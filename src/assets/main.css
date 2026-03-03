@@ -14,3 +14,137 @@ body {
   width: 100%;
   height: 100%;
 }
+
+:root {
+  --dark-0: #1d1d1d;
+  --dark-1: #242424;
+  --dark-2: #323232;
+  --dark-3: #272727;
+  --dark-4: #484848;
+
+  --light-5: #6b6b6b;
+  --light-4: #9a9a9a;
+  --light-3: #bcbcbc;
+  --light-2: #c4c4c4;
+  --light-1: #e6e6e6;
+  --light-0: #eeeeee;
+
+  --primary-0: #153063;
+  --primary-1: #233965;
+  --primary-2: #375e84;
+  --primary-3: #3e66b3;
+  --primary-4: #b2c6d5;
+  --primary-5: #d9e6f0;
+}
+
+/* Naive UI 对话框样式覆盖 */
+.n-modal {
+  border: 1px solid var(--dark-4) !important;
+  border-radius: 0 !important;
+}
+
+.n-modal .n-modal__title {
+  color: var(--light-2) !important;
+}
+
+.n-modal .n-base-close {
+  color: var(--light-2) !important;
+}
+
+.n-modal .n-base-close:hover {
+  color: var(--primary-3) !important;
+}
+
+.n-dialog__content {
+  margin-top: 30px !important;
+}
+
+.n-dialog__title .n-base-icon {
+  margin-right: 10px !important;
+}
+
+/* Naive UI 输入框样式覆盖 */
+.n-input:hover {
+  border-color: var(--primary-0) !important;
+}
+
+.n-input:focus-within {
+  border-color: var(--primary-0) !important;
+}
+
+.n-input__input-el {
+  color: var(--primary-0) !important;
+}
+
+.n-input__placeholder {
+  color: var(--light-4) !important;
+}
+
+/* Naive UI 数字输入框样式覆盖 */
+.n-input-number {
+  border: 1px solid var(--primary-1) !important;
+  border-radius: 0 !important;
+}
+
+.n-input-number:hover {
+  border-color: var(--primary-0) !important;
+}
+
+.n-input-number:focus-within {
+  border-color: var(--primary-0) !important;
+}
+
+.n-input-number__input {
+  color: var(--primary-0) !important;
+}
+
+.n-input-number__suffix {
+  border-left: 1px solid var(--primary-1) !important;
+}
+
+.n-input-number__suffix .n-button {
+  background-color: var(--primary-0) !important;
+  color: var(--primary-5) !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+.n-input-number__suffix .n-button:hover {
+  background-color: var(--primary-1) !important;
+}
+
+/* Naive UI 按钮样式覆盖 */
+.n-button {
+  border-radius: 0 !important;
+  border: 1px solid var(--primary-1) !important;
+  background-color: var(--primary-5) !important;
+  color: var(--primary-0) !important;
+}
+
+.n-button--primary-type {
+  background-color: var(--primary-0) !important;
+  color: var(--primary-5) !important;
+  border: 1px solid var(--primary-3) !important;
+}
+
+.n-button--primary-type:hover {
+  border: 1px solid var(--primary-3) !important;
+  background-color: var(--primary-1) !important;
+}
+
+.n-button--default-type:hover {
+  background-color: var(--primary-4) !important;
+}
+
+.n-button:not(.n-button--disabled) .n-button__state-border, .n-button:not(.n-button--disabled) .n-button__border {
+  border: none !important;
+}
+
+/* Naive UI 表单标签样式覆盖 */
+.n-form-item-label {
+  color: var(--light-2) !important;
+}
+
+.n-input__suffix {
+  gap: 5px !important;
+}

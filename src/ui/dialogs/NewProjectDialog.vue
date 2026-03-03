@@ -3,13 +3,15 @@
     v-model:show="visible"
     preset="dialog"
     title="新建工程"
+    class="new-project-dialog"
+    :style="{ width: '480px' }"
   >
     <n-form
       ref="formRef"
       :model="formData"
       :rules="rules"
       label-placement="left"
-      label-width="80"
+      label-width="100"
       require-mark-placement="right-hanging"
       @submit.prevent="handleConfirm"
     >
@@ -20,27 +22,40 @@
           :maxlength="100"
           show-count
           @keyup.enter="handleConfirm"
-          @change="handleNameChange"
           ref="nameInputRef"
+          class="form-input"
         />
       </n-form-item>
-      <n-form-item label="宽度" path="width">
+      <n-form-item label="unitsPerEm">
         <n-input-number
-          v-model:value="formData.width"
-          :min="1"
-          :max="10000"
-          :step="100"
-          placeholder="1000"
+          v-model:value="formData.unitsPerEm"
+          :precision="0"
+          :disabled="true"
+          class="form-input-number"
         />
       </n-form-item>
-      <n-form-item label="高度" path="height">
+      <n-form-item label="ascender">
         <n-input-number
-          v-model:value="formData.height"
-          :min="1"
-          :max="10000"
-          :step="100"
-          placeholder="1000"
+          v-model:value="formData.ascender"
+          :precision="0"
+          :disabled="true"
+          @update:value="onAscenderChange"
+          class="form-input-number"
         />
+      </n-form-item>
+      <n-form-item label="descender">
+        <n-input-number
+          v-model:value="formData.descender"
+          :precision="0"
+          :disabled="true"
+          @update:value="onDescenderChange"
+          class="form-input-number"
+        />
+      </n-form-item>
+      <n-form-item :label-width="0" class="use-default-template-form-item">
+        <n-checkbox v-model:checked="formData.useDefaultTemplate">
+          使用默认模板
+        </n-checkbox>
       </n-form-item>
     </n-form>
     <template #action>
@@ -54,17 +69,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, nextTick } from 'vue'
-import { NModal, NForm, NFormItem, NInput, NInputNumber, NButton, FormInst, useMessage, type FormRules } from 'naive-ui'
+import { NModal, NForm, NFormItem, NInput, NInputNumber, NButton, NCheckbox, FormInst, useMessage, type FormRules } from 'naive-ui'
 import { projectCreator } from '@/features/editor/services/ProjectCreator'
 import type { ProjectConfig } from '@/features/editor/services/ProjectCreator'
 import { isTauri } from '@/utils/env'
 import { ensureInputBlur } from '@/utils/tauri-input-fix'
 import { createDebouncedHandler } from '@/utils/debounce-click'
-
-const handleNameChange = () => {
-  console.log('nameInputRef change', nameInputRef.value)
-  //nameInputRef.value.blur()
-}
 
 const nameInputRef = ref<any>(null)
 const props = defineProps<{
@@ -86,9 +96,11 @@ const visible = computed({
 })
 
 const formData = reactive<ProjectConfig>({
-  name: '',
-  width: 1000,
-  height: 1000,
+  name: 'untitled',
+  unitsPerEm: 1000,
+  ascender: 800,
+  descender: -200,
+  useDefaultTemplate: true,
 })
 
 const rules: FormRules = {
@@ -96,12 +108,14 @@ const rules: FormRules = {
     { required: true, message: '请输入工程名称', trigger: 'blur' },
     { min: 1, max: 100, message: '工程名称长度在1-100个字符之间', trigger: 'blur' },
   ],
-  width: [
-    { type: 'number' as const, min: 1, max: 10000, message: '宽度必须在1-10000之间', trigger: 'blur' },
-  ],
-  height: [
-    { type: 'number' as const, min: 1, max: 10000, message: '高度必须在1-10000之间', trigger: 'blur' },
-  ],
+}
+
+const onAscenderChange = () => {
+  formData.descender = formData.ascender - formData.unitsPerEm
+}
+
+const onDescenderChange = () => {
+  formData.ascender = formData.unitsPerEm + formData.descender
 }
 
 const _handleConfirm = async () => {
@@ -117,7 +131,6 @@ const _handleConfirm = async () => {
   nameInputRef.value.blur()
 
   await nextTick()
-  console.log('nameInputRef blur')
 
   // 验证表单
   try {
@@ -137,9 +150,11 @@ const _handleConfirm = async () => {
     visible.value = false
     
     // 重置表单
-    formData.name = ''
-    formData.width = 1000
-    formData.height = 1000
+    formData.name = 'untitled'
+    formData.unitsPerEm = 1000
+    formData.ascender = 800
+    formData.descender = -200
+    formData.useDefaultTemplate = true
   } catch (error: any) {
     message.error(error.message || '创建工程失败')
   }
@@ -153,9 +168,11 @@ const _handleCancel = () => {
   // 关闭对话框
   visible.value = false
   // 重置表单
-  formData.name = ''
-  formData.width = 1000
-  formData.height = 1000
+  formData.name = 'untitled'
+  formData.unitsPerEm = 1000
+  formData.ascender = 800
+  formData.descender = -200
+  formData.useDefaultTemplate = true
 }
 
 // 使用防重复调用包装
@@ -168,5 +185,18 @@ const handleCancel = createDebouncedHandler(_handleCancel, 'NewProjectDialog.can
   justify-content: flex-end;
   gap: 12px;
   margin-top: 16px;
+}
+
+:deep(.form-input) {
+  width: 100%;
+}
+
+:deep(.form-input-number) {
+  width: 100%;
+}
+
+.use-default-template-form-item {
+  margin-bottom: 0;
+  margin-left: 100px;
 }
 </style>

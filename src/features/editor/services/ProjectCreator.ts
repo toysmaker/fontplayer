@@ -12,8 +12,10 @@ import { useProjectStore } from '@/stores/project'
  */
 export interface ProjectConfig {
   name: string
-  width?: number
-  height?: number
+  unitsPerEm: number
+  ascender: number
+  descender: number
+  useDefaultTemplate: boolean
 }
 
 /**
@@ -53,11 +55,15 @@ export class ProjectCreator {
     const project: IFile = {
       uuid: genUUID(),
       name: config.name,
-      width: config.width || 1000,
-      height: config.height || 1000,
+      width: config.unitsPerEm,
+      height: config.unitsPerEm,
       saved: false,
       iconsCount: 0,
-      fontSettings: this.createDefaultFontSettings(),
+      fontSettings: {
+        unitsPerEm: config.unitsPerEm,
+        ascender: config.ascender,
+        descender: config.descender,
+      },
       characterList: [],
       glyphs: [],
       stroke_glyphs: [],
@@ -92,12 +98,8 @@ export class ProjectCreator {
       throw new Error('工程名称不能超过100个字符')
     }
 
-    if (config.width !== undefined && (config.width <= 0 || config.width > 10000)) {
-      throw new Error('工程宽度必须在1-10000之间')
-    }
-
-    if (config.height !== undefined && (config.height <= 0 || config.height > 10000)) {
-      throw new Error('工程高度必须在1-10000之间')
+    if (config.unitsPerEm <= 0 || config.unitsPerEm > 10000) {
+      throw new Error('unitsPerEm必须在1-10000之间')
     }
   }
 
