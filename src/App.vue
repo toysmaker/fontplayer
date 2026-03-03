@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
+import { NMessageProvider, NNotificationProvider, NDialogProvider } from 'naive-ui'
 import { initTauri } from './utils/tauri-renderer'
 import paper from 'paper'
 
@@ -9,7 +10,13 @@ paper.setup(canvas)
 </script>
 
 <template>
-  <RouterView />
+  <n-message-provider>
+    <n-notification-provider>
+      <n-dialog-provider>
+        <RouterView />
+      </n-dialog-provider>
+    </n-notification-provider>
+  </n-message-provider>
 </template>
 
 <style scoped>

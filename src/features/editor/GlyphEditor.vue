@@ -8,6 +8,7 @@
         @mousemove="handleMouseMove"
         @mouseup="handleMouseUp"
         @click="handleCanvasClick"
+        @pointerdown="handleCanvasClick"
       />
     </div>
     <div class="right-panel">
@@ -19,6 +20,7 @@
             :key="component.uuid"
             :class="{ 'selected': component.uuid === glyphStore.selectedComponentUUID }"
             @click="handleComponentClick(component)"
+            @pointerdown="handleComponentClick(component)"
           >
             <n-thing :title="component.name || component.type" />
           </n-list-item>
@@ -44,6 +46,7 @@ import { getOrCreateDragger } from '@/features/tools/glyphDragger'
 import type { BaseGlyphDragger } from '@/features/tools/glyphDragger'
 import ParameterEditor from '@/ui/components/ParameterEditor.vue'
 import type { IGlyphComponent } from '@/core/types'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const glyphStore = useGlyphStore()
 const canvasRef = ref<HTMLCanvasElement>()
@@ -73,9 +76,16 @@ const components = computed(() => {
 })
 
 // 处理组件点击
-const handleComponentClick = (component: IGlyphComponent) => {
+const _handleComponentClick = (component: IGlyphComponent) => {
   glyphStore.selectComponent(component.uuid, [])
 }
+
+// 使用防重复调用包装，通过UUID区分不同的组件
+const handleComponentClick = createDebouncedHandler(
+  _handleComponentClick,
+  'GlyphEditor.componentClick',
+  (args) => args[0].uuid // 使用UUID作为比较参数
+)
 
 // 初始化拖拽器
 const initDragger = () => {
@@ -164,10 +174,13 @@ const handleMouseUp = () => {
 }
 
 // Canvas点击事件（用于选择组件）
-const handleCanvasClick = (e: MouseEvent) => {
+const _handleCanvasClick = (e: MouseEvent) => {
   // TODO: 实现组件选择逻辑
   console.log('Canvas clicked:', e)
 }
+
+// 使用防重复调用包装
+const handleCanvasClick = createDebouncedHandler(_handleCanvasClick, 'GlyphEditor.canvasClick')
 </script>
 
 <style scoped>

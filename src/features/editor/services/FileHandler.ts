@@ -4,8 +4,10 @@
  */
 
 import { projectLoader } from './ProjectLoader'
+import { projectCreator } from './ProjectCreator'
 import { useProjectStore } from '@/stores/project'
 import { isTauri } from '@/utils/env'
+import type { ProjectConfig } from './ProjectCreator'
 
 export class FileHandler {
   /**
@@ -170,6 +172,22 @@ export class FileHandler {
     // 4. 保存到文件
 
     console.log('Saving file:', file.name)
+  }
+
+  /**
+   * 创建新工程
+   * @param config 工程配置
+   * @returns 创建的工程文件
+   */
+  async createProject(config: ProjectConfig) {
+    // 检查是否已有工程打开
+    if (this.projectStore.hasFiles) {
+      throw new Error('目前字玩仅支持同时编辑一个工程，请关闭当前工程再新建。注意，关闭工程前请保存工程以避免数据丢失。')
+    }
+
+    // 创建工程
+    const project = await projectCreator.createProject(config)
+    return project
   }
 }
 

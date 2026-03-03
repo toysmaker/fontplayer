@@ -16,6 +16,7 @@
         class="character-item"
         :style="{ height: `${itemHeight}px` }"
         @click="handleItemClick(item)"
+        @pointerdown="handleItemClick(item)"
       >
         <CharacterItem :character="item" />
       </div>
@@ -35,6 +36,7 @@ import { EditStatus } from '@/core/types'
 import { CharacterRenderer } from '@/core/font/CharacterRenderer'
 import { CanvasManager } from '@/core/canvas/CanvasManager'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
@@ -206,11 +208,18 @@ const handleScroll = throttle((e: Event) => {
 }, 16) // 约60fps
 
 // 处理项点击
-const handleItemClick = (character: ICharacterFileLite) => {
+const _handleItemClick = (character: ICharacterFileLite) => {
   // 触发字符编辑
   characterStore.setEditingCharacter(character.uuid)
   editorStore.setEditStatus(EditStatus.Edit)
 }
+
+// 使用防重复调用包装，通过UUID区分不同的项
+const handleItemClick = createDebouncedHandler(
+  _handleItemClick,
+  'VirtualCharacterList.itemClick',
+  (args) => args[0].uuid // 使用UUID作为比较参数
+)
 
 // 更新容器高度
 const updateContainerHeight = () => {

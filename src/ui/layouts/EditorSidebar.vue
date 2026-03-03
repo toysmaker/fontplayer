@@ -9,19 +9,52 @@
       :default-value="activeMenu"
       @update:value="handleMenuSelect"
     />
+    
+    <NewProjectDialog
+      v-model:show="showNewProjectDialog"
+      @confirm="handleProjectCreated"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, h } from 'vue'
-import { NMenu } from 'naive-ui'
+import { ref, h, onMounted, onUnmounted } from 'vue'
+import { NMenu, useMessage } from 'naive-ui'
 import type { MenuOption } from 'naive-ui'
 import { useRouter } from 'vue-router'
 import { fileHandler } from '@/features/editor/services/FileHandler'
+import { useProjectStore } from '@/stores/project'
+import NewProjectDialog from '@/ui/dialogs/NewProjectDialog.vue'
+
+const message = useMessage()
 
 const router = useRouter()
 const activeMenu = ref('file')
 const collapsed = ref(false)
+const showNewProjectDialog = ref(false)
+
+// 监听 Tauri 菜单事件（新建工程）
+const handleShowNewProjectDialog = () => {
+  showNewProjectDialog.value = true
+}
+
+// 监听警告消息事件
+const handleShowWarningMessage = (event: Event) => {
+  const customEvent = event as CustomEvent<{ message: string }>
+  if (customEvent.detail?.message) {
+    message.warning(customEvent.detail.message)
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('editor-show-new-project-dialog', handleShowNewProjectDialog)
+  window.addEventListener('show-warning-message', handleShowWarningMessage)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('editor-show-new-project-dialog', handleShowNewProjectDialog)
+  window.removeEventListener('show-warning-message', handleShowWarningMessage)
+})
 
 const menuOptions: MenuOption[] = [
   {
@@ -136,9 +169,20 @@ const handleSaveFile = async () => {
   }
 }
 
-const handleNewFile = () => {
-  // TODO: 实现新建工程
-  console.log('New file')
+const handleNewFile = async () => {
+  try {
+    // 检查是否已有工程打开
+    const projectStore = useProjectStore()
+    if (projectStore.hasFiles) {
+      message.warning('目前字玩仅支持同时编辑一个工程，请关闭当前工程再新建。注意，关闭工程前请保存工程以避免数据丢失。')
+      return
+    }
+    
+    // 显示新建工程对话框
+    showNewProjectDialog.value = true
+  } catch (error) {
+    console.error('Failed to create new project:', error)
+  }
 }
 
 const handleExportOTF = () => {
@@ -159,6 +203,11 @@ const handleUndo = () => {
 const handleRedo = () => {
   // TODO: 实现重做
   console.log('Redo')
+}
+
+const handleProjectCreated = () => {
+  // 工程创建成功后的处理（如果需要）
+  // 由于工程已经通过 projectCreator 添加到 store 并选中，这里不需要额外操作
 }
 </script>
 

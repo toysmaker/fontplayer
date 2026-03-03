@@ -23,9 +23,30 @@ export async function initTauriMenu() {
     // 监听文件菜单事件
     // 注意：这些事件名称需要与 Rust 端发送的事件名称匹配
     // 在 Tauri 2.x 中，菜单事件通过 app.emit() 发送
-    listen('create-file', () => {
+    listen('create-file', async () => {
       console.log('File -> New')
-      // TODO: 实现新建工程逻辑
+      try {
+        const { useProjectStore } = await import('@/stores/project')
+        const projectStore = useProjectStore()
+        
+        // 检查是否已有工程打开
+        if (projectStore.hasFiles) {
+          // 通过事件通知 UI 层显示警告消息
+          window.dispatchEvent(new CustomEvent('show-warning-message', {
+            detail: {
+              message: '目前字玩仅支持同时编辑一个工程，请关闭当前工程再新建。注意，关闭工程前请保存工程以避免数据丢失。'
+            }
+          }))
+          return
+        }
+        
+        // 显示新建工程对话框
+        // 注意：在 Tauri 环境中，需要通过事件或全局状态来触发对话框显示
+        // 这里可以通过 window 对象或事件总线来通知 UI 显示对话框
+        window.dispatchEvent(new CustomEvent('show-new-project-dialog'))
+      } catch (error) {
+        console.error('Failed to handle create-file event:', error)
+      }
     })
     
     listen('open-file', () => {

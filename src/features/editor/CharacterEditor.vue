@@ -4,9 +4,6 @@
       <canvas
         ref="canvasRef"
         class="editor-canvas"
-        @mousedown="handleMouseDown"
-        @mousemove="handleMouseMove"
-        @mouseup="handleMouseUp"
       />
     </div>
     <div class="right-panel">
@@ -42,7 +39,8 @@ import { useCharacterStore } from '@/stores/character'
 import { getOrCreateDragger } from '@/features/tools/glyphDragger'
 import type { BaseGlyphDragger } from '@/features/tools/glyphDragger'
 import ParameterEditor from '@/ui/components/ParameterEditor.vue'
-import type { IComponent } from '@/core/types'
+import type { IComponent, ICharacterFileLite } from '@/core/types'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const characterStore = useCharacterStore()
 const canvasRef = ref<HTMLCanvasElement>()
@@ -52,8 +50,8 @@ const selectedComponent = computed(() => characterStore.selectedComponent)
 
 // 获取字符的所有组件（扁平化）
 const components = computed(() => {
-  const character = characterStore.editingCharacter
-  if (!character) return []
+  const character = characterStore.editingCharacter as ICharacterFileLite | null
+  if (!character || !character.components) return []
   
   // 递归获取所有组件
   const flattenComponents = (comps: IComponent[]): IComponent[] => {
@@ -68,13 +66,20 @@ const components = computed(() => {
     return result
   }
   
-  return flattenComponents(character.components || [])
+  return flattenComponents(character.components)
 })
 
 // 处理组件点击
-const handleComponentClick = (component: IComponent) => {
+const _handleComponentClick = (component: IComponent) => {
   characterStore.selectComponent(component.uuid, [])
 }
+
+// 使用防重复调用包装，通过UUID区分不同的组件
+const handleComponentClick = createDebouncedHandler(
+  _handleComponentClick,
+  'CharacterEditor.componentClick',
+  (args) => args[0].uuid // 使用UUID作为比较参数
+)
 
 // 初始化拖拽器
 const initDragger = () => {
@@ -98,7 +103,7 @@ const initDragger = () => {
       context: {
         mode: 'character',
         component,
-        character,
+        character: character as ICharacterFileLite, // 类型断言：编辑时字符数据应该已加载
         selectedComponentsTree: characterStore.selectedComponentsTree,
       },
       onRender: () => {
@@ -149,27 +154,8 @@ watch(() => characterStore.selectedComponent, () => {
   })
 })
 
-// 鼠标事件处理（由dragger内部处理，这里可以添加额外逻辑）
-const handleMouseDown = () => {
-  // dragger会处理拖拽逻辑
-}
-
-const handleMouseMove = () => {
-  // dragger会处理拖拽逻辑
-}
-
-const handleMouseUp = () => {
-  // dragger会处理拖拽逻辑
-}
-
-// Canvas点击事件（用于选择组件）
-const handleCanvasClick = (e: MouseEvent) => {
-  // TODO: 实现组件选择逻辑
-  // 1. 计算点击位置
-  // 2. 查找被点击的组件
-  // 3. 更新selectedComponent
-  console.log('Canvas clicked:', e)
-}
+// 注意：鼠标事件由 dragger 的 activate() 方法自动处理
+// 不需要在模板中手动绑定 @mousedown, @mousemove, @mouseup
 </script>
 
 <style scoped>

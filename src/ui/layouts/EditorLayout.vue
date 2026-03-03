@@ -27,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { NLayout, NLayoutSider, NLayoutContent } from 'naive-ui'
 import EditorSidebar from './EditorSidebar.vue'
 import EditorMain from './EditorMain.vue'
@@ -40,9 +40,21 @@ const sidebarCollapsed = ref(false)
 const sidebarWidth = ref(280)
 
 // 在 Tauri 环境中初始化原生菜单
+const handleShowNewProjectDialog = () => {
+  // 通过事件通知 EditorSidebar 显示对话框
+  window.dispatchEvent(new CustomEvent('editor-show-new-project-dialog'))
+}
+
 onMounted(() => {
   if (isTauri()) {
     initTauriMenu()
+    window.addEventListener('show-new-project-dialog', handleShowNewProjectDialog)
+  }
+})
+
+onUnmounted(() => {
+  if (isTauri()) {
+    window.removeEventListener('show-new-project-dialog', handleShowNewProjectDialog)
   }
 })
 </script>
