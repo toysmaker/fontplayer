@@ -14,7 +14,6 @@
         :key="item.uuid"
         :ref="el => setItemRef(el, item.uuid)"
         class="character-item"
-        :style="{ height: `${itemHeight}px` }"
         @click="handleItemClick(item)"
         @pointerdown="handleItemClick(item)"
       >
@@ -50,12 +49,18 @@ const isRendering = ref(false)
 // Props
 const props = defineProps<{
   itemHeight?: number
+  itemWidth?: number
+  gap?: number
+  padding?: number
   overscan?: number
 }>()
 
 // 配置
-const itemHeight = props.itemHeight || 120
-const overscan = props.overscan || 5
+const itemHeight = props.itemHeight || 112 // 字符项高度：80px preview + 32px info
+const itemWidth = props.itemWidth || 86 // 字符项宽度：80px + 3px border * 2
+const gap = props.gap || 10 // 网格间距
+const padding = props.padding || 10 // 容器内边距
+const overscan = props.overscan || 2 // 预加载的行数
 
 // Refs
 const containerRef = ref<HTMLElement>()
@@ -64,6 +69,7 @@ const itemRefs = new Map<string, HTMLElement>()
 // 状态
 const scrollTop = ref(0)
 const containerHeight = ref(0)
+const containerWidth = ref(0)
 const lastVisibleStart = ref(0)
 const lastVisibleEnd = ref(0)
 
@@ -79,13 +85,49 @@ const loadFullCharacter = async (metadata: ICharacterFileMetadata): Promise<ICha
   return await characterDataManager.loadCharacter(fileUUID, metadata.uuid)
 }
 
-// 计算可见范围（使用节流优化）
+// 计算每行字符数（响应式，参考原工程的容错机制）
+const colsPerRow = computed(() => {
+  if (containerWidth.value <= 0) return 1
+  // 可用宽度 = 容器宽度 - 左右内边距
+  const availableWidth = containerWidth.value - padding * 2
+  // 每行字符数 = 可用宽度 / (字符宽度 + 间距)
+  // 使用 Math.ceil 计算理论值，然后减1作为容错（因为 Grid 可能不会完全占满）
+  const theoreticalCols = Math.ceil(availableWidth / (itemWidth + gap))
+  const cols = Math.max(1, theoreticalCols - 1) // 减少1个作为容错，至少1列
+  return cols
+})
+
+// 计算总行数
+const totalRows = computed(() => {
+  if (characterList.value.length === 0) return 0
+  return Math.ceil(characterList.value.length / colsPerRow.value)
+})
+
+// 计算行高（包括间距）
+const rowHeight = computed(() => {
+  return itemHeight + gap
+})
+
+// 计算可见范围（考虑网格布局）
 const visibleRange = computed(() => {
-  const start = Math.max(0, Math.floor(scrollTop.value / itemHeight) - overscan)
+  if (containerHeight.value <= 0 || containerWidth.value <= 0) {
+    return { start: 0, end: Math.min(overscan * colsPerRow.value, characterList.value.length) }
+  }
+  
+  // 计算可见的行范围
+  const startRow = Math.max(0, Math.floor(scrollTop.value / rowHeight.value) - overscan)
+  const endRow = Math.min(
+    totalRows.value,
+    Math.ceil((scrollTop.value + containerHeight.value) / rowHeight.value) + overscan
+  )
+  
+  // 计算可见的字符范围
+  const start = Math.max(0, startRow * colsPerRow.value)
   const end = Math.min(
     characterList.value.length,
-    Math.ceil((scrollTop.value + containerHeight.value) / itemHeight) + overscan
+    endRow * colsPerRow.value
   )
+  
   return { start, end }
 })
 
@@ -177,14 +219,17 @@ watch(visibleRange, () => {
   })
 }, { immediate: true })
 
-// 总高度
+// 总高度（考虑网格布局）
 const totalHeight = computed(() => {
-  return characterList.value.length * itemHeight
+  if (totalRows.value === 0) return 0
+  // 总高度 = 行数 * 行高 - 最后一行不需要间距
+  return totalRows.value * rowHeight.value - gap + padding * 2
 })
 
-// 偏移量
+// 偏移量（考虑网格布局）
 const offsetY = computed(() => {
-  return visibleRange.value.start * itemHeight
+  const startRow = Math.floor(visibleRange.value.start / colsPerRow.value)
+  return startRow * rowHeight.value + padding
 })
 
 // 设置项引用
@@ -201,10 +246,44 @@ const setItemRef = (el: any, uuid: string) => {
   }
 }
 
+// 滚动清理的节流（避免频繁清理）
+let scrollCleanupTimer: number | null = null
+let lastScrollCleanupTime = 0
+const SCROLL_CLEANUP_INTERVAL = 500 // 滚动时每500ms最多清理一次
+
+const scrollCleanupThrottle = () => {
+  const now = Date.now()
+  if (now - lastScrollCleanupTime < SCROLL_CLEANUP_INTERVAL) {
+    return // 节流：太频繁了，跳过
+  }
+  lastScrollCleanupTime = now
+  
+  // 清理不可见的缓存
+  const visibleUUIDs = new Set(visibleItems.value.map(item => item.uuid))
+  const fileUUID = projectStore.selectedFile?.uuid
+  
+  // 清理 Canvas 缓存
+  CanvasManager.cleanupInvisible(visibleUUIDs)
+  
+  // 清理字符数据缓存
+  if (fileUUID) {
+    characterDataManager.cleanupInvisible(visibleUUIDs, fileUUID)
+  }
+}
+
 // 节流的滚动处理（减少更新频率）
 const handleScroll = throttle((e: Event) => {
   const target = e.target as HTMLElement
   scrollTop.value = target.scrollTop
+  
+  // 滚动时延迟清理（节流，避免频繁清理）
+  if (scrollCleanupTimer !== null) {
+    cancelAnimationFrame(scrollCleanupTimer)
+  }
+  scrollCleanupTimer = requestAnimationFrame(() => {
+    scrollCleanupThrottle()
+    scrollCleanupTimer = null
+  })
 }, 16) // 约60fps
 
 // 处理项点击
@@ -221,30 +300,120 @@ const handleItemClick = createDebouncedHandler(
   (args) => args[0].uuid // 使用UUID作为比较参数
 )
 
-// 更新容器高度
-const updateContainerHeight = () => {
+// 更新容器尺寸
+const updateContainerSize = () => {
   if (containerRef.value) {
     containerHeight.value = containerRef.value.clientHeight
+    containerWidth.value = containerRef.value.clientWidth
   }
 }
 
 // 监听窗口大小变化
 let resizeObserver: ResizeObserver | null = null
 
+// 定期清理机制（使用 requestIdleCallback）
+let periodicCleanupTimer: number | null = null
+const schedulePeriodicCleanup = () => {
+  if (periodicCleanupTimer !== null) {
+    cancelIdleCallback(periodicCleanupTimer)
+  }
+  
+  if ('requestIdleCallback' in window) {
+    periodicCleanupTimer = requestIdleCallback(() => {
+      const visibleUUIDs = new Set(visibleItems.value.map(item => item.uuid))
+      const fileUUID = projectStore.selectedFile?.uuid
+      
+      // 清理不可见的缓存
+      CanvasManager.cleanupInvisible(visibleUUIDs)
+      if (fileUUID) {
+        characterDataManager.cleanupInvisible(visibleUUIDs, fileUUID)
+      }
+      
+      // 如果缓存仍然很大，强制清理
+      if (CanvasManager.getCacheSize() > 30 || CanvasManager.getCanvasMapSize() > 100) {
+        CanvasManager.forceCleanupAllCache()
+      }
+      
+      periodicCleanupTimer = null
+      // 每3秒清理一次（更频繁的清理，减少内存占用）
+      setTimeout(() => schedulePeriodicCleanup(), 3000)
+    }, { timeout: 1000 })
+  } else {
+    // 降级到 setTimeout
+    periodicCleanupTimer = setTimeout(() => {
+      const visibleUUIDs = new Set(visibleItems.value.map(item => item.uuid))
+      const fileUUID = projectStore.selectedFile?.uuid
+      
+      CanvasManager.cleanupInvisible(visibleUUIDs)
+      if (fileUUID) {
+        characterDataManager.cleanupInvisible(visibleUUIDs, fileUUID)
+      }
+      
+      periodicCleanupTimer = null
+      schedulePeriodicCleanup()
+    }, 3000) as any
+  }
+}
+
 onMounted(() => {
-  updateContainerHeight()
+  updateContainerSize()
   
   if (containerRef.value && 'ResizeObserver' in window) {
     resizeObserver = new ResizeObserver(() => {
-      updateContainerHeight()
+      updateContainerSize()
     })
     resizeObserver.observe(containerRef.value)
   }
+  
+  // 启动定期清理
+  schedulePeriodicCleanup()
 })
 
 onUnmounted(() => {
   if (resizeObserver) {
     resizeObserver.disconnect()
+    resizeObserver = null
+  }
+  
+  // 清理所有渲染相关的资源
+  renderQueue.value = []
+  renderCache.clear()
+  isRendering.value = false
+  
+  // 清理所有缓存
+  const visibleUUIDs = new Set<string>()
+  const fileUUID = projectStore.selectedFile?.uuid
+  
+  // 清理 Canvas 缓存
+  CanvasManager.cleanupInvisible(visibleUUIDs)
+  CanvasManager.forceCleanupAllCache()
+  
+  // 清理字符数据缓存
+  if (fileUUID) {
+    characterDataManager.cleanupInvisible(visibleUUIDs, fileUUID)
+    characterDataManager.forceCleanupAllCache()
+  }
+  
+  // 清理定时器
+  if (updateTimer !== null) {
+    cancelAnimationFrame(updateTimer)
+    updateTimer = null
+  }
+  if (renderTimer !== null) {
+    cancelAnimationFrame(renderTimer)
+    renderTimer = null
+  }
+  if (scrollCleanupTimer !== null) {
+    cancelAnimationFrame(scrollCleanupTimer)
+    scrollCleanupTimer = null
+  }
+  if (periodicCleanupTimer !== null) {
+    if ('cancelIdleCallback' in window) {
+      cancelIdleCallback(periodicCleanupTimer)
+    } else {
+      clearTimeout(periodicCleanupTimer)
+    }
+    periodicCleanupTimer = null
   }
 })
 
@@ -255,7 +424,7 @@ watch(characterList, (newList, oldList) => {
   // 只在列表引用真正变化时处理（比如切换文件）
   // 避免在加载过程中频繁触发
   if (newList !== oldList && newList.length > 0) {
-    updateContainerHeight()
+    updateContainerSize()
     // 延迟处理，确保文件加载完成后再渲染
     nextTick(() => {
       console.log('projectStore.loading', projectStore.loading)
@@ -273,6 +442,9 @@ watch(characterList, (newList, oldList) => {
 
 // 监听可见项变化，触发渲染（延迟处理，避免在文件加载时触发）
 let renderTimer: number | null = null
+let lastCleanupTime = 0
+const CLEANUP_INTERVAL = 2000 // 每2秒最多清理一次（减少清理频率，避免清空刚渲染的内容）
+
 watch(visibleItems, () => {
   // 如果文件还在加载中，延迟渲染
   if (projectStore.loading) {
@@ -287,9 +459,27 @@ watch(visibleItems, () => {
   // 延迟调度渲染，避免频繁触发
   renderTimer = requestAnimationFrame(() => {
     scheduleRender()
-    // 清理不可见的Canvas缓存
-    const visibleUUIDs = new Set(visibleItems.value.map(item => item.uuid))
-    CanvasManager.cleanupInvisible(visibleUUIDs)
+    
+    // 延迟清理：等待渲染完成后再清理（避免清空刚渲染的内容）
+    setTimeout(() => {
+      // 节流清理：每2秒最多清理一次，避免频繁清理导致性能问题
+      const now = Date.now()
+      if (now - lastCleanupTime > CLEANUP_INTERVAL) {
+        const visibleUUIDs = new Set(visibleItems.value.map(item => item.uuid))
+        const fileUUID = projectStore.selectedFile?.uuid
+        
+        // 清理 Canvas 缓存
+        CanvasManager.cleanupInvisible(visibleUUIDs)
+        
+        // 清理字符数据缓存
+        if (fileUUID) {
+          characterDataManager.cleanupInvisible(visibleUUIDs, fileUUID)
+        }
+        
+        lastCleanupTime = now
+      }
+    }, 500) // 延迟 500ms，确保渲染完成
+    
     renderTimer = null
   })
 }, { deep: false }) // 使用shallow watch，避免深度监听导致的性能问题
@@ -402,6 +592,8 @@ const processRenderQueue = async () => {
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
+  background-color: var(--dark-1);
+  padding: 10px;
 }
 
 .virtual-list-spacer {
@@ -413,11 +605,17 @@ const processRenderQueue = async () => {
   top: 0;
   left: 0;
   right: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 86px);
+  gap: 10px;
+  /* 使用 will-change 提示浏览器优化 */
+  will-change: transform;
+  /* 使用 contain 隔离渲染，提升性能 */
+  contain: layout style paint;
 }
 
 .character-item {
-  width: 100%;
-  border-bottom: 1px solid var(--n-border-color);
+  width: 86px;
   /* 使用 will-change 提示浏览器优化 */
   will-change: transform;
   /* 使用 contain 隔离渲染，提升性能 */

@@ -20,6 +20,9 @@ export class CanvasManager {
   // UUID 到 Canvas 的映射
   private static canvasMap = new Map<string, HTMLCanvasElement>()
   
+  // Canvas 访问时间（用于 LRU 清理）
+  private static canvasAccessTime = new Map<string, number>()
+  
   // 渲染结果缓存（ImageData）- LRU 内存缓存
   private static renderCache = new Map<string, CachedImageData>()
   
@@ -27,7 +30,8 @@ export class CanvasManager {
   private static contentVersions = new Map<string, number>()
   
   // LRU 缓存配置
-  private static readonly MAX_MEMORY_CACHE_SIZE = 50 // 内存中最多保留50个
+  private static readonly MAX_MEMORY_CACHE_SIZE = 20 // 内存中最多保留20个（减少内存占用）
+  private static readonly MAX_CANVAS_MAP_SIZE = 50 // Canvas 映射最多保留50个（防止内存泄漏）
   private static readonly CACHE_PREFIX = 'canvas_preview_'
 
   /**
@@ -63,6 +67,17 @@ export class CanvasManager {
       canvas.width = width
       canvas.height = height
       this.canvasMap.set(uuid, canvas)
+      this.canvasAccessTime.set(uuid, Date.now())
+      
+      // 延迟清理：如果 canvasMap 过大，延迟清理（避免清理刚创建的 Canvas）
+      if (this.canvasMap.size > this.MAX_CANVAS_MAP_SIZE) {
+        setTimeout(() => {
+          if (this.canvasMap.size > this.MAX_CANVAS_MAP_SIZE) {
+            this.evictCanvasLRU(true) // 只清理不在 DOM 中的
+          }
+        }, 100)
+      }
+      
       return canvas
     }
 
@@ -101,7 +116,21 @@ export class CanvasManager {
       }
     }
     
+    // 更新访问时间
+    this.canvasAccessTime.set(uuid, Date.now())
+    
+    // 先添加到映射中
     this.canvasMap.set(uuid, canvas)
+    
+    // 延迟清理：如果 canvasMap 过大，延迟清理（避免清理刚注册的 Canvas）
+    if (this.canvasMap.size > this.MAX_CANVAS_MAP_SIZE) {
+      // 使用 setTimeout 延迟清理，确保当前注册的 Canvas 不会被立即清理
+      setTimeout(() => {
+        if (this.canvasMap.size > this.MAX_CANVAS_MAP_SIZE) {
+          this.evictCanvasLRU()
+        }
+      }, 100)
+    }
   }
   
   /**
@@ -111,20 +140,103 @@ export class CanvasManager {
     const toRemove: string[] = []
     for (const uuid of this.canvasMap.keys()) {
       if (!visibleUUIDs.has(uuid)) {
+        // 额外检查：如果 Canvas 还在 DOM 中，说明它可能是可见的，只是 visibleItems 还没更新
+        // 这种情况下不清理，避免清空可见的 Canvas
+        const canvas = this.canvasMap.get(uuid)
+        if (canvas && canvas.isConnected) {
+          // Canvas 还在 DOM 中，可能是可见的，跳过清理
+          continue
+        }
         toRemove.push(uuid)
       }
     }
+    
+    if (toRemove.length > 0 && import.meta.env.DEV) {
+      console.log(`[CanvasManager] Cleaning up ${toRemove.length} invisible canvases`)
+    }
+    
     toRemove.forEach(uuid => {
       const canvas = this.canvasMap.get(uuid)
       if (canvas) {
+        // 再次确认 Canvas 不在 DOM 中
+        if (!canvas.isConnected) {
+          // 清空 Canvas 内容，释放像素数据内存
+          // 这是关键：Canvas 的像素数据（width * height * 4 bytes）会占用大量内存
+          // 清空内容可以让浏览器释放这些内存
+          this.clearCanvasContent(canvas)
+        }
         // 清除 Canvas 的渲染标记
         this.clearCanvasMark(canvas)
       }
       this.canvasMap.delete(uuid)
+      this.canvasAccessTime.delete(uuid)
     })
+    
+    // 如果 canvasMap 仍然过大，使用 LRU 策略清理（但只清理不在 DOM 中的）
+    if (this.canvasMap.size > this.MAX_CANVAS_MAP_SIZE) {
+      const beforeSize = this.canvasMap.size
+      // 只清理不在 DOM 中的 Canvas
+      this.evictCanvasLRU(true)
+      if (import.meta.env.DEV) {
+        console.log(`[CanvasManager] Canvas map too large, evicted. Before: ${beforeSize}, After: ${this.canvasMap.size}`)
+      }
+    }
     
     // 同时清理渲染缓存
     this.cleanupRenderCache(visibleUUIDs)
+  }
+  
+  /**
+   * 清空 Canvas 内容，释放像素数据内存
+   */
+  private static clearCanvasContent(canvas: HTMLCanvasElement): void {
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      // 清空画布内容
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      // 重置 Canvas 尺寸可以强制释放像素数据（但会影响后续使用）
+      // 所以只清空内容，不重置尺寸
+    }
+  }
+  
+  /**
+   * 移除最久未使用的 Canvas（LRU 策略）
+   * @param onlyDisconnected 如果为 true，只清理不在 DOM 中的 Canvas
+   */
+  private static evictCanvasLRU(onlyDisconnected: boolean = false): void {
+    let oldestKey: string | null = null
+    let oldestTime = Infinity
+    
+    for (const [key, time] of this.canvasAccessTime.entries()) {
+      if (onlyDisconnected) {
+        // 只考虑不在 DOM 中的 Canvas
+        const canvas = this.canvasMap.get(key)
+        if (canvas && canvas.isConnected) {
+          continue // 跳过在 DOM 中的 Canvas
+        }
+      }
+      
+      if (time < oldestTime) {
+        oldestTime = time
+        oldestKey = key
+      }
+    }
+    
+    if (oldestKey) {
+      const canvas = this.canvasMap.get(oldestKey)
+      if (canvas) {
+        // 只清空不在 DOM 中的 Canvas 内容
+        if (!canvas.isConnected) {
+          this.clearCanvasContent(canvas)
+        }
+        // 清除标记
+        this.clearCanvasMark(canvas)
+        // 如果是离屏 Canvas（不在 DOM 中），可以考虑移除
+        // 但为了安全，我们只清空内容，不删除元素
+      }
+      this.canvasMap.delete(oldestKey)
+      this.canvasAccessTime.delete(oldestKey)
+    }
   }
 
   /**
@@ -144,6 +256,17 @@ export class CanvasManager {
     if (byDataAttr) {
       // 缓存到映射中
       this.canvasMap.set(uuid, byDataAttr)
+      this.canvasAccessTime.set(uuid, Date.now())
+      
+      // 延迟清理：如果 canvasMap 过大，延迟清理
+      if (this.canvasMap.size > this.MAX_CANVAS_MAP_SIZE) {
+        setTimeout(() => {
+          if (this.canvasMap.size > this.MAX_CANVAS_MAP_SIZE) {
+            this.evictCanvasLRU(true) // 只清理不在 DOM 中的
+          }
+        }, 100)
+      }
+      
       return byDataAttr
     }
     
@@ -188,7 +311,13 @@ export class CanvasManager {
       const width = view.getUint32(0, true)
       const height = view.getUint32(4, true)
       const data = new Uint8ClampedArray(buffer, 8)
-      return new ImageData(data, width, height)
+      const imageData = new ImageData(data, width, height)
+      
+      // 注意：ArrayBuffer 会被 ImageData 引用，但 view 和 data 是临时对象
+      // 它们会在函数返回后被 GC，但 ArrayBuffer 会一直存在直到 ImageData 被释放
+      // 这是正常的，因为 ImageData 需要这些数据
+      
+      return imageData
     } catch (error) {
       console.error('Failed to restore ImageData from ArrayBuffer:', error)
       return null
@@ -321,10 +450,62 @@ export class CanvasManager {
       }
     }
     toRemove.forEach(uuid => {
+      // 清理 ImageData（释放内存）
+      const cached = this.renderCache.get(uuid)
+      if (cached && cached.imageData) {
+        // ImageData 会被垃圾回收，但显式删除可以加速回收
+        cached.imageData = null as any
+      }
       this.renderCache.delete(uuid)
       this.contentVersions.delete(uuid)
       // 注意：不删除 IndexedDB 中的缓存，以便后续快速加载
     })
+    
+    // 如果缓存仍然超过限制，使用 LRU 策略清理
+    if (this.renderCache.size > this.MAX_MEMORY_CACHE_SIZE) {
+      const excess = this.renderCache.size - this.MAX_MEMORY_CACHE_SIZE
+      for (let i = 0; i < excess; i++) {
+        this.evictLRU()
+      }
+    }
+  }
+  
+  /**
+   * 获取当前缓存大小
+   */
+  static getCacheSize(): number {
+    return this.renderCache.size
+  }
+  
+  /**
+   * 强制清理所有缓存（用于内存压力大时）
+   */
+  static forceCleanupAllCache(): void {
+    // 清理所有 ImageData
+    for (const cached of this.renderCache.values()) {
+      if (cached && cached.imageData) {
+        cached.imageData = null as any
+      }
+    }
+    this.renderCache.clear()
+    this.contentVersions.clear()
+    
+    // 清空所有 Canvas 内容（释放像素数据）
+    for (const canvas of this.canvasMap.values()) {
+      this.clearCanvasContent(canvas)
+    }
+    
+    // 清理 Canvas 映射（但保留 DOM 中的 Canvas 元素）
+    // 注意：不清空 canvasMap，因为 Canvas 元素还在 DOM 中，下次访问时会重新注册
+    // 但清空访问时间，让它们可以被 LRU 清理
+    this.canvasAccessTime.clear()
+  }
+  
+  /**
+   * 获取 Canvas 映射大小
+   */
+  static getCanvasMapSize(): number {
+    return this.canvasMap.size
   }
   
   /**
@@ -422,7 +603,12 @@ export class CanvasManager {
    * 注意：这个方法只检查 Canvas 上是否有像素数据，不检查是否渲染过特定 UUID
    * 应该结合 canvasUUIDMap 来判断 Canvas 是否渲染过特定字符
    */
-  static hasContent(canvas: HTMLCanvasElement): boolean {
+  static hasContent(canvas: HTMLCanvasElement | null | undefined): boolean {
+    // 如果 canvas 为 null 或 undefined，返回 false
+    if (!canvas) {
+      return false
+    }
+    
     // 如果Canvas尺寸为0，肯定没有内容
     if (canvas.width === 0 || canvas.height === 0) {
       return false

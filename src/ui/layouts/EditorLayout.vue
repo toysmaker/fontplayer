@@ -4,14 +4,11 @@
       <!-- 左侧菜单栏（Web和Tauri都显示） -->
       <n-layout-sider
         v-if="showSidebar"
-        :width="sidebarWidth"
+        :width="80"
         collapse-mode="width"
-        :collapsed="sidebarCollapsed"
-        :collapsed-width="64"
-        show-trigger
+        :collapsed="true"
+        :collapsed-width="80"
         bordered
-        @collapse="sidebarCollapsed = true"
-        @expand="sidebarCollapsed = false"
       >
         <EditorSidebar />
       </n-layout-sider>
@@ -28,16 +25,82 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { NLayout, NLayoutSider, NLayoutContent } from 'naive-ui'
 import EditorSidebar from './EditorSidebar.vue'
 import EditorMain from './EditorMain.vue'
 import LoadingProgress from '@/ui/components/LoadingProgress.vue'
-import { isTauri } from '@/utils/env'
+import { isTauri, getEnv } from '@/utils/env'
 import { initTauriMenu } from '@/utils/tauri-menu'
+import { useProjectStore } from '@/stores/project'
+import { useEditorStore } from '@/stores/editor'
+import { EditStatus } from '@/core/types'
+
+const { t, locale } = useI18n()
+const projectStore = useProjectStore()
+const editorStore = useEditorStore()
 
 const showSidebar = ref(true)
-const sidebarCollapsed = ref(false)
-const sidebarWidth = ref(280)
+const sidebarCollapsed = ref(true)
+const sidebarWidth = ref(64)
+
+// 路由离开前提示
+onBeforeRouteLeave((to, from, next) => {
+  let msg = '你确定要离开吗？未保存的更改将丢失。'
+  if (locale.value === 'zh') {
+    msg = '你确定要离开吗？未保存的更改将丢失。'
+  } else if (locale.value === 'en') {
+    msg = 'Exit without saving? Your changes will be lost.'
+  }
+  const answer = window.confirm(msg)
+  if (answer) {
+    next() // 允许离开
+  } else {
+    next(false) // 阻止离开
+  }
+})
+
+// 浏览器关闭/刷新前提示
+const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+  if (getEnv() === 'web') {
+    // 取消默认事件
+    e.preventDefault()
+    let msg = '你确定要离开吗？未保存的更改将丢失。'
+    if (locale.value === 'zh') {
+      msg = '你确定要离开吗？未保存的更改将丢失。'
+    } else if (locale.value === 'en') {
+      msg = 'Exit without saving? Your changes will be lost.'
+    }
+    // 设置 returnValue 属性，提示用户
+    e.returnValue = msg // 现代浏览器会使用默认提示
+    return '' // 在某些老旧浏览器中可能需要返回值
+  }
+}
+
+// 键盘事件处理，阻止 Backspace/Delete 触发浏览器后退
+const onKeyDown = (e: KeyboardEvent) => {
+  // 处理删除键和退格键，防止触发浏览器后退
+  if (e.key === 'Backspace' || e.key === 'Delete') {
+    // 检查当前焦点是否在输入框、文本域或其他可编辑元素中
+    const target = e.target as HTMLElement
+    const isInputElement = target.tagName === 'INPUT' || 
+      target.tagName === 'TEXTAREA' || 
+      target.isContentEditable ||
+      target.closest('input, textarea, [contenteditable="true"]')
+    
+    // 如果不在输入框中，阻止默认行为并执行删除操作
+    if (!isInputElement) {
+      e.preventDefault()
+      e.stopPropagation()
+      // 执行删除操作（调用菜单中的删除处理函数）
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        // 触发删除事件，由 EditorSidebar 处理
+        window.dispatchEvent(new CustomEvent('editor-delete'))
+      }
+    }
+  }
+}
 
 // 在 Tauri 环境中初始化原生菜单
 const handleShowNewProjectDialog = () => {
@@ -46,6 +109,11 @@ const handleShowNewProjectDialog = () => {
 }
 
 onMounted(() => {
+  // 监听浏览器关闭/刷新事件
+  window.addEventListener('beforeunload', handleBeforeUnload)
+  // 监听键盘事件
+  document.addEventListener('keydown', onKeyDown)
+  
   if (isTauri()) {
     initTauriMenu()
     window.addEventListener('show-new-project-dialog', handleShowNewProjectDialog)
@@ -53,6 +121,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+  document.removeEventListener('keydown', onKeyDown)
+  
   if (isTauri()) {
     window.removeEventListener('show-new-project-dialog', handleShowNewProjectDialog)
   }
@@ -72,5 +143,14 @@ onUnmounted(() => {
 .editor-main {
   padding: 0;
   overflow: hidden;
+}
+
+/* 确保sider不裁剪子菜单 */
+:deep(.n-layout-sider) {
+  overflow: visible !important;
+}
+
+:deep(.n-layout-sider .n-layout-sider-scroll-container) {
+  overflow: visible !important;
 }
 </style>

@@ -9,8 +9,9 @@ import type { ICharacterFileLite, ICharacterFileMetadata } from '../types'
 export class CharacterDataManager {
   private static instance: CharacterDataManager
   private cache: Map<string, ICharacterFileLite> = new Map()
+  private cacheAccessTime: Map<string, number> = new Map() // 记录访问时间，用于 LRU
   private loadingPromises: Map<string, Promise<ICharacterFileLite | null>> = new Map()
-  private readonly MAX_CACHE_SIZE = 100 // 最多缓存100个字符数据
+  private readonly MAX_CACHE_SIZE = 30 // 最多缓存30个字符数据（减少内存占用）
 
   private constructor() {}
 
@@ -46,6 +47,8 @@ export class CharacterDataManager {
     // 检查缓存
     const cacheKey = `${fileUUID}_${characterUUID}`
     if (this.cache.has(cacheKey)) {
+      // 更新访问时间（LRU）
+      this.cacheAccessTime.set(cacheKey, Date.now())
       return this.cache.get(cacheKey)!
     }
 
@@ -90,14 +93,69 @@ export class CharacterDataManager {
    * 添加到缓存（LRU策略）
    */
   private addToCache(key: string, character: ICharacterFileLite): void {
-    // 如果缓存已满，删除最旧的
+    // 如果缓存已满，删除最久未使用的
     if (this.cache.size >= this.MAX_CACHE_SIZE) {
-      const firstKey = this.cache.keys().next().value
-      if (firstKey) {
-        this.cache.delete(firstKey)
-      }
+      this.evictLRU()
     }
     this.cache.set(key, character)
+    this.cacheAccessTime.set(key, Date.now())
+  }
+  
+  /**
+   * 移除最久未使用的缓存（LRU 策略）
+   */
+  private evictLRU(): void {
+    let oldestKey: string | null = null
+    let oldestTime = Infinity
+    
+    for (const [key, time] of this.cacheAccessTime.entries()) {
+      if (time < oldestTime) {
+        oldestTime = time
+        oldestKey = key
+      }
+    }
+    
+    if (oldestKey) {
+      this.cache.delete(oldestKey)
+      this.cacheAccessTime.delete(oldestKey)
+    }
+  }
+  
+  /**
+   * 清理不可见的字符数据缓存
+   */
+  cleanupInvisible(visibleUUIDs: Set<string>, fileUUID: string): void {
+    const toRemove: string[] = []
+    for (const [key] of this.cache) {
+      // key 格式: fileUUID_characterUUID
+      const parts = key.split('_')
+      if (parts.length >= 2 && parts[0] === fileUUID) {
+        const characterUUID = parts.slice(1).join('_')
+        if (!visibleUUIDs.has(characterUUID)) {
+          toRemove.push(key)
+        }
+      }
+    }
+    toRemove.forEach(key => {
+      this.cache.delete(key)
+      this.cacheAccessTime.delete(key)
+    })
+    
+    // 如果缓存仍然超过限制，使用 LRU 策略清理
+    if (this.cache.size > this.MAX_CACHE_SIZE) {
+      const excess = this.cache.size - this.MAX_CACHE_SIZE
+      for (let i = 0; i < excess; i++) {
+        this.evictLRU()
+      }
+    }
+  }
+  
+  /**
+   * 强制清理所有缓存（用于内存压力大时）
+   */
+  forceCleanupAllCache(): void {
+    this.cache.clear()
+    this.cacheAccessTime.clear()
   }
 
   /**
@@ -168,6 +226,7 @@ export class CharacterDataManager {
    */
   clearCache(): void {
     this.cache.clear()
+    this.cacheAccessTime.clear()
   }
 }
 
