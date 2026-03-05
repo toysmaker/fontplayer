@@ -9,18 +9,9 @@
     <main class="editor-content-wrapper">
       <!-- 左侧面板 -->
       <aside class="left-panel-wrapper">
-        <n-card title="组件列表" class="component-list-card" :bordered="false">
-          <n-list>
-            <n-list-item
-              v-for="component in components"
-              :key="component.uuid"
-              :class="{ 'selected': component.uuid === characterStore.selectedComponentUUID }"
-              @click="handleComponentClick(component)"
-            >
-              <n-thing :title="component.name || component.type" />
-            </n-list-item>
-          </n-list>
-        </n-card>
+        <div class="left-panel-content">
+          <CharacterComponentList />
+        </div>
       </aside>
       
       <!-- 中间 Canvas 区域 -->
@@ -54,12 +45,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { NCard, NList, NListItem, NThing, NEmpty } from 'naive-ui'
+import { NCard, NEmpty } from 'naive-ui'
 import { useCharacterStore } from '@/stores/character'
 import { getOrCreateDragger } from '@/features/tools/glyphDragger'
 import type { BaseGlyphDragger } from '@/features/tools/glyphDragger'
 import ParameterEditor from '@/ui/components/ParameterEditor.vue'
 import ToolBar from '@/ui/components/ToolBar/ToolBar.vue'
+import CharacterComponentList from '@/ui/components/ComponentList/CharacterComponentList.vue'
 import type { IComponent, ICharacterFileLite } from '@/core/types'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 
@@ -68,39 +60,6 @@ const canvasRef = ref<HTMLCanvasElement>()
 let dragger: BaseGlyphDragger | null = null
 
 const selectedComponent = computed(() => characterStore.selectedComponent)
-
-// 获取字符的所有组件（扁平化）
-const components = computed(() => {
-  const character = characterStore.editingCharacter as ICharacterFileLite | null
-  if (!character || !character.components) return []
-  
-  // 递归获取所有组件
-  const flattenComponents = (comps: IComponent[]): IComponent[] => {
-    const result: IComponent[] = []
-    for (const comp of comps) {
-      result.push(comp)
-      // 如果是字形组件，递归获取子组件
-      if (comp.type === 'glyph' && (comp.value as any).components) {
-        result.push(...flattenComponents((comp.value as any).components))
-      }
-    }
-    return result
-  }
-  
-  return flattenComponents(character.components)
-})
-
-// 处理组件点击
-const _handleComponentClick = (component: IComponent) => {
-  characterStore.selectComponent(component.uuid, [])
-}
-
-// 使用防重复调用包装，通过UUID区分不同的组件
-const handleComponentClick = createDebouncedHandler(
-  _handleComponentClick,
-  'CharacterEditor.componentClick',
-  (args) => args[0].uuid // 使用UUID作为比较参数
-)
 
 // 初始化拖拽器
 const initDragger = () => {
@@ -151,12 +110,48 @@ const cleanupDragger = () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 如果还没有设置编辑字符，从 UUID 设置
+  if (characterStore.editingCharacterUUID) {
+    if (!characterStore.editingCharacter) {
+      if (import.meta.env.DEV) {
+        console.log('[CharacterEditor] onMounted: setting edit character from UUID', characterStore.editingCharacterUUID)
+      }
+      await characterStore.setEditCharacterFileByUUID(characterStore.editingCharacterUUID)
+    } else {
+      if (import.meta.env.DEV) {
+        console.log('[CharacterEditor] onMounted: editingCharacter already set', {
+          uuid: characterStore.editingCharacterUUID,
+          componentsCount: characterStore.editingCharacter.components?.length || 0,
+          orderedListCount: characterStore.editingCharacter.orderedList?.length || 0
+        })
+      }
+    }
+  } else {
+    if (import.meta.env.DEV) {
+      console.warn('[CharacterEditor] onMounted: no editingCharacterUUID set')
+    }
+  }
+  
+  // 等待 nextTick 确保 editingCharacter 已设置
+  await nextTick()
+  if (import.meta.env.DEV) {
+    console.log('[CharacterEditor] onMounted after nextTick:', {
+      editingCharacter: !!characterStore.editingCharacter,
+      componentsCount: characterStore.editingCharacter?.components?.length || 0,
+      orderedListCount: characterStore.editingCharacter?.orderedList?.length || 0
+    })
+  }
   initDragger()
 })
 
 onUnmounted(() => {
   cleanupDragger()
+  // 退出编辑时，将编辑字符的数据同步回列表
+  if (characterStore.editingCharacterUUID) {
+    characterStore.updateCharacterListFromEditFile()
+    characterStore.resetEditCharacterFile()
+  }
 })
 
 // 监听编辑字符变化
@@ -212,11 +207,12 @@ watch(() => characterStore.selectedComponent, () => {
   flex-direction: column;
 }
 
-.component-list-card {
+.left-panel-content {
   flex: 1;
-  overflow-y: auto;
-  height: 100%;
-  background-color: var(--dark-0);
+  overflow: hidden;
+  height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .main-wrapper {
@@ -269,16 +265,4 @@ watch(() => characterStore.selectedComponent, () => {
   background-color: white;
 }
 
-.n-list-item {
-  cursor: pointer;
-  padding: 8px;
-}
-
-.n-list-item.selected {
-  background-color: var(--n-color-hover);
-}
-
-.n-list-item:hover {
-  background-color: var(--n-color-hover);
-}
 </style>

@@ -302,9 +302,26 @@ const handleScroll = throttle((e: Event) => {
 }, 16) // 约60fps
 
 // 处理项点击
-const _handleItemClick = (character: ICharacterFileLite) => {
+const _handleItemClick = async (character: ICharacterFileLite) => {
   // 触发字符编辑
-  characterStore.setEditingCharacter(character.uuid)
+  // 先设置编辑字符（深拷贝，与列表分离）
+  if (import.meta.env.DEV) {
+    console.log('[VirtualCharacterList] _handleItemClick:', {
+      uuid: character.uuid,
+      componentsCount: character.components?.length || 0,
+      orderedListCount: character.orderedList?.length || 0
+    })
+  }
+  // 等待加载完整字符数据
+  await characterStore.setEditCharacterFileByUUID(character.uuid)
+  // 等待 nextTick 确保 editingCharacter 已设置
+  await nextTick()
+  if (import.meta.env.DEV) {
+    console.log('[VirtualCharacterList] after setEditCharacterFileByUUID:', {
+      editingCharacter: !!characterStore.editingCharacter,
+      componentsCount: characterStore.editingCharacter?.components?.length || 0
+    })
+  }
   editorStore.setEditStatus(EditStatus.Edit)
 }
 

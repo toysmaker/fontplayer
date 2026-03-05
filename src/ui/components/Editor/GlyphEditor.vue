@@ -9,19 +9,9 @@
     <main class="editor-content-wrapper">
       <!-- 左侧面板 -->
       <aside class="left-panel-wrapper">
-        <n-card title="组件列表" class="component-list-card" :bordered="false">
-          <n-list>
-            <n-list-item
-              v-for="component in components"
-              :key="component.uuid"
-              :class="{ 'selected': component.uuid === glyphStore.selectedComponentUUID }"
-              @click="handleComponentClick(component)"
-              @pointerdown="handleComponentClick(component)"
-            >
-              <n-thing :title="component.name || component.type" />
-            </n-list-item>
-          </n-list>
-        </n-card>
+        <div class="left-panel-content">
+          <GlyphComponentList />
+        </div>
       </aside>
       
       <!-- 中间 Canvas 区域 -->
@@ -60,53 +50,19 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { NCard, NList, NListItem, NThing, NEmpty } from 'naive-ui'
+import { NCard, NEmpty } from 'naive-ui'
 import { useGlyphStore } from '@/stores/glyph'
 import { getOrCreateDragger } from '@/features/tools/glyphDragger'
 import type { BaseGlyphDragger } from '@/features/tools/glyphDragger'
 import ParameterEditor from '@/ui/components/ParameterEditor.vue'
 import ToolBar from '@/ui/components/ToolBar/ToolBar.vue'
-import type { IGlyphComponent } from '@/core/types'
-import { createDebouncedHandler } from '@/utils/debounce-click'
+import GlyphComponentList from '@/ui/components/ComponentList/GlyphComponentList.vue'
 
 const glyphStore = useGlyphStore()
 const canvasRef = ref<HTMLCanvasElement>()
 let dragger: BaseGlyphDragger | null = null
 
 const selectedComponent = computed(() => glyphStore.selectedComponent)
-
-// 获取字形的所有组件（扁平化）
-const components = computed(() => {
-  const glyph = glyphStore.editingGlyph
-  if (!glyph) return []
-  
-  // 递归获取所有组件
-  const flattenComponents = (comps: IGlyphComponent[]): IGlyphComponent[] => {
-    const result: IGlyphComponent[] = []
-    for (const comp of comps) {
-      result.push(comp)
-      // 如果是字形组件，递归获取子组件
-      if (comp.type === 'glyph' && (comp.value as any).components) {
-        result.push(...flattenComponents((comp.value as any).components))
-      }
-    }
-    return result
-  }
-  
-  return flattenComponents(glyph.components || [])
-})
-
-// 处理组件点击
-const _handleComponentClick = (component: IGlyphComponent) => {
-  glyphStore.selectComponent(component.uuid, [])
-}
-
-// 使用防重复调用包装，通过UUID区分不同的组件
-const handleComponentClick = createDebouncedHandler(
-  _handleComponentClick,
-  'GlyphEditor.componentClick',
-  (args) => args[0].uuid // 使用UUID作为比较参数
-)
 
 // 初始化拖拽器
 const initDragger = () => {
@@ -158,11 +114,20 @@ const cleanupDragger = () => {
 }
 
 onMounted(() => {
+  // 如果还没有设置编辑字形，从 UUID 设置
+  if (glyphStore.editingGlyphUUID && !glyphStore.editingGlyph) {
+    glyphStore.setEditGlyphByUUID(glyphStore.editingGlyphUUID, glyphStore.glyphCategory)
+  }
   initDragger()
 })
 
 onUnmounted(() => {
   cleanupDragger()
+  // 退出编辑时，将编辑字形的数据同步回列表
+  if (glyphStore.editingGlyphUUID) {
+    glyphStore.updateGlyphListFromEditFile()
+    glyphStore.resetEditGlyph()
+  }
 })
 
 // 监听编辑字形变化
@@ -237,11 +202,12 @@ const handleCanvasClick = createDebouncedHandler(_handleCanvasClick, 'GlyphEdito
   flex-direction: column;
 }
 
-.component-list-card {
+.left-panel-content {
   flex: 1;
-  overflow-y: auto;
-  height: 100%;
-  background-color: var(--dark-0);
+  overflow: hidden;
+  height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .main-wrapper {
@@ -294,16 +260,4 @@ const handleCanvasClick = createDebouncedHandler(_handleCanvasClick, 'GlyphEdito
   background-color: white;
 }
 
-.n-list-item {
-  cursor: pointer;
-  padding: 8px;
-}
-
-.n-list-item.selected {
-  background-color: var(--n-color-hover);
-}
-
-.n-list-item:hover {
-  background-color: var(--n-color-hover);
-}
 </style>

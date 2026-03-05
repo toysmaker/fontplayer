@@ -19,6 +19,10 @@ export const useEditorStore = defineStore('editor', () => {
   // 搜索相关状态
   const isCharacterSearching = ref(false)
   const characterSearchKeyword = ref('')
+  
+  // 组件列表过滤器
+  const editPanelCompFilter = ref<'all' | 'font'>('all')
+  const glyphPanelCompFilter = ref<'all' | 'font'>('all')
 
   // Actions
   /**
@@ -111,6 +115,20 @@ export const useEditorStore = defineStore('editor', () => {
     }
   }
 
+  /**
+   * 设置编辑面板组件过滤器
+   */
+  function setEditPanelCompFilter(filter: 'all' | 'font') {
+    editPanelCompFilter.value = filter
+  }
+
+  /**
+   * 设置字形面板组件过滤器
+   */
+  function setGlyphPanelCompFilter(filter: 'all' | 'font') {
+    glyphPanelCompFilter.value = filter
+  }
+
   return {
     // State
     editStatus,
@@ -121,6 +139,8 @@ export const useEditorStore = defineStore('editor', () => {
     showBottomBar,
     isCharacterSearching,
     characterSearchKeyword,
+    editPanelCompFilter,
+    glyphPanelCompFilter,
     
     // Actions
     setEditStatus,
@@ -130,5 +150,7 @@ export const useEditorStore = defineStore('editor', () => {
     toggleBottomBar,
     setCharacterSearchKeyword,
     setIsCharacterSearching,
+    setEditPanelCompFilter,
+    setGlyphPanelCompFilter,
   }
 })

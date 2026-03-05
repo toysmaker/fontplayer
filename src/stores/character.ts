@@ -4,11 +4,14 @@
  */
 
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import type { ICharacterFileLite, IComponent } from '@/core/types'
 import { useProjectStore } from './project'
 import { instanceManager } from '@/core/instance'
 import { Character } from '@/core/instance/Character'
+import { selectedItemByUUID } from '@/core/utils/component'
+import { genUUID } from '@/core/script/adapters'
+import * as R from 'ramda'
 
 export const useCharacterStore = defineStore('character', () => {
   const projectStore = useProjectStore()
@@ -17,16 +20,18 @@ export const useCharacterStore = defineStore('character', () => {
   const editingCharacterUUID = ref<string>('')
   const selectedComponentUUID = ref<string>('')
   const selectedComponentsTree = ref<string[]>([])
-
-  // Getters
-  const editingCharacter = computed(() => {
-    if (!editingCharacterUUID.value || !projectStore.selectedFile) {
-      return null
-    }
-    return projectStore.selectedFile.characterList.find(
-      c => c.uuid === editingCharacterUUID.value
-    ) || null
+  
+  // 剪贴板
+  const clipBoard = reactive<{ value: Array<IComponent> }>({
+    value: []
   })
+  
+  // 是否支持多选
+  const enableMultiSelect = ref(false)
+
+  // 当前编辑的字符文件（独立对象，与列表分离，提升性能）
+  // 由于列表中有大量字符时，computed属性计算过慢，editCharacterFile改用手动赋值，不使用computed
+  const editingCharacter = ref<ICharacterFileLite | null>(null)
 
   const selectedComponent = computed(() => {
     if (!selectedComponentUUID.value || !editingCharacter.value) {
@@ -36,6 +41,81 @@ export const useCharacterStore = defineStore('character', () => {
       editingCharacter.value.components,
       selectedComponentUUID.value
     )
+  })
+
+  // 当前字符文件的排序组件（包含组件本身）列表
+  const orderedListWithItemsForCurrentCharacterFile = computed(() => {
+    if (!editingCharacter.value) {
+      if (import.meta.env.DEV) {
+        console.log('[CharacterStore] orderedListWithItemsForCurrentCharacterFile: editingCharacter is null')
+      }
+      return []
+    }
+    const characterFile = editingCharacter.value
+    if (!characterFile.components || characterFile.components.length === 0) {
+      if (import.meta.env.DEV) {
+        console.log('[CharacterStore] orderedListWithItemsForCurrentCharacterFile: no components')
+      }
+      return []
+    }
+    if (!characterFile.orderedList || !characterFile.orderedList.length) {
+      if (import.meta.env.DEV) {
+        console.log('[CharacterStore] orderedListWithItemsForCurrentCharacterFile: no orderedList, using components directly', {
+          componentsCount: characterFile.components.length
+        })
+      }
+      return characterFile.components || []
+    }
+    
+    const result = characterFile.orderedList.map((item: { type: string; uuid: string }) => {
+      if (item.type === 'group') {
+        // 如果是组，从 groups 中查找（暂时不支持组）
+        return null
+      }
+      return selectedItemByUUID(characterFile.components, item.uuid)
+    }).filter((item): item is IComponent => item !== null)
+    
+    if (import.meta.env.DEV) {
+      console.log('[CharacterStore] orderedListWithItemsForCurrentCharacterFile:', {
+        orderedListCount: characterFile.orderedList.length,
+        resultCount: result.length,
+        componentsCount: characterFile.components.length
+      })
+    }
+    
+    return result
+  })
+
+  // 当前字符文件的排序列表（不包含组件本身）
+  const orderedListForCurrentCharacterFile = computed(() => {
+    if (!editingCharacter.value) return []
+    return editingCharacter.value.orderedList || []
+  })
+
+  // 选中的所有组件uuid列表
+  const selectedComponentsUUIDs = computed(() => {
+    if (!editingCharacter.value) return []
+    return editingCharacter.value.selectedComponentsUUIDs || []
+  })
+
+  // 选中的所有组件列表
+  const selectedComponents = computed(() => {
+    if (!editingCharacter.value || !selectedComponentsUUIDs.value.length) return []
+    const components: IComponent[] = []
+    selectedComponentsUUIDs.value.forEach(uuid => {
+      const component = findComponentInTree(editingCharacter.value!.components, uuid)
+      if (component) {
+        components.push(component)
+      }
+    })
+    return components
+  })
+
+  // 用在字符中的组件列表（usedInCharacter 为 true 的组件）
+  const usedComponents = computed(() => {
+    return orderedListWithItemsForCurrentCharacterFile.value.filter((component: IComponent) => {
+      return !!component.usedInCharacter
+    })
   })
 
   /**
@@ -63,7 +143,121 @@ export const useCharacterStore = defineStore('character', () => {
 
   // Actions
   /**
-   * 设置正在编辑的字符
+   * 设置正在编辑的字符 UUID
+   */
+  function setEditingCharacterUUID(uuid: string) {
+    editingCharacterUUID.value = uuid
+  }
+
+  /**
+   * 从列表中设置编辑字符（深拷贝，与列表分离）
+   * 将列表中指定uuid的字符数据设置为editCharacterFile
+   * 注意：如果列表中的字符只有元数据，需要从IndexedDB加载完整数据
+   */
+  async function setEditCharacterFileByUUID(uuid: string) {
+    if (!projectStore.selectedFile) return
+    
+    const characterMetadata = projectStore.selectedFile.characterList.find(
+      c => c.uuid === uuid
+    )
+    
+    if (!characterMetadata) {
+      if (import.meta.env.DEV) {
+        console.warn('[CharacterStore] setEditCharacterFileByUUID: character not found', uuid)
+      }
+      return
+    }
+    
+    // 检查是否是完整数据（有 components 属性）还是只是元数据
+    let character: ICharacterFileLite | null = null
+    
+    if ('components' in characterMetadata && Array.isArray((characterMetadata as any).components)) {
+      // 已经是完整数据
+      character = characterMetadata as ICharacterFileLite
+    } else {
+      // 只是元数据，需要从 IndexedDB 加载完整数据
+      if (import.meta.env.DEV) {
+        console.log('[CharacterStore] setEditCharacterFileByUUID: loading full character data from IndexedDB', uuid)
+      }
+      const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
+      character = await characterDataManager.loadCharacter(projectStore.selectedFile.uuid, uuid)
+    }
+    
+    if (!character) {
+      if (import.meta.env.DEV) {
+        console.error('[CharacterStore] setEditCharacterFileByUUID: failed to load character', uuid)
+      }
+      return
+    }
+    
+    // 深拷贝字符数据，与列表分离
+    editingCharacter.value = R.clone(character) as ICharacterFileLite
+    editingCharacterUUID.value = uuid
+    selectedComponentUUID.value = ''
+    selectedComponentsTree.value = []
+    
+    // 确保必要的属性存在
+    if (!editingCharacter.value.components) {
+      editingCharacter.value.components = []
+    }
+    if (!editingCharacter.value.orderedList) {
+      // 如果 orderedList 不存在，从 components 生成
+      editingCharacter.value.orderedList = editingCharacter.value.components.map(comp => ({
+        type: 'component',
+        uuid: comp.uuid
+      }))
+    }
+    if (!editingCharacter.value.selectedComponentsUUIDs) {
+      editingCharacter.value.selectedComponentsUUIDs = []
+    }
+    if (!editingCharacter.value.groups) {
+      editingCharacter.value.groups = []
+    }
+    
+    if (import.meta.env.DEV) {
+      console.log('[CharacterStore] setEditCharacterFileByUUID:', {
+        uuid,
+        componentsCount: editingCharacter.value.components.length,
+        orderedListCount: editingCharacter.value.orderedList.length
+      })
+    }
+    
+    // 标记为正在编辑，触发实例化
+    instanceManager.markEditing(uuid)
+    // 获取或创建实例（延迟实例化）
+    getCharacterInstance()
+  }
+
+  /**
+   * 重置编辑字符（退出编辑时调用）
+   */
+  function resetEditCharacterFile() {
+    editingCharacter.value = null
+    editingCharacterUUID.value = ''
+    selectedComponentUUID.value = ''
+    selectedComponentsTree.value = []
+  }
+
+  /**
+   * 将编辑字符的数据同步回列表
+   * 在退出编辑时调用，将 editCharacterFile 的值赋给列表中相应字符
+   */
+  function updateCharacterListFromEditFile() {
+    if (!editingCharacter.value || !projectStore.selectedFile) return
+    
+    const characterList = projectStore.selectedFile.characterList
+    const index = characterList.findIndex(
+      c => c.uuid === editingCharacterUUID.value
+    )
+    
+    if (index >= 0) {
+      // 深拷贝编辑字符的数据回列表
+      characterList[index] = R.clone(editingCharacter.value) as ICharacterFileLite
+    }
+  }
+
+  /**
+   * 设置正在编辑的字符（兼容旧接口）
    * 会触发实例化（延迟实例化）
    */
   function setEditingCharacter(uuid: string) {
@@ -72,16 +266,8 @@ export const useCharacterStore = defineStore('character', () => {
       instanceManager.unmarkEditing(editingCharacterUUID.value)
     }
     
-    editingCharacterUUID.value = uuid
-    selectedComponentUUID.value = ''
-    selectedComponentsTree.value = []
-    
-    // 标记为正在编辑，触发实例化
-    if (uuid && editingCharacter.value) {
-      instanceManager.markEditing(uuid)
-      // 获取或创建实例（延迟实例化）
-      getCharacterInstance()
-    }
+    // 从列表中设置编辑字符
+    setEditCharacterFileByUUID(uuid)
   }
 
   /**
@@ -129,21 +315,188 @@ export const useCharacterStore = defineStore('character', () => {
     return false
   }
 
+  /**
+   * 修改组件（支持更多选项）
+   */
+  function modifyComponent(uuid: string, options: Partial<IComponent>) {
+    if (!editingCharacter.value) return false
+    
+    const component = findComponentInTree(editingCharacter.value.components, uuid)
+    if (!component) return false
+    
+    Object.keys(options).forEach((key: string) => {
+      const value = (options as any)[key]
+      if (key === 'value' && typeof value === 'object') {
+        // 深拷贝 value 对象
+        (component as any).value = R.clone(value)
+      } else {
+        (component as any)[key] = value
+      }
+    })
+    
+    return true
+  }
+
+  /**
+   * 删除组件
+   */
+  function removeComponent(uuid: string) {
+    if (!editingCharacter.value) return false
+    
+    const characterFile = editingCharacter.value
+    const index = characterFile.components.findIndex(comp => comp.uuid === uuid)
+    if (index === -1) return false
+    
+    // 从 orderedList 中删除
+    removeOrderedItem(uuid)
+    
+    // 从 components 中删除
+    characterFile.components.splice(index, 1)
+    
+    // 清除选择
+    if (selectedComponentUUID.value === uuid) {
+      selectedComponentUUID.value = ''
+      selectedComponentsTree.value = []
+    }
+    
+    return true
+  }
+
+  /**
+   * 从 orderedList 中删除项目
+   */
+  function removeOrderedItem(uuid: string) {
+    if (!editingCharacter.value) return
+    
+    const characterFile = editingCharacter.value
+    if (!characterFile.orderedList) return
+    
+    const index = characterFile.orderedList.findIndex(item => item.uuid === uuid)
+    if (index >= 0) {
+      characterFile.orderedList.splice(index, 1)
+    }
+  }
+
+  /**
+   * 插入组件
+   */
+  function insertComponent(component: IComponent, options: { uuid: string; pos: 'prev' | 'next' }) {
+    if (!editingCharacter.value) return false
+    
+    const characterFile = editingCharacter.value
+    characterFile.components.push(component)
+    
+    // 插入到 orderedList
+    insertOrderedItem({
+      type: 'component',
+      uuid: component.uuid,
+    }, options)
+    
+    return true
+  }
+
+  /**
+   * 插入 orderedList 项目
+   */
+  function insertOrderedItem(
+    item: { type: string; uuid: string },
+    options: { uuid: string; pos: 'prev' | 'next' }
+  ) {
+    if (!editingCharacter.value) return
+    
+    const characterFile = editingCharacter.value
+    if (!characterFile.orderedList) {
+      characterFile.orderedList = []
+    }
+    
+    const index = characterFile.orderedList.findIndex(item => item.uuid === options.uuid)
+    if (index === -1) {
+      // 如果找不到，直接添加到末尾
+      characterFile.orderedList.push(item)
+      return
+    }
+    
+    if (options.pos === 'prev') {
+      characterFile.orderedList.splice(index, 0, item)
+    } else {
+      characterFile.orderedList.splice(index + 1, 0, item)
+    }
+  }
+
+  /**
+   * 设置排序列表
+   */
+  function setOrderedList(list: Array<{ type: string; uuid: string }>) {
+    if (!editingCharacter.value) return
+    editingCharacter.value.orderedList = list
+  }
+
+  /**
+   * 设置组件选择（支持多选）
+   */
+  function setSelection(uuid: string) {
+    if (!editingCharacter.value) return
+    
+    const characterFile = editingCharacter.value
+    if (!characterFile.selectedComponentsUUIDs) {
+      characterFile.selectedComponentsUUIDs = []
+    }
+    
+    if (uuid) {
+      if (enableMultiSelect.value) {
+        const index = characterFile.selectedComponentsUUIDs.indexOf(uuid)
+        if (index === -1) {
+          characterFile.selectedComponentsUUIDs.push(uuid)
+        } else {
+          characterFile.selectedComponentsUUIDs.splice(index, 1)
+        }
+      } else {
+        characterFile.selectedComponentsUUIDs = [uuid]
+      }
+    } else {
+      characterFile.selectedComponentsUUIDs = []
+    }
+  }
+
+  /**
+   * 设置剪贴板
+   */
+  function setClipBoard(components: IComponent | IComponent[]) {
+    clipBoard.value = Array.isArray(components) ? R.clone(components) : [R.clone(components)]
+  }
+
   return {
     // State
     editingCharacterUUID,
     selectedComponentUUID,
     selectedComponentsTree,
+    clipBoard,
+    enableMultiSelect,
     
     // Getters
     editingCharacter,
     selectedComponent,
+    orderedListWithItemsForCurrentCharacterFile,
+    orderedListForCurrentCharacterFile,
+    selectedComponentsUUIDs,
+    selectedComponents,
+    usedComponents,
     
     // Actions
     setEditingCharacter,
+    setEditingCharacterUUID,
+    setEditCharacterFileByUUID,
+    resetEditCharacterFile,
+    updateCharacterListFromEditFile,
     getCharacterInstance,
     selectComponent,
     clearSelection,
     updateComponent,
+    modifyComponent,
+    removeComponent,
+    insertComponent,
+    setOrderedList,
+    setSelection,
+    setClipBoard,
   }
 })

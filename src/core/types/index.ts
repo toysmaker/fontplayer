@@ -340,7 +340,9 @@ export interface ICustomGlyph {
   type: string
   components: Array<IGlyphComponent>
   groups?: Array<any>
-  orderedList?: Array<any>
+  orderedList?: Array<{ type: string; uuid: string }>
+  selectedComponentsTree?: Array<string>
+  selectedComponentsUUIDs?: Array<string>
   script?: string
   script_reference?: string
   glyph_script?: Record<string, string>
@@ -353,6 +355,11 @@ export interface ICustomGlyph {
   _o?: IGlyphScriptCallbacks | any
   contourRef?: string // IndexedDB key for contour data
   previewRef?: string // IndexedDB key for preview data
+  view?: {
+    zoom?: number
+    translateX?: number
+    translateY?: number
+  }
   // ... 其他属性
 }
 
