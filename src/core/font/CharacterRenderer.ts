@@ -8,6 +8,8 @@ import { ContourConverter } from './converter'
 import { RenderEngine } from './renderer'
 import { CanvasManager } from '../canvas/CanvasManager'
 import { PathType } from './types'
+import { indexedDBManager } from '../storage/IndexedDBManager'
+import type { IContours } from './types'
 
 /**
  * 计算字符内容的版本号（用于判断是否需要重新渲染）
@@ -60,8 +62,31 @@ export class CharacterRenderer {
         }
       }
 
+      // 优先从 IndexedDB 加载预览数据（如果已计算过）
+      let contours: IContours | null = null
+      
+      if (characterFile.previewRef) {
+        try {
+          contours = await indexedDBManager.get<IContours>(characterFile.previewRef)
+          if (contours && contours.length > 0) {
+            // 成功从 IndexedDB 加载，直接使用
+            if (import.meta.env.DEV) {
+              console.log(`[CharacterRenderer] Loaded preview from IndexedDB for ${characterFile.uuid}`)
+            }
+          } else {
+            contours = null
+          }
+        } catch (error) {
+          console.warn(`[CharacterRenderer] Failed to load preview from IndexedDB for ${characterFile.uuid}:`, error)
+          contours = null
+        }
+      }
+
+      // 如果没有预览数据，需要计算
+      let components: any[] = []
+      if (!contours || contours.length === 0) {
       // 获取组件列表
-      const components = ContourConverter.getComponentsForCharacter(
+        components = ContourConverter.getComponentsForCharacter(
         characterFile
       )
 
@@ -81,7 +106,7 @@ export class CharacterRenderer {
       }
 
       // 转换为轮廓
-      const contours = await ContourConverter.componentsToContours(
+        contours = await ContourConverter.componentsToContours(
         components,
         {
           unitsPerEm,
@@ -92,17 +117,38 @@ export class CharacterRenderer {
         { x: 0, y: 0 }
       )
 
-      if (contours.length === 0) {
+        // 如果计算出了轮廓，存储到 IndexedDB（异步，不阻塞渲染）
+        if (contours.length > 0 && !characterFile.previewRef) {
+          const { IndexedDBManager } = await import('../storage/IndexedDBManager')
+          const previewKey = IndexedDBManager.generatePreviewKey(characterFile.uuid)
+          indexedDBManager.set(previewKey, contours).then(() => {
+            characterFile.previewRef = previewKey
+            if (import.meta.env.DEV) {
+              console.log(`[CharacterRenderer] Saved preview to IndexedDB for ${characterFile.uuid}`)
+            }
+          }).catch(error => {
+            console.error(`[CharacterRenderer] Failed to save preview to IndexedDB for ${characterFile.uuid}:`, error)
+          })
+        }
+      }
+
+      if (!contours || contours.length === 0) {
         // 没有轮廓，清空Canvas
-        console.warn(`No contours generated for character ${characterFile.uuid}, components count: ${components.length}`)
         RenderEngine.clearCanvas(canvas)
         return true
       }
       
+      if (import.meta.env.DEV) {
       console.log(`Generated ${contours.length} contours for character ${characterFile.uuid}`)
+      }
 
-      // 获取填充颜色
-      const fillColors = ContourConverter.getFillColors(components)
+      // 获取填充颜色（如果是从 IndexedDB 加载的，需要重新获取组件）
+      let fillColors: string[] = []
+      if (components.length === 0) {
+        // 如果组件为空（从 IndexedDB 加载的情况），需要重新获取组件以提取填充颜色
+        components = ContourConverter.getComponentsForCharacter(characterFile)
+      }
+      fillColors = ContourConverter.getFillColors(components)
 
       // 注意：预览轮廓已经在 converter.ts 中进行了缩放（scale = 100 / unitsPerEm）
       // 所以这里不需要再次缩放，只需要应用偏移来居中显示

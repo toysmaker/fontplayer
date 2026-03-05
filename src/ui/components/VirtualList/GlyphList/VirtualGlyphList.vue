@@ -1,5 +1,5 @@
 <template>
-  <div ref="containerRef" class="virtual-character-list" @scroll="handleScroll">
+  <div ref="containerRef" class="virtual-glyph-list" @scroll="handleScroll">
     <div
       class="virtual-list-spacer"
       :style="{ height: `${totalHeight}px` }"
@@ -13,11 +13,11 @@
         v-for="item in visibleItems"
         :key="item.uuid"
         :ref="el => setItemRef(el, item.uuid)"
-        class="character-item"
+        class="glyph-item"
         @click="handleItemClick(item)"
         @pointerdown="handleItemClick(item)"
       >
-        <CharacterItem :character="item" />
+        <GlyphItem :glyph="item" />
       </div>
     </div>
   </div>
@@ -25,21 +25,20 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import type { ICharacterFileLite, ICharacterFileMetadata } from '@/core/types'
+import type { ICustomGlyph } from '@/core/types'
 import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
-import { useCharacterStore } from '@/stores/character'
-import CharacterItem from './CharacterItem.vue'
+import { useGlyphStore } from '@/stores/glyph'
+import GlyphItem from './GlyphItem.vue'
 import { throttle } from '@/utils/performance'
 import { EditStatus } from '@/core/types'
-import { CharacterRenderer } from '@/core/font/CharacterRenderer'
+import { GlyphRenderer } from '@/core/font/GlyphRenderer'
 import { CanvasManager } from '@/core/canvas/CanvasManager'
-import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
-const characterStore = useCharacterStore()
+const glyphStore = useGlyphStore()
 
 // 渲染队列和缓存
 const renderQueue = ref<string[]>([])
@@ -53,6 +52,7 @@ const props = defineProps<{
   gap?: number
   padding?: number
   overscan?: number
+  glyphType?: 'glyphs' | 'stroke_glyphs' | 'radical_glyphs' | 'comp_glyphs'
 }>()
 
 // 配置
@@ -73,32 +73,14 @@ const containerWidth = ref(0)
 const lastVisibleStart = ref(0)
 const lastVisibleEnd = ref(0)
 
-// 字符列表（元数据，支持搜索过滤）
-const characterList = computed(() => {
-  const allCharacters = projectStore.selectedFile?.characterList || []
+// 字形列表
+const glyphList = computed(() => {
+  const selectedFile = projectStore.selectedFile
+  if (!selectedFile) return []
   
-  // 如果不在搜索状态或没有搜索关键词，返回全部字符
-  if (!editorStore.isCharacterSearching || !editorStore.characterSearchKeyword) {
-    return allCharacters
-  }
-  
-  // 搜索过滤：将关键词拆分成单个字符数组，查找包含其中任何一个字符的所有字符
-  const keyword = editorStore.characterSearchKeyword
-  const keywordChars = Array.from(keyword)
-  
-  return allCharacters.filter((characterFile) => {
-    const characterText = characterFile.character.text
-    // 检查字符文本是否包含关键词中的任何一个字符
-    return keywordChars.some(char => characterText.includes(char))
-  })
+  const glyphType = props.glyphType || 'glyphs'
+  return selectedFile[glyphType] || []
 })
-
-// 加载完整字符数据的辅助函数
-const loadFullCharacter = async (metadata: ICharacterFileMetadata): Promise<ICharacterFileLite | null> => {
-  const fileUUID = projectStore.selectedFile?.uuid
-  if (!fileUUID) return null
-  return await characterDataManager.loadCharacter(fileUUID, metadata.uuid)
-}
 
 // 计算每行字符数（响应式，参考原工程的容错机制）
 const colsPerRow = computed(() => {
@@ -114,8 +96,8 @@ const colsPerRow = computed(() => {
 
 // 计算总行数
 const totalRows = computed(() => {
-  if (characterList.value.length === 0) return 0
-  return Math.ceil(characterList.value.length / colsPerRow.value)
+  if (glyphList.value.length === 0) return 0
+  return Math.ceil(glyphList.value.length / colsPerRow.value)
 })
 
 // 计算行高（包括间距）
@@ -126,7 +108,7 @@ const rowHeight = computed(() => {
 // 计算可见范围（考虑网格布局）
 const visibleRange = computed(() => {
   if (containerHeight.value <= 0 || containerWidth.value <= 0) {
-    return { start: 0, end: Math.min(overscan * colsPerRow.value, characterList.value.length) }
+    return { start: 0, end: Math.min(overscan * colsPerRow.value, glyphList.value.length) }
   }
   
   // 计算可见的行范围
@@ -136,10 +118,10 @@ const visibleRange = computed(() => {
     Math.ceil((scrollTop.value + containerHeight.value) / rowHeight.value) + overscan
   )
   
-  // 计算可见的字符范围
+  // 计算可见的字形范围
   const start = Math.max(0, startRow * colsPerRow.value)
   const end = Math.min(
-    characterList.value.length,
+    glyphList.value.length,
     endRow * colsPerRow.value
   )
   
@@ -147,55 +129,25 @@ const visibleRange = computed(() => {
 })
 
 // 可见项（使用ref优化，减少数组重建）
-const visibleItems = ref<ICharacterFileLite[]>([])
-
-// 组件实例缓存（用于复用组件，避免频繁创建/销毁）
-const componentInstances = new Map<string, any>()
+const visibleItems = ref<ICustomGlyph[]>([])
 
 // 更新可见项（使用更智能的更新策略，减少DOM操作）
 const updateVisibleItems = async () => {
   const { start, end } = visibleRange.value
-  const newMetadata = characterList.value.slice(start, end)
+  const newGlyphs = glyphList.value.slice(start, end)
   
   // 计算新旧UUID集合
   const currentUUIDs = new Set(visibleItems.value.map(item => item.uuid))
-  
-  // 加载新项的完整数据
-  const newItems: ICharacterFileLite[] = []
-  for (const metadata of newMetadata) {
-    if (currentUUIDs.has(metadata.uuid)) {
-      // 已存在，从当前列表获取
-      const existing = visibleItems.value.find(item => item.uuid === metadata.uuid)
-      if (existing) {
-        newItems.push(existing)
-      }
-    } else {
-      // 新项，从IndexedDB加载
-      const fullCharacter = await loadFullCharacter(metadata)
-      if (fullCharacter) {
-        newItems.push(fullCharacter)
-      } else {
-        // 如果加载失败，使用元数据创建一个最小化的字符对象
-        newItems.push({
-          ...metadata,
-          components: [],
-          groups: [],
-          orderedList: [],
-          view: { zoom: 100, translateX: 0, translateY: 0 },
-        } as ICharacterFileLite)
-      }
-    }
-  }
-  const newUUIDs = new Set(newItems.map(item => item.uuid))
+  const newUUIDs = new Set(newGlyphs.map(item => item.uuid))
   
   // 如果UUID集合完全相同，不需要更新（避免不必要的DOM diff）
   if (currentUUIDs.size === newUUIDs.size && 
       [...currentUUIDs].every(uuid => newUUIDs.has(uuid)) &&
-      visibleItems.value.length === newItems.length) {
+      visibleItems.value.length === newGlyphs.length) {
     // 检查顺序是否相同
     let orderChanged = false
     for (let i = 0; i < visibleItems.value.length; i++) {
-      if (visibleItems.value[i].uuid !== newItems[i].uuid) {
+      if (visibleItems.value[i].uuid !== newGlyphs[i].uuid) {
         orderChanged = true
         break
       }
@@ -216,7 +168,7 @@ const updateVisibleItems = async () => {
   }
   
   // 更新数组（Vue会智能diff，只更新变化的项）
-  visibleItems.value = newItems
+  visibleItems.value = newGlyphs
 }
 
 // 监听可见范围变化（使用防抖，减少更新频率）
@@ -280,10 +232,7 @@ const scrollCleanupThrottle = () => {
   // 清理 Canvas 缓存
   CanvasManager.cleanupInvisible(visibleUUIDs)
   
-  // 清理字符数据缓存
-  if (fileUUID) {
-    characterDataManager.cleanupInvisible(visibleUUIDs, fileUUID)
-  }
+  // 字形列表不需要字符数据缓存清理
 }
 
 // 节流的滚动处理（减少更新频率）
@@ -302,16 +251,17 @@ const handleScroll = throttle((e: Event) => {
 }, 16) // 约60fps
 
 // 处理项点击
-const _handleItemClick = (character: ICharacterFileLite) => {
-  // 触发字符编辑
-  characterStore.setEditingCharacter(character.uuid)
-  editorStore.setEditStatus(EditStatus.Edit)
+const _handleItemClick = (glyph: ICustomGlyph) => {
+  // 触发字形编辑
+  glyphStore.setEditingGlyph(glyph.uuid)
+  glyphStore.glyphCategory = props.glyphType || 'glyphs'
+  editorStore.setEditStatus(EditStatus.Glyph)
 }
 
 // 使用防重复调用包装，通过UUID区分不同的项
 const handleItemClick = createDebouncedHandler(
   _handleItemClick,
-  'VirtualCharacterList.itemClick',
+  'VirtualGlyphList.itemClick',
   (args) => args[0].uuid // 使用UUID作为比较参数
 )
 
@@ -340,9 +290,6 @@ const schedulePeriodicCleanup = () => {
       
       // 清理不可见的缓存
       CanvasManager.cleanupInvisible(visibleUUIDs)
-      if (fileUUID) {
-        characterDataManager.cleanupInvisible(visibleUUIDs, fileUUID)
-      }
       
       // 如果缓存仍然很大，强制清理
       if (CanvasManager.getCacheSize() > 30 || CanvasManager.getCanvasMapSize() > 100) {
@@ -360,9 +307,6 @@ const schedulePeriodicCleanup = () => {
       const fileUUID = projectStore.selectedFile?.uuid
       
       CanvasManager.cleanupInvisible(visibleUUIDs)
-      if (fileUUID) {
-        characterDataManager.cleanupInvisible(visibleUUIDs, fileUUID)
-      }
       
       periodicCleanupTimer = null
       schedulePeriodicCleanup()
@@ -403,11 +347,7 @@ onUnmounted(() => {
   CanvasManager.cleanupInvisible(visibleUUIDs)
   CanvasManager.forceCleanupAllCache()
   
-  // 清理字符数据缓存
-  if (fileUUID) {
-    characterDataManager.cleanupInvisible(visibleUUIDs, fileUUID)
-    characterDataManager.forceCleanupAllCache()
-  }
+  // 字形列表不需要字符数据缓存清理
   
   // 清理定时器
   if (updateTimer !== null) {
@@ -432,10 +372,10 @@ onUnmounted(() => {
   }
 })
 
-// 监听字符列表变化（使用 shallow watch，避免深度监听大数组）
+// 监听字形列表变化（使用 shallow watch，避免深度监听大数组）
 // 只在引用变化时触发，而不是内容变化
-watch(characterList, (newList, oldList) => {
-  console.log('characterList changed', newList, oldList)
+watch(glyphList, (newList, oldList) => {
+  console.log('glyphList changed', newList, oldList)
   // 只在列表引用真正变化时处理（比如切换文件）
   // 避免在加载过程中频繁触发
   if (newList !== oldList && newList.length > 0) {
@@ -486,10 +426,7 @@ watch(visibleItems, () => {
         // 清理 Canvas 缓存
         CanvasManager.cleanupInvisible(visibleUUIDs)
         
-        // 清理字符数据缓存
-        if (fileUUID) {
-          characterDataManager.cleanupInvisible(visibleUUIDs, fileUUID)
-        }
+        // 字形列表不需要字符数据缓存清理
         
         lastCleanupTime = now
       }
@@ -533,7 +470,7 @@ const processRenderQueue = async () => {
   isRendering.value = true
   
   try {
-    const characters = characterList.value
+    const glyphs = glyphList.value
     const fontSettings = projectStore.selectedFile?.fontSettings
     let processed = 0
     const maxBatch = 5 // 每批处理5个
@@ -541,16 +478,10 @@ const processRenderQueue = async () => {
     while (renderQueue.value.length > 0 && processed < maxBatch) {
       const uuid = renderQueue.value.shift()!
       
-      // 从可见项中查找，如果不存在则从IndexedDB加载
-      let character: ICharacterFileLite | null = visibleItems.value.find(c => c.uuid === uuid) || null
-      if (!character) {
-        const metadata = characters.find(c => c.uuid === uuid)
-        if (metadata) {
-          character = await loadFullCharacter(metadata)
-        }
-      }
+      // 从可见项中查找字形
+      const glyph: ICustomGlyph | null = visibleItems.value.find(g => g.uuid === uuid) || null
       
-      if (!character) {
+      if (!glyph) {
         continue
       }
       
@@ -558,7 +489,7 @@ const processRenderQueue = async () => {
         // 使用CanvasManager获取Canvas（支持缓存和复用）
         const canvas = CanvasManager.getCanvasFromDOM(uuid)
         if (!canvas) {
-          // Canvas 还没创建，跳过（等待 CharacterItem 挂载）
+          // Canvas 还没创建，跳过（等待 GlyphItem 挂载）
           continue
         }
         
@@ -568,20 +499,20 @@ const processRenderQueue = async () => {
         // 检查是否可以跳过渲染（缓存存在且Canvas已有内容）
         const canSkip = CanvasManager.canSkipRender(canvas, uuid)
         if (import.meta.env.DEV) {
-          console.log(`[VirtualCharacterList] canSkipRender for ${uuid}:`, canSkip)
+          console.log(`[VirtualGlyphList] canSkipRender for ${uuid}:`, canSkip)
         }
 
         if (!canSkip) {
           if (import.meta.env.DEV) {
-            console.log(`[VirtualCharacterList] renderPreview ${uuid}`)
+            console.log(`[VirtualGlyphList] renderPreview ${uuid}`)
           }
-          await CharacterRenderer.renderPreview(character, canvas, fontSettings)
+          await GlyphRenderer.renderPreview(canvas, glyph, fontSettings)
         }
         
         renderCache.add(`${uuid}_rendered`)
         processed++
       } catch (error) {
-        console.error(`Error rendering character ${uuid}:`, error)
+        console.error(`Error rendering glyph ${uuid}:`, error)
       }
       
       // 每处理一个就让出主线程
@@ -601,7 +532,7 @@ const processRenderQueue = async () => {
 </script>
 
 <style scoped>
-.virtual-character-list {
+.virtual-glyph-list {
   width: 100%;
   height: 100%;
   overflow-y: auto;
@@ -629,7 +560,7 @@ const processRenderQueue = async () => {
   contain: layout style paint;
 }
 
-.character-item {
+.glyph-item {
   width: 86px;
   /* 使用 will-change 提示浏览器优化 */
   will-change: transform;

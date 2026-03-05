@@ -251,6 +251,114 @@ export class ContourConverter {
           break
         }
 
+        // 内置脚本组件类型（glyph-pen, glyph-polygon, glyph-rectangle, glyph-ellipse）
+        case 'glyph-pen': {
+          const scriptComp = component as any
+          // 如果没有轮廓或强制更新，调用 updateData 生成
+          if (!scriptComp.contour || !scriptComp.contour.length || forceUpdate) {
+            if (!grid || useSkeletonGrid) {
+              // 不使用布局调整或使用骨架布局调整的情况下，使用给定组件本身的数据
+              if (typeof scriptComp.updateData === 'function') {
+                scriptComp.updateData(true, offset)
+              }
+            } else {
+              // 使用布局调整
+              if (typeof scriptComp.updateData === 'function') {
+                scriptComp.updateData(true, offset, grid)
+              }
+            }
+          }
+          // 根据 preview 选项返回对应的轮廓
+          if (!preview) {
+            if (scriptComp.contour && scriptComp.contour.length > 0) {
+              contours.push(scriptComp.contour as IContour)
+            }
+          } else {
+            if (scriptComp.preview && scriptComp.preview.length > 0) {
+              contours.push(scriptComp.preview as IContour)
+            }
+          }
+          break
+        }
+
+        case 'glyph-polygon': {
+          const scriptComp = component as any
+          // 如果没有轮廓或强制更新，调用 updateData 生成
+          if (!scriptComp.contour || !scriptComp.contour.length || forceUpdate) {
+            if (!grid || useSkeletonGrid) {
+              if (typeof scriptComp.updateData === 'function') {
+                scriptComp.updateData(true, offset)
+              }
+            } else {
+              if (typeof scriptComp.updateData === 'function') {
+                scriptComp.updateData(true, offset, grid)
+              }
+            }
+          }
+          if (!preview) {
+            if (scriptComp.contour && scriptComp.contour.length > 0) {
+              contours.push(scriptComp.contour as IContour)
+            }
+          } else {
+            if (scriptComp.preview && scriptComp.preview.length > 0) {
+              contours.push(scriptComp.preview as IContour)
+            }
+          }
+          break
+        }
+
+        case 'glyph-rectangle': {
+          const scriptComp = component as any
+          // 如果没有轮廓或强制更新，调用 updateData 生成
+          if (!scriptComp.contour || !scriptComp.contour.length || forceUpdate) {
+            if (!grid || useSkeletonGrid) {
+              if (typeof scriptComp.updateData === 'function') {
+                scriptComp.updateData(true, offset)
+              }
+            } else {
+              if (typeof scriptComp.updateData === 'function') {
+                scriptComp.updateData(true, offset, grid)
+              }
+            }
+          }
+          if (!preview) {
+            if (scriptComp.contour && scriptComp.contour.length > 0) {
+              contours.push(scriptComp.contour as IContour)
+            }
+          } else {
+            if (scriptComp.preview && scriptComp.preview.length > 0) {
+              contours.push(scriptComp.preview as IContour)
+            }
+          }
+          break
+        }
+
+        case 'glyph-ellipse': {
+          const scriptComp = component as any
+          // 如果没有轮廓或强制更新，调用 updateData 生成
+          if (!scriptComp.contour || !scriptComp.contour.length || forceUpdate) {
+            if (!grid || useSkeletonGrid) {
+              if (typeof scriptComp.updateData === 'function') {
+                scriptComp.updateData(true, offset)
+              }
+            } else {
+              if (typeof scriptComp.updateData === 'function') {
+                scriptComp.updateData(true, offset, grid)
+              }
+            }
+          }
+          if (!preview) {
+            if (scriptComp.contour && scriptComp.contour.length > 0) {
+              contours.push(scriptComp.contour as IContour)
+            }
+          } else {
+            if (scriptComp.preview && scriptComp.preview.length > 0) {
+              contours.push(scriptComp.preview as IContour)
+            }
+          }
+          break
+        }
+
         case 'glyph': {
           // 字形组件需要执行脚本生成子组件，然后递归处理
           const glyphValue = value as ICustomGlyph
@@ -627,5 +735,235 @@ export class ContourConverter {
     }
 
     return fillColors
+  }
+
+  /**
+   * 将轮廓转换为组件
+   * 参考原工程实现，将轮廓数据转换为 pen 组件
+   */
+  static async contoursToComponents(
+    contours: IContours,
+    options: {
+      unitsPerEm: number
+      descender: number
+      advanceWidth: number
+    }
+  ): Promise<IComponent[]> {
+    // 导入必要的工具函数
+    const { genUUID } = await import('../script/adapters')
+    const { formatPoints, genPenContour } = await import('../utils/contour')
+    
+    // 轻量级 ID 生成器（简化版，使用计数器）
+    let lightIdCounter = 0
+    const genLightId = () => {
+      lightIdCounter++
+      return `light_${Date.now()}_${lightIdCounter}`
+    }
+
+    // 生成 pen 组件的辅助函数
+    const genPenComponent = (points: any[], closePath: boolean = true): IComponent => {
+      // 计算边界框
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+      for (const point of points) {
+        minX = Math.min(minX, point.x)
+        minY = Math.min(minY, point.y)
+        maxX = Math.max(maxX, point.x)
+        maxY = Math.max(maxY, point.y)
+      }
+      const x = minX
+      const y = minY
+      const w = maxX - minX
+      const h = maxY - minY
+
+      // 格式化点（从字体坐标转换为编辑坐标）
+      const formattedPoints = formatPoints(points, options, 0)
+
+      // 生成轮廓和预览
+      const contour_points = formatPoints(formattedPoints, options, 1)
+      const contour = genPenContour(contour_points)
+
+      const scale = 100 / options.unitsPerEm
+      const preview_points = formattedPoints.map((point: any) => ({
+        ...point,
+        x: point.x * scale,
+        y: point.y * scale,
+      }))
+      const preview_contour = genPenContour(preview_points, true)
+
+      return {
+        uuid: genUUID(),
+        type: 'pen',
+        name: 'pen',
+        lock: false,
+        visible: true,
+        x,
+        y,
+        w,
+        h,
+        rotation: 0,
+        flipX: false,
+        flipY: false,
+        usedInCharacter: true,
+        ox: 0,
+        oy: 0,
+        value: {
+          points: formattedPoints,
+          fillColor: '',
+          strokeColor: '#000',
+          closePath,
+          editMode: false,
+          preview: preview_contour,
+          contour: contour,
+        } as IPenComponent,
+      }
+    }
+
+    const components: IComponent[] = []
+
+    for (const contour of contours) {
+      const points: any[] = []
+
+      for (let i = 0; i < contour.length; i++) {
+        const path = contour[i]
+
+        if (i === 0) {
+          // 第一个点作为锚点
+          points.push({
+            uuid: genLightId(),
+            x: path.start.x,
+            y: path.start.y,
+            type: 'anchor',
+            origin: null,
+            isShow: true,
+          })
+        }
+
+        switch (path.type) {
+          case PathType.LINE: {
+            const control1 = {
+              uuid: genLightId(),
+              x: path.start.x,
+              y: path.start.y,
+              type: 'control',
+              origin: points[points.length - 1].uuid,
+              isShow: true,
+            }
+            const anchor2 = {
+              uuid: genLightId(),
+              x: path.end.x,
+              y: path.end.y,
+              type: 'anchor',
+              origin: null,
+              isShow: true,
+            }
+            const control2 = {
+              uuid: genLightId(),
+              x: path.end.x,
+              y: path.end.y,
+              type: 'control',
+              origin: anchor2.uuid,
+              isShow: true,
+            }
+            points.push(control1, control2, anchor2)
+            break
+          }
+
+          case PathType.QUADRATIC_BEZIER: {
+            const qPath = path as any
+            const control1 = {
+              uuid: genLightId(),
+              x: qPath.start.x + (2 / 3) * (qPath.control.x - qPath.start.x),
+              y: qPath.start.y + (2 / 3) * (qPath.control.y - qPath.start.y),
+              type: 'control',
+              origin: points[points.length - 1].uuid,
+              isShow: true,
+            }
+            const anchor2 = {
+              uuid: genLightId(),
+              x: qPath.end.x,
+              y: qPath.end.y,
+              type: 'anchor',
+              origin: null,
+              isShow: true,
+            }
+            const control2 = {
+              uuid: genLightId(),
+              x: qPath.end.x + (2 / 3) * (qPath.control.x - qPath.end.x),
+              y: qPath.end.y + (2 / 3) * (qPath.control.y - qPath.end.y),
+              type: 'control',
+              origin: anchor2.uuid,
+              isShow: true,
+            }
+            points.push(control1, control2, anchor2)
+            break
+          }
+
+          case PathType.CUBIC_BEZIER: {
+            const cPath = path as any
+            const control1 = {
+              uuid: genLightId(),
+              x: cPath.control1.x,
+              y: cPath.control1.y,
+              type: 'control',
+              origin: points[points.length - 1].uuid,
+              isShow: true,
+            }
+            const anchor2 = {
+              uuid: genLightId(),
+              x: cPath.end.x,
+              y: cPath.end.y,
+              type: 'anchor',
+              origin: null,
+              isShow: true,
+            }
+            const control2 = {
+              uuid: genLightId(),
+              x: cPath.control2.x,
+              y: cPath.control2.y,
+              type: 'control',
+              origin: anchor2.uuid,
+              isShow: true,
+            }
+            points.push(control1, control2, anchor2)
+            break
+          }
+        }
+      }
+
+      // 如果路径未闭合，添加闭合点
+      if (points.length > 0 && 
+          (points[points.length - 1].x !== points[0].x || points[points.length - 1].y !== points[0].y)) {
+        points.push({
+          uuid: genLightId(),
+          x: points[points.length - 1].x,
+          y: points[points.length - 1].y,
+          type: 'control',
+          origin: points[points.length - 1].uuid,
+          isShow: true,
+        })
+        points.push({
+          uuid: genLightId(),
+          x: points[0].x,
+          y: points[0].y,
+          type: 'control',
+          origin: points[0].uuid,
+          isShow: true,
+        })
+        points.push({
+          uuid: genLightId(),
+          x: points[0].x,
+          y: points[0].y,
+          type: 'anchor',
+          origin: points[0].uuid,
+          isShow: true,
+        })
+      }
+
+      // 生成组件
+      const component = genPenComponent(points, true)
+      components.push(component)
+    }
+
+    return components
   }
 }

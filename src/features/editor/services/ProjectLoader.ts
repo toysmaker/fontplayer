@@ -3,12 +3,16 @@
  * 负责加载和解析工程文件，支持7000+字符的大型工程
  */
 
-import type { IFile, ICharacterFileLite, ICharacterFileMetadata, ICustomGlyph, IParameter } from '@/core/types'
+import type { IFile, ICharacterFileLite, ICharacterFileMetadata, ICustomGlyph, IParameter, IFontSettings } from '@/core/types'
 import { ParameterType } from '@/core/types'
 import { indexedDBManager, IndexedDBManager } from '@/core/storage/IndexedDBManager'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import { useProjectStore } from '@/stores/project'
 import { projectMigrator, ProjectMigrator } from './ProjectMigrator'
+import { instanceManager } from '@/core/instance/InstanceManager'
+import { CustomGlyph } from '@/core/instance/CustomGlyph'
+import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+import { ContourConverter } from '@/core/font/converter'
 
 export interface LoadProgress {
   loaded: number
@@ -121,12 +125,19 @@ export class ProjectLoader {
       return sum + (data[type]?.length || 0)
     }, 0)
 
+    // 获取字体设置（用于轮廓计算）
+    const fontSettings: IFontSettings = data.file?.fontSettings || {
+      unitsPerEm: 1000,
+      ascender: 800,
+      descender: -200,
+    }
+
     for (const type of glyphTypes) {
       const glyphs = data[type] || []
       
       for (const glyph of glyphs) {
         // 处理字形数据
-        await this.processSingleGlyph(glyph)
+        await this.processSingleGlyph(glyph, fontSettings)
         processed++
         
         // 减少进度更新频率，每10个字形更新一次
@@ -144,10 +155,120 @@ export class ProjectLoader {
 
   /**
    * 处理单个字形
+   * 1. 创建临时实例
+   * 2. 执行脚本（生成组件）
+   * 3. 计算轮廓和预览
+   * 4. 存储到 IndexedDB
+   * 5. 保存引用到字形
+   * 6. 释放实例（清理 _o）
    */
-  private async processSingleGlyph(glyph: ICustomGlyph): Promise<void> {
-    // TODO: 实例化字形，执行脚本等
-    // 这里暂时只做数据转换
+  private async processSingleGlyph(glyph: ICustomGlyph, fontSettings: IFontSettings): Promise<void> {
+    try {
+      // 如果已经有 contourRef 和 previewRef，说明已经处理过，跳过
+      if (glyph.contourRef && glyph.previewRef) {
+        return
+      }
+
+      // 1. 创建临时实例（用于脚本执行和轮廓计算）
+      const instanceKey = glyph.uuid
+      const glyphInstance = instanceManager.acquireTemporaryInstance(
+        instanceKey,
+        () => new CustomGlyph(glyph),
+        'glyph'
+      )
+
+      try {
+        // 2. 执行脚本（生成组件）
+        await executeGlyphScript(glyph, instanceKey)
+
+        debugger
+
+        // 3. 获取执行脚本后的组件（从实例中获取）
+        const components = glyphInstance.components || glyph.components || []
+        
+        if (components.length === 0) {
+          // 没有组件，不需要计算轮廓
+          return
+        }
+
+        // 4. 计算轮廓和预览
+        const unitsPerEm = fontSettings.unitsPerEm || 1000
+        const descender = fontSettings.descender || -200
+
+        // 计算轮廓（非预览）
+        const contours = await ContourConverter.componentsToContours(
+          components as any,
+          {
+            unitsPerEm,
+            descender,
+            advanceWidth: unitsPerEm,
+            preview: false,
+            forceUpdate: true, // 强制更新，确保计算最新的轮廓
+          },
+          { x: 0, y: 0 }
+        )
+
+        // 计算预览
+        const previews = await ContourConverter.componentsToContours(
+          components as any,
+          {
+            unitsPerEm,
+            descender,
+            advanceWidth: unitsPerEm,
+            preview: true,
+            forceUpdate: true, // 强制更新，确保计算最新的预览
+          },
+          { x: 0, y: 0 }
+        )
+
+        // 5. 存储到 IndexedDB（并行存储，提高性能）
+        const indexDBPromises: Promise<void>[] = []
+
+        if (contours.length > 0) {
+          const contourKey = IndexedDBManager.generateContourKey(glyph.uuid)
+          indexDBPromises.push(
+            indexedDBManager.set(contourKey, contours).then(() => {
+              glyph.contourRef = contourKey
+            })
+          )
+        }
+
+        if (previews.length > 0) {
+          const previewKey = IndexedDBManager.generatePreviewKey(glyph.uuid)
+          indexDBPromises.push(
+            indexedDBManager.set(previewKey, previews).then(() => {
+              glyph.previewRef = previewKey
+            })
+          )
+        }
+
+        console.log('compute preview', previews)
+
+        // 等待所有 IndexedDB 操作完成
+        if (indexDBPromises.length > 0) {
+          await Promise.all(indexDBPromises)
+        }
+      } finally {
+        // 6. 释放临时实例（清理 _o 引用）
+        instanceManager.releaseTemporaryInstance(instanceKey)
+        
+        // 确保清理 _o 引用（防止内存泄漏）
+        if (glyph._o) {
+          delete glyph._o
+        }
+      }
+    } catch (error) {
+      console.error(`Error processing glyph ${glyph.uuid}:`, error)
+      // 即使出错，也要确保释放实例
+      const instanceKey = glyph.uuid
+      if (instanceManager.isTemporary(instanceKey)) {
+        instanceManager.releaseTemporaryInstance(instanceKey)
+      }
+      if (glyph._o) {
+        delete glyph._o
+      }
+      // 不抛出错误，继续处理其他字形
+    }
   }
 
   /**

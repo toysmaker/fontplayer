@@ -14,6 +14,10 @@ export const useEditorStore = defineStore('editor', () => {
   const showRightPanel = ref(false)
   const showToolbar = ref(false)
   const showBottomBar = ref(false)
+  
+  // 搜索相关状态
+  const isCharacterSearching = ref(false)
+  const characterSearchKeyword = ref('')
 
   // Actions
   /**
@@ -69,6 +73,23 @@ export const useEditorStore = defineStore('editor', () => {
     showBottomBar.value = !showBottomBar.value
   }
 
+  /**
+   * 设置字符搜索关键词
+   */
+  function setCharacterSearchKeyword(keyword: string) {
+    characterSearchKeyword.value = keyword
+  }
+
+  /**
+   * 设置是否正在搜索字符
+   */
+  function setIsCharacterSearching(isSearching: boolean) {
+    isCharacterSearching.value = isSearching
+    if (!isSearching) {
+      characterSearchKeyword.value = ''
+    }
+  }
+
   return {
     // State
     editStatus,
@@ -76,6 +97,8 @@ export const useEditorStore = defineStore('editor', () => {
     showRightPanel,
     showToolbar,
     showBottomBar,
+    isCharacterSearching,
+    characterSearchKeyword,
     
     // Actions
     setEditStatus,
@@ -83,5 +106,7 @@ export const useEditorStore = defineStore('editor', () => {
     toggleRightPanel,
     toggleToolbar,
     toggleBottomBar,
+    setCharacterSearchKeyword,
+    setIsCharacterSearching,
   }
 })

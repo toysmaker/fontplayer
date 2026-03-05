@@ -351,6 +351,8 @@ export interface ICustomGlyph {
   joints?: Array<IJoint>
   reflines?: Array<IRefLine>
   _o?: IGlyphScriptCallbacks | any
+  contourRef?: string // IndexedDB key for contour data
+  previewRef?: string // IndexedDB key for preview data
   // ... 其他属性
 }
 
@@ -424,6 +426,10 @@ export interface IFile {
  */
 export enum EditStatus {
   CharacterList = 'CharacterList',
+  StrokeGlyphList = 'StrokeGlyphList',
+  RadicalGlyphList = 'RadicalGlyphList',
+  CompGlyphList = 'CompGlyphList',
+  GlyphList = 'GlyphList',
   Edit = 'Edit',
   Glyph = 'Glyph',
   Pic = 'Pic',
