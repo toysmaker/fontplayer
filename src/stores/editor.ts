@@ -10,6 +10,7 @@ import { EditStatus } from '@/core/types'
 export const useEditorStore = defineStore('editor', () => {
   // 状态
   const editStatus = ref<EditStatus>(EditStatus.CharacterList)
+  const prevStatus = ref<EditStatus>(EditStatus.CharacterList) // 记录之前的状态，用于返回
   const showLeftPanel = ref(false)
   const showRightPanel = ref(false)
   const showToolbar = ref(false)
@@ -24,7 +25,27 @@ export const useEditorStore = defineStore('editor', () => {
    * 设置编辑状态
    */
   function setEditStatus(status: EditStatus) {
+    // 如果从列表模式进入编辑模式，保存当前的列表状态到 prevStatus
+    const isListStatus = editStatus.value === EditStatus.CharacterList || 
+                         editStatus.value === EditStatus.StrokeGlyphList || 
+                         editStatus.value === EditStatus.RadicalGlyphList || 
+                         editStatus.value === EditStatus.CompGlyphList || 
+                         editStatus.value === EditStatus.GlyphList
+    const isEditStatus = status === EditStatus.Edit || status === EditStatus.Glyph
+    
+    if (isListStatus && isEditStatus) {
+      // 保存当前的列表状态到 prevStatus
+      prevStatus.value = editStatus.value
+      if (import.meta.env.DEV) {
+        console.log(`[EditorStore] Saving prevStatus: ${prevStatus.value} -> entering ${status}`)
+      }
+    }
+    
     editStatus.value = status
+    
+    if (import.meta.env.DEV) {
+      console.log(`[EditorStore] setEditStatus: ${status}, prevStatus: ${prevStatus.value}`)
+    }
     
     // 根据编辑状态自动调整面板显示
     switch (status) {
@@ -93,6 +114,7 @@ export const useEditorStore = defineStore('editor', () => {
   return {
     // State
     editStatus,
+    prevStatus,
     showLeftPanel,
     showRightPanel,
     showToolbar,

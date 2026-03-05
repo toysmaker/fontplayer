@@ -253,8 +253,11 @@ const handleScroll = throttle((e: Event) => {
 // 处理项点击
 const _handleItemClick = (glyph: ICustomGlyph) => {
   // 触发字形编辑
-  glyphStore.setEditingGlyph(glyph.uuid)
+  // 先设置 glyphCategory，确保在进入编辑模式前知道来源
   glyphStore.glyphCategory = props.glyphType || 'glyphs'
+  glyphStore.setEditingGlyph(glyph.uuid, props.glyphType || 'glyphs')
+  // 确保在切换状态前，当前状态是列表状态（用于保存 prevStatus）
+  // setEditStatus 会自动保存当前的列表状态到 prevStatus
   editorStore.setEditStatus(EditStatus.Glyph)
 }
 
