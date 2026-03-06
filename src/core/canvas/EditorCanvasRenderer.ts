@@ -450,6 +450,9 @@ export async function renderCanvas(
     if (fontRenderStyle.value === 'black' || options.fill) {
       ctx.fillStyle = '#000'
       ctx.fill("nonzero")
+    } else if (fontRenderStyle.value === 'contour') {
+      // contour 模式下只绘制轮廓，不填充
+      ctx.stroke()
     }
   }
 }

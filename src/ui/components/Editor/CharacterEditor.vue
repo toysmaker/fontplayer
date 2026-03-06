@@ -68,9 +68,13 @@ import { render } from '@/core/canvas/EditorCanvasRenderer'
 import { mapCanvasWidth, mapCanvasHeight } from '@/utils/canvas'
 import { BackgroundType, GridType } from '@/core/canvas/types'
 import type { IBackground, IGrid } from '@/core/canvas/types'
+import { renderJoints, renderRefLines } from '@/core/script/Joint'
+import { useEditorStore } from '@/stores/editor'
+import { fontRenderStyle } from '@/core/script/globals'
 
 const characterStore = useCharacterStore()
 const projectStore = useProjectStore()
+const editorStore = useEditorStore()
 const canvasRef = ref<HTMLCanvasElement>()
 let dragger: BaseGlyphDragger | null = null
 
@@ -142,6 +146,27 @@ const renderCanvas = async () => {
     background: defaultBackground,
     grid: defaultGrid,
   })
+  
+  // 渲染关键点和辅助线（在主要渲染之后）
+  if (editorStore.checkJoints || editorStore.checkRefLines) {
+    const selectedComponent = characterStore.selectedComponent
+    if (selectedComponent && selectedComponent.type === 'glyph') {
+      if (import.meta.env.DEV) {
+        console.log('[CharacterEditor] Rendering joints/reflines:', {
+          checkJoints: editorStore.checkJoints,
+          checkRefLines: editorStore.checkRefLines,
+          componentType: selectedComponent.type,
+          componentUUID: selectedComponent.uuid,
+        })
+      }
+      if (editorStore.checkJoints) {
+        renderJoints(selectedComponent, canvasRef.value)
+      }
+      if (editorStore.checkRefLines) {
+        renderRefLines(selectedComponent, canvasRef.value)
+      }
+    }
+  }
 }
 
 // 初始化拖拽器
@@ -286,6 +311,16 @@ watch(() => characterStore.selectedComponent, () => {
   nextTick(() => {
     initDragger()
   })
+})
+
+// 监听关键点和辅助线显示状态变化，重新渲染
+watch([() => editorStore.checkJoints, () => editorStore.checkRefLines], async () => {
+  await renderCanvas()
+})
+
+// 监听渲染样式变化，重新渲染
+watch(() => fontRenderStyle.value, async () => {
+  await renderCanvas()
 })
 
 // 注意：鼠标事件由 dragger 的 activate() 方法自动处理

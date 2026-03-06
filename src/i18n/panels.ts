@@ -76,6 +76,9 @@ const panels = {
 			joints: {
 				title: '关键点',
 			},
+			refLines: {
+				title: '辅助线',
+			},
 			fillColor: {
 				title: '填充颜色',
 				label: '颜色',
@@ -297,6 +300,9 @@ const panels = {
 			},
 			joints: {
 				title: 'Key Points',
+			},
+			refLines: {
+				title: 'Reference Lines',
 			},
 			fillColor: {
 				title: 'Fill Color',

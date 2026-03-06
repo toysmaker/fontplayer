@@ -24,6 +24,10 @@ export const useEditorStore = defineStore('editor', () => {
   const editPanelCompFilter = ref<'all' | 'font'>('all')
   const glyphPanelCompFilter = ref<'all' | 'font'>('all')
 
+  // 关键点和辅助线显示状态
+  const checkJoints = ref<boolean>(false)
+  const checkRefLines = ref<boolean>(false)
+
   // Actions
   /**
    * 设置编辑状态
@@ -141,6 +145,8 @@ export const useEditorStore = defineStore('editor', () => {
     characterSearchKeyword,
     editPanelCompFilter,
     glyphPanelCompFilter,
+    checkJoints,
+    checkRefLines,
     
     // Actions
     setEditStatus,

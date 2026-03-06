@@ -2,6 +2,8 @@ import { mapCanvasX, mapCanvasY } from '@/utils/canvas'
 import { genUUID } from '@/utils/uuid'
 import { getStrokeWidth } from '@/utils/canvas-utils'
 import type { IGlyphComponent } from '../types'
+import { instanceManager } from '../instance/InstanceManager'
+import { CustomGlyph } from '../instance/CustomGlyph'
 
 export interface IJoint {
   name: string
@@ -115,16 +117,65 @@ const renderJoints = (rootComponent, canvas) => {
 		const ox = _component.ox + _ox
 		const oy = _component.oy + _oy
 		// 从 InstanceManager 获取字形实例
-		const instanceManager = (window as any).instanceManager
-		const glyphInstance = instanceManager?.getOrCreateGlyphInstance(_component.value, () => {
-			const { CustomGlyph } = require('../instance/CustomGlyph')
-			return new CustomGlyph(_component.value)
-		})
-		if (!glyphInstance) return
+		// 使用 component.uuid 作为 instanceKey，与 EditorCanvasRenderer 保持一致
+		const instanceKey = _component.uuid
+		let glyphInstance: CustomGlyph | null = null
 		
-		const firstJointIndex = glyphInstance.getJoints().findIndex(joint => !joint.name.includes('_ref')) || 0
-		glyphInstance.getJoints().map((joint, index) => {
-			const { x, y } = joint.getCoords()
+		// 如果临时实例已存在，直接获取（说明脚本已执行）
+		if (instanceManager.isTemporary(instanceKey)) {
+			glyphInstance = instanceManager.acquireTemporaryInstance(
+				instanceKey,
+				() => new CustomGlyph(_component.value),
+				'glyph'
+			) as CustomGlyph
+		} else {
+			// 如果实例不存在，尝试从实例池获取（可能已执行过脚本）
+			glyphInstance = instanceManager.getOrCreateGlyphInstance(_component.value, () => {
+				return new CustomGlyph(_component.value)
+			}) as CustomGlyph
+		}
+		
+		if (!glyphInstance) {
+			if (import.meta.env.DEV) {
+				console.warn('[renderJoints] Failed to get glyph instance for component:', _component.uuid)
+			}
+			return
+		}
+		
+		const joints = glyphInstance.getJoints()
+		if (import.meta.env.DEV) {
+			console.log('[renderJoints] Glyph instance info:', {
+				componentUUID: _component.uuid,
+				glyphUUID: _component.value.uuid,
+				instanceKey,
+				isTemporary: instanceManager.isTemporary(instanceKey),
+				jointsCount: joints?.length || 0,
+				hasGlyphJoints: !!_component.value.joints,
+				glyphJointsCount: _component.value.joints?.length || 0,
+				instanceJointsCount: glyphInstance._joints?.length || 0,
+			})
+		}
+		if (!joints || joints.length === 0) {
+			if (import.meta.env.DEV) {
+				console.log('[renderJoints] No joints found for component:', _component.uuid)
+			}
+			return
+		}
+		
+		const firstJointIndex = joints.findIndex(joint => !joint.name?.includes('_ref')) || 0
+		joints.map((joint, index) => {
+			// 处理两种情况：Joint 类实例（有 getCoords 方法）或普通对象（有 x, y 属性）
+			let x: number, y: number
+			if (typeof joint.getCoords === 'function') {
+				const coords = joint.getCoords()
+				x = coords.x
+				y = coords.y
+			} else {
+				// 普通对象，直接使用 x, y 属性
+				x = joint.x ?? joint._x ?? 0
+				y = joint.y ?? joint._y ?? 0
+			}
+			
 			if (index === firstJointIndex) {
 				renderFisrtJoint(canvas, {
 					x: x + ox,
@@ -151,24 +202,84 @@ const renderRefLines = (rootComponent, canvas) => {
 		const ox = _component.ox + _ox
 		const oy = _component.oy + _oy
 		// 从 InstanceManager 获取字形实例
-		const instanceManager = (window as any).instanceManager
-		const glyphInstance = instanceManager?.getOrCreateGlyphInstance(_component.value, () => {
-			const { CustomGlyph } = require('../instance/CustomGlyph')
-			return new CustomGlyph(_component.value)
-		})
-		if (!glyphInstance) return
+		// 使用 component.uuid 作为 instanceKey，与 EditorCanvasRenderer 保持一致
+		const instanceKey = _component.uuid
+		let glyphInstance: CustomGlyph | null = null
 		
-		glyphInstance.getRefLines().map((_refline) => {
+		// 如果临时实例已存在，直接获取（说明脚本已执行）
+		if (instanceManager.isTemporary(instanceKey)) {
+			glyphInstance = instanceManager.acquireTemporaryInstance(
+				instanceKey,
+				() => new CustomGlyph(_component.value),
+				'glyph'
+			) as CustomGlyph
+		} else {
+			// 如果实例不存在，尝试从实例池获取（可能已执行过脚本）
+			glyphInstance = instanceManager.getOrCreateGlyphInstance(_component.value, () => {
+				return new CustomGlyph(_component.value)
+			}) as CustomGlyph
+		}
+		
+		if (!glyphInstance) {
+			if (import.meta.env.DEV) {
+				console.warn('[renderRefLines] Failed to get glyph instance for component:', _component.uuid)
+			}
+			return
+		}
+		
+		const reflines = glyphInstance.getRefLines()
+		if (import.meta.env.DEV) {
+			console.log('[renderRefLines] Glyph instance info:', {
+				componentUUID: _component.uuid,
+				glyphUUID: _component.value.uuid,
+				instanceKey,
+				isTemporary: instanceManager.isTemporary(instanceKey),
+				reflinesCount: reflines?.length || 0,
+				hasGlyphReflines: !!_component.value.reflines,
+				glyphReflinesCount: _component.value.reflines?.length || 0,
+				instanceReflinesCount: glyphInstance._reflines?.length || 0,
+			})
+		}
+		if (!reflines || reflines.length === 0) {
+			if (import.meta.env.DEV) {
+				console.log('[renderRefLines] No reflines found for component:', _component.uuid)
+			}
+			return
+		}
+		
+		reflines.map((_refline) => {
 			const start = glyphInstance.getJoint(_refline.start)
 			const end = glyphInstance.getJoint(_refline.end)
+			if (!start || !end) return
+			
+			// 处理两种情况：Joint 类实例（有 getCoords 方法）或普通对象（有 x, y 属性）
+			let startX: number, startY: number, endX: number, endY: number
+			if (typeof start.getCoords === 'function') {
+				const startCoords = start.getCoords()
+				startX = startCoords.x
+				startY = startCoords.y
+			} else {
+				startX = start.x ?? start._x ?? 0
+				startY = start.y ?? start._y ?? 0
+			}
+			
+			if (typeof end.getCoords === 'function') {
+				const endCoords = end.getCoords()
+				endX = endCoords.x
+				endY = endCoords.y
+			} else {
+				endX = end.x ?? end._x ?? 0
+				endY = end.y ?? end._y ?? 0
+			}
+			
 			const refline = {
 				start: {
-					x: start.x + ox,
-					y: start.y + oy,
+					x: startX + ox,
+					y: startY + oy,
 				},
 				end: {
-					x: end.x + ox,
-					y: end.y + oy,
+					x: endX + ox,
+					y: endY + oy,
 				},
 				type: _refline.type,
 			}
@@ -190,16 +301,25 @@ const getJoints = (rootComponent, subComponentUUID) => {
 		const oy = _component.oy + _oy
 		if (subComponentUUID === _component.uuid) {
 			// 从 InstanceManager 获取字形实例
-			const instanceManager = (window as any).instanceManager
-			const glyphInstance = instanceManager?.getOrCreateGlyphInstance(_component.value, () => {
-				const { CustomGlyph } = require('../instance/CustomGlyph')
+			const glyphInstance = instanceManager.getOrCreateGlyphInstance(_component.value, () => {
 				return new CustomGlyph(_component.value)
-			})
+			}) as CustomGlyph
 			if (!glyphInstance) return []
 			
 			// 获取该节点Joints数组
-			joints = glyphInstance.getJoints().map((joint) => {
-				const { x, y } = joint.getCoords()
+			const allJoints = glyphInstance.getJoints()
+			joints = allJoints.map((joint) => {
+				// 处理两种情况：Joint 类实例（有 getCoords 方法）或普通对象（有 x, y 属性）
+				let x: number, y: number
+				if (typeof joint.getCoords === 'function') {
+					const coords = joint.getCoords()
+					x = coords.x
+					y = coords.y
+				} else {
+					// 普通对象，直接使用 x, y 属性
+					x = joint.x ?? joint._x ?? 0
+					y = joint.y ?? joint._y ?? 0
+				}
 				return {
 					name: joint.name,
 					x: x + ox,

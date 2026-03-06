@@ -5,7 +5,7 @@
  */
 
 import { ref, computed, watch } from 'vue'
-import { NInputNumber, NForm, NFormItem, NInput, NEmpty, NSlider, NSelect } from 'naive-ui'
+import { NInputNumber, NForm, NFormItem, NInput, NEmpty, NSlider, NSelect, NSwitch } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from '../composables/useComponentEditor'
 import { useEditorStore } from '@/stores/editor'
@@ -170,6 +170,25 @@ const handleChangeName = (name: string) => {
               :value="selectedComponent.oy"
               :precision="1"
               @update:value="handleChangeOY"
+            />
+          </n-form-item>
+        </n-form>
+      </div>
+
+      <!-- 关键点和辅助线 -->
+      <div class="section">
+        <div class="section-title">{{ t('panels.paramsPanel.joints.title') }} / {{ t('panels.paramsPanel.refLines.title') }}</div>
+        <n-form label-placement="left" label-width="80px">
+          <n-form-item :label="t('panels.paramsPanel.joints.title')">
+            <n-switch
+              :value="editorStore.checkJoints"
+              @update:value="(v) => editorStore.checkJoints = v"
+            />
+          </n-form-item>
+          <n-form-item :label="t('panels.paramsPanel.refLines.title')">
+            <n-switch
+              :value="editorStore.checkRefLines"
+              @update:value="(v) => editorStore.checkRefLines = v"
             />
           </n-form-item>
         </n-form>
