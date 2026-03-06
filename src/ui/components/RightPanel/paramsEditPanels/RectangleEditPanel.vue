@@ -145,10 +145,4 @@ const handleChangeFillColor = (color: string) => {
 .n-form {
   margin: 10px 0;
 }
-
-.name-wrap,
-.transform-wrap,
-.fill-color-wrap {
-  margin-bottom: 20px;
-}
 </style>

@@ -47,23 +47,20 @@
                   {{ component.name || component.type }}
                 </span>
                 <span class="tool-wrapper">
-                  <n-icon
-                    class="tool-icon used-in-character"
-                    @pointerdown.stop="(e: MouseEvent) => toggleUsedInCharacter(component.uuid, !component.usedInCharacter, component.type)"
-                  >
-                    <component :is="component.usedInCharacter ? CheckmarkCircle : CloseCircle" />
+                  <n-icon class="tool-icon used-in-character" @pointerdown.stop="(e: MouseEvent) => toggleUsedInCharacter(component.uuid, !component.usedInCharacter, component.type)">
+                    <font-awesome-icon
+                      :icon="component.usedInCharacter ? ['fas', 'circle-check'] : ['fas', 'circle-xmark']"
+                    />
                   </n-icon>
-                  <n-icon
-                    class="tool-icon lock"
-                    @pointerdown.stop="(e: MouseEvent) => toggleLock(component.uuid, !component.lock)"
-                  >
-                    <component :is="component.lock ? LockClosed : LockOpen" />
+                  <n-icon class="tool-icon lock" @pointerdown.stop="(e: MouseEvent) => toggleLock(component.uuid, !component.lock)">
+                    <font-awesome-icon
+                      :icon="component.lock ? ['fas', 'lock'] : ['fas', 'lock-open']"
+                    />
                   </n-icon>
-                  <n-icon
-                    class="tool-icon visible"
-                    @pointerdown.stop="(e: MouseEvent) => toggleVisibility(component.uuid, !component.visible)"
-                  >
-                    <component :is="component.visible ? Eye : EyeOff" />
+                  <n-icon class="tool-icon visible" @pointerdown.stop="(e: MouseEvent) => toggleVisibility(component.uuid, !component.visible)">
+                    <font-awesome-icon
+                      :icon="component.visible ? ['fas', 'eye'] : ['fas', 'eye-slash']"
+                    />
                   </n-icon>
                 </span>
               </div>
@@ -111,24 +108,21 @@
                   {{ component.name || component.type }}
                 </span>
                 <span class="tool-wrapper">
-                  <n-icon
+                  <font-awesome-icon
                     class="tool-icon used-in-character"
                     @pointerdown.stop="(e: MouseEvent) => toggleUsedInCharacter(component.uuid, !component.usedInCharacter, component.type)"
-                  >
-                    <component :is="component.usedInCharacter ? CheckmarkCircle : CloseCircle" />
-                  </n-icon>
-                  <n-icon
+                    :icon="component.usedInCharacter ? ['fas', 'circle-check'] : ['fas', 'circle-xmark']"
+                  />
+                  <font-awesome-icon
                     class="tool-icon lock"
                     @pointerdown.stop="(e: MouseEvent) => toggleLock(component.uuid, !component.lock)"
-                  >
-                    <component :is="component.lock ? LockClosed : LockOpen" />
-                  </n-icon>
-                  <n-icon
+                    :icon="component.lock ? ['fas', 'lock'] : ['fas', 'lock-open']"
+                  />
+                  <font-awesome-icon
                     class="tool-icon visible"
                     @pointerdown.stop="(e: MouseEvent) => toggleVisibility(component.uuid, !component.visible)"
-                  >
-                    <component :is="component.visible ? Eye : EyeOff" />
-                  </n-icon>
+                    :icon="component.visible ? ['fas', 'eye'] : ['fas', 'eye-slash']"
+                  />
                 </span>
               </div>
             </template>
@@ -155,15 +149,7 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
-import { NScrollbar, NIcon, NPopover, NSelect } from 'naive-ui'
-import { 
-  CheckmarkCircle, 
-  CloseCircle, 
-  LockClosed, 
-  LockOpen, 
-  Eye, 
-  EyeOff 
-} from '@vicons/ionicons5'
+import { NScrollbar, NPopover, NSelect } from 'naive-ui'
 import { useCharacterStore } from '@/stores/character'
 import { useEditorStore } from '@/stores/editor'
 import { useI18n } from 'vue-i18n'
@@ -532,7 +518,7 @@ const openPopover = (e: MouseEvent, uuid: string) => {
 .component .tool-icon {
   margin: 0 5px;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   color: var(--primary-5);
 }
 
@@ -575,31 +561,15 @@ const openPopover = (e: MouseEvent, uuid: string) => {
 </style>
 
 <style>
-/* 全局样式，覆盖 Naive UI 的默认样式以匹配原工程 */
-.list-wrapper .n-base-selection {
-  background-color: var(--primary-0) !important;
-  border-radius: 10px 5px 20px !important;
-  box-shadow: 0 0 0 1px var(--primary-1) inset !important;
-}
+  .list-wrapper .n-base-selection {
+    background-color: var(--primary-0) !important;
+    .n-base-selection-label {
+      color: var(--primary-5) !important;
+      background-color: var(--primary-0) !important;
 
-.list-wrapper .n-base-selection .n-base-selection-label {
-  color: var(--primary-5) !important;
-}
-
-.list-wrapper .n-base-selection .n-base-selection-placeholder {
-  color: var(--primary-5) !important;
-}
-
-.list-wrapper .n-base-selection .n-base-selection__arrow {
-  color: var(--primary-5) !important;
-}
-
-.list-wrapper .n-base-selection:hover {
-  background-color: var(--primary-0) !important;
-}
-
-.list-wrapper .n-base-selection.n-base-selection--active {
-  background-color: var(--primary-0) !important;
-  box-shadow: 0 0 0 1px var(--primary-1) inset !important;
-}
+      .n-base-selection-input, .n-base-suffix__arrow {
+        color: var(--primary-5) !important;
+      }
+    }
+  }
 </style>

@@ -13,7 +13,7 @@
           :class="{ 'is-hovered': hoveredMenu === menu.key }"
         >
           <div class="menu-icon-item-icon">
-            <component :is="web_menu_icons[menu.key]" />
+            <font-awesome-icon :icon="web_menu_icons[menu.key]" />
           </div>
           <div class="menu-icon-item-label">{{ menu.label }}</div>
         </div>
@@ -68,16 +68,6 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
-import { 
-  DocumentTextOutline, 
-  CreateOutline, 
-  CloudUploadOutline, 
-  DownloadOutline, 
-  TicketOutline, 
-  SettingsOutline, 
-  ListOutline, 
-  BuildOutline 
-} from '@vicons/ionicons5'
 import { fileHandler } from '@/features/editor/services/FileHandler'
 import { useProjectStore } from '@/stores/project'
 import NewProjectDialog from '@/ui/dialogs/NewProjectDialog.vue'
@@ -92,16 +82,16 @@ const hoveredSubMenu = ref<string | null>(null)
 let menuLeaveTimer: number | null = null
 let subMenuLeaveTimer: number | null = null
 
-// 图标映射
+// 图标映射（FontAwesome）
 const web_menu_icons: Record<string, any> = {
-  'file': DocumentTextOutline,
-  'edit': CreateOutline,
-  'import': CloudUploadOutline,
-  'export': DownloadOutline,
-  'character': TicketOutline,
-  'settings': SettingsOutline,
-  'templates': ListOutline,
-  'tools': BuildOutline,
+  'file': ['fas', 'file'],
+  'edit': ['fas', 'pencil'],
+  'import': ['fas', 'upload'],
+  'export': ['fas', 'download'],
+  'character': ['fas', 'ticket'],
+  'settings': ['fas', 'gear'],
+  'templates': ['fas', 'list'],
+  'tools': ['fas', 'wrench'],
 }
 
 // 菜单处理器
@@ -405,6 +395,7 @@ const handleProjectCreated = () => {
   position: relative;
   overflow: visible;
   padding-top: 10px;
+  border-right: 1px solid var(--dark-4);
 }
 
 .side-bar-menu {
@@ -444,19 +435,20 @@ const handleProjectCreated = () => {
 }
 
 .menu-icon-item-icon {
-  flex: 0 0 24px;
+  flex: 0 0 20px;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 24px;
+  height: 20px;
   color: var(--light-2);
   transition: color 0.2s;
 }
 
 .menu-icon-item-icon svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
+  margin-top: 6px;
 }
 
 .menu-icon-item.is-hovered .menu-icon-item-icon {
@@ -468,7 +460,7 @@ const handleProjectCreated = () => {
   line-height: 18px;
   font-size: 12px;
   text-align: center;
-  margin-top: 4px;
+  margin-top: 8px;
   color: var(--light-0);
 }
 

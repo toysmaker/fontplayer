@@ -1,5 +1,10 @@
 <template>
-  <div class="files-bar">
+  <div 
+    class="files-bar"
+    :style="{
+      'border-bottom': isListMode ? 'none' : '1px solid var(--dark-4)',
+    }"
+  >
     <div class="files-bar-row" v-if="isListMode">
       <span
         v-for="file in files"
@@ -14,36 +19,39 @@
             {{ file.name }}
           </span>
         </span>
-        <span class="close-btn" @pointerdown="() => closeFile(file.uuid)">
-          <CloseOutline />
-        </span>
+        <!-- <span class="close-btn" @pointerdown="() => closeFile(file.uuid)">
+          <font-awesome-icon :icon="['fas', 'xmark']" />
+        </span> -->
       </span>
       <span class="advanced-edit-btn" v-show="files.length > 0">
         <n-button type="primary" size="small">
           <template #icon>
-            <BuildOutline />
+            <font-awesome-icon :icon="['fas', 'wrench']" />
           </template>
           高级编辑
         </n-button>
       </span>
+      <div class="style-selection-wrap" v-show="files.length > 0">
+        <span class="style-selection-title">渲染</span>
+        <n-radio-group v-model:value="fontPreviewStyle" size="small" @update:value="handlePreviewStyleChange">
+          <n-radio value="black">黑色</n-radio>
+          <n-radio value="color">彩色</n-radio>
+        </n-radio-group>
+      </div>
       <div class="right-btns" v-if="selectedFile" style="margin-left: auto;">
-        <n-icon 
+        <font-awesome-icon 
           class="right-btn" 
           :class="{ 'searching': isCharacterSearching }"
           @click="searchFile"
-          size="22"
-        >
-          <SearchOutline />
-        </n-icon>
+          :icon="['fas', 'magnifying-glass']"
+        />
         <n-popover
           placement="bottom-end"
           :width="120"
           trigger="hover"
         >
           <template #trigger>
-            <n-icon class="right-btn" size="22">
-              <InformationCircleOutline />
-            </n-icon>
+            <font-awesome-icon class="right-btn" :icon="['fas', 'circle-info']" />
           </template>
           <div class="info-list">
             <div class="info-item">
@@ -68,6 +76,27 @@
             </div>
           </div>
         </n-popover>
+        <font-awesome-icon 
+          class="right-btn" 
+          @click="handleSettings"
+          :icon="['fas', 'fa-gear']"
+        />
+        <div class="language-settings">
+          <div 
+            class="language-choice-item" 
+            :class="{ selected: locale === 'zh' }"
+            @click="locale = 'zh'"
+          >
+            中文
+          </div>
+          <div 
+            class="language-choice-item" 
+            :class="{ selected: locale === 'en' }"
+            @click="locale = 'en'"
+          >
+            English
+          </div>
+        </div>
       </div>
     </div>
 
@@ -96,8 +125,8 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { NButton, NIcon, NPopover, NModal, NInput, useMessage } from 'naive-ui'
-import { CloseOutline, SearchOutline, InformationCircleOutline, BuildOutline } from '@vicons/ionicons5'
+import { NButton, NPopover, NModal, NInput, NRadioGroup, NRadio, useMessage } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
 import { EditStatus } from '@/core/types'
@@ -105,6 +134,7 @@ import { EditStatus } from '@/core/types'
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
 const message = useMessage()
+const { locale } = useI18n()
 
 const files = computed(() => projectStore.files)
 const selectedFileUUID = computed(() => projectStore.selectedFileUUID)
@@ -141,6 +171,21 @@ const glyphsCount = computed(() => {
 // 搜索相关
 const searchCharacterDialogVisible = ref(false)
 const searchInput = ref('')
+
+// 预览样式（列表模式使用）
+const fontPreviewStyle = ref('black')
+
+// 处理预览样式变化
+const handlePreviewStyleChange = () => {
+  // TODO: 触发画布重新渲染
+  console.log('Preview style changed:', fontPreviewStyle.value)
+}
+
+// 处理设置按钮点击
+const handleSettings = () => {
+  // TODO: 打开设置对话框
+  console.log('Settings clicked')
+}
 
 // 选择文件
 const selectFile = (uuid: string) => {
@@ -203,16 +248,16 @@ const cancelSearch = () => {
 </script>
 
 <style scoped>
+/* FilesBar styles - updated for HMR */
 .files-bar {
   width: 100%;
   height: 36px;
   z-index: 99;
   background-color: white;
-  border-bottom: 1px solid var(--dark-4);
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  padding: 0 10px;
+  padding: 0;
 }
 
 .files-bar-row {
@@ -220,7 +265,7 @@ const cancelSearch = () => {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 15px;
+  gap: 10px;
 }
 
 .file-tag {
@@ -318,11 +363,56 @@ const cancelSearch = () => {
 }
 
 .info-item-name {
-  color: var(--primary-0);
+  color: var(--primary-5);
 }
 
 .info-item-content {
   margin-left: 20px;
-  color: var(--dark-0);
+  color: var(--primary-5);
+}
+
+.style-selection-wrap {
+  margin-left: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.style-selection-title {
+  color: var(--primary-0);
+}
+
+.language-settings {
+  color: var(--primary-0);
+  font-weight: normal;
+  display: flex;
+  flex-direction: row;
+  min-width: 140px;
+  font-size: 14px;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  margin-left: 20px;
+}
+
+.language-choice-item {
+  flex: 0 0 auto;
+  min-width: 50px;
+  text-align: center;
+  line-height: 22px;
+  cursor: pointer;
+  padding: 2px 12px;
+  border-radius: 20px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.language-choice-item.selected {
+  background-color: var(--primary-0);
+  color: var(--light-0);
+}
+
+.language-choice-item:not(.selected):hover {
+  background-color: var(--light-0);
 }
 </style>

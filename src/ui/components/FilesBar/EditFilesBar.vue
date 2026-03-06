@@ -51,7 +51,6 @@ const {
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  padding: 0 10px;
 }
 
 .files-bar-row {
@@ -104,6 +103,7 @@ const {
   display: flex;
   align-items: center;
   gap: 10px;
+  color: var(--primary-0);
 }
 
 .style-selection-title {

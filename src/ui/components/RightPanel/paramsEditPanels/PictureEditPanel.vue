@@ -170,10 +170,4 @@ const handleChangeOpacity = (opacity: number | null) => {
 .n-form {
   margin: 10px 0;
 }
-
-.name-wrap,
-.transform-wrap,
-.opacity-wrap {
-  margin-bottom: 20px;
-}
 </style>

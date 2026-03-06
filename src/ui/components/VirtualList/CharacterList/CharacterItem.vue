@@ -19,13 +19,13 @@
     </span>
     <span class="icon-group">
       <span class="copy-icon" @click.stop="handleCopy">
-        <CopyOutline />
+        <font-awesome-icon :icon="['fas', 'copy']" />
       </span>
       <span class="edit-icon" @click.stop="handleEdit">
-        <CreateOutline />
+        <font-awesome-icon icon="fa-solid fa-pen-nib" />
       </span>
       <span class="delete-icon" @click.stop="handleDelete">
-        <TrashOutline />
+        <font-awesome-icon :icon="['fas', 'trash']" />
       </span>
     </span>
   </div>
@@ -38,7 +38,6 @@ import { CharacterRenderer } from '@/core/font/CharacterRenderer'
 import { useProjectStore } from '@/stores/project'
 import { useCharacterStore } from '@/stores/character'
 import { CanvasManager } from '@/core/canvas/CanvasManager'
-import { CopyOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5'
 
 // 标记是否已初始化（避免重复渲染）
 const isInitialized = ref(false)

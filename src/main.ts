@@ -6,6 +6,59 @@ import { setupNaiveUI } from './plugins/naive-ui'
 import { setupI18n } from './i18n'
 import './assets/main.css'
 
+import { library } from '@fortawesome/fontawesome-svg-core'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+
+// 按需导入图标 - 从 @fortawesome/free-solid-svg-icons
+import {
+	faArrowPointer,
+	faPenNib,
+	faDrawPolygon,
+	faImage,
+	faFont,
+	faTerminal,
+	faSliders,
+	faTableCells,
+	faTextWidth,
+	faHand as faHandSolid,
+	faPercent,
+	faArrowDownWideShort,
+	faGamepad,
+	faMinus,
+	faPlus,
+	faXmark,
+	faMagnifyingGlass,
+	faCircleInfo,
+	faWrench,
+	faCopy,
+	faTrash,
+	faFolderOpen,
+	faArchive,
+	faArrowsLeftRight,
+	faFile,
+	faFileImport,
+	faPencil,
+	faUpload,
+	faDownload,
+	faTicket,
+	faGear,
+	faList,
+	faCircleCheck,
+	faCircleXmark,
+	faLock,
+	faLockOpen,
+	faEye,
+	faEyeSlash,
+  faPenToSquare,
+} from '@fortawesome/free-solid-svg-icons'
+
+// 按需导入图标 - 从 @fortawesome/free-regular-svg-icons
+import {
+	faHand,
+	faSquare as faSquare_regular,
+	faCircle as faCircle_regular,
+} from '@fortawesome/free-regular-svg-icons'
+
 import localForage from 'localforage'
 
 // 配置 localForage
@@ -85,10 +138,63 @@ window.addEventListener('error', (event) => {
   return true
 })
 
+// 将图标添加到 library
+library.add(
+  faCircleCheck,
+  faLock,
+  faEye,
+  faEyeSlash,
+	faArrowPointer,
+	faPenNib,
+	faDrawPolygon,
+	faImage,
+	faFont,
+	faTerminal,
+	faSliders,
+	faTableCells,
+	faTextWidth,
+	faHandSolid,
+	faPercent,
+	faArrowDownWideShort,
+	faGamepad,
+	faMinus,
+	faPlus,
+	faXmark,
+	faMagnifyingGlass,
+	faCircleInfo,
+	faWrench,
+	faCopy,
+	faTrash,
+	faFolderOpen,
+	faArchive,
+	faArrowsLeftRight,
+	faFile,
+	faFileImport,
+	faPencil,
+	faUpload,
+	faDownload,
+	faTicket,
+	faGear,
+	faList,
+	faCircleCheck,
+	faCircleXmark,
+	faLock,
+	faLockOpen,
+	faEye,
+	faEyeSlash,
+	faHand,
+	faSquare_regular,
+	faCircle_regular,
+  faPenToSquare,
+)
+
 app.use(pinia)
 app.use(router)
 setupNaiveUI(app)
 setupI18n(app)
+
+// 注册 FontAwesome 全局组件
+app.component('font-awesome-icon', FontAwesomeIcon)
 
 app.mount('#app')
 

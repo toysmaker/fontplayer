@@ -136,9 +136,7 @@ const handleChangeName = (name: string) => {
 </script>
 
 <template>
-  <div class="glyph-edit-panel">
-    <div class="panel-title">字形组件参数</div>
-    
+  <div class="glyph-edit-panel">    
     <template v-if="selectedComponent">
       <!-- 组件名称 -->
       <div class="section">
@@ -193,7 +191,6 @@ const handleChangeName = (name: string) => {
                   :max="parameter.max"
                   :precision="parameter.max && parameter.max <= 10 ? 2 : 0"
                   @update:value="(v) => handleChangeParameter(parameter, v ?? 0)"
-                  style="width: 150px;"
                 />
                 <n-slider
                   :value="parameter.value as number"
@@ -213,7 +210,6 @@ const handleChangeName = (name: string) => {
                 :value="parameter.value"
                 :options="parameter.options?.map(opt => ({ label: opt.label, value: opt.value })) || []"
                 @update:value="(v) => handleChangeParameter(parameter, v)"
-                style="width: 150px;"
               />
             </template>
             
@@ -227,7 +223,6 @@ const handleChangeName = (name: string) => {
                   :max="parameter.max"
                   :precision="parameter.max && parameter.max <= 10 ? 2 : 0"
                   @update:value="(v) => handleChangeParameter(parameter, v ?? 0)"
-                  style="width: 150px;"
                 />
                 <n-slider
                   :value="getConstantValue(parameter) as number"
@@ -238,7 +233,14 @@ const handleChangeName = (name: string) => {
                   @update:value="(v) => handleChangeParameter(parameter, v)"
                   style="width: 100%; margin-top: 8px;"
                 />
-                <span class="constant-note">全局常量</span>
+                <span class="constant-note">
+                  <span class="constant-note-text">全局常量</span>
+                  <span class="constant-note-icon">
+                    <n-icon name="edit">
+                      <font-awesome-icon :icon="['fas', 'pen-to-square']" />
+                    </n-icon>
+                  </span>
+                </span>
               </div>
             </template>
           </n-form-item>
@@ -254,22 +256,9 @@ const handleChangeName = (name: string) => {
 
 <style scoped>
 .glyph-edit-panel {
-  padding: 20px;
+  padding: 10px;
   height: 100%;
   overflow-y: auto;
-}
-
-.panel-title {
-  font-size: 16px;
-  font-weight: bold;
-  margin-bottom: 20px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--dark-4);
-  color: var(--text-color-1);
-}
-
-.section {
-  margin-bottom: 30px;
 }
 
 .section-title {
@@ -288,7 +277,7 @@ const handleChangeName = (name: string) => {
 }
 
 .parameter-control .n-input-number {
-  width: 150px;
+  width: 100%
 }
 
 .parameter-control .n-slider {
@@ -303,7 +292,7 @@ const handleChangeName = (name: string) => {
 }
 
 .constant-param .n-input-number {
-  width: 150px;
+  width: 100%;
 }
 
 .constant-param .n-slider {
@@ -318,18 +307,12 @@ const handleChangeName = (name: string) => {
   margin-top: 8px;
 }
 
+.constant-note-text {
+  margin-right: 5px;
+}
+
 .empty-state {
   padding: 40px 20px;
   text-align: center;
-}
-
-/* 确保表单项有足够的间距 */
-:deep(.n-form-item) {
-  margin-bottom: 16px;
-}
-
-/* 参数列表的表单项样式 */
-.section .n-form-item {
-  margin-bottom: 20px;
 }
 </style>

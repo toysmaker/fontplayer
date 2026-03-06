@@ -16,6 +16,10 @@
       
       <!-- 中间 Canvas 区域 -->
       <main class="main-wrapper">
+        <!-- FilesBar（编辑模式） -->
+        <header class="files-bar-wrapper">
+          <EditFilesBar />
+        </header>
         <div class="canvas-panel-wrapper">
           <div class="edit-canvas-wrapper">
             <canvas
@@ -56,6 +60,7 @@ import ToolBar from '@/ui/components/ToolBar/ToolBar.vue'
 import GlyphComponentList from '@/ui/components/ComponentList/GlyphComponentList.vue'
 import RightPanel from '@/ui/components/RightPanel/RightPanel.vue'
 import BottomBar from '@/ui/components/BottomBar/BottomBar.vue'
+import EditFilesBar from '@/ui/components/FilesBar/EditFilesBar.vue'
 import type { ICustomGlyph } from '@/core/types'
 import { render } from '@/core/canvas/EditorCanvasRenderer'
 import { mapCanvasWidth, mapCanvasHeight } from '@/utils/canvas'
@@ -236,7 +241,6 @@ watch(() => glyphStore.selectedComponent, () => {
 
 .toolbar-wrapper {
   flex: 0 0 50px;
-  border-bottom: 1px solid #dcdfe6;
   box-sizing: border-box;
 }
 
@@ -272,6 +276,12 @@ watch(() => glyphStore.selectedComponent, () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.files-bar-wrapper {
+  flex: 0 0 36px;
+  border-bottom: 1px solid var(--dark-4);
+  background-color: white;
 }
 
 .canvas-panel-wrapper {

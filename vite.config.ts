@@ -33,6 +33,8 @@ export default defineConfig({
       usePolling: false, // 在 Windows 上可能需要设置为 true
       interval: 100, // 轮询间隔（仅在 usePolling 为 true 时有效）
       ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**'], // 忽略的文件
+      // 确保监听 Vue 文件变化
+      include: ['**/*.vue', '**/*.ts', '**/*.js'],
     },
     // 文件系统权限
     fs: {

@@ -67,14 +67,13 @@ if (import.meta.env.DEV) {
   width: 100%;
   height: 100%;
   text-align: left;
-  border-left: solid 1px var(--dark-4);
   overflow-y: auto;
   z-index: 99;
   background-color: var(--dark-1);
 }
 
 .empty-panel {
-  padding: 20px;
+  padding: 10px;
   display: flex;
   align-items: center;
   justify-content: center;

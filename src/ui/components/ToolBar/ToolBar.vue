@@ -4,122 +4,127 @@
       <!-- 工具图标区域 -->
       <div class="tool-icons">
         <!-- 选择工具 -->
-        <n-icon
-          :class="{
-            'tool-icon': true,
-            'selected': tool === 'select',
-          }"
-          @pointerdown="switchTool('select')"
-          :component="ArrowBackOutline"
-        />
+        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+          <font-awesome-icon
+            :class="{
+              'selected': tool === 'select',
+            }"
+            @pointerdown="switchTool('select')"
+            icon="fa-solid fa-arrow-pointer"
+          />
+        </n-icon>
         
         <!-- 钢笔工具 -->
-        <n-icon
-          :class="{
-            'tool-icon': true,
-            'selected': tool === 'pen',
-          }"
-          @pointerdown="switchTool('pen')"
-          :component="CreateOutline"
-        />
+        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+          <font-awesome-icon
+            :class="{
+              'selected': tool === 'pen',
+            }"
+            @pointerdown="switchTool('pen')"
+            icon="fa-solid fa-pen-nib"
+          />
+        </n-icon>
         
         <!-- 椭圆工具 -->
-        <n-icon
-          :class="{
-            'tool-icon': true,
-            'selected': tool === 'ellipse',
-          }"
-          @pointerdown="switchTool('ellipse')"
-          :component="EllipseOutline"
-        />
+        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+          <font-awesome-icon
+            :class="{
+              'selected': tool === 'ellipse',
+            }"
+            @pointerdown="switchTool('ellipse')"
+            icon="fa-regular fa-circle"
+          />
+        </n-icon>
         
         <!-- 矩形工具 -->
-        <n-icon
-          :class="{
-            'tool-icon': true,
-            'selected': tool === 'rectangle',
-          }"
-          @pointerdown="switchTool('rectangle')"
-          :component="SquareOutline"
-        />
+        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+          <font-awesome-icon
+            :class="{
+              'selected': tool === 'rectangle',
+            }"
+            @pointerdown="switchTool('rectangle')"
+            icon="fa-regular fa-square"
+          />
+        </n-icon>
         
         <!-- 多边形工具 -->
-        <n-icon
-          :class="{
-            'tool-icon': true,
-            'selected': tool === 'polygon',
-          }"
-          @pointerdown="switchTool('polygon')"
-          :component="ShapesOutline"
-        />
+        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+          <font-awesome-icon
+            :class="{
+              'selected': tool === 'polygon',
+            }"
+            @pointerdown="switchTool('polygon')"
+            icon="fa-solid fa-draw-polygon"
+          />
+        </n-icon>
         
         <!-- 图片工具 - 仅在字符编辑模式显示 -->
-        <n-icon
-          v-show="editStatus === EditStatus.Edit"
-          :class="{
-            'tool-icon': true,
-            'selected': tool === 'picture',
-          }"
-          @pointerdown="switchTool('picture')"
-          :component="ImageOutline"
-        />
+        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+          <font-awesome-icon
+            :class="{
+              'selected': tool === 'picture',
+            }"
+            @pointerdown="switchTool('picture')"
+            icon="fa-solid fa-image"
+          />
+        </n-icon>
         
         <!-- 字形组件工具 - 在字符和字形编辑模式显示 -->
-        <n-icon
-          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph"
+        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
+          <font-awesome-icon
           :class="{
-            'tool-icon': true,
             'selected': tool === 'glyph',
           }"
           @pointerdown="switchTool('glyph')"
-          :component="TextOutline"
-        />
+            :icon="['fas', 'font']"
+          />
+        </n-icon>
         
         <!-- 代码编辑器 - 在字符和字形编辑模式显示 -->
-        <n-icon
-          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph"
-          class="code-icon"
+        <n-icon class="tool-icon code-icon" size="40" v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
+          <font-awesome-icon
           @pointerdown="switchTool('code')"
-          :component="CodeSlashOutline"
-        />
+          :icon="['fas', 'terminal']"
+          />
+        </n-icon>
         
         <!-- 参数工具 - 仅在字形编辑模式显示 -->
-        <n-icon
-          v-show="editStatus === EditStatus.Glyph"
-          :class="{
-            'tool-icon': true,
-            'selected': tool === 'params',
-          }"
-          @pointerdown="switchTool('params')"
-          :component="OptionsOutline"
-        />
+        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Glyph">
+          <font-awesome-icon
+            :class="{
+              'selected': tool === 'params',
+            }"
+            @pointerdown="switchTool('params')"
+            :icon="['fas', 'sliders']"
+          />
+        </n-icon>
         
         <!-- 网格工具 - 仅在字符编辑模式显示 -->
-        <n-icon
-          v-show="editStatus === EditStatus.Edit"
-          :class="{
-            'tool-icon': true,
-            'selected': tool === 'grid',
-          }"
-          @pointerdown="switchTool('grid')"
-          :component="GridOutline"
-        />
+        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+          <font-awesome-icon
+            :class="{
+              'selected': tool === 'grid',
+            }"
+            @pointerdown="switchTool('grid')"
+            :icon="['fas', 'table-cells']"
+          />
+        </n-icon>
         
         <!-- 度量工具 - 仅在字符编辑模式显示 -->
-        <n-icon
-          v-show="editStatus === EditStatus.Edit"
-          :class="{
-            'tool-icon': true,
-            'selected': tool === 'metrics',
-          }"
-          @pointerdown="switchTool('metrics')"
-          :component="ResizeOutline"
-        />
+        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+          <font-awesome-icon
+            :class="{
+              'selected': tool === 'metrics',
+            }"
+            @pointerdown="switchTool('metrics')"
+            :icon="['fas', 'text-width']"
+          />
+        </n-icon>
       </div>
       
       <!-- 返回字符列表按钮 -->
       <div class="to-list" @pointerdown="handleToList">
-        <n-icon class="to-list-icon" :component="GridOutline" />
+        <font-awesome-icon class="to-list-icon" :icon="['fas', 'table-cells']" />
         <span class="to-list-label">字符列表</span>
       </div>
     </div>
@@ -128,20 +133,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NIcon } from 'naive-ui'
-import {
-  ArrowBackOutline,
-  CreateOutline,
-  EllipseOutline,
-  SquareOutline,
-  ShapesOutline,
-  ImageOutline,
-  TextOutline,
-  CodeSlashOutline,
-  OptionsOutline,
-  GridOutline,
-  ResizeOutline,
-} from '@vicons/ionicons5'
 import { useEditorStore } from '@/stores/editor'
 import { useToolStore } from '@/stores/tool'
 import { EditStatus } from '@/core/types'
@@ -218,10 +209,15 @@ const handleToList = () => {
   align-items: center;
   justify-content: center;
   transition: background-color 0.2s ease;
+  color: var(--primary-0);
 }
 
-.tool-icon:hover {
+.tool-icon:not(.code-icon):hover {
   background-color: var(--primary-5);
+}
+
+.tool-icon.code-icon:hover {
+  background-color: var(--dark-4);
 }
 
 .tool-icon.selected {
@@ -249,6 +245,7 @@ const handleToList = () => {
   align-items: center;
   justify-content: center;
   flex: 0 0 100px;
+  color: var(--primary-0);
   cursor: pointer;
   background-color: var(--primary-5);
   transition: background-color 0.2s ease;
@@ -267,6 +264,6 @@ const handleToList = () => {
   flex: 1;
   text-align: center;
   font-size: 14px;
-  color: white;
+  color: var(--primary-0);
 }
 </style>

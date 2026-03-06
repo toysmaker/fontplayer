@@ -57,6 +57,12 @@ const themeOverrides: GlobalThemeOverrides = {
   Form: {
     labelTextColor: getCSSVariable('--light-2', '#c4c4c4'),
   },
+  Radio: {
+    textColor: getCSSVariable('--primary-0', '#153063'),
+  },
+  Popover: {
+    color: getCSSVariable('--primary-0', '#153063'),
+  },
 }
 </script>
 

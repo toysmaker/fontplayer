@@ -11,19 +11,17 @@
             />
             <n-button size="small" @pointerdown="resetTranslate" class="reset-btn">归零</n-button>
           </div>
-          <n-icon
+          <font-awesome-icon
             v-else
             class="translate-btn"
             @pointerdown="onTranslate"
-            :component="HandLeftOutline"
-            size="20"
+            icon="fa-regular fa-hand"
           />
-          <n-icon
+          <font-awesome-icon
             v-if="tool === 'translateMover'"
             class="translate-edit-btn"
             @pointerdown="offTranslate"
-            :component="HandLeftOutline"
-            size="20"
+            icon="fa-solid fa-hand"
           />
         </span>
         <span class="coords-wrapper">
@@ -37,24 +35,22 @@
               坐标
             </template>
           </n-input>
-          <n-icon
+          <font-awesome-icon
             v-else
             class="coords-btn"
             @pointerdown="onCoordsViewer"
-            :component="ArrowBackOutline"
-            size="20"
+            icon="fa-solid fa-arrow-pointer"
           />
-          <n-icon
+          <font-awesome-icon
             v-if="tool === 'coordsViewer'"
             class="coords-edit-btn"
             @pointerdown="offCoordsViewer"
-            :component="ArrowBackOutline"
-            size="20"
+            icon="fa-solid fa-arrow-pointer"
           />
         </span>
         <span class="zoom-settings-wrapper">
           <span class="zoom-out" @pointerdown="zoomEditOut">
-            <n-icon :component="RemoveOutline" size="18" />
+            <font-awesome-icon :icon="['fas', 'minus']" />
           </span>
           <n-input-number
             class="zoom-value"
@@ -67,7 +63,7 @@
             <template #suffix>%</template>
           </n-input-number>
           <span class="zoom-in" @pointerdown="zoomEditIn">
-            <n-icon :component="AddOutline" size="18" />
+            <font-awesome-icon :icon="['fas', 'plus']" />
           </span>
         </span>
       </span>
@@ -76,13 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { NInput, NButton, NIcon, NInputNumber } from 'naive-ui'
-import {
-  HandLeftOutline,
-  ArrowBackOutline,
-  RemoveOutline,
-  AddOutline,
-} from '@vicons/ionicons5'
+import { NInput, NButton, NInputNumber } from 'naive-ui'
 import { useBottomBar } from './composables/useBottomBar'
 import { EditStatus } from '@/core/types'
 

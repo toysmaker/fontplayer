@@ -4,28 +4,28 @@
       <div class="items-wrapper">
         <div class="item new-project-item" @pointerdown="handleNewProject">
           <div class="item-icon">
-            <AddOutline />
+            <font-awesome-icon :icon="['fas', 'plus']" />
           </div>
           <div class="item-name">新建工程</div>
           <div class="description">新建字体（或web图标字体）工程</div>
         </div>
         <div class="item open-project-item" @pointerdown="handleOpenProject">
           <div class="item-icon">
-            <FolderOpenOutline />
+            <font-awesome-icon :icon="['fas', 'folder-open']" />
           </div>
           <div class="item-name">打开工程</div>
           <div class="description">打开已有字体（或web图标字体）工程</div>
         </div>
         <div class="item import-font-item">
           <div class="item-icon">
-            <ArchiveOutline />
+            <font-awesome-icon :icon="['fas', 'archive']" />
           </div>
           <div class="item-name">导入字体库</div>
           <div class="description">将字体库导入成新的字体（或web图标字体）工程</div>
         </div>
         <div class="item template-item">
           <div class="item-icon">
-            <SwapHorizontalOutline />
+            <font-awesome-icon :icon="['fas', 'fa-file-import']" />
           </div>
           <div class="item-name">导入模板</div>
           <div class="description">导入字玩自带的测试模板</div>
@@ -33,7 +33,7 @@
       </div>
       <div class="playground-btn">
         <div class="item-icon playground-icon">
-          <GameControllerOutline />
+          <font-awesome-icon :icon="['fas', 'gamepad']" />
         </div>
         <div class="playground-main">
           <div class="playground-text">玩一玩字玩</div>
@@ -52,7 +52,6 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { AddOutline, FolderOpenOutline, ArchiveOutline, SwapHorizontalOutline, GameControllerOutline } from '@vicons/ionicons5'
 import { fileHandler } from '@/features/editor/services/FileHandler'
 import NewProjectDialog from '@/ui/dialogs/NewProjectDialog.vue'
 import { createDebouncedHandler } from '@/utils/debounce-click'
