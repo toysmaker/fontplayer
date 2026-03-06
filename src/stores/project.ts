@@ -28,14 +28,14 @@ export const useProjectStore = defineStore('project', () => {
 
   const hasFiles = computed(() => files.value.length > 0)
   
-  // 当 selectedFile 或 constants 变化时，更新 constantsMap
+  // 当 selectedFile 或 constants 变化时，更新 constantsMap（使用单例模式）
   watch(
     () => selectedFile.value?.constants,
     (constants) => {
       if (constants && constants.length > 0) {
-        constantsMap.value = new ConstantsMap(constants)
+        constantsMap.value = ConstantsMap.getInstance(constants)
       } else {
-        constantsMap.value = new ConstantsMap([])
+        constantsMap.value = ConstantsMap.getInstance([])
       }
     },
     { immediate: true }

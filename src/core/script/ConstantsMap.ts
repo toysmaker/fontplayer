@@ -3,10 +3,31 @@ import type { IConstant } from '@/core/types'
 export type { IConstant }
 
 class ConstantsMap {
+	private static instance: ConstantsMap | null = null
 	private constants: Array<IConstant>
   
-	constructor (constants: Array<IConstant>) {
+	private constructor (constants: Array<IConstant> = []) {
 		this.constants = constants
+	}
+
+	/**
+	 * 获取单例实例
+	 */
+	public static getInstance (constants?: Array<IConstant>): ConstantsMap {
+		if (!ConstantsMap.instance) {
+			ConstantsMap.instance = new ConstantsMap(constants || [])
+		} else if (constants !== undefined) {
+			// 如果提供了新的 constants，更新实例
+			ConstantsMap.instance.update(constants)
+		}
+		return ConstantsMap.instance
+	}
+
+	/**
+	 * 重置单例实例（主要用于测试或清理）
+	 */
+	public static resetInstance (): void {
+		ConstantsMap.instance = null
 	}
 
 	public update (constants: Array<IConstant>) {
@@ -48,6 +69,21 @@ class ConstantsMap {
 			})
 		}
 		return undefined
+	}
+
+	/**
+	 * 更新指定 UUID 的常量值
+	 * @param uuid 常量的 UUID
+	 * @param value 新的值（必须是 number 类型，因为 IConstant.value 是 number）
+	 */
+	public updateConstantValue (uuid: string, value: number) {
+		for (let i = 0; i < this.constants.length; i++) {
+			if (this.constants[i].uuid === uuid) {
+				this.constants[i].value = value
+				return true
+			}
+		}
+		return false
 	}
 }
 

@@ -140,7 +140,6 @@ export const useGlyphStore = defineStore('glyph', () => {
       editingGlyph.value = R.clone(glyph) as ICustomGlyph
       editingGlyphUUID.value = uuid
       glyphCategory.value = category
-      selectedComponentUUID.value = ''
       selectedComponentsTree.value = []
       
       // 确保必要的属性存在
@@ -159,6 +158,14 @@ export const useGlyphStore = defineStore('glyph', () => {
       }
       if (!editingGlyph.value.groups) {
         editingGlyph.value.groups = []
+      }
+      
+      // 如果文件中已经有选中的组件，恢复选中状态
+      if (editingGlyph.value.selectedComponentsUUIDs && editingGlyph.value.selectedComponentsUUIDs.length > 0) {
+        // 取第一个选中的组件作为当前选中组件
+        selectedComponentUUID.value = editingGlyph.value.selectedComponentsUUIDs[0]
+      } else {
+        selectedComponentUUID.value = ''
       }
       
       if (import.meta.env.DEV) {
@@ -399,11 +406,16 @@ export const useGlyphStore = defineStore('glyph', () => {
         } else {
           glyph.selectedComponentsUUIDs.splice(index, 1)
         }
+        // 多选模式下，始终将 selectedComponentUUID 设置为当前点击的组件
+        selectedComponentUUID.value = uuid
       } else {
         glyph.selectedComponentsUUIDs = [uuid]
+        // 同步更新 selectedComponentUUID
+        selectedComponentUUID.value = uuid
       }
     } else {
       glyph.selectedComponentsUUIDs = []
+      selectedComponentUUID.value = ''
     }
   }
 

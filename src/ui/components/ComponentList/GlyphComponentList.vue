@@ -261,9 +261,8 @@ const selectComponent = (e: MouseEvent, uuid: string) => {
   
   const hasSelected = selectedComponentsUUIDs.value.indexOf(uuid) !== -1
   
-  if (!hasSelected) {
-    glyphStore.setSelection(uuid)
-  }
+  // 无论是否已选中，都调用 setSelection 以确保 selectedComponentUUID 被正确设置
+  glyphStore.setSelection(uuid)
   
   // 如果组件是字形类型，可能需要触发字形拖拽工具
   const component = glyphStore.selectedComponent

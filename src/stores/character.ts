@@ -206,7 +206,6 @@ export const useCharacterStore = defineStore('character', () => {
     // 深拷贝字符数据，与列表分离
     editingCharacter.value = R.clone(character) as ICharacterFileLite
     editingCharacterUUID.value = uuid
-    selectedComponentUUID.value = ''
     selectedComponentsTree.value = []
     
     // 确保必要的属性存在
@@ -225,6 +224,14 @@ export const useCharacterStore = defineStore('character', () => {
     }
     if (!editingCharacter.value.groups) {
       editingCharacter.value.groups = []
+    }
+    
+    // 如果文件中已经有选中的组件，恢复选中状态
+    if (editingCharacter.value.selectedComponentsUUIDs && editingCharacter.value.selectedComponentsUUIDs.length > 0) {
+      // 取第一个选中的组件作为当前选中组件
+      selectedComponentUUID.value = editingCharacter.value.selectedComponentsUUIDs[0]
+    } else {
+      selectedComponentUUID.value = ''
     }
     
     if (import.meta.env.DEV) {
@@ -463,11 +470,16 @@ export const useCharacterStore = defineStore('character', () => {
         } else {
           characterFile.selectedComponentsUUIDs.splice(index, 1)
         }
+        // 多选模式下，始终将 selectedComponentUUID 设置为当前点击的组件
+        selectedComponentUUID.value = uuid
       } else {
         characterFile.selectedComponentsUUIDs = [uuid]
+        // 同步更新 selectedComponentUUID
+        selectedComponentUUID.value = uuid
       }
     } else {
       characterFile.selectedComponentsUUIDs = []
+      selectedComponentUUID.value = ''
     }
   }
 

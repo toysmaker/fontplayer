@@ -280,9 +280,8 @@ const selectComponent = (e: MouseEvent, uuid: string) => {
   
   const hasSelected = selectedComponentsUUIDs.value.indexOf(uuid) !== -1
   
-  if (!hasSelected) {
-    characterStore.setSelection(uuid)
-  }
+  // 无论是否已选中，都调用 setSelection 以确保 selectedComponentUUID 被正确设置
+  characterStore.setSelection(uuid)
   
   // 如果组件是字形类型，可能需要触发字形拖拽工具
   const component = characterStore.selectedComponent

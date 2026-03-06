@@ -107,8 +107,8 @@ export async function executeGlyphScript(
       // 获取项目存储（用于获取 constantsMap 和 selectedFile）
       const projectStore = useProjectStore()
       
-      // 从 store 获取统一的 constantsMap（不再每次创建）
-      const constantsMap = projectStore.constantsMap || new ConstantsMap([])
+      // 从 store 获取统一的 constantsMap（使用单例模式）
+      const constantsMap = projectStore.constantsMap || ConstantsMap.getInstance([])
 
       // 获取 FP（动态导入）
       const FP = await getFP()

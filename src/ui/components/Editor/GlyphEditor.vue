@@ -40,12 +40,7 @@
       
       <!-- 右侧面板 -->
       <aside class="right-panel-wrapper">
-        <n-card v-if="selectedComponent" title="参数编辑" class="parameter-panel-card" :bordered="false">
-          <ParameterEditor :component="selectedComponent" />
-        </n-card>
-        <n-card v-else title="提示" class="parameter-panel-card" :bordered="false">
-          <n-empty description="请选择一个组件进行编辑" />
-        </n-card>
+        <RightPanel />
       </aside>
     </main>
   </div>
@@ -57,9 +52,9 @@ import { NCard, NEmpty } from 'naive-ui'
 import { useGlyphStore } from '@/stores/glyph'
 import { getOrCreateDragger } from '@/features/tools/glyphDragger'
 import type { BaseGlyphDragger } from '@/features/tools/glyphDragger'
-import ParameterEditor from '@/ui/components/ParameterEditor.vue'
 import ToolBar from '@/ui/components/ToolBar/ToolBar.vue'
 import GlyphComponentList from '@/ui/components/ComponentList/GlyphComponentList.vue'
+import RightPanel from '@/ui/components/RightPanel/RightPanel.vue'
 import type { ICustomGlyph } from '@/core/types'
 import { render } from '@/core/canvas/EditorCanvasRenderer'
 import { mapCanvasWidth, mapCanvasHeight } from '@/utils/canvas'
