@@ -63,7 +63,11 @@ export async function executeGlyphScript(
 ): Promise<void> {
   try {
     // 如果字形实例缓存了数据，表示字形正在拖拽编辑中，则返回不执行脚本运行操作
-    if (targetGlyph._o && (targetGlyph._o as any).tempData) {
+    const existingInstance = instanceManager.getOrCreateGlyphInstance(
+      targetGlyph,
+      () => new CustomGlyph(targetGlyph)
+    ) as CustomGlyph
+    if (existingInstance.tempData) {
       return
     }
 
@@ -95,10 +99,12 @@ export async function executeGlyphScript(
       key,
       () => new CustomGlyph(targetGlyph),
       'glyph'
-    )
+    ) as CustomGlyph
+    
+    // 不再维护 targetGlyph._o，统一从 InstanceManager 获取实例
 
     try {
-      // 获取项目存储（用于获取 constantsMap）
+      // 获取项目存储（用于获取 constantsMap 和 selectedFile）
       const projectStore = useProjectStore()
       
       // 从 store 获取统一的 constantsMap（不再每次创建）
@@ -106,6 +112,11 @@ export async function executeGlyphScript(
 
       // 获取 FP（动态导入）
       const FP = await getFP()
+
+      // 注入 selectedFile 到脚本执行环境的全局状态
+      const { selectedFile: scriptSelectedFile } = await import('./globals')
+      const originalSelectedFile = scriptSelectedFile.value
+      scriptSelectedFile.value = projectStore.selectedFile
 
       // 设置全局变量（脚本执行环境）
       const originalGlyph = (window as any).glyph
@@ -115,6 +126,7 @@ export async function executeGlyphScript(
       ;(window as any).glyph = glyphInstance
       ;(window as any).constantsMap = constantsMap
       ;(window as any).FP = FP
+      ;(window as any).instanceManager = instanceManager // 注入 instanceManager 供脚本使用
 
       // 执行主脚本
       const script = getScript(targetGlyph, projectStore)
@@ -228,6 +240,9 @@ export async function executeGlyphScript(
       ;(window as any).constantsMap = originalConstantsMap
       ;(window as any).FP = originalFP
       
+      // 恢复 selectedFile
+      scriptSelectedFile.value = originalSelectedFile
+      
       // 调试：检查脚本执行后组件的数量和状态
       const componentsCount = glyphInstance._components?.length || 0
       if (componentsCount > 0) {
@@ -255,6 +270,8 @@ export async function executeGlyphScript(
     } catch (innerError) {
       // 如果脚本执行出错，立即释放实例
       instanceManager.releaseTemporaryInstance(key)
+      // 恢复 selectedFile
+      scriptSelectedFile.value = originalSelectedFile
       throw innerError
     }
   } catch (e) {

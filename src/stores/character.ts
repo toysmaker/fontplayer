@@ -10,7 +10,7 @@ import { useProjectStore } from './project'
 import { instanceManager } from '@/core/instance'
 import { Character } from '@/core/instance/Character'
 import { selectedItemByUUID } from '@/core/utils/component'
-import { genUUID } from '@/core/script/adapters'
+import { genUUID } from '@/utils/uuid'
 import * as R from 'ramda'
 
 export const useCharacterStore = defineStore('character', () => {
@@ -20,7 +20,7 @@ export const useCharacterStore = defineStore('character', () => {
   const editingCharacterUUID = ref<string>('')
   const selectedComponentUUID = ref<string>('')
   const selectedComponentsTree = ref<string[]>([])
-  
+
   // 剪贴板
   const clipBoard = reactive<{ value: Array<IComponent> }>({
     value: []
@@ -54,14 +54,19 @@ export const useCharacterStore = defineStore('character', () => {
     const characterFile = editingCharacter.value
     if (!characterFile.components || characterFile.components.length === 0) {
       if (import.meta.env.DEV) {
-        console.log('[CharacterStore] orderedListWithItemsForCurrentCharacterFile: no components')
+        console.log('[CharacterStore] orderedListWithItemsForCurrentCharacterFile: no components', {
+          characterUUID: characterFile.uuid,
+          hasComponents: !!characterFile.components,
+          componentsLength: characterFile.components?.length || 0
+        })
       }
       return []
     }
     if (!characterFile.orderedList || !characterFile.orderedList.length) {
       if (import.meta.env.DEV) {
         console.log('[CharacterStore] orderedListWithItemsForCurrentCharacterFile: no orderedList, using components directly', {
-          componentsCount: characterFile.components.length
+          componentsCount: characterFile.components.length,
+          componentTypes: characterFile.components.map((c: IComponent) => c.type)
         })
       }
       return characterFile.components || []
@@ -72,14 +77,22 @@ export const useCharacterStore = defineStore('character', () => {
         // 如果是组，从 groups 中查找（暂时不支持组）
         return null
       }
-      return selectedItemByUUID(characterFile.components, item.uuid)
+      const found = selectedItemByUUID(characterFile.components, item.uuid)
+      if (!found && import.meta.env.DEV) {
+        console.warn('[CharacterStore] orderedListWithItemsForCurrentCharacterFile: component not found', {
+          uuid: item.uuid,
+          availableUUIDs: characterFile.components.map((c: IComponent) => c.uuid)
+        })
+      }
+      return found
     }).filter((item): item is IComponent => item !== null)
     
     if (import.meta.env.DEV) {
       console.log('[CharacterStore] orderedListWithItemsForCurrentCharacterFile:', {
         orderedListCount: characterFile.orderedList.length,
         resultCount: result.length,
-        componentsCount: characterFile.components.length
+        componentsCount: characterFile.components.length,
+        componentTypes: result.map(c => c.type)
       })
     }
     

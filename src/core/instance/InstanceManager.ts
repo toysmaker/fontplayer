@@ -236,6 +236,32 @@ export class InstanceManager {
 
     return lru?.uuid || null
   }
+
+  /**
+   * 获取或创建字形实例（如果不存在则创建临时实例）
+   * 用于渲染等场景，不需要编辑状态
+   */
+  getOrCreateGlyphInstance(
+    glyph: ICustomGlyph,
+    factory: () => IInstance
+  ): IInstance {
+    const uuid = glyph.uuid
+    
+    // 如果实例已存在，直接返回
+    if (this.instancePool.has(uuid)) {
+      const instance = this.instancePool.get(uuid)!
+      instance.lastUsed = Date.now()
+      return instance
+    }
+    
+    // 如果不在编辑状态且不是临时实例，创建临时实例
+    if (!this.isEditing(uuid) && !this.isTemporary(uuid)) {
+      return this.acquireTemporaryInstance(uuid, factory, 'glyph')
+    }
+    
+    // 否则使用 getInstance
+    return this.getInstance(uuid, factory, 'glyph') || factory()
+  }
 }
 
 // 导出单例

@@ -10,7 +10,7 @@ import { useProjectStore } from './project'
 import { instanceManager } from '@/core/instance'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { selectedItemByUUID } from '@/core/utils/component'
-import { genUUID } from '@/core/script/adapters'
+import { genUUID } from '@/utils/uuid'
 import * as R from 'ramda'
 
 export const useGlyphStore = defineStore('glyph', () => {
@@ -21,7 +21,7 @@ export const useGlyphStore = defineStore('glyph', () => {
   const selectedComponentUUID = ref<string>('')
   const selectedComponentsTree = ref<string[]>([])
   const glyphCategory = ref<'glyphs' | 'stroke_glyphs' | 'radical_glyphs' | 'comp_glyphs'>('glyphs')
-  
+
   // 剪贴板（复用字符的剪贴板，因为两者可以互相复制粘贴）
   // 注意：这里暂时使用独立的剪贴板，后续可以考虑统一管理
   const clipBoard = reactive<{ value: Array<IGlyphComponent> }>({

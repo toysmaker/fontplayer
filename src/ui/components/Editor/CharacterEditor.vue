@@ -21,6 +21,14 @@
             <canvas
               ref="canvasRef"
               class="editor-canvas"
+              :class="{
+                'edit-canvas-panel': true,
+              }"
+              :style="{
+                'transform': editingCharacter ? `translate3d(${editingCharacter.view.translateX}px, ${editingCharacter.view.translateY}px, 0px)` : 'none',
+              }"
+              :width="canvasWidth"
+              :height="canvasHeight"
             />
           </div>
         </div>
@@ -47,6 +55,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { NCard, NEmpty } from 'naive-ui'
 import { useCharacterStore } from '@/stores/character'
+import { useProjectStore } from '@/stores/project'
 import { getOrCreateDragger } from '@/features/tools/glyphDragger'
 import type { BaseGlyphDragger } from '@/features/tools/glyphDragger'
 import ParameterEditor from '@/ui/components/ParameterEditor.vue'
@@ -54,12 +63,85 @@ import ToolBar from '@/ui/components/ToolBar/ToolBar.vue'
 import CharacterComponentList from '@/ui/components/ComponentList/CharacterComponentList.vue'
 import type { IComponent, ICharacterFileLite } from '@/core/types'
 import { createDebouncedHandler } from '@/utils/debounce-click'
+import { render } from '@/core/canvas/EditorCanvasRenderer'
+import { mapCanvasWidth, mapCanvasHeight } from '@/utils/canvas'
+import { BackgroundType, GridType } from '@/core/canvas/types'
+import type { IBackground, IGrid } from '@/core/canvas/types'
 
 const characterStore = useCharacterStore()
+const projectStore = useProjectStore()
 const canvasRef = ref<HTMLCanvasElement>()
 let dragger: BaseGlyphDragger | null = null
 
 const selectedComponent = computed(() => characterStore.selectedComponent)
+const editingCharacter = computed(() => characterStore.editingCharacter)
+
+// Canvas 尺寸
+const canvasWidth = computed(() => {
+  if (!projectStore.selectedFile) return mapCanvasWidth(1000)
+  return mapCanvasWidth(projectStore.selectedFile.width || 1000)
+})
+
+const canvasHeight = computed(() => {
+  if (!projectStore.selectedFile) return mapCanvasHeight(1000)
+  return mapCanvasHeight(projectStore.selectedFile.height || 1000)
+})
+
+// Canvas 显示尺寸（逻辑尺寸，用于CSS）
+// 原工程中 width.value 和 height.value 默认是 500
+// 这是显示尺寸，不是字符的实际宽度
+// Canvas 实际尺寸是 mapCanvasWidth(selectedFile.width) = 2 * width
+// 显示尺寸是 width.value = 500（默认）
+// 所以如果字符宽度是 1000，canvas 实际尺寸是 2000，显示尺寸是 500（缩小了 1/4）
+// 原工程中，显示尺寸固定为 500（width.value 默认值）
+const displayWidth = computed(() => {
+  return 500
+})
+const displayHeight = computed(() => {
+  return 500
+})
+
+// 默认背景和网格配置
+const defaultBackground: IBackground = {
+  type: BackgroundType.Transparent,
+  color: '#FFFFFF'
+}
+
+const defaultGrid: IGrid = {
+  type: GridType.None,
+  precision: 20
+}
+
+// 渲染画布
+const renderCanvas = async () => {
+  if (!canvasRef.value || !editingCharacter.value) {
+    if (import.meta.env.DEV) {
+      console.warn('[CharacterEditor] Cannot render: canvas or editingCharacter is null')
+    }
+    return
+  }
+  
+  const components = characterStore.orderedListWithItemsForCurrentCharacterFile
+  
+  if (import.meta.env.DEV) {
+    console.log('[CharacterEditor] Rendering canvas:', {
+      componentsCount: components.length,
+      canvasSize: { width: canvasRef.value.width, height: canvasRef.value.height },
+      editingCharacterUUID: editingCharacter.value.uuid,
+      editingCharacterComponentsCount: editingCharacter.value.components?.length || 0,
+      editingCharacterOrderedListCount: editingCharacter.value.orderedList?.length || 0,
+      components: components
+    })
+  }
+  
+  await render(canvasRef.value, true, false, {
+    mode: 'character',
+    character: editingCharacter.value,
+    components: components,
+    background: defaultBackground,
+    grid: defaultGrid,
+  })
+}
 
 // 初始化拖拽器
 const initDragger = () => {
@@ -142,6 +224,24 @@ onMounted(async () => {
       orderedListCount: characterStore.editingCharacter?.orderedList?.length || 0
     })
   }
+  
+  // 初始化画布尺寸
+  if (canvasRef.value && editingCharacter.value) {
+    // 设置 canvas 的实际尺寸（用于渲染，高分辨率）
+    canvasRef.value.width = canvasWidth.value
+    canvasRef.value.height = canvasHeight.value
+    
+    // 设置 canvas 的显示尺寸（CSS style，逻辑尺寸 * zoom）
+    const zoom = editingCharacter.value.view.zoom || 100
+    const styleWidth = displayWidth.value * zoom / 100
+    const styleHeight = displayHeight.value * zoom / 100
+    canvasRef.value.style.width = `${styleWidth}px`
+    canvasRef.value.style.height = `${styleHeight}px`
+  }
+  
+  // 初始渲染
+  await renderCanvas()
+  
   initDragger()
 })
 
@@ -155,12 +255,29 @@ onUnmounted(() => {
 })
 
 // 监听编辑字符变化
-watch(() => characterStore.editingCharacter, () => {
+watch(() => characterStore.editingCharacter, async () => {
   cleanupDragger()
-  nextTick(() => {
-    initDragger()
-  })
+  await nextTick()
+  
+  // 更新 canvas 显示尺寸
+  if (canvasRef.value && editingCharacter.value) {
+    const zoom = editingCharacter.value.view.zoom || 100
+    const styleWidth = displayWidth.value * zoom / 100
+    const styleHeight = displayHeight.value * zoom / 100
+    canvasRef.value.style.width = `${styleWidth}px`
+    canvasRef.value.style.height = `${styleHeight}px`
+  }
+  
+  // 重新渲染画布
+  await renderCanvas()
+  
+  initDragger()
 })
+
+// 监听组件列表变化，重新渲染
+watch(() => characterStore.orderedListWithItemsForCurrentCharacterFile, async () => {
+  await renderCanvas()
+}, { deep: true })
 
 // 监听选中组件变化
 watch(() => characterStore.selectedComponent, () => {
@@ -238,8 +355,7 @@ watch(() => characterStore.selectedComponent, () => {
 }
 
 .editor-canvas {
-  width: 100%;
-  height: 100%;
+  position: absolute; /* 原工程中使用 absolute，通过 wrapper 的 flex 居中 */
   cursor: crosshair;
 }
 

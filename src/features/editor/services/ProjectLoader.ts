@@ -251,11 +251,6 @@ export class ProjectLoader {
       } finally {
         // 6. 释放临时实例（清理 _o 引用）
         instanceManager.releaseTemporaryInstance(instanceKey)
-        
-        // 确保清理 _o 引用（防止内存泄漏）
-        if (glyph._o) {
-          delete glyph._o
-        }
       }
     } catch (error) {
       console.error(`Error processing glyph ${glyph.uuid}:`, error)
@@ -264,9 +259,7 @@ export class ProjectLoader {
       if (instanceManager.isTemporary(instanceKey)) {
         instanceManager.releaseTemporaryInstance(instanceKey)
       }
-      if (glyph._o) {
-        delete glyph._o
-      }
+      // 不再维护 glyph._o，统一从 InstanceManager 管理
       // 不抛出错误，继续处理其他字形
     }
   }

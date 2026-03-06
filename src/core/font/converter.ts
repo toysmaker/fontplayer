@@ -401,16 +401,15 @@ export class ContourConverter {
             }
             
             // 获取字形实例（脚本执行后实例应该还在，因为 ScriptExecutor 不会立即释放）
-            // 注意：脚本执行时，实例会被设置到 glyphValue._o，并且会保留在实例池中
             // 使用 component.uuid 作为实例key，确保每个组件有独立的实例
             const instanceKey = component.uuid
-            let glyphInstance = glyphValue._o
+            let glyphInstance: any = null
             let wasInstanceCreatedHere = false
             
-            // 如果 _o 不存在，尝试从实例池获取（脚本执行后实例应该在池中）
-            if (!glyphInstance && scriptExecuted) {
+            // 从实例池获取（脚本执行后实例应该在池中）
+            if (scriptExecuted) {
               // 检查实例池中是否已有实例（脚本执行时创建的）
-              const existingInstance = instanceManager.isTemporary(instanceKey)
+              const hadInstanceBefore = instanceManager.isTemporary(instanceKey)
               // 尝试从实例池获取（acquireTemporaryInstance 会返回已存在的实例）
               glyphInstance = instanceManager.acquireTemporaryInstance(
                 instanceKey,
@@ -418,7 +417,7 @@ export class ContourConverter {
                 'glyph'
               )
               // 如果实例池中原本没有实例，说明是新创建的
-              wasInstanceCreatedHere = !existingInstance
+              wasInstanceCreatedHere = !hadInstanceBefore
             }
             
             // 检查实例是否有脚本生成的组件
@@ -750,7 +749,7 @@ export class ContourConverter {
     }
   ): Promise<IComponent[]> {
     // 导入必要的工具函数
-    const { genUUID } = await import('../script/adapters')
+    const { genUUID } = await import('@/utils/uuid')
     const { formatPoints, genPenContour } = await import('../utils/contour')
     
     // 轻量级 ID 生成器（简化版，使用计数器）

@@ -136,7 +136,7 @@ const showEmptyLines = computed(() => {
       if (import.meta.env.DEV) {
         console.log(`[GlyphItem] ${glyphName} (${glyphUUID}): showEmptyLines=true (initialized and rendered but no content)`)
       }
-      return true
+  return true
     }
     
     // 还没初始化或还在渲染中，暂时不显示红线（等待渲染完成）
@@ -162,10 +162,10 @@ const renderPreview = async (force: boolean = false) => {
   if (import.meta.env.DEV) {
     console.log(`[GlyphItem] ${glyphName} (${uuid}): renderPreview called`, { force })
   }
-
+  
   // 注册 Canvas
   CanvasManager.registerCanvas(uuid, canvas)
-
+  
   // 如果不强制渲染，先检查是否可以跳过
   if (!force && CanvasManager.canSkipRender(canvas, uuid)) {
     // 缓存存在且Canvas已有内容，直接返回
@@ -178,12 +178,12 @@ const renderPreview = async (force: boolean = false) => {
 
   // 先尝试从内存缓存恢复（同步，快速）
   if (CanvasManager.restoreFromCache(canvas, uuid)) {
-    hasRendered.value = true
+      hasRendered.value = true
     if (import.meta.env.DEV) {
       console.log(`[GlyphItem] ${glyphName} (${uuid}): restored from memory cache, hasRendered=true`)
     }
-    return
-  }
+      return
+    }
 
   // 尝试从 IndexedDB 异步加载缓存
   const restored = await CanvasManager.restoreFromCacheAsync(canvas, uuid)
@@ -195,7 +195,7 @@ const renderPreview = async (force: boolean = false) => {
     }
     return
   }
-
+  
   // 缓存都没有，使用渲染引擎渲染
   try {
     const fontSettings = projectStore.selectedFile?.fontSettings
@@ -292,7 +292,7 @@ onMounted(() => {
       // 缓存都没有，让 VirtualGlyphList 的渲染队列统一处理
       // 避免重复渲染和标记冲突
       // 如果 VirtualGlyphList 没有处理，再自己渲染
-      if (!isInitialized.value) {
+  if (!isInitialized.value) {
         if (import.meta.env.DEV) {
           console.log(`[GlyphItem] ${glyphName} (${uuid}): no cache, waiting for VirtualGlyphList or self render`)
         }
@@ -350,7 +350,7 @@ onMounted(() => {
                     })
                   }
                 }
-                isInitialized.value = true
+    isInitialized.value = true
               })
             }
           }

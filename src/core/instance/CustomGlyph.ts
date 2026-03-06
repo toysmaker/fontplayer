@@ -7,7 +7,7 @@
 
 import type { ICustomGlyph, IComponent, IParameter } from '../types'
 import { ParameterType } from '../types'
-import type { IInstance } from './InstanceManager'
+import { instanceManager, type IInstance } from './InstanceManager'
 import { orderedListWithItemsForGlyph } from '../utils/glyph'
 import { useProjectStore } from '@/stores/project'
 
@@ -46,8 +46,7 @@ export class CustomGlyph implements IInstance {
       }
     }
     
-    // 将实例关联到字形数据
-    glyph._o = this as any
+    // 不再维护 glyph._o，统一从 InstanceManager 获取实例
   }
 
   /**
@@ -117,7 +116,7 @@ export class CustomGlyph implements IInstance {
   /**
    * 渲染字形
    */
-  render(
+  async render(
     canvas: HTMLCanvasElement,
     renderBackground: boolean = true,
     offset: { x: number; y: number } = { x: 0, y: 0 },
@@ -125,9 +124,140 @@ export class CustomGlyph implements IInstance {
     scale: number = 1,
     fillColor: string = '#000'
   ) {
-    // TODO: 实现渲染逻辑
-    // 需要从原代码迁移 renderCanvas 和相关函数
-    console.warn('CustomGlyph.render() not implemented yet')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    debugger
+    
+    // 导入必要的函数
+    const { renderCanvas } = await import('@/core/canvas/EditorCanvasRenderer')
+    const { orderedListWithItemsForGlyph } = await import('@/core/utils/glyph')
+    const { fontRenderStyle } = await import('@/core/script/globals')
+    
+    // 渲染字形组件列表（components，即字形内部的组件，如 pen, polygon 等）
+    const glyphComponents = orderedListWithItemsForGlyph(this._glyph)
+    if (import.meta.env.DEV) {
+      console.log('[CustomGlyph.render] Rendering glyph:', {
+        glyphUUID: this._glyph.uuid,
+        glyphName: this._glyph.name,
+        glyphComponentsCount: glyphComponents.length,
+        _componentsCount: this._components.length,
+        hasGlyphComponents: glyphComponents.length > 0,
+        has_components: this._components.length > 0
+      })
+    }
+    if (glyphComponents.length > 0) {
+      await renderCanvas(glyphComponents, canvas, {
+        offset,
+        scale: scale,
+        fill: false,
+        forceUpdate: false,
+      })
+    }
+    
+    // 确保清除renderCanvas可能留下的路径状态
+    ctx.beginPath()
+    
+    // 渲染脚本生成的组件（_components，即脚本生成的 glyph-pen, glyph-ellipse 等）
+    if (import.meta.env.DEV) {
+      console.log('[CustomGlyph.render] Rendering _components:', {
+        _componentsCount: this._components.length,
+        componentTypes: this._components.map((c: any) => c.type || 'unknown')
+      })
+    }
+    this._components.forEach((component: any, index: number) => {
+      if (component.render) {
+        if (import.meta.env.DEV) {
+          console.log(`[CustomGlyph.render] Rendering _component ${index}:`, {
+            type: component.type,
+            pointsCount: component.points?.length || 0,
+            hasRender: !!component.render
+          })
+        }
+        component.render(canvas, {
+          offset,
+          scale: scale,
+          fillColor: fillColor,
+        })
+      } else {
+        if (import.meta.env.DEV) {
+          console.warn(`[CustomGlyph.render] _component ${index} has no render method:`, {
+            type: component.type,
+            component: component
+          })
+        }
+      }
+    })
+    
+    // 根据渲染样式填充
+    if (fontRenderStyle.value === 'black' || fill) {
+      ctx.fillStyle = '#000'
+      ctx.fill("nonzero")
+      ctx.closePath()
+    } else if (fontRenderStyle.value === 'color') {
+      ctx.fillStyle = fillColor || '#000'
+      ctx.fill("nonzero")
+      ctx.closePath()
+    } else {
+      // 线框模式下，确保路径被清除，避免残留
+      ctx.closePath()
+    }
+  }
+
+  /**
+   * 强制更新渲染字形
+   */
+  async render_forceUpdate(
+    canvas: HTMLCanvasElement,
+    renderBackground: boolean = true,
+    offset: { x: number; y: number } = { x: 0, y: 0 },
+    fill: boolean = false,
+    scale: number = 1,
+    fillColor: string = '#000'
+  ) {
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    
+    // 导入必要的函数
+    const { renderCanvas } = await import('@/core/canvas/EditorCanvasRenderer')
+    const { orderedListWithItemsForGlyph } = await import('@/core/utils/glyph')
+    const { fontRenderStyle } = await import('@/core/script/globals')
+    
+    // 渲染字形组件列表（强制更新）
+    await renderCanvas(orderedListWithItemsForGlyph(this._glyph), canvas, {
+      offset,
+      scale: scale,
+      fill: false,
+      forceUpdate: true,
+    })
+    
+    // 确保清除renderCanvas可能留下的路径状态
+    ctx.beginPath()
+    
+    // 渲染脚本生成的组件（_components）
+    this._components.forEach((component: any) => {
+      if (component.render) {
+        component.render(canvas, {
+          offset,
+          scale: scale,
+          fillColor: fillColor,
+        })
+      }
+    })
+    
+    // 根据渲染样式填充
+    if (fontRenderStyle.value === 'black' || fill) {
+      ctx.fillStyle = '#000'
+      ctx.fill("nonzero")
+      ctx.closePath()
+    } else if (fontRenderStyle.value === 'color') {
+      ctx.fillStyle = fillColor || '#000'
+      ctx.fill("nonzero")
+      ctx.closePath()
+    } else {
+      // 线框模式下，确保路径被清除，避免残留
+      ctx.closePath()
+    }
   }
 
   /**
@@ -157,10 +287,7 @@ export class CustomGlyph implements IInstance {
    * 清理资源
    */
   cleanup() {
-    // 清理与字形数据的关联
-    if (this._glyph._o && (this._glyph._o as any)._glyph === this._glyph) {
-      delete this._glyph._o
-    }
+    // 不再维护 glyph._o，统一从 InstanceManager 管理
     // 清理临时数据
     this.clear()
     // 清理回调
@@ -382,7 +509,8 @@ export class CustomGlyph implements IInstance {
     for (let i = 0; i < this._glyph.components.length; i++) {
       if (this._glyph.components[i].name === name && this._glyph.components[i].type === 'glyph') {
         const glyph = this._glyph.components[i].value as ICustomGlyph
-        return glyph._o || null
+        // 从 InstanceManager 获取实例
+        return instanceManager.getOrCreateGlyphInstance(glyph, () => new CustomGlyph(glyph)) as any
       }
     }
     return null

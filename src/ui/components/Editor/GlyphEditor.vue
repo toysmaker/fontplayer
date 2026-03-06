@@ -21,11 +21,14 @@
             <canvas
               ref="canvasRef"
               class="editor-canvas"
-              @mousedown="handleMouseDown"
-              @mousemove="handleMouseMove"
-              @mouseup="handleMouseUp"
-              @click="handleCanvasClick"
-              @pointerdown="handleCanvasClick"
+              :class="{
+                'edit-canvas-panel': true,
+              }"
+              :style="{
+                'transform': editingGlyph ? `translate3d(${editingGlyph.view.translateX}px, ${editingGlyph.view.translateY}px, 0px)` : 'none',
+              }"
+              :width="canvasWidth"
+              :height="canvasHeight"
             />
           </div>
         </div>
@@ -57,12 +60,50 @@ import type { BaseGlyphDragger } from '@/features/tools/glyphDragger'
 import ParameterEditor from '@/ui/components/ParameterEditor.vue'
 import ToolBar from '@/ui/components/ToolBar/ToolBar.vue'
 import GlyphComponentList from '@/ui/components/ComponentList/GlyphComponentList.vue'
+import type { ICustomGlyph } from '@/core/types'
+import { render } from '@/core/canvas/EditorCanvasRenderer'
+import { mapCanvasWidth, mapCanvasHeight } from '@/utils/canvas'
+import { BackgroundType, GridType } from '@/core/canvas/types'
+import type { IBackground, IGrid } from '@/core/canvas/types'
 
 const glyphStore = useGlyphStore()
 const canvasRef = ref<HTMLCanvasElement>()
 let dragger: BaseGlyphDragger | null = null
 
 const selectedComponent = computed(() => glyphStore.selectedComponent)
+const editingGlyph = computed(() => glyphStore.editingGlyph)
+
+// Canvas 尺寸（字形编辑界面使用默认尺寸）
+const defaultUnitsPerEm = 1000
+const canvasWidth = computed(() => mapCanvasWidth(defaultUnitsPerEm))
+const canvasHeight = computed(() => mapCanvasHeight(defaultUnitsPerEm))
+
+// Canvas 显示尺寸（固定为 500，与原工程一致）
+const displayWidth = computed(() => 500)
+const displayHeight = computed(() => 500)
+
+// 默认背景和网格配置
+const defaultBackground: IBackground = {
+  type: BackgroundType.Transparent,
+  color: '#FFFFFF'
+}
+
+const defaultGrid: IGrid = {
+  type: GridType.None,
+  precision: 20
+}
+
+// 渲染画布
+const renderCanvas = async () => {
+  if (!canvasRef.value || !editingGlyph.value) return
+  
+  await render(canvasRef.value, true, false, {
+    mode: 'glyph',
+    glyph: editingGlyph.value,
+    background: defaultBackground,
+    grid: defaultGrid,
+  })
+}
 
 // 初始化拖拽器
 const initDragger = () => {
@@ -113,11 +154,32 @@ const cleanupDragger = () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   // 如果还没有设置编辑字形，从 UUID 设置
   if (glyphStore.editingGlyphUUID && !glyphStore.editingGlyph) {
-    glyphStore.setEditGlyphByUUID(glyphStore.editingGlyphUUID, glyphStore.glyphCategory)
+    await glyphStore.setEditGlyphByUUID(glyphStore.editingGlyphUUID, glyphStore.glyphCategory)
   }
+  
+  // 等待 nextTick 确保 editingGlyph 已设置
+  await nextTick()
+  
+  // 初始化画布尺寸
+  if (canvasRef.value && editingGlyph.value) {
+    // 设置 canvas 的实际尺寸（用于渲染，高分辨率）
+    canvasRef.value.width = canvasWidth.value
+    canvasRef.value.height = canvasHeight.value
+    
+    // 设置 canvas 的显示尺寸（CSS style，固定 500px * zoom）
+    const zoom = editingGlyph.value.view.zoom || 100
+    const styleWidth = displayWidth.value * zoom / 100
+    const styleHeight = displayHeight.value * zoom / 100
+    canvasRef.value.style.width = `${styleWidth}px`
+    canvasRef.value.style.height = `${styleHeight}px`
+  }
+  
+  // 初始渲染
+  await renderCanvas()
+  
   initDragger()
 })
 
@@ -131,12 +193,29 @@ onUnmounted(() => {
 })
 
 // 监听编辑字形变化
-watch(() => glyphStore.editingGlyph, () => {
+watch(() => glyphStore.editingGlyph, async () => {
   cleanupDragger()
-  nextTick(() => {
-    initDragger()
-  })
+  await nextTick()
+  
+  // 更新 canvas 显示尺寸
+  if (canvasRef.value && editingGlyph.value) {
+    const zoom = editingGlyph.value.view.zoom || 100
+    const styleWidth = displayWidth.value * zoom / 100
+    const styleHeight = displayHeight.value * zoom / 100
+    canvasRef.value.style.width = `${styleWidth}px`
+    canvasRef.value.style.height = `${styleHeight}px`
+  }
+  
+  // 重新渲染画布
+  await renderCanvas()
+  
+  initDragger()
 })
+
+// 监听组件列表变化，重新渲染
+watch(() => glyphStore.orderedListWithItemsForCurrentGlyph, async () => {
+  await renderCanvas()
+}, { deep: true })
 
 // 监听选中组件变化
 watch(() => glyphStore.selectedComponent, () => {
@@ -146,27 +225,8 @@ watch(() => glyphStore.selectedComponent, () => {
   })
 })
 
-// 鼠标事件处理
-const handleMouseDown = () => {
-  // dragger会处理拖拽逻辑
-}
-
-const handleMouseMove = () => {
-  // dragger会处理拖拽逻辑
-}
-
-const handleMouseUp = () => {
-  // dragger会处理拖拽逻辑
-}
-
-// Canvas点击事件（用于选择组件）
-const _handleCanvasClick = (e: MouseEvent) => {
-  // TODO: 实现组件选择逻辑
-  console.log('Canvas clicked:', e)
-}
-
-// 使用防重复调用包装
-const handleCanvasClick = createDebouncedHandler(_handleCanvasClick, 'GlyphEditor.canvasClick')
+// 注意：鼠标事件由 dragger 的 activate() 方法自动处理
+// 不需要在模板中手动绑定 @mousedown, @mousemove, @mouseup
 </script>
 
 <style scoped>
@@ -233,8 +293,7 @@ const handleCanvasClick = createDebouncedHandler(_handleCanvasClick, 'GlyphEdito
 }
 
 .editor-canvas {
-  width: 100%;
-  height: 100%;
+  position: absolute;
   cursor: crosshair;
 }
 

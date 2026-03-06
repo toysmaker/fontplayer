@@ -1,4 +1,6 @@
-import { mapCanvasX, mapCanvasY, genUUID, getStrokeWidth } from './adapters'
+import { mapCanvasX, mapCanvasY } from '@/utils/canvas'
+import { genUUID } from '@/utils/uuid'
+import { getStrokeWidth } from '@/utils/canvas-utils'
 import type { IGlyphComponent } from '../types'
 
 export interface IJoint {
@@ -112,8 +114,16 @@ const renderJoints = (rootComponent, canvas) => {
 	const traverse = (_component, _ox, _oy) => {
 		const ox = _component.ox + _ox
 		const oy = _component.oy + _oy
-		const firstJointIndex = _component.value._o?.getJoints().findIndex(joint => !joint.name.includes('_ref')) || 0
-		_component.value._o?.getJoints().map((joint, index) => {
+		// 从 InstanceManager 获取字形实例
+		const instanceManager = (window as any).instanceManager
+		const glyphInstance = instanceManager?.getOrCreateGlyphInstance(_component.value, () => {
+			const { CustomGlyph } = require('../instance/CustomGlyph')
+			return new CustomGlyph(_component.value)
+		})
+		if (!glyphInstance) return
+		
+		const firstJointIndex = glyphInstance.getJoints().findIndex(joint => !joint.name.includes('_ref')) || 0
+		glyphInstance.getJoints().map((joint, index) => {
 			const { x, y } = joint.getCoords()
 			if (index === firstJointIndex) {
 				renderFisrtJoint(canvas, {
@@ -140,9 +150,17 @@ const renderRefLines = (rootComponent, canvas) => {
 	const traverse = (_component, _ox, _oy) => {
 		const ox = _component.ox + _ox
 		const oy = _component.oy + _oy
-		_component.value._o?.getRefLines().map((_refline) => {
-			const start = _component.value._o.getJoint(_refline.start)
-			const end = _component.value._o.getJoint(_refline.end)
+		// 从 InstanceManager 获取字形实例
+		const instanceManager = (window as any).instanceManager
+		const glyphInstance = instanceManager?.getOrCreateGlyphInstance(_component.value, () => {
+			const { CustomGlyph } = require('../instance/CustomGlyph')
+			return new CustomGlyph(_component.value)
+		})
+		if (!glyphInstance) return
+		
+		glyphInstance.getRefLines().map((_refline) => {
+			const start = glyphInstance.getJoint(_refline.start)
+			const end = glyphInstance.getJoint(_refline.end)
 			const refline = {
 				start: {
 					x: start.x + ox,
@@ -171,8 +189,16 @@ const getJoints = (rootComponent, subComponentUUID) => {
 		const ox = _component.ox + _ox
 		const oy = _component.oy + _oy
 		if (subComponentUUID === _component.uuid) {
+			// 从 InstanceManager 获取字形实例
+			const instanceManager = (window as any).instanceManager
+			const glyphInstance = instanceManager?.getOrCreateGlyphInstance(_component.value, () => {
+				const { CustomGlyph } = require('../instance/CustomGlyph')
+				return new CustomGlyph(_component.value)
+			})
+			if (!glyphInstance) return []
+			
 			// 获取该节点Joints数组
-			joints = _component.value._o?.getJoints().map((joint) => {
+			joints = glyphInstance.getJoints().map((joint) => {
 				const { x, y } = joint.getCoords()
 				return {
 					name: joint.name,

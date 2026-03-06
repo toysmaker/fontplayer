@@ -4,7 +4,7 @@
  */
 
 import type { IFile, IFontSettings } from '@/core/types'
-import { genUUID } from '@/core/script/adapters'
+import { genUUID } from '@/utils/uuid'
 import { useProjectStore } from '@/stores/project'
 
 /**

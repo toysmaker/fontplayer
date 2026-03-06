@@ -163,7 +163,7 @@ import { useEditorStore } from '@/stores/editor'
 import { useI18n } from 'vue-i18n'
 import type { IGlyphComponent } from '@/core/types'
 import { selectedItemByUUID } from '@/core/utils/component'
-import { genUUID } from '@/core/script/adapters'
+import { genUUID } from '@/utils/uuid'
 import * as R from 'ramda'
 
 const { t } = useI18n()

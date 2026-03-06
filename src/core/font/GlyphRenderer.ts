@@ -77,7 +77,7 @@ export class GlyphRenderer {
 
       // 如果没有预览数据，需要计算
       if (!contours || contours.length === 0) {
-        // 获取组件列表
+      // 获取组件列表
         let components = glyph.components || []
 
         // 如果组件为空但字形有脚本，需要先执行脚本生成组件
@@ -102,37 +102,35 @@ export class GlyphRenderer {
               components = glyphInstance.components || []
             } finally {
               instanceManager.releaseTemporaryInstance(instanceKey)
-              if (glyph._o) {
-                delete glyph._o
-              }
+              // 不再维护 glyph._o，统一从 InstanceManager 管理
             }
           } catch (error) {
             console.warn(`[GlyphRenderer] Failed to execute script for ${glyph.uuid}:`, error)
           }
         }
 
-        if (components.length === 0) {
-          // 没有组件，清空Canvas
-          RenderEngine.clearCanvas(canvas)
-          return true
-        }
+      if (components.length === 0) {
+        // 没有组件，清空Canvas
+        RenderEngine.clearCanvas(canvas)
+        return true
+      }
 
-        // 准备转换选项
-        const unitsPerEm = fontSettings?.unitsPerEm || 1000
-        const descender = fontSettings?.descender || -200
+      // 准备转换选项
+      const unitsPerEm = fontSettings?.unitsPerEm || 1000
+      const descender = fontSettings?.descender || -200
 
-        // 转换为轮廓（字形使用与字符相同的转换逻辑）
+      // 转换为轮廓（字形使用与字符相同的转换逻辑）
         // 注意：ContourConverter 会自动处理字形组件中的脚本执行
         contours = await ContourConverter.componentsToContours(
-          components as any,
-          {
-            unitsPerEm,
-            descender,
-            advanceWidth: unitsPerEm,
-            preview: true,
-          },
-          { x: 0, y: 0 }
-        )
+        components as any,
+        {
+          unitsPerEm,
+          descender,
+          advanceWidth: unitsPerEm,
+          preview: true,
+        },
+        { x: 0, y: 0 }
+      )
 
         // 如果计算出了轮廓，存储到 IndexedDB（异步，不阻塞渲染）
         if (contours.length > 0 && !glyph.previewRef) {

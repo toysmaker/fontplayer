@@ -352,7 +352,6 @@ export interface ICustomGlyph {
   parameters?: Array<any>
   joints?: Array<IJoint>
   reflines?: Array<IRefLine>
-  _o?: IGlyphScriptCallbacks | any
   contourRef?: string // IndexedDB key for contour data
   previewRef?: string // IndexedDB key for preview data
   view?: {

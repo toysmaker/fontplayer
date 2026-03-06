@@ -16,7 +16,7 @@ class Character {
   
 	constructor (character) {
 		this._character = character
-		character._o = this
+		// 不再维护 character._o，统一从 InstanceManager 获取实例
 	}
 
 	public getComponent (name) {
@@ -31,7 +31,15 @@ class Character {
 	public getGlyph (name) {
 		for (let i = 0; i < this._character.components.length; i++) {
 			if (this._character.components[i].name === name) {
-				return (this._character.components[i].value as ICustomGlyph)._o
+				const glyph = this._character.components[i].value as ICustomGlyph
+				// 从 InstanceManager 获取实例（在脚本执行环境中，instanceManager 应该已经通过全局变量注入）
+				const instanceManager = (window as any).instanceManager
+				if (instanceManager) {
+					const { CustomGlyph } = require('../instance/CustomGlyph')
+					return instanceManager.getOrCreateGlyphInstance(glyph, () => new CustomGlyph(glyph))
+				}
+				// 如果 instanceManager 不可用，返回 null（不应该发生）
+				return null
 			}
 		}
 		return null

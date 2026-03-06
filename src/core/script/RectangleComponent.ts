@@ -1,5 +1,10 @@
 import type { ILine, IQuadraticBezierCurve, ICubicBezierCurve } from './types'
-import { mapCanvasX, mapCanvasY, getRectanglePoints, formatPoints, genRectangleContour, translate, computeCoords, fontRenderStyle, getStrokeWidth, selectedFile } from './adapters'
+import { mapCanvasX, mapCanvasY } from '@/utils/canvas'
+import { getRectanglePoints, translate } from '../utils/math'
+import { formatPoints, genRectangleContour } from '../utils/contour'
+import { computeCoords } from '../utils/grid'
+import { fontRenderStyle, selectedFile } from './globals'
+import { getStrokeWidth } from '@/utils/canvas-utils'
 import * as R from 'ramda'
 
 interface IOption {

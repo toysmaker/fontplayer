@@ -1,13 +1,19 @@
 import type { ICustomGlyph, IRefLine } from '../types'
 import { ParameterType } from '../types'
-import { renderCanvas, renderGridCanvas, fontRenderStyle, getStrokeWidth, computeCoords } from './adapters'
+import { renderCanvas } from '../canvas/EditorCanvasRenderer'
+import { fontRenderStyle } from './globals'
+import { getStrokeWidth } from '@/utils/canvas-utils'
+import { computeCoords } from '../utils/grid'
+import { mapCanvasX, mapCanvasY } from '@/utils/canvas'
 import { PenComponent } from './PenComponent'
 import { PolygonComponent } from './PolygonComponent'
 import { EllipseComponent } from './EllipseComponent'
 import { RectangleComponent } from './RectangleComponent'
 import { Joint } from './Joint'
 import { orderedListWithItemsForGlyph } from '../utils/glyph'
-import { mapCanvasX, mapCanvasY } from './adapters'
+
+// renderGridCanvas 占位符函数（暂时使用 renderCanvas）
+const renderGridCanvas = renderCanvas
 
 // TODO: 这些函数需要从原代码迁移或实现
 // import { clearCanvas, computeCoords, fillBackground, renderCanvas, renderGridCanvas } from '../canvas/canvas'
@@ -33,7 +39,7 @@ class CustomGlyph {
 
 	constructor (glyph: ICustomGlyph) {
 		this._glyph = glyph
-		glyph._o = this as any
+		// 不再维护 glyph._o，统一从 InstanceManager 获取实例
 	}
 
 	public getJoints () {
@@ -461,7 +467,15 @@ class CustomGlyph {
 	public getGlyph (name) {
 		for (let i = 0; i < this._glyph.components.length; i++) {
 			if (this._glyph.components[i].name === name) {
-				return (this._glyph.components[i].value as ICustomGlyph)._o
+				const glyph = this._glyph.components[i].value as ICustomGlyph
+				// 从 InstanceManager 获取实例（在脚本执行环境中，instanceManager 应该已经通过全局变量注入）
+				const instanceManager = (window as any).instanceManager
+				if (instanceManager) {
+					// 注意：在脚本环境中，CustomGlyph 类已经在全局作用域中
+					return instanceManager.getOrCreateGlyphInstance(glyph, () => new CustomGlyph(glyph))
+				}
+				// 如果 instanceManager 不可用，返回 null（不应该发生）
+				return null
 			}
 		}
 		return null
