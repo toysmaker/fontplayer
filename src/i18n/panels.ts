@@ -80,6 +80,11 @@ const panels = {
 				title: '填充颜色',
 				label: '颜色',
 			},
+			width: '宽度',
+			height: '高度',
+			horizontalFlip: '水平翻转',
+			verticalFlip: '垂直翻转',
+			offset: '偏移',
 			formatComponent: {
 				title: '格式化组件',
 				button: '格式化字形组件',
@@ -181,6 +186,40 @@ const panels = {
 			reset: '归零',
 			coords: '坐标',
 		},
+		filesBar: {
+			advancedEdit: '高级编辑',
+			searchCharacter: '搜索字符',
+			search: '搜索',
+			searchPlaceholder: '请输入要搜索的字符（1-100个字符）',
+			searchWarning: '请输入搜索关键词（1-100个字符）',
+			searchWarningTooLong: '搜索关键词不能超过100个字符',
+		},
+		toolBar: {
+			characterList: '字符列表',
+		},
+		componentList: {
+			noComponents: '暂无组件',
+			warningEditingCharacterEmpty: '警告: editingCharacter 为空',
+		},
+		rightPanel: {
+			selectComponent: '请选择一个组件进行编辑',
+		},
+		editorMain: {
+			featureInDevelopment: '功能开发中...',
+			character: '字符',
+			stroke: '笔画',
+			radical: '部首',
+			comp: '部件',
+			glyph: '字形',
+		},
+		loading: {
+			loading: '正在加载...',
+			initializing: '正在初始化...',
+			loadingProject: '正在加载工程文件...',
+		},
+		editorSidebar: {
+			onlyOneProjectWarning: '目前字玩仅支持同时编辑一个工程，请关闭当前工程再新建。注意，关闭工程前请保存工程以避免数据丢失。',
+		},
 	},
 	en: {
 		filter: {
@@ -263,6 +302,11 @@ const panels = {
 				title: 'Fill Color',
 				label: 'Color',
 			},
+			width: 'Width',
+			height: 'Height',
+			horizontalFlip: 'Horizontal Flip',
+			verticalFlip: 'Vertical Flip',
+			offset: 'Offset',
 			formatComponent: {
 				title: 'Format Component',
 				button: 'Format Glyph Component',
@@ -363,6 +407,40 @@ const panels = {
 		bottomBar: {
 			reset: 'Reset',
 			coords: 'Coords',
+		},
+		filesBar: {
+			advancedEdit: 'Advanced Edit',
+			searchCharacter: 'Search Character',
+			search: 'Search',
+			searchPlaceholder: 'Please enter characters to search (1-100 characters)',
+			searchWarning: 'Please enter search keyword (1-100 characters)',
+			searchWarningTooLong: 'Search keyword cannot exceed 100 characters',
+		},
+		toolBar: {
+			characterList: 'Character List',
+		},
+		componentList: {
+			noComponents: 'No Components',
+			warningEditingCharacterEmpty: 'Warning: editingCharacter is empty',
+		},
+		rightPanel: {
+			selectComponent: 'Please select a component to edit',
+		},
+		editorMain: {
+			featureInDevelopment: 'Feature in development...',
+			character: 'Character',
+			stroke: 'Stroke',
+			radical: 'Radical',
+			comp: 'Component',
+			glyph: 'Glyph',
+		},
+		loading: {
+			loading: 'Loading...',
+			initializing: 'Initializing...',
+			loadingProject: 'Loading project file...',
+		},
+		editorSidebar: {
+			onlyOneProjectWarning: 'FontPlayer currently only supports editing one project at a time. Please close the current project before creating a new one. Note: Please save the project before closing to avoid data loss.',
 		},
 	}
 }

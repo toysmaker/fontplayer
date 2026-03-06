@@ -22,7 +22,7 @@
     <div v-else class="loading-spinner-container">
       <n-spin size="large" />
       <div class="loading-message">
-        {{ loadingMessage || '正在加载...' }}
+        {{ loadingMessage || t('panels.loading.loading') }}
       </div>
     </div>
   </div>
@@ -31,7 +31,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { NSpin, NProgress } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useProjectStore } from '@/stores/project'
+
+const { t } = useI18n()
 
 const projectStore = useProjectStore()
 
@@ -47,8 +50,8 @@ const percentage = computed(() => {
 const loadingMessage = computed(() => {
   // 使用 store 中的消息，如果没有则使用默认消息
   return projectStore.loadingMessage || (loadingTotal.value === 0 
-    ? '正在初始化...' 
-    : '正在加载工程文件...')
+    ? t('panels.loading.initializing') 
+    : t('panels.loading.loadingProject'))
 })
 </script>
 

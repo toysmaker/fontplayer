@@ -29,7 +29,7 @@
       <!-- 编辑模式 -->
       <CharacterEditor v-if="editStatus === EditStatus.Edit" />
       <GlyphEditor v-else-if="editStatus === EditStatus.Glyph" />
-      <n-empty v-else-if="!isListMode" description="功能开发中..." />
+      <n-empty v-else-if="!isListMode" :description="t('panels.editorMain.featureInDevelopment')" />
     </div>
     
     <!-- Tab 切换按钮（仅在列表模式下显示） -->
@@ -38,27 +38,27 @@
         class="character-list"
         @click="handleTabChange(EditStatus.CharacterList)"
         :class="{ selected: editStatus === EditStatus.CharacterList }"
-      >字符</span>
+      >{{ t('panels.editorMain.character') }}</span>
       <span
         class="stroke-glyph-list"
         @click="handleTabChange(EditStatus.StrokeGlyphList)"
         :class="{ selected: editStatus === EditStatus.StrokeGlyphList }"
-      >笔画</span>
+      >{{ t('panels.editorMain.stroke') }}</span>
       <span
         class="radical-glyph-list"
         @click="handleTabChange(EditStatus.RadicalGlyphList)"
         :class="{ selected: editStatus === EditStatus.RadicalGlyphList }"
-      >部首</span>
+      >{{ t('panels.editorMain.radical') }}</span>
       <span
         class="comp-glyph-list"
         @click="handleTabChange(EditStatus.CompGlyphList)"
         :class="{ selected: editStatus === EditStatus.CompGlyphList }"
-      >部件</span>
+      >{{ t('panels.editorMain.comp') }}</span>
       <span
         class="glyph-list"
         @click="handleTabChange(EditStatus.GlyphList)"
         :class="{ selected: editStatus === EditStatus.GlyphList }"
-      >字形</span>
+      >{{ t('panels.editorMain.glyph') }}</span>
     </div>
   </div>
 </template>
@@ -66,6 +66,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { NEmpty } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useEditorStore } from '@/stores/editor'
 import { EditStatus } from '@/core/types'
 import VirtualCharacterList from '@/ui/components/VirtualList/CharacterList/VirtualCharacterList.vue'
@@ -73,6 +74,8 @@ import VirtualGlyphList from '@/ui/components/VirtualList/GlyphList/VirtualGlyph
 import CharacterEditor from '@/ui/components/Editor/CharacterEditor.vue'
 import GlyphEditor from '@/ui/components/Editor/GlyphEditor.vue'
 import FilesBar from '@/ui/components/FilesBar/FilesBar.vue'
+
+const { t } = useI18n()
 
 const editorStore = useEditorStore()
 const editStatus = computed(() => editorStore.editStatus)

@@ -6,6 +6,7 @@
 
 import { ref, computed, watch } from 'vue'
 import { NInputNumber, NForm, NFormItem, NInput, NEmpty, NSlider, NSelect } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from '../composables/useComponentEditor'
 import { useEditorStore } from '@/stores/editor'
 import { useCharacterStore } from '@/stores/character'
@@ -13,6 +14,8 @@ import { useGlyphStore } from '@/stores/glyph'
 import { useProjectStore } from '@/stores/project'
 import { EditStatus, ParameterType, IParameter, ICustomGlyph } from '@/core/types'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+
+const { t } = useI18n()
 
 const { selectedComponent, selectedComponentUUID, modifyComponent, editStatus } = useComponentEditor()
 const editorStore = useEditorStore()
@@ -140,9 +143,9 @@ const handleChangeName = (name: string) => {
     <template v-if="selectedComponent">
       <!-- 组件名称 -->
       <div class="section">
-        <div class="section-title">组件名称</div>
+        <div class="section-title">{{ t('panels.paramsPanel.componentName.title') }}</div>
         <n-form label-placement="left" label-width="80px">
-          <n-form-item label="名称">
+          <n-form-item :label="t('panels.paramsPanel.componentName.label')">
             <n-input
               :value="selectedComponent.name"
               @update:value="handleChangeName"
@@ -153,16 +156,16 @@ const handleChangeName = (name: string) => {
 
       <!-- 变换参数 -->
       <div class="section">
-        <div class="section-title">变换</div>
+        <div class="section-title">{{ t('panels.paramsPanel.transform.title') }}</div>
         <n-form label-placement="left" label-width="80px">
-          <n-form-item label="X">
+          <n-form-item :label="t('panels.paramsPanel.transform.x')">
             <n-input-number
               :value="selectedComponent.ox"
               :precision="1"
               @update:value="handleChangeOX"
             />
           </n-form-item>
-          <n-form-item label="Y">
+          <n-form-item :label="t('panels.paramsPanel.transform.y')">
             <n-input-number
               :value="selectedComponent.oy"
               :precision="1"
@@ -174,7 +177,7 @@ const handleChangeName = (name: string) => {
 
       <!-- 参数列表 -->
       <div class="section" v-if="glyphParameters.length > 0">
-        <div class="section-title">参数</div>
+        <div class="section-title">{{ t('panels.paramsPanel.params.title') }}</div>
         <n-form label-placement="left" label-width="80px">
           <n-form-item
             v-for="parameter in glyphParameters"

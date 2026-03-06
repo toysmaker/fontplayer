@@ -5,8 +5,11 @@
  */
 
 import { NInputNumber, NForm, NFormItem, NInput, NColorPicker, NButton } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from '../composables/useComponentEditor'
 import { EditStatus, IPolygonComponent } from '@/core/types'
+
+const { t } = useI18n()
 
 const { selectedComponent, selectedComponentUUID, modifyComponent, editStatus } = useComponentEditor()
 
@@ -61,9 +64,9 @@ const transformToPath = () => {
     <template v-if="selectedComponent">
       <!-- 组件名称 -->
       <div class="name-wrap">
-        <div class="title">组件名称</div>
+        <div class="title">{{ t('panels.paramsPanel.componentName.title') }}</div>
         <n-form label-placement="left" label-width="80px">
-          <n-form-item label="名称">
+          <n-form-item :label="t('panels.paramsPanel.componentName.label')">
             <n-input
               :value="selectedComponent.name"
               @update:value="handleChangeName"
@@ -74,23 +77,23 @@ const transformToPath = () => {
       
       <!-- 变换 -->
       <div class="transform-wrap">
-        <div class="title">变换</div>
+        <div class="title">{{ t('panels.paramsPanel.transform.title') }}</div>
         <n-form label-placement="left" label-width="80px">
-          <n-form-item label="X">
+          <n-form-item :label="t('panels.paramsPanel.transform.x')">
             <n-input-number
               :value="selectedComponent.x"
               :precision="1"
               @update:value="handleChangeX"
             />
           </n-form-item>
-          <n-form-item label="Y">
+          <n-form-item :label="t('panels.paramsPanel.transform.y')">
             <n-input-number
               :value="selectedComponent.y"
               :precision="1"
               @update:value="handleChangeY"
             />
           </n-form-item>
-          <n-form-item label="宽度">
+          <n-form-item :label="t('panels.paramsPanel.width')">
             <n-input-number
               :value="selectedComponent.w"
               :precision="1"
@@ -98,7 +101,7 @@ const transformToPath = () => {
               @update:value="handleChangeW"
             />
           </n-form-item>
-          <n-form-item label="高度">
+          <n-form-item :label="t('panels.paramsPanel.height')">
             <n-input-number
               :value="selectedComponent.h"
               :precision="1"
@@ -106,7 +109,7 @@ const transformToPath = () => {
               @update:value="handleChangeH"
             />
           </n-form-item>
-          <n-form-item label="旋转">
+          <n-form-item :label="t('panels.paramsPanel.transform.rotation')">
             <n-input-number
               :value="selectedComponent.rotation"
               :precision="1"
@@ -118,21 +121,21 @@ const transformToPath = () => {
       
       <!-- 转换为曲线（字符和字形都显示） -->
       <div class="transform-to-curve-wrap" v-if="selectedComponent.type === 'polygon'">
-        <div class="title">转换为曲线</div>
+        <div class="title">{{ t('panels.paramsPanel.transformToCurve.title') }}</div>
         <n-button
           type="primary"
           @click="transformToPath"
           style="width: calc(100% - 20px); margin: 10px;"
         >
-          转换为曲线
+          {{ t('panels.paramsPanel.transformToCurve.label') }}
         </n-button>
       </div>
       
       <!-- 填充颜色（仅字符模式显示） -->
       <div class="fill-color-wrap" v-if="editStatus === EditStatus.Edit">
-        <div class="title">填充颜色</div>
+        <div class="title">{{ t('panels.paramsPanel.fillColor.title') }}</div>
         <n-form label-placement="left" label-width="120px">
-          <n-form-item label="颜色">
+          <n-form-item :label="t('panels.paramsPanel.fillColor.label')">
             <n-color-picker
               :value="(selectedComponent.value as IPolygonComponent)?.fillColor || '#000000'"
               :show-alpha="true"

@@ -11,12 +11,12 @@
     </div>
     <!-- 调试信息 -->
     <div v-if="isDev && !editingCharacter" style="padding: 10px; color: red;">
-      警告: editingCharacter 为空
+      {{ t('panels.componentList.warningEditingCharacterEmpty') }}
     </div>
     <n-scrollbar v-if="editPanelCompFilter === 'all'">
       <div class="all-components-list" v-if="editPanelCompFilter === 'all'">
         <div v-if="orderedListWithItemsForCurrentCharacterFile.length === 0" style="padding: 10px; color: #999;">
-          暂无组件
+          {{ t('panels.componentList.noComponents') }}
         </div>
         <div
           class="component-item-wrapper"

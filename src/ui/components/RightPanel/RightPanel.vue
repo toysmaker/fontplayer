@@ -6,8 +6,11 @@
 
 import { computed, watch } from 'vue'
 import { NEmpty } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from './composables/useComponentEditor'
 import { EditStatus } from '@/core/types'
+
+const { t } = useI18n()
 
 // 导入各个参数编辑面板
 import PenEditPanel from './paramsEditPanels/PenEditPanel.vue'
@@ -57,7 +60,7 @@ if (import.meta.env.DEV) {
     
     <!-- 未选中组件时的提示 -->
     <div v-else class="empty-panel">
-      <n-empty description="请选择一个组件进行编辑" />
+      <n-empty :description="t('panels.rightPanel.selectComponent')" />
     </div>
   </div>
 </template>

@@ -230,7 +230,7 @@ async function handleNewFile() {
   try {
     const projectStore = useProjectStore()
     if (projectStore.hasFiles) {
-      message.warning('目前字玩仅支持同时编辑一个工程，请关闭当前工程再新建。注意，关闭工程前请保存工程以避免数据丢失。')
+      message.warning(t('panels.editorSidebar.onlyOneProjectWarning'))
       return
     }
     showNewProjectDialog.value = true

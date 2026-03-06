@@ -6,29 +6,29 @@
           <div class="item-icon">
             <font-awesome-icon :icon="['fas', 'plus']" />
           </div>
-          <div class="item-name">新建工程</div>
-          <div class="description">新建字体（或web图标字体）工程</div>
+          <div class="item-name">{{ t('welcome.new.name') }}</div>
+          <div class="description">{{ t('welcome.new.description') }}</div>
         </div>
         <div class="item open-project-item" @pointerdown="handleOpenProject">
           <div class="item-icon">
             <font-awesome-icon :icon="['fas', 'folder-open']" />
           </div>
-          <div class="item-name">打开工程</div>
-          <div class="description">打开已有字体（或web图标字体）工程</div>
+          <div class="item-name">{{ t('welcome.open.name') }}</div>
+          <div class="description">{{ t('welcome.open.description') }}</div>
         </div>
         <div class="item import-font-item">
           <div class="item-icon">
             <font-awesome-icon :icon="['fas', 'archive']" />
           </div>
-          <div class="item-name">导入字体库</div>
-          <div class="description">将字体库导入成新的字体（或web图标字体）工程</div>
+          <div class="item-name">{{ t('welcome.import.name') }}</div>
+          <div class="description">{{ t('welcome.import.description') }}</div>
         </div>
         <div class="item template-item">
           <div class="item-icon">
             <font-awesome-icon :icon="['fas', 'fa-file-import']" />
           </div>
-          <div class="item-name">导入模板</div>
-          <div class="description">导入字玩自带的测试模板</div>
+          <div class="item-name">{{ t('welcome.template.name') }}</div>
+          <div class="description">{{ t('welcome.template.description') }}</div>
         </div>
       </div>
       <div class="playground-btn">
@@ -36,8 +36,8 @@
           <font-awesome-icon :icon="['fas', 'gamepad']" />
         </div>
         <div class="playground-main">
-          <div class="playground-text">玩一玩字玩</div>
-          <div class="playground-description">通过参数化快速创建一个迷你字库</div>
+          <div class="playground-text">{{ t('welcome.playground.title') }}</div>
+          <div class="playground-description">{{ t('welcome.playground.description') }}</div>
         </div>
       </div>
     </div>
@@ -52,9 +52,12 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { fileHandler } from '@/features/editor/services/FileHandler'
 import NewProjectDialog from '@/ui/dialogs/NewProjectDialog.vue'
 import { createDebouncedHandler } from '@/utils/debounce-click'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const showNewProjectDialog = ref(false)

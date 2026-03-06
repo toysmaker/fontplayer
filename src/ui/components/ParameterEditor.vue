@@ -2,22 +2,22 @@
   <div class="parameter-editor">
     <n-form v-if="component" :model="component" label-placement="left" label-width="100">
       <!-- 基础属性 -->
-      <n-form-item label="X偏移">
+      <n-form-item :label="t('panels.paramsPanel.transform.x') + t('panels.paramsPanel.offset')">
         <n-input-number v-model:value="component.ox" :min="0" />
       </n-form-item>
-      <n-form-item label="Y偏移">
+      <n-form-item :label="t('panels.paramsPanel.transform.y') + t('panels.paramsPanel.offset')">
         <n-input-number v-model:value="component.oy" :min="0" />
       </n-form-item>
-      <n-form-item label="宽度">
+      <n-form-item :label="t('panels.paramsPanel.width')">
         <n-input-number v-model:value="component.w" :min="0" />
       </n-form-item>
-      <n-form-item label="高度">
+      <n-form-item :label="t('panels.paramsPanel.height')">
         <n-input-number v-model:value="component.h" :min="0" />
       </n-form-item>
-      <n-form-item label="旋转">
+      <n-form-item :label="t('panels.paramsPanel.transform.rotation')">
         <n-input-number v-model:value="component.rotation" :min="0" :max="360" />
       </n-form-item>
-      <n-form-item label="透明度">
+      <n-form-item :label="t('panels.paramsPanel.opacity.opacity')">
         <n-slider v-model:value="opacity" :min="0" :max="100" />
       </n-form-item>
       
@@ -48,10 +48,13 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { NForm, NFormItem, NInputNumber, NSlider, NSwitch, NSelect, NDivider } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { ParameterType } from '@/core/types'
 import type { IComponent, IGlyphComponent, ICustomGlyph } from '@/core/types'
 import { useGlyphStore } from '@/stores/glyph'
 import { useCharacterStore } from '@/stores/character'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   component: IComponent | IGlyphComponent

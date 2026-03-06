@@ -9,7 +9,7 @@
               class="translate-text"
               :disabled="true"
             />
-            <n-button size="small" @pointerdown="resetTranslate" class="reset-btn">归零</n-button>
+            <n-button size="small" @pointerdown="resetTranslate" class="reset-btn">{{ t('panels.bottomBar.reset') }}</n-button>
           </div>
           <font-awesome-icon
             v-else
@@ -32,7 +32,7 @@
             :disabled="true"
           >
             <template #prefix>
-              坐标
+              {{ t('panels.bottomBar.coords') }}
             </template>
           </n-input>
           <font-awesome-icon
@@ -73,8 +73,11 @@
 
 <script setup lang="ts">
 import { NInput, NButton, NInputNumber } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useBottomBar } from './composables/useBottomBar'
 import { EditStatus } from '@/core/types'
+
+const { t } = useI18n()
 
 const {
   editStatus,

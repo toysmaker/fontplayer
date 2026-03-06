@@ -2,7 +2,7 @@
   <n-modal
     v-model:show="visible"
     preset="dialog"
-    title="新建工程"
+    :title="t('dialogs.newProjectDialog.title')"
     class="new-project-dialog"
     :style="{ width: '480px' }"
   >
@@ -15,10 +15,10 @@
       require-mark-placement="right-hanging"
       @submit.prevent="handleConfirm"
     >
-      <n-form-item label="工程名称" path="name">
+      <n-form-item :label="t('dialogs.newProjectDialog.projectName')" path="name">
         <n-input
           v-model:value="formData.name"
-          placeholder="请输入工程名称"
+          :placeholder="t('dialogs.newProjectDialog.projectNamePlaceholder')"
           :maxlength="100"
           show-count
           @keyup.enter="handleConfirm"
@@ -54,14 +54,14 @@
       </n-form-item>
       <n-form-item :label-width="0" class="use-default-template-form-item">
         <n-checkbox v-model:checked="formData.useDefaultTemplate">
-          使用默认模板
+          {{ t('dialogs.newProjectDialog.useDefaultTemplate') }}
         </n-checkbox>
       </n-form-item>
     </n-form>
     <template #action>
       <div class="dialog-footer">
-        <n-button @click="handleCancel" @pointerdown="handleCancel">取消</n-button>
-        <n-button type="primary" @click="handleConfirm" @pointerdown="handleConfirm">确认</n-button>
+        <n-button @click="handleCancel" @pointerdown="handleCancel">{{ t('dialogs.newProjectDialog.cancel') }}</n-button>
+        <n-button type="primary" @click="handleConfirm" @pointerdown="handleConfirm">{{ t('dialogs.newProjectDialog.confirm') }}</n-button>
       </div>
     </template>
   </n-modal>
@@ -70,11 +70,14 @@
 <script setup lang="ts">
 import { ref, reactive, computed, nextTick } from 'vue'
 import { NModal, NForm, NFormItem, NInput, NInputNumber, NButton, NCheckbox, FormInst, useMessage, type FormRules } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { projectCreator } from '@/features/editor/services/ProjectCreator'
 import type { ProjectConfig } from '@/features/editor/services/ProjectCreator'
 import { isTauri } from '@/utils/env'
 import { ensureInputBlur } from '@/utils/tauri-input-fix'
 import { createDebouncedHandler } from '@/utils/debounce-click'
+
+const { t } = useI18n()
 
 const nameInputRef = ref<any>(null)
 const props = defineProps<{
@@ -105,8 +108,8 @@ const formData = reactive<ProjectConfig>({
 
 const rules: FormRules = {
   name: [
-    { required: true, message: '请输入工程名称', trigger: 'blur' },
-    { min: 1, max: 100, message: '工程名称长度在1-100个字符之间', trigger: 'blur' },
+    { required: true, message: t('dialogs.newProjectDialog.projectNameRequired'), trigger: 'blur' },
+    { min: 1, max: 100, message: t('dialogs.newProjectDialog.projectNameLength'), trigger: 'blur' },
   ],
 }
 
@@ -156,7 +159,7 @@ const _handleConfirm = async () => {
     formData.descender = -200
     formData.useDefaultTemplate = true
   } catch (error: any) {
-    message.error(error.message || '创建工程失败')
+    message.error(error.message || t('dialogs.newProjectDialog.createProjectFailed'))
   }
 }
 

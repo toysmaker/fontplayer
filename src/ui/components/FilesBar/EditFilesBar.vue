@@ -14,7 +14,7 @@
         </span>
       </span>
       <div class="style-selection-wrap">
-        <span class="style-selection-title">渲染</span>
+        <span class="style-selection-title">{{ t('panels.settingsPanel.render.title') }}</span>
         <n-radio-group v-model:value="currentRenderStyle" size="small">
           <n-radio
             v-for="option in renderStyleOptions"
@@ -30,8 +30,11 @@
 
 <script setup lang="ts">
 import { NRadioGroup, NRadio } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 import { useEditFilesBar } from './composables/useEditFilesBar'
 import { EditStatus } from '@/core/types'
+
+const { t } = useI18n()
 
 const {
   editStatus,

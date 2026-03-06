@@ -125,7 +125,7 @@
       <!-- 返回字符列表按钮 -->
       <div class="to-list" @pointerdown="handleToList">
         <font-awesome-icon class="to-list-icon" :icon="['fas', 'table-cells']" />
-        <span class="to-list-label">字符列表</span>
+        <span class="to-list-label">{{ t('panels.toolBar.characterList') }}</span>
       </div>
     </div>
   </div>
@@ -133,9 +133,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useEditorStore } from '@/stores/editor'
 import { useToolStore } from '@/stores/tool'
 import { EditStatus } from '@/core/types'
+
+const { t } = useI18n()
 
 const editorStore = useEditorStore()
 const toolStore = useToolStore()

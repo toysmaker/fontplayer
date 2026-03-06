@@ -28,14 +28,14 @@
           <template #icon>
             <font-awesome-icon :icon="['fas', 'wrench']" />
           </template>
-          高级编辑
+          {{ t('panels.filesBar.advancedEdit') }}
         </n-button>
       </span>
       <div class="style-selection-wrap" v-show="files.length > 0">
-        <span class="style-selection-title">渲染</span>
+        <span class="style-selection-title">{{ t('panels.settingsPanel.render.title') }}</span>
         <n-radio-group v-model:value="fontPreviewStyle" size="small" @update:value="handlePreviewStyleChange">
-          <n-radio value="black">黑色</n-radio>
-          <n-radio value="color">彩色</n-radio>
+          <n-radio value="black">{{ t('panels.settingsPanel.render.black') }}</n-radio>
+          <n-radio value="color">{{ t('panels.settingsPanel.render.color') }}</n-radio>
         </n-radio-group>
       </div>
       <div class="right-btns" v-if="selectedFile" style="margin-left: auto;">
@@ -55,23 +55,23 @@
           </template>
           <div class="info-list">
             <div class="info-item">
-              <span class="info-item-name">字符数</span>
+              <span class="info-item-name">{{ t('programming.charCounts') }}</span>
               <span class="info-item-content">{{ selectedFile.characterList.length }}</span>
             </div>
             <div class="info-item">
-              <span class="info-item-name">笔画数</span>
+              <span class="info-item-name">{{ t('programming.strokeCounts') }}</span>
               <span class="info-item-content">{{ strokeGlyphsCount }}</span>
             </div>
             <div class="info-item">
-              <span class="info-item-name">部首数</span>
+              <span class="info-item-name">{{ t('programming.radicalCounts') }}</span>
               <span class="info-item-content">{{ radicalGlyphsCount }}</span>
             </div>
             <div class="info-item">
-              <span class="info-item-name">部件数</span>
+              <span class="info-item-name">{{ t('programming.compCounts') }}</span>
               <span class="info-item-content">{{ compGlyphsCount }}</span>
             </div>
             <div class="info-item">
-              <span class="info-item-name">字形数</span>
+              <span class="info-item-name">{{ t('programming.glyphCompCounts') }}</span>
               <span class="info-item-content">{{ glyphsCount }}</span>
             </div>
           </div>
@@ -104,20 +104,20 @@
     <n-modal
       v-model:show="searchCharacterDialogVisible"
       preset="dialog"
-      title="搜索字符"
+      :title="t('panels.filesBar.searchCharacter')"
       :mask-closable="false"
       style="width: 400px"
     >
       <n-input
         v-model:value="searchInput"
-        placeholder="请输入要搜索的字符（1-100个字符）"
+        :placeholder="t('panels.filesBar.searchPlaceholder')"
         :maxlength="100"
         show-count
         @keyup.enter="confirmSearch"
       />
       <template #action>
-        <n-button @click="cancelSearch">取消</n-button>
-        <n-button type="primary" @click="confirmSearch">搜索</n-button>
+        <n-button @click="cancelSearch">{{ t('dialogs.tipsDialog.cancel') }}</n-button>
+        <n-button type="primary" @click="confirmSearch">{{ t('panels.filesBar.search') }}</n-button>
       </template>
     </n-modal>
   </div>
@@ -134,7 +134,7 @@ import { EditStatus } from '@/core/types'
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
 const message = useMessage()
-const { locale } = useI18n()
+const { locale, t } = useI18n()
 
 const files = computed(() => projectStore.files)
 const selectedFileUUID = computed(() => projectStore.selectedFileUUID)
@@ -223,12 +223,12 @@ const confirmSearch = () => {
   
   // 验证输入：1-100个字符
   if (keyword.length === 0) {
-    message.warning('请输入搜索关键词（1-100个字符）')
+    message.warning(t('panels.filesBar.searchWarning'))
     return
   }
   
   if (keyword.length > 100) {
-    message.warning('搜索关键词不能超过100个字符')
+    message.warning(t('panels.filesBar.searchWarningTooLong'))
     return
   }
 
