@@ -34,7 +34,7 @@
         </div>
         <!-- 底部栏（在 main-wrapper 内部，卡在左边栏和右边栏中间） -->
         <footer class="bottom-bar-wrapper">
-          <!-- 暂时留空，后续添加缩放等功能 -->
+          <BottomBar />
         </footer>
       </main>
       
@@ -56,6 +56,7 @@ import type { BaseGlyphDragger } from '@/features/tools/glyphDragger'
 import ToolBar from '@/ui/components/ToolBar/ToolBar.vue'
 import CharacterComponentList from '@/ui/components/ComponentList/CharacterComponentList.vue'
 import RightPanel from '@/ui/components/RightPanel/RightPanel.vue'
+import BottomBar from '@/ui/components/BottomBar/BottomBar.vue'
 import type { IComponent, ICharacterFileLite } from '@/core/types'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import { render } from '@/core/canvas/EditorCanvasRenderer'
