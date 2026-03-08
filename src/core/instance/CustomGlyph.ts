@@ -10,6 +10,8 @@ import { ParameterType } from '../types'
 import { instanceManager, type IInstance } from './InstanceManager'
 import { orderedListWithItemsForGlyph } from '../utils/glyph'
 import { useProjectStore } from '@/stores/project'
+import { renderCanvas } from '../canvas/EditorCanvasRenderer'
+import { fontRenderStyle } from '../script/globals'
 
 // TODO: 需要从原代码迁移 Component 类型
 // type Component = PenComponent | PolygonComponent | EllipseComponent | RectangleComponent
@@ -116,21 +118,16 @@ export class CustomGlyph implements IInstance {
   /**
    * 渲染字形
    */
-  async render(
+  render(
     canvas: HTMLCanvasElement,
     renderBackground: boolean = true,
     offset: { x: number; y: number } = { x: 0, y: 0 },
     fill: boolean = false,
     scale: number = 1,
     fillColor: string = '#000'
-  ) {
+  ): void {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    
-    // 导入必要的函数
-    const { renderCanvas } = await import('@/core/canvas/EditorCanvasRenderer')
-    const { orderedListWithItemsForGlyph } = await import('@/core/utils/glyph')
-    const { fontRenderStyle } = await import('@/core/script/globals')
     
     // 渲染字形组件列表（components，即字形内部的组件，如 pen, polygon 等）
     const glyphComponents = orderedListWithItemsForGlyph(this._glyph)
@@ -145,7 +142,7 @@ export class CustomGlyph implements IInstance {
       })
     }
     if (glyphComponents.length > 0) {
-      await renderCanvas(glyphComponents, canvas, {
+      renderCanvas(glyphComponents, canvas, {
         offset,
         scale: scale,
         fill: false,
@@ -205,24 +202,19 @@ export class CustomGlyph implements IInstance {
   /**
    * 强制更新渲染字形
    */
-  async render_forceUpdate(
+  render_forceUpdate(
     canvas: HTMLCanvasElement,
     renderBackground: boolean = true,
     offset: { x: number; y: number } = { x: 0, y: 0 },
     fill: boolean = false,
     scale: number = 1,
     fillColor: string = '#000'
-  ) {
+  ): void {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     
-    // 导入必要的函数
-    const { renderCanvas } = await import('@/core/canvas/EditorCanvasRenderer')
-    const { orderedListWithItemsForGlyph } = await import('@/core/utils/glyph')
-    const { fontRenderStyle } = await import('@/core/script/globals')
-    
     // 渲染字形组件列表（强制更新）
-    await renderCanvas(orderedListWithItemsForGlyph(this._glyph), canvas, {
+    renderCanvas(orderedListWithItemsForGlyph(this._glyph), canvas, {
       offset,
       scale: scale,
       fill: false,

@@ -103,7 +103,7 @@ class CustomGlyph {
 			component.render(canvas, {
 				offset,
 				scale: scale,
-				fillColor: fillColor,
+				fillColor: fontRenderStyle.value === 'black' ? '#000' : fillColor,
 			})
 		})
 		if (fontRenderStyle.value === 'black' || fill) {
@@ -137,7 +137,7 @@ class CustomGlyph {
 			component.render(canvas, {
 				offset,
 				scale: scale,
-				fillColor: fillColor,
+				fillColor: fontRenderStyle.value === 'black' ? '#000' : fillColor,
 			})
 		})
 		if (fontRenderStyle.value === 'black' || fill) {

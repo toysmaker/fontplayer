@@ -125,7 +125,7 @@ export abstract class BaseGlyphDragger {
       // 使用转换后的坐标尺寸进行比较
       hitJoint = JointManager.findHitJoint(joints, coordX, coordY, 20)
     }
-
+    
     if (hitJoint) {
       this.draggingJoint = hitJoint
       this.isDraggingFirstJoint = JointManager.isFirstJoint(hitJoint, joints)

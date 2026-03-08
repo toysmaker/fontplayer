@@ -328,7 +328,7 @@ watch(() => fontRenderStyle.value, async () => {
 
 .editor-canvas {
   position: absolute;
-  cursor: crosshair;
+  /* cursor: crosshair; */
 }
 
 .right-panel-wrapper {

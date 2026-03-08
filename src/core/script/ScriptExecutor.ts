@@ -8,22 +8,8 @@ import { instanceManager } from '../instance/InstanceManager'
 import { CustomGlyph } from '../instance/CustomGlyph'
 import { ConstantsMap } from './ConstantsMap'
 import { useProjectStore } from '@/stores/project'
-
-// 动态导入 FP，避免循环依赖
-let FP: any = null
-async function getFP() {
-  if (!FP) {
-    try {
-      const fpModule = await import('./FPUtils')
-      FP = fpModule.FP
-    } catch (error) {
-      console.error('Failed to load FPUtils:', error)
-      // 创建一个空的 FP 对象作为后备
-      FP = {}
-    }
-  }
-  return FP
-}
+import { FP } from './FPUtils'
+import { selectedFile } from './globals'
 
 /**
  * 获取脚本字符串
@@ -57,10 +43,10 @@ function getScript(glyph: ICustomGlyph, projectStore?: ReturnType<typeof useProj
  * @param instanceKey 可选的实例key，用于区分不同的组件实例（默认使用 targetGlyph.uuid）
  *                    当从 characterFile 的 component 调用时，应该传入 component.uuid
  */
-export async function executeGlyphScript(
+export function executeGlyphScript(
   targetGlyph: ICustomGlyph,
   instanceKey?: string
-): Promise<void> {
+): void {
   try {
     // 使用 instanceKey 或 targetGlyph.uuid 作为实例池的 key
     // 当从 characterFile 的 component 调用时，使用 component.uuid 确保每个组件有独立的实例
@@ -78,9 +64,9 @@ export async function executeGlyphScript(
       ) as CustomGlyph
     } else {
       existingInstance = instanceManager.getOrCreateGlyphInstance(
-        targetGlyph,
-        () => new CustomGlyph(targetGlyph)
-      ) as CustomGlyph
+      targetGlyph,
+      () => new CustomGlyph(targetGlyph)
+    ) as CustomGlyph
     }
     
     if (existingInstance.tempData) {
@@ -108,7 +94,7 @@ export async function executeGlyphScript(
       for (let i = 0; i < targetGlyph.components.length; i++) {
         const component = targetGlyph.components[i]
         if (component.type === 'glyph') {
-          await executeGlyphScript(component.value as ICustomGlyph)
+          executeGlyphScript(component.value as ICustomGlyph)
         }
       }
     }
@@ -123,7 +109,6 @@ export async function executeGlyphScript(
     // 不再维护 targetGlyph._o，统一从 InstanceManager 获取实例
 
     // 在 try 块外部定义变量，确保 catch 块可以访问
-    let scriptSelectedFile: any = null
     let originalSelectedFile: any = null
 
     try {
@@ -133,19 +118,9 @@ export async function executeGlyphScript(
       // 从 store 获取统一的 constantsMap（使用单例模式）
       const constantsMap = projectStore.constantsMap || ConstantsMap.getInstance([])
 
-      // 获取 FP（动态导入）
-      const FP = await getFP()
-
       // 注入 selectedFile 到脚本执行环境的全局状态
-      try {
-        const globalsModule = await import('./globals')
-        scriptSelectedFile = globalsModule.selectedFile
-        originalSelectedFile = scriptSelectedFile.value
-        scriptSelectedFile.value = projectStore.selectedFile
-      } catch (importError) {
-        console.error('Failed to import globals:', importError)
-        // 如果导入失败，继续执行但不设置 selectedFile
-      }
+      originalSelectedFile = selectedFile.value
+      selectedFile.value = projectStore.selectedFile
 
       // 设置全局变量（脚本执行环境）
       const originalGlyph = (window as any).glyph
@@ -269,9 +244,9 @@ export async function executeGlyphScript(
       ;(window as any).constantsMap = originalConstantsMap
       ;(window as any).FP = originalFP
       
-      // 恢复 selectedFile（如果已设置）
-      if (scriptSelectedFile && originalSelectedFile !== undefined) {
-        scriptSelectedFile.value = originalSelectedFile
+      // 恢复 selectedFile
+      if (originalSelectedFile !== undefined) {
+        selectedFile.value = originalSelectedFile
       }
       
       // 调试：检查脚本执行后组件的数量和状态
@@ -301,9 +276,9 @@ export async function executeGlyphScript(
     } catch (innerError) {
       // 如果脚本执行出错，立即释放实例
       instanceManager.releaseTemporaryInstance(key)
-      // 恢复 selectedFile（如果已设置）
-      if (scriptSelectedFile && originalSelectedFile !== undefined) {
-        scriptSelectedFile.value = originalSelectedFile
+      // 恢复 selectedFile
+      if (originalSelectedFile !== undefined) {
+        selectedFile.value = originalSelectedFile
       }
       throw innerError
     }

@@ -57,7 +57,7 @@ export function fillBackground(canvas: HTMLCanvasElement, background: IBackgroun
  * 渲染画布
  * 注意：原工程中这个函数是同步的，但由于我们需要执行字形脚本（async），所以这里保持 async
  */
-export async function renderCanvas(
+export function renderCanvas(
   components: Array<IComponent>,
   canvas: HTMLCanvasElement,
   options: IRenderOptions = {
@@ -223,7 +223,7 @@ export async function renderCanvas(
         if (import.meta.env.DEV) {
           console.log('[EditorCanvasRenderer] Instance not exists, creating:', instanceKey)
         }
-        await executeGlyphScript(glyphValue, instanceKey)
+        executeGlyphScript(glyphValue, instanceKey)
         // 脚本执行后，获取实例
         glyphInstance = instanceManager.acquireTemporaryInstance(
           instanceKey,
@@ -250,7 +250,7 @@ export async function renderCanvas(
       }
       
       if (needsScriptExecution) {
-        await executeGlyphScript(glyphValue, instanceKey)
+        executeGlyphScript(glyphValue, instanceKey)
         // 脚本执行后，重新获取实例
         glyphInstance = instanceManager.acquireTemporaryInstance(
           instanceKey,
@@ -269,12 +269,12 @@ export async function renderCanvas(
       
       // 直接调用字形实例的 render 方法（与原工程一致）
       if (options.forceUpdate) {
-        await glyphInstance.render_forceUpdate(canvas, true, {
+        glyphInstance.render_forceUpdate(canvas, true, {
           x: (options.offset?.x || 0) + (component as IGlyphComponent).ox,
           y: (options.offset?.y || 0) + (component as IGlyphComponent).oy,
         }, false, scale, (glyphValue as any).fillColor || '#000')
       } else {
-        await glyphInstance.render(canvas, true, {
+        glyphInstance.render(canvas, true, {
           x: (options.offset?.x || 0) + (component as IGlyphComponent).ox,
           y: (options.offset?.y || 0) + (component as IGlyphComponent).oy,
         }, false, scale, (glyphValue as any).fillColor || '#000')
@@ -494,13 +494,13 @@ export async function renderCanvas(
 /**
  * 渲染字形
  */
-async function renderGlyph(
+function renderGlyph(
   glyph: CustomGlyph,
   canvas: HTMLCanvasElement,
   renderBackground: boolean,
   fill: boolean,
   useSkeletonGrid: boolean
-): Promise<void> {
+): void {
   // 调用字形实例的 render 方法
   glyph.render(canvas, renderBackground, { x: 0, y: 0 }, fill, 1, '#000')
 }
@@ -509,7 +509,7 @@ async function renderGlyph(
  * 主渲染函数
  * 用于字符编辑界面和字形编辑界面
  */
-export async function render(
+export function render(
   canvas: HTMLCanvasElement,
   renderBackground: boolean = true,
   forceUpdate: boolean = false,
@@ -521,7 +521,8 @@ export async function render(
     background?: IBackground
     grid?: IGrid
   } = { mode: 'character' }
-): Promise<void> {
+): void {
+  console.log('renderEditorCanvasRenderer render')
   clearCanvas(canvas)
   
   // 默认背景和网格配置
@@ -559,7 +560,7 @@ export async function render(
       // 计算 scale：canvas 显示尺寸 / canvas 实际尺寸
       // 如果 canvas 实际尺寸是 2000，显示尺寸是 500，scale 应该是 1（因为坐标已经通过 mapCanvasX/Y 映射了）
       // 但为了确保组件渲染到整个 canvas，我们需要确保坐标映射正确
-      await renderCanvas(options.components, canvas, {
+      renderCanvas(options.components, canvas, {
         forceUpdate,
         fill: false,
         offset: { x: 0, y: 0 },
@@ -576,7 +577,7 @@ export async function render(
         options.glyph,
         () => new CustomGlyph(options.glyph!)
       ) as CustomGlyph
-      await renderGlyph(glyphInstance, canvas, renderBackground, false, false)
+      renderGlyph(glyphInstance, canvas, renderBackground, false, false)
     }
   }
 }

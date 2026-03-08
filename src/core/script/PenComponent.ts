@@ -178,6 +178,7 @@ class PenComponent {
 				)
 			}
 			ctx.stroke()
+			console.log('render PenComponent stroke', ctx.strokeStyle)
 			ctx.setTransform(1, 0, 0, 1, 0, 0)
 		}
 	}

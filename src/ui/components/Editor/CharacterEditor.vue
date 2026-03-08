@@ -118,7 +118,7 @@ const defaultGrid: IGrid = {
 }
 
 // 渲染画布
-const renderCanvas = async () => {
+const renderCanvas = () => {
   if (!canvasRef.value || !editingCharacter.value) {
     if (import.meta.env.DEV) {
       console.warn('[CharacterEditor] Cannot render: canvas or editingCharacter is null')
@@ -138,8 +138,10 @@ const renderCanvas = async () => {
       components: components
     })
   }
+
+  console.log('renderCanvas')
   
-  await render(canvasRef.value, true, false, {
+  render(canvasRef.value, true, false, {
     mode: 'character',
     character: editingCharacter.value,
     components: components,
@@ -269,7 +271,7 @@ onMounted(async () => {
   }
   
   // 初始渲染
-  await renderCanvas()
+  renderCanvas()
   
   initDragger()
 })
@@ -298,14 +300,14 @@ watch(() => characterStore.editingCharacter, async () => {
   }
   
   // 重新渲染画布
-  await renderCanvas()
+  renderCanvas()
   
   initDragger()
 })
 
 // 监听组件列表变化，重新渲染
 watch(() => characterStore.orderedListWithItemsForCurrentCharacterFile, async () => {
-  await renderCanvas()
+  renderCanvas()
 }, { deep: true })
 
 // 监听选中组件变化
@@ -318,12 +320,12 @@ watch(() => characterStore.selectedComponent, () => {
 
 // 监听关键点和辅助线显示状态变化，重新渲染
 watch([() => editorStore.checkJoints, () => editorStore.checkRefLines], async () => {
-  await renderCanvas()
+  renderCanvas()
 })
 
 // 监听渲染样式变化，重新渲染
 watch(() => fontRenderStyle.value, async () => {
-  await renderCanvas()
+  renderCanvas()
 })
 
 // 注意：鼠标事件由 dragger 的 activate() 方法自动处理
@@ -400,7 +402,7 @@ watch(() => fontRenderStyle.value, async () => {
 
 .editor-canvas {
   position: absolute; /* 原工程中使用 absolute，通过 wrapper 的 flex 居中 */
-  cursor: crosshair;
+  /* cursor: crosshair; */
 }
 
 .right-panel-wrapper {
