@@ -7,6 +7,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, reactive } from 'vue'
 import type { ICharacterFileLite, IComponent } from '@/core/types'
 import { useProjectStore } from './project'
+import { useEditorStore } from './editor'
 import { instanceManager } from '@/core/instance'
 import { Character } from '@/core/instance/Character'
 import { selectedItemByUUID } from '@/core/utils/component'
@@ -15,6 +16,7 @@ import * as R from 'ramda'
 
 export const useCharacterStore = defineStore('character', () => {
   const projectStore = useProjectStore()
+  const editorStore = useEditorStore()
   
   // 状态
   const editingCharacterUUID = ref<string>('')
@@ -311,6 +313,13 @@ export const useCharacterStore = defineStore('character', () => {
   function selectComponent(uuid: string, tree: string[] = []) {
     selectedComponentUUID.value = uuid
     selectedComponentsTree.value = tree
+    
+    // 如果选中的是字形组件，自动勾选 checkJoints 和 checkRefLines
+    const component = selectedComponent.value
+    if (component && component.type === 'glyph') {
+      editorStore.checkJoints = true
+      editorStore.checkRefLines = true
+    }
   }
 
   /**

@@ -154,6 +154,8 @@ export abstract class BaseGlyphDragger {
     }
     
     this._isDragging = true
+    // 拖拽时清除悬停关键点，避免高亮显示在原位置
+    this.hoverJoint = null
     // 将显示坐标转换为坐标尺寸，用于计算拖拽增量
     this.lastX = this.convertDisplayToCoord(mouseX, true)
     this.lastY = this.convertDisplayToCoord(mouseY, false)
@@ -238,7 +240,12 @@ export abstract class BaseGlyphDragger {
   
   private updateHoverJoint(e: MouseEvent) {
     if (!this.shouldCheckJoints()) {
+      const hadHoverJoint = this.hoverJoint !== null
       this.hoverJoint = null
+      // 如果之前有 hoverJoint，现在清除了，需要重新渲染
+      if (hadHoverJoint) {
+        this.config.onRender?.()
+      }
       return
     }
     
@@ -247,13 +254,29 @@ export abstract class BaseGlyphDragger {
     const mouseY = this.getCoord(e.clientY - rect.top)
     const joints = this.getJoints()
     
+    // 过滤掉参考关键点（名称包含 _ref 的关键点），与原工程一致
+    const filteredJoints = joints.filter(joint => !joint.name.includes('_ref'))
+    
     // 将鼠标坐标从显示尺寸转换为坐标尺寸
     const coordX = this.convertDisplayToCoord(mouseX, true)
     const coordY = this.convertDisplayToCoord(mouseY, false)
     
     // joints 已经是全局坐标（getJoints() 已经加上了正确的 ox, oy）
     // 使用转换后的坐标尺寸进行比较
-    this.hoverJoint = JointManager.findHoverJoint(joints, coordX, coordY, 10)
+    const newHoverJoint = JointManager.findHoverJoint(filteredJoints, coordX, coordY, 10)
+    
+    // 比较 hoverJoint 是否发生变化（通过 name 比较，因为对象引用可能不同）
+    const oldHoverJointName = this.hoverJoint?.name
+    const newHoverJointName = newHoverJoint?.name
+    const hasChanged = oldHoverJointName !== newHoverJointName
+    
+    if (hasChanged) {
+      this.hoverJoint = newHoverJoint
+      // 触发重新渲染以显示高亮
+      this.config.onRender?.()
+    } else {
+      this.hoverJoint = newHoverJoint
+    }
   }
   
   private handleDefaultDrag(dx: number, dy: number): void {
@@ -278,6 +301,13 @@ export abstract class BaseGlyphDragger {
   
   getHoverJoint(): IJoint | null {
     return this.hoverJoint
+  }
+  
+  /**
+   * 获取所有关键点（用于判断是否是第一个关键点）
+   */
+  getJointsForHighlight(): IJoint[] {
+    return this.getJoints()
   }
   
   isDragging(): boolean {

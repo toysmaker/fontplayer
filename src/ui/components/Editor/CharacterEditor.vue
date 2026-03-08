@@ -71,6 +71,8 @@ import type { IBackground, IGrid } from '@/core/canvas/types'
 import { renderJoints, renderRefLines } from '@/core/script/Joint'
 import { useEditorStore } from '@/stores/editor'
 import { fontRenderStyle } from '@/core/script/globals'
+import { JointManager } from '@/features/tools/glyphDragger/core/JointManager'
+import { mapCanvasX, mapCanvasY } from '@/utils/canvas'
 
 const characterStore = useCharacterStore()
 const projectStore = useProjectStore()
@@ -163,6 +165,46 @@ const renderCanvas = () => {
       }
       if (editorStore.checkJoints) {
         renderJoints(selectedComponent, canvasRef.value)
+        
+        // 渲染高亮的悬停关键点（如果不是第一个关键点，且不在拖拽中）
+        if (dragger && !dragger.isDragging()) {
+          const hoverJoint = dragger.getHoverJoint()
+          if (hoverJoint) {
+            // 获取所有关键点来判断是否是第一个
+            const joints = dragger.getJointsForHighlight()
+            const isFirst = JointManager.isFirstJoint(hoverJoint, joints)
+            
+            // 只高亮非第一个关键点
+            if (!isFirst) {
+              const ctx = canvasRef.value.getContext('2d')
+              if (ctx) {
+                // 获取关键点坐标
+                let x: number, y: number
+                if (typeof hoverJoint.x === 'function') {
+                  x = hoverJoint.x()
+                } else {
+                  x = hoverJoint.x as number
+                }
+                if (typeof hoverJoint.y === 'function') {
+                  y = hoverJoint.y()
+                } else {
+                  y = hoverJoint.y as number
+                }
+                
+                // 转换为 canvas 坐标
+                const _x = mapCanvasX(x)
+                const _y = mapCanvasY(y)
+                const _d = 10
+                
+                // 绘制红色方块（参考原工程样式）
+                ctx.save()
+                ctx.fillStyle = 'red'
+                ctx.fillRect(_x - _d, _y - _d, 2 * _d, 2 * _d)
+                ctx.restore()
+              }
+            }
+          }
+        }
       }
       if (editorStore.checkRefLines) {
         renderRefLines(selectedComponent, canvasRef.value)

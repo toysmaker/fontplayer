@@ -25,8 +25,8 @@ export const useEditorStore = defineStore('editor', () => {
   const glyphPanelCompFilter = ref<'all' | 'font'>('all')
 
   // 关键点和辅助线显示状态
-  const checkJoints = ref<boolean>(false)
-  const checkRefLines = ref<boolean>(false)
+  const checkJoints = ref<boolean>(true)
+  const checkRefLines = ref<boolean>(true)
 
   // Actions
   /**
