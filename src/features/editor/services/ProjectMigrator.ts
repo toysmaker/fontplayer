@@ -102,7 +102,6 @@ export class ProjectMigrator {
    * 检查是否需要迁移
    */
   static needsMigration(data: any): boolean {
-    debugger
     // 检查版本号
     if (data.version === '2.0') {
       return false

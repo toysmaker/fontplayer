@@ -17,8 +17,11 @@ export class GlyphGlyphDragger extends BaseGlyphDragger {
     this.glyphStore = config.glyphStore
   }
   protected getJoints(): IJoint[] {
-    const { component } = this.context
-    return JointManager.getJoints(component, component.uuid)
+    const { component, componentUUID } = this.context
+    // 获取正确的原点坐标（考虑子组件的累积偏移）
+    const origin = this.getOrigin()
+    // 传入正确的 ox, oy 以确保 joints 坐标计算正确
+    return JointManager.getJoints(component, componentUUID, origin.ox, origin.oy)
   }
   
   protected getOrigin(): { ox: number; oy: number } {

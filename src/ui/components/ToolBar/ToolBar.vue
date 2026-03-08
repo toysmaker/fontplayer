@@ -4,119 +4,156 @@
       <!-- 工具图标区域 -->
       <div class="tool-icons">
         <!-- 选择工具 -->
-        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+        <n-icon
+          class="tool-icon" 
+          :class="{
+            'selected': tool === 'select',
+          }"
+          @pointerdown="switchTool('select')"
+          size="40"
+          v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
-            :class="{
-              'selected': tool === 'select',
-            }"
-            @pointerdown="switchTool('select')"
             icon="fa-solid fa-arrow-pointer"
           />
         </n-icon>
         
         <!-- 钢笔工具 -->
-        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+        <n-icon
+          class="tool-icon"
+          :class="{
+            'selected': tool === 'pen',
+          }"
+          @pointerdown="switchTool('pen')"
+          size="40"
+          v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
-            :class="{
-              'selected': tool === 'pen',
-            }"
-            @pointerdown="switchTool('pen')"
             icon="fa-solid fa-pen-nib"
           />
         </n-icon>
         
         <!-- 椭圆工具 -->
-        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+        <n-icon
+          class="tool-icon"
+          :class="{
+            'selected': tool === 'ellipse',
+          }"
+          @pointerdown="switchTool('ellipse')"
+          size="40"
+          v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
-            :class="{
-              'selected': tool === 'ellipse',
-            }"
-            @pointerdown="switchTool('ellipse')"
             icon="fa-regular fa-circle"
           />
         </n-icon>
         
         <!-- 矩形工具 -->
-        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+        <n-icon
+          class="tool-icon"
+          :class="{
+            'selected': tool === 'rectangle',
+          }"
+          @pointerdown="switchTool('rectangle')"
+          size="40"
+          v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
-            :class="{
-              'selected': tool === 'rectangle',
-            }"
-            @pointerdown="switchTool('rectangle')"
             icon="fa-regular fa-square"
           />
         </n-icon>
         
         <!-- 多边形工具 -->
-        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+        <n-icon
+          class="tool-icon"
+          :class="{
+            'selected': tool === 'polygon',
+          }"
+          @pointerdown="switchTool('polygon')"
+          size="40"
+          v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
-            :class="{
-              'selected': tool === 'polygon',
-            }"
-            @pointerdown="switchTool('polygon')"
             icon="fa-solid fa-draw-polygon"
           />
         </n-icon>
         
         <!-- 图片工具 - 仅在字符编辑模式显示 -->
-        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+        <n-icon
+          class="tool-icon"
+          :class="{
+            'selected': tool === 'picture',
+          }"
+          @pointerdown="switchTool('picture')"
+          size="40"
+          v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
-            :class="{
-              'selected': tool === 'picture',
-            }"
-            @pointerdown="switchTool('picture')"
             icon="fa-solid fa-image"
           />
         </n-icon>
         
         <!-- 字形组件工具 - 在字符和字形编辑模式显示 -->
-        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
-          <font-awesome-icon
+        <n-icon
+          class="tool-icon"
           :class="{
             'selected': tool === 'glyph',
           }"
           @pointerdown="switchTool('glyph')"
+          size="40"
+          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
+          <font-awesome-icon
             :icon="['fas', 'font']"
           />
         </n-icon>
         
         <!-- 代码编辑器 - 在字符和字形编辑模式显示 -->
-        <n-icon class="tool-icon code-icon" size="40" v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
-          <font-awesome-icon
+        <n-icon class="tool-icon code-icon" size="40"
           @pointerdown="switchTool('code')"
+          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
+          <font-awesome-icon
           :icon="['fas', 'terminal']"
           />
         </n-icon>
         
         <!-- 参数工具 - 仅在字形编辑模式显示 -->
-        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Glyph">
+        <n-icon
+          class="tool-icon"
+          :class="{
+            'selected': tool === 'params',
+          }"
+          @pointerdown="switchTool('params')"
+          size="40"
+          v-show="editStatus === EditStatus.Glyph">
           <font-awesome-icon
-            :class="{
-              'selected': tool === 'params',
-            }"
-            @pointerdown="switchTool('params')"
             :icon="['fas', 'sliders']"
           />
         </n-icon>
         
         <!-- 网格工具 - 仅在字符编辑模式显示 -->
-        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+        <n-icon
+          class="tool-icon"
+          :class="{
+            'selected': tool === 'params',
+          }"
+          size="40"
+          @pointerdown="switchTool('grid')"
+          v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
             :class="{
               'selected': tool === 'grid',
             }"
-            @pointerdown="switchTool('grid')"
             :icon="['fas', 'table-cells']"
           />
         </n-icon>
         
         <!-- 度量工具 - 仅在字符编辑模式显示 -->
-        <n-icon class="tool-icon" size="40" v-show="editStatus === EditStatus.Edit">
+        <n-icon
+          class="tool-icon"
+          :class="{
+            'selected': tool === 'params',
+          }"
+          size="40"
+          @pointerdown="switchTool('metrics')"
+          v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
             :class="{
               'selected': tool === 'metrics',
             }"
-            @pointerdown="switchTool('metrics')"
             :icon="['fas', 'text-width']"
           />
         </n-icon>
@@ -215,7 +252,7 @@ const handleToList = () => {
   color: var(--primary-0);
 }
 
-.tool-icon:not(.code-icon):hover {
+.tool-icon:not(.code-icon):hover, .tool-icon:not(.code-icon).selected {
   background-color: var(--primary-5);
 }
 

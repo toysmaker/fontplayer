@@ -126,8 +126,6 @@ export class CustomGlyph implements IInstance {
   ) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-
-    debugger
     
     // 导入必要的函数
     const { renderCanvas } = await import('@/core/canvas/EditorCanvasRenderer')

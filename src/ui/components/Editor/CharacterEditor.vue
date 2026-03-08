@@ -191,11 +191,14 @@ const initDragger = () => {
       context: {
         mode: 'character',
         component,
+        componentUUID: component.uuid, // 组件的 UUID，用作 instanceKey
+        glyph: component.type === 'glyph' ? (component.value as any) : undefined,
         character: character as ICharacterFileLite, // 类型断言：编辑时字符数据应该已加载
         selectedComponentsTree: characterStore.selectedComponentsTree,
       },
       onRender: () => {
-        // TODO: 触发渲染
+        // 拖拽骨架关键点后触发重新渲染
+        renderCanvas()
       },
       onUpdate: (comp) => {
         characterStore.updateComponent(comp.uuid, comp)

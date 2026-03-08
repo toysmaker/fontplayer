@@ -207,8 +207,22 @@ export async function renderCanvas(
           () => new CustomGlyph(glyphValue),
           'glyph'
         ) as CustomGlyph
+        
+        if (import.meta.env.DEV) {
+          const hasTempData = !!glyphInstance.tempData
+          const componentsCount = glyphInstance._components?.length || 0
+          console.log('[EditorCanvasRenderer] Instance exists:', {
+            instanceKey,
+            hasTempData,
+            componentsCount,
+            forceUpdate: options.forceUpdate
+          })
+        }
       } else {
         // 如果实例不存在，先执行脚本创建实例
+        if (import.meta.env.DEV) {
+          console.log('[EditorCanvasRenderer] Instance not exists, creating:', instanceKey)
+        }
         await executeGlyphScript(glyphValue, instanceKey)
         // 脚本执行后，获取实例
         glyphInstance = instanceManager.acquireTemporaryInstance(
@@ -219,11 +233,23 @@ export async function renderCanvas(
       }
       
       // 如果实例没有脚本生成的组件，执行脚本
-      if (
-        !glyphInstance._components ||
+      // executeGlyphScript 内部会检查 tempData，如果有则跳过执行（避免重置拖拽修改）
+      const needsScriptExecution = !glyphInstance._components ||
         !glyphInstance._components.length ||
         options.forceUpdate
-      ) {
+      
+      if (import.meta.env.DEV) {
+        console.log('[EditorCanvasRenderer] Checking script execution:', {
+          instanceKey,
+          hasComponents: !!glyphInstance._components?.length,
+          componentsCount: glyphInstance._components?.length || 0,
+          hasTempData: !!glyphInstance.tempData,
+          needsScriptExecution,
+          forceUpdate: options.forceUpdate
+        })
+      }
+      
+      if (needsScriptExecution) {
         await executeGlyphScript(glyphValue, instanceKey)
         // 脚本执行后，重新获取实例
         glyphInstance = instanceManager.acquireTemporaryInstance(
@@ -231,6 +257,14 @@ export async function renderCanvas(
           () => new CustomGlyph(glyphValue),
           'glyph'
         ) as CustomGlyph
+        
+        if (import.meta.env.DEV) {
+          console.log('[EditorCanvasRenderer] After script execution:', {
+            instanceKey,
+            componentsCount: glyphInstance._components?.length || 0,
+            hasTempData: !!glyphInstance.tempData
+          })
+        }
       }
       
       // 直接调用字形实例的 render 方法（与原工程一致）

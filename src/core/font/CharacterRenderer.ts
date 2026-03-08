@@ -100,11 +100,6 @@ export class CharacterRenderer {
       const unitsPerEm = fontSettings?.unitsPerEm || 1000
       const descender = fontSettings?.descender || -200
 
-      if (characterFile.character.text === '三') {
-        console.log('DEBUG: 三')
-        // debugger
-      }
-
       // 转换为轮廓
         contours = await ContourConverter.componentsToContours(
         components,

@@ -145,6 +145,7 @@ const initDragger = () => {
       context: {
         mode: 'glyph',
         component,
+        componentUUID: component.uuid, // 组件的 UUID，用作 instanceKey
         glyph,
         selectedComponentsTree: glyphStore.selectedComponentsTree,
       },

@@ -25,13 +25,24 @@ export abstract class BaseGlyphDragger {
   
   // 节流函数（单例，避免重复创建）
   private throttledSkeletonDrag = throttle(
-    (glyph: ICustomGlyph, joint: IJoint, dx: number, dy: number) => {
-      if (!glyph._o?.onSkeletonDrag) return
-      ScriptExecutor.executeDrag(glyph, {
+    (glyph: ICustomGlyph, componentUUID: string, joint: IJoint, dx: number, dy: number) => {
+      if (import.meta.env.DEV) {
+        console.log('[BaseGlyphDragger.throttledSkeletonDrag] Executing:', {
+          componentUUID,
+          jointName: joint.name,
+          dx,
+          dy,
+          hasOnRender: !!this.config.onRender
+        })
+      }
+      ScriptExecutor.executeDrag(glyph, componentUUID, {
         draggingJoint: joint,
         deltaX: dx,
         deltaY: dy
       })
+      if (import.meta.env.DEV) {
+        console.log('[BaseGlyphDragger.throttledSkeletonDrag] Calling onRender')
+      }
       this.config.onRender?.()
     },
     16, // 16ms ≈ 60fps
@@ -64,6 +75,27 @@ export abstract class BaseGlyphDragger {
     return this.config.getCoord ? this.config.getCoord(coord) : coord
   }
   
+  /**
+   * 将显示坐标转换为坐标尺寸
+   * 显示尺寸（CSS 样式尺寸，如 500px） -> 坐标尺寸（unitsPerEm，如 1000）
+   */
+  protected convertDisplayToCoord(displayCoord: number, isX: boolean = true): number {
+    // 优先使用配置中的值，否则从 canvas 样式获取，最后使用默认值 500
+    let displaySize: number
+    if (isX) {
+      displaySize = this.config.displayWidth ?? 
+        (this.canvas.style.width ? parseFloat(this.canvas.style.width) : 500)
+    } else {
+      displaySize = this.config.displayHeight ?? 
+        (this.canvas.style.height ? parseFloat(this.canvas.style.height) : 500)
+    }
+    
+    const unitsPerEm = this.config.unitsPerEm ?? 1000
+    
+    // 转换公式：coord = (displayCoord / displaySize) * unitsPerEm
+    return (displayCoord / displaySize) * unitsPerEm
+  }
+  
   protected canDrag(): boolean {
     return this.config.draggable ? this.config.draggable() : true
   }
@@ -84,22 +116,47 @@ export abstract class BaseGlyphDragger {
     let hitJoint: IJoint | null = null
     
     if (this.shouldCheckJoints()) {
-      hitJoint = JointManager.findHitJoint(joints, mouseX, mouseY, 20)
+      // 将鼠标坐标从显示尺寸转换为坐标尺寸
+      // mouseX, mouseY 是相对于显示尺寸（如 500px）的，需要转换为坐标尺寸（unitsPerEm = 1000）
+      const coordX = this.convertDisplayToCoord(mouseX, true)
+      const coordY = this.convertDisplayToCoord(mouseY, false)
+      
+      // joints 已经是全局坐标（getJoints() 已经加上了正确的 ox, oy）
+      // 使用转换后的坐标尺寸进行比较
+      hitJoint = JointManager.findHitJoint(joints, coordX, coordY, 20)
     }
-    
+
     if (hitJoint) {
       this.draggingJoint = hitJoint
       this.isDraggingFirstJoint = JointManager.isFirstJoint(hitJoint, joints)
       
+      if (import.meta.env.DEV) {
+        console.log('[BaseGlyphDragger.onMouseDown] Hit joint:', {
+          jointName: hitJoint.name,
+          isFirstJoint: this.isDraggingFirstJoint,
+          hasGlyph: !!this.context.glyph,
+          componentUUID: this.context.componentUUID
+        })
+      }
+      
       // 调用脚本回调（非第一个关键点）
       if (!this.isDraggingFirstJoint && this.context.glyph) {
-        ScriptExecutor.executeDragStart(this.context.glyph, hitJoint)
+        ScriptExecutor.executeDragStart(
+          this.context.glyph,
+          this.context.componentUUID,
+          hitJoint
+        )
+      }
+    } else {
+      if (import.meta.env.DEV) {
+        console.log('[BaseGlyphDragger.onMouseDown] No joint hit, will drag component')
       }
     }
     
     this._isDragging = true
-    this.lastX = mouseX
-    this.lastY = mouseY
+    // 将显示坐标转换为坐标尺寸，用于计算拖拽增量
+    this.lastX = this.convertDisplayToCoord(mouseX, true)
+    this.lastY = this.convertDisplayToCoord(mouseY, false)
     this.origin = this.getOrigin()
     
     window.addEventListener('mouseup', this.onMouseUp)
@@ -115,24 +172,34 @@ export abstract class BaseGlyphDragger {
     const rect = this.canvas.getBoundingClientRect()
     const mouseX = this.getCoord(e.clientX - rect.left)
     const mouseY = this.getCoord(e.clientY - rect.top)
-    const dx = mouseX - this.lastX
-    const dy = mouseY - this.lastY
     
-    if (!this.draggingJoint || this.isDraggingFirstJoint) {
-      // 移动整个组件
-      this.throttledGlyphDrag(dx, dy)
-    } else if (this.context.glyph?._o?.onSkeletonDrag) {
+    // 将显示坐标转换为坐标尺寸，用于计算拖拽增量
+    const coordX = this.convertDisplayToCoord(mouseX, true)
+    const coordY = this.convertDisplayToCoord(mouseY, false)
+    const dx = coordX - this.lastX
+    const dy = coordY - this.lastY
+    
+    // 只处理骨架关键点拖拽，组件移动由 select 工具处理
+    if (this.draggingJoint && !this.isDraggingFirstJoint && this.context.glyph) {
       // 拖拽骨架（如果脚本支持）
+      // 执行骨架拖拽脚本，并在节流函数中触发重新渲染
+      if (import.meta.env.DEV) {
+        console.log('[BaseGlyphDragger.onMouseMove] Dragging skeleton joint:', {
+          jointName: this.draggingJoint.name,
+          dx,
+          dy,
+          componentUUID: this.context.componentUUID
+        })
+      }
       this.throttledSkeletonDrag(
         this.context.glyph,
+        this.context.componentUUID,
         this.draggingJoint!,
         dx,
         dy
       )
-    } else {
-      // 默认拖拽逻辑（移动组件位置）
-      this.handleDefaultDrag(dx, dy)
     }
+    // 如果没有选中关键点，不做任何改变（组件移动由 select 工具处理）
   }
   
   protected onMouseUp = (e: MouseEvent) => {
@@ -141,20 +208,28 @@ export abstract class BaseGlyphDragger {
     const rect = this.canvas.getBoundingClientRect()
     const mouseX = this.getCoord(e.clientX - rect.left)
     const mouseY = this.getCoord(e.clientY - rect.top)
-    const dx = mouseX - this.lastX
-    const dy = mouseY - this.lastY
+    
+    // 将显示坐标转换为坐标尺寸，用于计算拖拽增量
+    const coordX = this.convertDisplayToCoord(mouseX, true)
+    const coordY = this.convertDisplayToCoord(mouseY, false)
+    const dx = coordX - this.lastX
+    const dy = coordY - this.lastY
     
     // 调用脚本回调（非第一个关键点）
     if (
-      this.context.glyph?._o?.onSkeletonDragEnd &&
+      this.context.glyph &&
       this.draggingJoint &&
       !this.isDraggingFirstJoint
     ) {
-      ScriptExecutor.executeDragEnd(this.context.glyph, {
-        draggingJoint: this.draggingJoint,
-        deltaX: dx,
-        deltaY: dy
-      })
+      ScriptExecutor.executeDragEnd(
+        this.context.glyph,
+        this.context.componentUUID,
+        {
+          draggingJoint: this.draggingJoint,
+          deltaX: dx,
+          deltaY: dy
+        }
+      )
     }
     
     this.handleDragEnd()
@@ -172,7 +247,13 @@ export abstract class BaseGlyphDragger {
     const mouseY = this.getCoord(e.clientY - rect.top)
     const joints = this.getJoints()
     
-    this.hoverJoint = JointManager.findHoverJoint(joints, mouseX, mouseY, 10)
+    // 将鼠标坐标从显示尺寸转换为坐标尺寸
+    const coordX = this.convertDisplayToCoord(mouseX, true)
+    const coordY = this.convertDisplayToCoord(mouseY, false)
+    
+    // joints 已经是全局坐标（getJoints() 已经加上了正确的 ox, oy）
+    // 使用转换后的坐标尺寸进行比较
+    this.hoverJoint = JointManager.findHoverJoint(joints, coordX, coordY, 10)
   }
   
   private handleDefaultDrag(dx: number, dy: number): void {

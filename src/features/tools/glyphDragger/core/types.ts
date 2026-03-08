@@ -20,6 +20,7 @@ export interface IJoint {
 export interface IDragContext {
   mode: 'character' | 'glyph'
   component: IComponent | IGlyphComponent
+  componentUUID: string // 组件的 UUID，用作 instanceKey
   glyph?: ICustomGlyph
   character?: ICharacterFileLite
   rootComponent?: IComponent | IGlyphComponent
@@ -49,4 +50,8 @@ export interface IDraggerConfig {
   // Store实例（可选，用于更新状态）
   characterStore?: any
   glyphStore?: any
+  // 坐标转换配置
+  displayWidth?: number // Canvas 显示宽度（CSS 样式尺寸，默认 500）
+  displayHeight?: number // Canvas 显示高度（CSS 样式尺寸，默认 500）
+  unitsPerEm?: number // 坐标尺寸单位，默认 1000
 }
