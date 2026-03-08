@@ -75,10 +75,13 @@ export class CharacterGlyphDragger extends BaseGlyphDragger {
   protected handleGlyphDrag(dx: number, dy: number): void {
     const { component } = this.context
     
-    // 更新组件位置
+    // 获取拖拽开始时的初始位置
+    const initialOrigin = this.getInitialOrigin()
+    
+    // 使用初始值加上增量来计算新位置（而不是累加）
     const comp = component as IComponent
-    comp.ox += dx
-    comp.oy += dy
+    comp.ox = initialOrigin.ox + dx
+    comp.oy = initialOrigin.oy + dy
     
     this.config.onUpdate?.(comp)
     

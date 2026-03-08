@@ -7,7 +7,10 @@ import { throttle } from '@/utils/performance'
 import { JointManager } from './JointManager'
 import { ScriptExecutor } from './ScriptExecutor'
 import type { IDragContext, IDraggerConfig, IJoint } from './types'
-import type { ICustomGlyph } from '@/core/types'
+import type { ICustomGlyph, IComponent } from '@/core/types'
+import { getBound, transformPoints, getRectanglePoints, getEllipsePoints } from '@/core/utils/math'
+import { instanceManager } from '@/core/instance/InstanceManager'
+import { CustomGlyph } from '@/core/instance/CustomGlyph'
 
 export abstract class BaseGlyphDragger {
   protected canvas: HTMLCanvasElement
@@ -21,6 +24,8 @@ export abstract class BaseGlyphDragger {
   private lastX = 0
   private lastY = 0
   private origin: { ox: number; oy: number } = { ox: 0, oy: 0 }
+  private initialOx = 0  // 记录拖拽开始时的初始 ox
+  private initialOy = 0  // 记录拖拽开始时的初始 oy
   private _isActive: boolean = false
   
   // 节流函数（单例，避免重复创建）
@@ -70,6 +75,14 @@ export abstract class BaseGlyphDragger {
   protected abstract handleGlyphDrag(dx: number, dy: number): void
   protected abstract handleDragEnd(): void
   
+  /**
+   * 获取拖拽开始时的初始位置
+   * 用于在 handleGlyphDrag 中计算新位置（初始值 + dx/dy）
+   */
+  protected getInitialOrigin(): { ox: number; oy: number } {
+    return { ox: this.initialOx, oy: this.initialOy }
+  }
+  
   // 工具方法
   protected getCoord(coord: number): number {
     return this.config.getCoord ? this.config.getCoord(coord) : coord
@@ -104,6 +117,178 @@ export abstract class BaseGlyphDragger {
     return this.config.checkJoints ? this.config.checkJoints() : true
   }
   
+  /**
+   * 计算字形组件的包围框（基于实际轮廓点）
+   * 遍历外部组件（不在实例中）和内部组件（实例中存储的脚本组件）的实际轮廓点数据
+   */
+  protected getComponentBoundingBox(component: IComponent, componentUUID: string): { x: number; y: number; w: number; h: number } | null {
+    if (component.type !== 'glyph') {
+      return null
+    }
+    
+    const glyphValue = component.value as ICustomGlyph
+    if (!glyphValue) {
+      return null
+    }
+    
+    const allPoints: Array<{ x: number; y: number }> = []
+    const origin = this.getOrigin()
+    
+    try {
+      // 获取字形实例（用于访问内部组件）
+      const instanceKey = componentUUID
+      const glyphInstance = instanceManager.acquireTemporaryInstance(
+        instanceKey,
+        () => new CustomGlyph(glyphValue),
+        'glyph'
+      ) as CustomGlyph
+      
+      if (!glyphInstance) {
+        return null
+      }
+      
+      // 1. 遍历外部组件（glyph.components 中的组件）
+      if (glyphValue.components && Array.isArray(glyphValue.components)) {
+        for (const extComp of glyphValue.components) {
+          if (!extComp.usedInCharacter) continue
+          
+          const { x, y, w, h, rotation, flipX, flipY } = extComp
+          let points: Array<{ x: number; y: number }> = []
+          
+          switch (extComp.type) {
+            case 'pen': {
+              const penValue = extComp.value as any
+              if (penValue.points && Array.isArray(penValue.points)) {
+                points = penValue.points
+              }
+              break
+            }
+            case 'polygon': {
+              const polyValue = extComp.value as any
+              if (polyValue.points && Array.isArray(polyValue.points)) {
+                points = polyValue.points
+              }
+              break
+            }
+            case 'rectangle': {
+              const rectValue = extComp.value as any
+              points = getRectanglePoints(
+                rectValue.width || 0,
+                rectValue.height || 0,
+                extComp.x || 0,
+                extComp.y || 0
+              )
+              break
+            }
+            case 'ellipse': {
+              const ellipseValue = extComp.value as any
+              points = getEllipsePoints(
+                ellipseValue.radiusX || 0,
+                ellipseValue.radiusY || 0,
+                1000,
+                (extComp.x || 0) + (ellipseValue.radiusX || 0),
+                (extComp.y || 0) + (ellipseValue.radiusY || 0)
+              )
+              break
+            }
+          }
+          
+          if (points.length > 0) {
+            // 应用变换（缩放、旋转、翻转、偏移）
+            const transformedPoints = transformPoints(points, {
+              x: x || 0,
+              y: y || 0,
+              w: w || 1,
+              h: h || 1,
+              rotation: rotation || 0,
+              flipX: flipX || false,
+              flipY: flipY || false
+            })
+            // 加上组件的全局偏移
+            transformedPoints.forEach(p => {
+              allPoints.push({
+                x: p.x + origin.ox,
+                y: p.y + origin.oy
+              })
+            })
+          }
+        }
+      }
+      
+      // 2. 遍历内部组件（实例中存储的脚本组件）
+      if (glyphInstance._components && Array.isArray(glyphInstance._components)) {
+        for (const intComp of glyphInstance._components) {
+          if (intComp.usedInCharacter === false) continue
+          
+          let points: Array<{ x: number; y: number }> = []
+          
+          if (intComp.type === 'glyph-pen' && intComp.points) {
+            points = intComp.points
+          } else if (intComp.type === 'glyph-polygon' && intComp.points) {
+            points = intComp.points
+          } else if (intComp.type === 'glyph-rectangle') {
+            points = getRectanglePoints(
+              intComp.width || 0,
+              intComp.height || 0,
+              intComp.x || 0,
+              intComp.y || 0
+            )
+          } else if (intComp.type === 'glyph-ellipse') {
+            points = getEllipsePoints(
+              intComp.radiusX || 0,
+              intComp.radiusY || 0,
+              1000,
+              (intComp.centerX || 0),
+              (intComp.centerY || 0)
+            )
+          }
+          
+          if (points.length > 0) {
+            // 内部组件的点已经是在字形坐标系中，只需加上组件的全局偏移
+            points.forEach(p => {
+              allPoints.push({
+                x: p.x + origin.ox,
+                y: p.y + origin.oy
+              })
+            })
+          }
+        }
+      }
+      
+      // 释放临时实例
+      instanceManager.releaseTemporaryInstance(instanceKey)
+      
+      if (allPoints.length === 0) {
+        return null
+      }
+      
+      // 计算包围框
+      return getBound(allPoints)
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn('[BaseGlyphDragger.getComponentBoundingBox] Error:', error)
+      }
+      return null
+    }
+  }
+  
+  /**
+   * 检测点是否在包围框内
+   */
+  protected isPointInBoundingBox(
+    x: number,
+    y: number,
+    bbox: { x: number; y: number; w: number; h: number } | null
+  ): boolean {
+    if (!bbox) return false
+    return (
+      x >= bbox.x &&
+      x <= bbox.x + bbox.w &&
+      y >= bbox.y &&
+      y <= bbox.y + bbox.h
+    )
+  }
+  
   // 统一的事件处理
   protected onMouseDown = (e: MouseEvent) => {
     if (!this.canDrag()) return
@@ -112,21 +297,30 @@ export abstract class BaseGlyphDragger {
     const mouseX = this.getCoord(e.clientX - rect.left)
     const mouseY = this.getCoord(e.clientY - rect.top)
     
+    // 将鼠标坐标从显示尺寸转换为坐标尺寸
+    const coordX = this.convertDisplayToCoord(mouseX, true)
+    const coordY = this.convertDisplayToCoord(mouseY, false)
+    
     const joints = this.getJoints()
     let hitJoint: IJoint | null = null
     
+    // 检测是否点击了关键点
     if (this.shouldCheckJoints()) {
-      // 将鼠标坐标从显示尺寸转换为坐标尺寸
-      // mouseX, mouseY 是相对于显示尺寸（如 500px）的，需要转换为坐标尺寸（unitsPerEm = 1000）
-      const coordX = this.convertDisplayToCoord(mouseX, true)
-      const coordY = this.convertDisplayToCoord(mouseY, false)
-      
-      // joints 已经是全局坐标（getJoints() 已经加上了正确的 ox, oy）
-      // 使用转换后的坐标尺寸进行比较
       hitJoint = JointManager.findHitJoint(joints, coordX, coordY, 20)
     }
     
+    // 检测是否在组件包围框内（且并非关键点）
+    let isInBoundingBox = false
+    if (!hitJoint && this.context.component && this.context.component.type === 'glyph') {
+      const bbox = this.getComponentBoundingBox(
+        this.context.component as IComponent,
+        this.context.componentUUID
+      )
+      isInBoundingBox = this.isPointInBoundingBox(coordX, coordY, bbox)
+    }
+    
     if (hitJoint) {
+      // 点击了关键点，拖拽关键点
       this.draggingJoint = hitJoint
       this.isDraggingFirstJoint = JointManager.isFirstJoint(hitJoint, joints)
       
@@ -147,19 +341,32 @@ export abstract class BaseGlyphDragger {
           hitJoint
         )
       }
-    } else {
+    } else if (isInBoundingBox) {
+      // 在包围框内但并非关键点，准备移动组件
+      this.draggingJoint = null
+      this.isDraggingFirstJoint = false
+      
       if (import.meta.env.DEV) {
-        console.log('[BaseGlyphDragger.onMouseDown] No joint hit, will drag component')
+        console.log('[BaseGlyphDragger.onMouseDown] In bounding box, will drag component')
       }
+    } else {
+      // 不在包围框内，也不在关键点上，不处理
+      if (import.meta.env.DEV) {
+        console.log('[BaseGlyphDragger.onMouseDown] Not in bounding box or on joint')
+      }
+      return
     }
     
     this._isDragging = true
     // 拖拽时清除悬停关键点，避免高亮显示在原位置
     this.hoverJoint = null
     // 将显示坐标转换为坐标尺寸，用于计算拖拽增量
-    this.lastX = this.convertDisplayToCoord(mouseX, true)
-    this.lastY = this.convertDisplayToCoord(mouseY, false)
+    this.lastX = coordX
+    this.lastY = coordY
     this.origin = this.getOrigin()
+    // 记录初始的 ox 和 oy，用于拖拽时计算新位置（避免累加错误）
+    this.initialOx = this.origin.ox
+    this.initialOy = this.origin.oy
     
     window.addEventListener('mouseup', this.onMouseUp)
   }
@@ -181,7 +388,7 @@ export abstract class BaseGlyphDragger {
     const dx = coordX - this.lastX
     const dy = coordY - this.lastY
     
-    // 只处理骨架关键点拖拽，组件移动由 select 工具处理
+    // 处理关键点拖拽
     if (this.draggingJoint && !this.isDraggingFirstJoint && this.context.glyph) {
       // 拖拽骨架（如果脚本支持）
       // 执行骨架拖拽脚本，并在节流函数中触发重新渲染
@@ -200,8 +407,17 @@ export abstract class BaseGlyphDragger {
         dx,
         dy
       )
+    } else if (!this.draggingJoint && this.context.component && this.context.component.type === 'glyph') {
+      // 没有拖拽关键点，但在包围框内，移动组件
+      if (import.meta.env.DEV) {
+        console.log('[BaseGlyphDragger.onMouseMove] Dragging component:', {
+          dx,
+          dy,
+          componentUUID: this.context.componentUUID
+        })
+      }
+      this.throttledGlyphDrag(dx, dy)
     }
-    // 如果没有选中关键点，不做任何改变（组件移动由 select 工具处理）
   }
   
   protected onMouseUp = (e: MouseEvent) => {

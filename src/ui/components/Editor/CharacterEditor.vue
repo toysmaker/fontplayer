@@ -140,7 +140,7 @@ const renderCanvas = () => {
       components: components
     })
   }
-
+  
   console.log('renderCanvas')
   
   render(canvasRef.value, true, false, {
