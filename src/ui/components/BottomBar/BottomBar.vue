@@ -50,7 +50,7 @@
         </span>
         <span class="zoom-settings-wrapper">
           <span class="zoom-out" @pointerdown="zoomEditOut">
-            <font-awesome-icon :icon="['fas', 'minus']" />
+            <font-awesome-icon :icon="['fas', 'magnifying-glass-minus']" />
           </span>
           <n-input-number
             class="zoom-value"
@@ -58,12 +58,13 @@
             :min="0"
             :max="200"
             :step="1"
+            size="tiny"
             @update:value="onZoomChange"
           >
             <template #suffix>%</template>
           </n-input-number>
           <span class="zoom-in" @pointerdown="zoomEditIn">
-            <font-awesome-icon :icon="['fas', 'plus']" />
+            <font-awesome-icon :icon="['fas', 'magnifying-glass-plus']" />
           </span>
         </span>
       </span>
@@ -161,7 +162,7 @@ const {
 .zoom-settings-wrapper {
   display: flex;
   flex-direction: row;
-  width: 180px;
+  width: 220px;
   margin-left: auto;
   align-items: center;
 }
@@ -194,5 +195,22 @@ const {
 .coords-text {
   width: 120px;
   margin: 0 10px;
+}
+</style>
+
+<style>
+.tools-wrapper {
+  --n-text-color: var(--primary-0) !important;
+  color: var(--primary-0) !important;
+  .n-input-number {
+    border: none !important;
+  }
+  .n-input__border {
+    border: var(--primary-0) 1px solid;
+  }
+  .n-button {
+    width: 14px;
+    height: 14px;
+  }
 }
 </style>
