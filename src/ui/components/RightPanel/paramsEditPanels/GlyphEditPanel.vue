@@ -5,7 +5,7 @@
  */
 
 import { ref, computed, watch } from 'vue'
-import { NInputNumber, NForm, NFormItem, NInput, NEmpty, NSlider, NSelect, NSwitch } from 'naive-ui'
+import { NInputNumber, NForm, NFormItem, NInput, NEmpty, NSlider, NSelect, NSwitch, NIcon } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from '../composables/useComponentEditor'
 import { useEditorStore } from '@/stores/editor'
@@ -327,6 +327,9 @@ const handleChangeName = (name: string) => {
   font-weight: bold;
   white-space: nowrap;
   margin-top: 8px;
+  .n-icon {
+    font-size: 14px !important;
+  }
 }
 
 .constant-note-text {

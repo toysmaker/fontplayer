@@ -171,6 +171,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { NIcon } from 'naive-ui'
 import { useEditorStore } from '@/stores/editor'
 import { useToolStore } from '@/stores/tool'
 import { EditStatus } from '@/core/types'

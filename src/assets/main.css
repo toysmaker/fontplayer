@@ -231,3 +231,7 @@ body {
   background-color: var(--primary-0) !important;
   box-shadow: 0 0 0 1px var(--primary-1) inset !important;
 }
+
+.n-icon {
+  font-size: 18px !important;
+}

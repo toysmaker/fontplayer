@@ -149,7 +149,7 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
-import { NScrollbar, NPopover, NSelect } from 'naive-ui'
+import { NScrollbar, NPopover, NSelect, NIcon } from 'naive-ui'
 import { useCharacterStore } from '@/stores/character'
 import { useEditorStore } from '@/stores/editor'
 import { useI18n } from 'vue-i18n'

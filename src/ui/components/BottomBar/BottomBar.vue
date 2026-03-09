@@ -2,7 +2,7 @@
   <div class="bottom-bar">
     <div class="bottom-bar-row" v-if="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
       <span class="tools-wrapper">
-        <span class="translate-wrapper">
+        <!-- <span class="translate-wrapper">
           <div v-if="tool === 'translateMover'" class="translate-input-wrapper">
             <n-input
               v-model:value="translateText"
@@ -23,7 +23,7 @@
             @pointerdown="offTranslate"
             icon="fa-solid fa-hand"
           />
-        </span>
+        </span> -->
         <span class="coords-wrapper">
           <n-input
             v-if="tool === 'coordsViewer'"
