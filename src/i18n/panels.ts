@@ -12,6 +12,8 @@ const panels = {
 				paste: '粘贴',
 				delete: '删除',
 			},
+			noComponents: '暂无组件',
+			warningEditingCharacterEmpty: '警告: editingCharacter 为空',
 		},
 		viewList: {
 			thumbnail: {
@@ -200,10 +202,6 @@ const panels = {
 		toolBar: {
 			characterList: '字符列表',
 		},
-		componentList: {
-			noComponents: '暂无组件',
-			warningEditingCharacterEmpty: '警告: editingCharacter 为空',
-		},
 		rightPanel: {
 			selectComponent: '请选择一个组件进行编辑',
 		},
@@ -237,6 +235,8 @@ const panels = {
 				paste: 'Paste',
 				delete: 'Delete',
 			},
+			noComponents: 'No Components',
+			warningEditingCharacterEmpty: 'Warning: editingCharacter is empty',
 		},
 		viewList: {
 			thumbnail: {
@@ -424,10 +424,6 @@ const panels = {
 		},
 		toolBar: {
 			characterList: 'Character List',
-		},
-		componentList: {
-			noComponents: 'No Components',
-			warningEditingCharacterEmpty: 'Warning: editingCharacter is empty',
 		},
 		rightPanel: {
 			selectComponent: 'Please select a component to edit',

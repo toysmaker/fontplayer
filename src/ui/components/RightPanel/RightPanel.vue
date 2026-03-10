@@ -35,7 +35,7 @@ if (import.meta.env.DEV) {
 </script>
 
 <template>
-  <div class="right-panel">
+  <div class="right-panel" data-testid="parameter-panel">
     <!-- 基础组件面板（不区分字符/字形） -->
     <pen-edit-panel
       v-if="selectedComponentUUID && selectedComponent?.type === 'pen'"

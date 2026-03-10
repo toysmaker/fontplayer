@@ -1,5 +1,5 @@
 <template>
-  <div ref="containerRef" class="virtual-character-list" @scroll="handleScroll">
+  <div ref="containerRef" class="virtual-character-list" data-testid="character-list" @scroll="handleScroll">
     <div
       class="virtual-list-spacer"
       :style="{ height: `${totalHeight}px` }"
@@ -14,8 +14,9 @@
         :key="item.uuid"
         :ref="el => setItemRef(el, item.uuid)"
         class="character-item"
+        data-testid="character-item"
         @click="handleItemClick(item)"
-        @pointerdown="handleItemClick(item)"
+        @pointerup="handleItemClick(item)"
       >
         <CharacterItem :character="item" />
       </div>

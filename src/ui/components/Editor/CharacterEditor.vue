@@ -73,10 +73,13 @@ import { useEditorStore } from '@/stores/editor'
 import { fontRenderStyle } from '@/core/script/globals'
 import { JointManager } from '@/features/tools/glyphDragger/core/JointManager'
 import { mapCanvasX, mapCanvasY } from '@/utils/canvas'
+import { bottomBarToolManager } from '@/features/bottomBar/BottomBarToolManager'
+import { useBottomBarToolStore } from '@/stores/bottomBarTool'
 
 const characterStore = useCharacterStore()
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
+const bottomBarToolStore = useBottomBarToolStore()
 const canvasRef = ref<HTMLCanvasElement>()
 let dragger: BaseGlyphDragger | null = null
 
@@ -152,9 +155,14 @@ const renderCanvas = () => {
   })
   
   // 渲染关键点和辅助线（在主要渲染之后）
+  // 如果当前选中的组件被设置为不可见（visible === false），则不渲染其关键点和辅助线
   if (editorStore.checkJoints || editorStore.checkRefLines) {
     const selectedComponent = characterStore.selectedComponent
-    if (selectedComponent && selectedComponent.type === 'glyph') {
+    if (
+      selectedComponent &&
+      selectedComponent.type === 'glyph' &&
+      selectedComponent.visible !== false
+    ) {
       if (import.meta.env.DEV) {
         console.log('[CharacterEditor] Rendering joints/reflines:', {
           checkJoints: editorStore.checkJoints,
@@ -316,10 +324,17 @@ onMounted(async () => {
   renderCanvas()
   
   initDragger()
+
+  // 注册 canvas 到 BottomBarToolManager（如果 coordsViewer 已激活）
+  if (canvasRef.value && bottomBarToolStore.currentTool === 'coordsViewer') {
+    bottomBarToolManager.activateCoordsViewer(canvasRef.value, false)
+  }
 })
 
 onUnmounted(() => {
   cleanupDragger()
+  // 清理 BottomBarToolManager
+  bottomBarToolManager.cleanup()
   // 退出编辑时，将编辑字符的数据同步回列表
   if (characterStore.editingCharacterUUID) {
     characterStore.updateCharacterListFromEditFile()
@@ -345,6 +360,37 @@ watch(() => characterStore.editingCharacter, async () => {
   renderCanvas()
   
   initDragger()
+
+  // 如果 coordsViewer 已激活，重新注册 canvas
+  if (canvasRef.value && bottomBarToolStore.currentTool === 'coordsViewer') {
+    bottomBarToolManager.activateCoordsViewer(canvasRef.value, false)
+  }
+})
+
+// 监听 zoom 变化，更新 canvas 显示尺寸
+watch(() => editingCharacter.value?.view?.zoom, (newZoom) => {
+  if (canvasRef.value && editingCharacter.value) {
+    const zoom = newZoom || 100
+    const styleWidth = displayWidth.value * zoom / 100
+    const styleHeight = displayHeight.value * zoom / 100
+    canvasRef.value.style.width = `${styleWidth}px`
+    canvasRef.value.style.height = `${styleHeight}px`
+  }
+})
+
+// 监听 bottomBarTool 变化，激活/停用 coordsViewer
+watch(() => bottomBarToolStore.currentTool, (newTool) => {
+  if (!canvasRef.value) return
+  
+  if (newTool === 'coordsViewer') {
+    bottomBarToolManager.activateCoordsViewer(canvasRef.value, false)
+  } else {
+    // 如果当前管理器中的工具是 coordsViewer，但新工具不是，则停用
+    const currentTool = bottomBarToolManager.getCurrentTool()
+    if (currentTool === 'coordsViewer') {
+      bottomBarToolManager.deactivateCoordsViewer()
+    }
+  }
 })
 
 // 监听组件列表变化，重新渲染

@@ -15,7 +15,7 @@
         :ref="el => setItemRef(el, item.uuid)"
         class="glyph-item"
         @click="handleItemClick(item)"
-        @pointerdown="handleItemClick(item)"
+        @pointerup="handleItemClick(item)"
       >
         <GlyphItem :glyph="item" />
       </div>

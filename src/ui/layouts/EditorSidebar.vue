@@ -33,6 +33,7 @@
             @mouseenter="handleSubMenuEnter(subMenu.key)"
             @mouseleave="handleSubMenuLeave(subMenu.key)"
             @click="handleMenuSelect(subMenu.key)"
+            @pointerup="handleMenuSelect(subMenu.key)"
           >
             <span>{{ subMenu.label }}</span>
             <!-- 嵌套子菜单 -->
@@ -47,6 +48,7 @@
                 :key="subSubMenu.key"
                 class="menu-dropdown-item"
                 @click.stop="handleMenuSelect(subSubMenu.key)"
+                @pointerup.stop="handleMenuSelect(subSubMenu.key)"
               >
                 {{ subSubMenu.label }}
               </div>
@@ -72,6 +74,7 @@ import { fileHandler } from '@/features/editor/services/FileHandler'
 import { useProjectStore } from '@/stores/project'
 import NewProjectDialog from '@/ui/dialogs/NewProjectDialog.vue'
 import { getWebMenu, traverse_web_menu } from '@/features/editor/menus/web_menus'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -187,13 +190,16 @@ const handleSubMenuLeave = (key: string) => {
   }, 200)
 }
 
-const handleMenuSelect = async (key: string) => {
+const _handleMenuSelect = async (key: string) => {
   if (web_handlers[key]) {
     await web_handlers[key]()
   }
   hoveredMenu.value = null
   hoveredSubMenu.value = null
 }
+
+// 使用防重复调用包装，避免 click 和 pointerup 同时触发时重复调用
+const handleMenuSelect = createDebouncedHandler(_handleMenuSelect, 'EditorSidebar.menuSelect', (args) => args[0])
 
 // 监听 Tauri 菜单事件（新建工程）
 const handleShowNewProjectDialog = () => {

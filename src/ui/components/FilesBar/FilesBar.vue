@@ -14,12 +14,12 @@
           'selected': file.uuid === selectedFileUUID
         }"
       >
-        <span class="file-info-wrapper" @pointerdown="() => selectFile(file.uuid)">
+        <span class="file-info-wrapper" @click="() => selectFile(file.uuid)" @pointerup="() => selectFile(file.uuid)">
           <span class="file-name">
             {{ file.name }}
           </span>
         </span>
-        <!-- <span class="close-btn" @pointerdown="() => closeFile(file.uuid)">
+        <!-- <span class="close-btn" @pointerup="() => closeFile(file.uuid)">
           <font-awesome-icon :icon="['fas', 'xmark']" />
         </span> -->
       </span>
@@ -85,14 +85,14 @@
           <div 
             class="language-choice-item" 
             :class="{ selected: locale === 'zh' }"
-            @click="locale = 'zh'"
+            @click="handleLanguageChange('zh')"
           >
             中文
           </div>
           <div 
             class="language-choice-item" 
             :class="{ selected: locale === 'en' }"
-            @click="locale = 'en'"
+            @click="handleLanguageChange('en')"
           >
             English
           </div>
@@ -124,17 +124,48 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { NButton, NPopover, NModal, NInput, NRadioGroup, NRadio, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
 import { EditStatus } from '@/core/types'
+import { createDebouncedHandler } from '@/utils/debounce-click'
+import { isTauri } from '@/utils/env'
 
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
 const message = useMessage()
 const { locale, t } = useI18n()
+
+// 处理语言切换
+const handleLanguageChange = async (lang: 'zh' | 'en') => {
+  console.log('Changing language to:', lang)
+  locale.value = lang
+  // 更新 Tauri 菜单
+  if (isTauri()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      console.log('Calling update_menu_language with:', lang)
+      const result = await invoke('update_menu_language', { language: lang })
+      console.log('Menu language updated:', result)
+    } catch (error) {
+      console.error('Failed to update menu language:', error)
+    }
+  }
+}
+
+// 监听语言变化，更新 Tauri 菜单（作为备用）
+watch(() => locale.value, async (newLocale) => {
+  if (isTauri()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('update_menu_language', { language: newLocale })
+    } catch (error) {
+      console.error('Failed to update menu language:', error)
+    }
+  }
+}, { immediate: false })
 
 const files = computed(() => projectStore.files)
 const selectedFileUUID = computed(() => projectStore.selectedFileUUID)
@@ -188,9 +219,10 @@ const handleSettings = () => {
 }
 
 // 选择文件
-const selectFile = (uuid: string) => {
+const _selectFile = (uuid: string) => {
   projectStore.selectFile(uuid)
 }
+const selectFile = createDebouncedHandler(_selectFile, 'FilesBar.selectFile', (args) => args[0])
 
 // 关闭文件
 const closeFile = (uuid: string) => {

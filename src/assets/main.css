@@ -235,3 +235,11 @@ body {
 .n-icon {
   font-size: 18px !important;
 }
+
+.n-switch__rail {
+  background-color: var(--dark-4) !important;
+}
+
+.n-switch.n-switch--active .n-switch__rail {
+  background-color: var(--n-rail-color-active) !important;
+}

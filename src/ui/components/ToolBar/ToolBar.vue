@@ -9,7 +9,8 @@
           :class="{
             'selected': tool === 'select',
           }"
-          @pointerdown="switchTool('select')"
+          @click="switchTool('select')"
+          @pointerup="switchTool('select')"
           size="40"
           v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
@@ -23,7 +24,8 @@
           :class="{
             'selected': tool === 'pen',
           }"
-          @pointerdown="switchTool('pen')"
+          @click="switchTool('pen')"
+          @pointerup="switchTool('pen')"
           size="40"
           v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
@@ -37,7 +39,8 @@
           :class="{
             'selected': tool === 'ellipse',
           }"
-          @pointerdown="switchTool('ellipse')"
+          @click="switchTool('ellipse')"
+          @pointerup="switchTool('ellipse')"
           size="40"
           v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
@@ -51,7 +54,8 @@
           :class="{
             'selected': tool === 'rectangle',
           }"
-          @pointerdown="switchTool('rectangle')"
+          @click="switchTool('rectangle')"
+          @pointerup="switchTool('rectangle')"
           size="40"
           v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
@@ -65,7 +69,8 @@
           :class="{
             'selected': tool === 'polygon',
           }"
-          @pointerdown="switchTool('polygon')"
+          @click="switchTool('polygon')"
+          @pointerup="switchTool('polygon')"
           size="40"
           v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
@@ -79,7 +84,8 @@
           :class="{
             'selected': tool === 'picture',
           }"
-          @pointerdown="switchTool('picture')"
+          @click="switchTool('picture')"
+          @pointerup="switchTool('picture')"
           size="40"
           v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
@@ -93,7 +99,8 @@
           :class="{
             'selected': tool === 'glyph',
           }"
-          @pointerdown="switchTool('glyph')"
+          @click="switchTool('glyph')"
+          @pointerup="switchTool('glyph')"
           size="40"
           v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
           <font-awesome-icon
@@ -103,7 +110,8 @@
         
         <!-- 代码编辑器 - 在字符和字形编辑模式显示 -->
         <n-icon class="tool-icon code-icon" size="40"
-          @pointerdown="switchTool('code')"
+          @click="switchTool('code')"
+          @pointerup="switchTool('code')"
           v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
           <font-awesome-icon
           :icon="['fas', 'terminal']"
@@ -116,7 +124,8 @@
           :class="{
             'selected': tool === 'params',
           }"
-          @pointerdown="switchTool('params')"
+          @click="switchTool('params')"
+          @pointerup="switchTool('params')"
           size="40"
           v-show="editStatus === EditStatus.Glyph">
           <font-awesome-icon
@@ -131,7 +140,8 @@
             'selected': tool === 'params',
           }"
           size="40"
-          @pointerdown="switchTool('grid')"
+          @click="switchTool('grid')"
+          @pointerup="switchTool('grid')"
           v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
             :class="{
@@ -148,7 +158,8 @@
             'selected': tool === 'params',
           }"
           size="40"
-          @pointerdown="switchTool('metrics')"
+          @click="switchTool('metrics')"
+          @pointerup="switchTool('metrics')"
           v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
             :class="{
@@ -160,7 +171,7 @@
       </div>
       
       <!-- 返回字符列表按钮 -->
-      <div class="to-list" @pointerdown="handleToList">
+      <div class="to-list" @click="handleToList" @pointerup="handleToList">
         <font-awesome-icon class="to-list-icon" :icon="['fas', 'table-cells']" />
         <span class="to-list-label">{{ t('panels.toolBar.characterList') }}</span>
       </div>
@@ -175,6 +186,7 @@ import { NIcon } from 'naive-ui'
 import { useEditorStore } from '@/stores/editor'
 import { useToolStore } from '@/stores/tool'
 import { EditStatus } from '@/core/types'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t } = useI18n()
 
@@ -185,14 +197,15 @@ const editStatus = computed(() => editorStore.editStatus)
 const tool = computed(() => toolStore.tool)
 
 // 切换工具（事件处理先留空）
-const switchTool = (toolName: string) => {
+const _switchTool = (toolName: string) => {
   // TODO: 实现工具切换逻辑
   console.log('[ToolBar] switchTool:', toolName)
   toolStore.setTool(toolName)
 }
+const switchTool = createDebouncedHandler(_switchTool, 'ToolBar.switchTool', (args) => args[0])
 
 // 返回列表
-const handleToList = () => {
+const _handleToList = () => {
   // 返回到之前保存的列表状态，如果没有则返回到字符列表
   const targetStatus = editorStore.prevStatus || EditStatus.CharacterList
   
@@ -217,6 +230,7 @@ const handleToList = () => {
     editorStore.setEditStatus(EditStatus.CharacterList)
   }
 }
+const handleToList = createDebouncedHandler(_handleToList, 'ToolBar.handleToList')
 </script>
 
 <style scoped>

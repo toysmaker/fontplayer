@@ -17,6 +17,14 @@ export async function initTauriMenu() {
   }
 
   try {
+    // 同步菜单语言（确保菜单语言与前端 i18n 一致）
+    const { invoke } = await import('@tauri-apps/api/core')
+    const { i18n } = await import('@/i18n')
+    // 访问 i18n 的 locale，vue-i18n 的 locale 是一个 Ref<string>
+    const localeRef = i18n.global.locale
+    const currentLocale = typeof localeRef === 'string' ? localeRef : (localeRef as { value: string }).value || 'zh'
+    await invoke('update_menu_language', { language: currentLocale })
+    
     // 监听菜单事件
     const { listen } = await import('@tauri-apps/api/event')
     

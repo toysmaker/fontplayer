@@ -77,7 +77,7 @@ const loadingMessage = computed(() => {
   gap: 16px;
   padding: 32px;
   background: white;
-  border-radius: 8px;
+  border-radius: 0;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   min-width: 400px;
   max-width: 600px;
@@ -91,7 +91,7 @@ const loadingMessage = computed(() => {
   gap: 16px;
   padding: 32px;
   background: white;
-  border-radius: 8px;
+  border-radius: 0;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   min-width: 300px;
 }
@@ -103,13 +103,36 @@ const loadingMessage = computed(() => {
 .loading-message {
   font-size: 16px;
   font-weight: 500;
-  color: var(--n-text-color);
+  color: var(--primary-0);
   text-align: center;
 }
 
 .loading-detail {
   font-size: 14px;
-  color: var(--n-text-color-2);
+  color: var(--primary-0);
   text-align: center;
+}
+</style>
+
+<style>
+/* 设置进度条的 primary 颜色 */
+.loading-progress-container .n-progress {
+  --n-fill-color: var(--primary-0);
+}
+
+.loading-progress-container .n-progress-line-fill {
+  background-color: var(--primary-0) !important;
+}
+
+.n-progress .n-progress-graph .n-progress-graph-line .n-progress-graph-line-rail .n-progress-graph-line-fill {
+  background-color: var(--primary-0) !important;
+}
+
+.n-base-loading .n-base-loading__container .n-base-loading__icon {
+  color: var(--primary-0) !important;
+}
+
+.n-base-icon {
+  fill: var(--primary-0) !important;
 }
 </style>

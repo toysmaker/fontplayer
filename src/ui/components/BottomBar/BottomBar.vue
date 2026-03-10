@@ -9,24 +9,26 @@
               class="translate-text"
               :disabled="true"
             />
-            <n-button size="small" @pointerdown="resetTranslate" class="reset-btn">{{ t('panels.bottomBar.reset') }}</n-button>
+            <n-button size="small" @click="resetTranslate" @pointerup="resetTranslate" class="reset-btn">{{ t('panels.bottomBar.reset') }}</n-button>
           </div>
           <font-awesome-icon
             v-else
             class="translate-btn"
-            @pointerdown="onTranslate"
+            @click="onTranslate"
+            @pointerup="onTranslate"
             icon="fa-regular fa-hand"
           />
           <font-awesome-icon
             v-if="tool === 'translateMover'"
             class="translate-edit-btn"
-            @pointerdown="offTranslate"
+            @click="offTranslate"
+            @pointerup="offTranslate"
             icon="fa-solid fa-hand"
           />
         </span> -->
         <span class="coords-wrapper">
           <n-input
-            v-if="tool === 'coordsViewer'"
+            v-if="bottomBarTool === 'coordsViewer'"
             v-model:value="coordsText"
             class="coords-text"
             :disabled="true"
@@ -38,18 +40,20 @@
           <font-awesome-icon
             v-else
             class="coords-btn"
-            @pointerdown="onCoordsViewer"
+            @click="onCoordsViewer"
+            @pointerup="onCoordsViewer"
             icon="fa-solid fa-arrow-pointer"
           />
           <font-awesome-icon
-            v-if="tool === 'coordsViewer'"
+            v-if="bottomBarTool === 'coordsViewer'"
             class="coords-edit-btn"
-            @pointerdown="offCoordsViewer"
+            @click="offCoordsViewer"
+            @pointerup="offCoordsViewer"
             icon="fa-solid fa-arrow-pointer"
           />
         </span>
         <span class="zoom-settings-wrapper">
-          <span class="zoom-out" @pointerdown="zoomEditOut">
+          <span class="zoom-out" @click="zoomEditOut" @pointerup="zoomEditOut">
             <font-awesome-icon :icon="['fas', 'magnifying-glass-minus']" />
           </span>
           <n-input-number
@@ -63,7 +67,7 @@
           >
             <template #suffix>%</template>
           </n-input-number>
-          <span class="zoom-in" @pointerdown="zoomEditIn">
+          <span class="zoom-in" @click="zoomEditIn" @pointerup="zoomEditIn">
             <font-awesome-icon :icon="['fas', 'magnifying-glass-plus']" />
           </span>
         </span>
@@ -82,16 +86,16 @@ const { t } = useI18n()
 
 const {
   editStatus,
-  tool,
+  bottomBarTool,
   coordsText,
-  translateText,
+  // translateText, // translate 功能暂时注释
   zoom,
-  resetTranslate,
+  // resetTranslate, // translate 功能暂时注释
   zoomEditOut,
   zoomEditIn,
   onZoomChange,
-  onTranslate,
-  offTranslate,
+  // onTranslate, // translate 功能暂时注释
+  // offTranslate, // translate 功能暂时注释
   onCoordsViewer,
   offCoordsViewer,
 } = useBottomBar()
@@ -211,6 +215,10 @@ const {
   .n-button {
     width: 14px;
     height: 14px;
+  }
+  .n-input__input-el {
+    font-size: 12px;
+    height: 20px;
   }
 }
 </style>

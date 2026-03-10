@@ -10,7 +10,20 @@
     "preview": "vite preview --port 4173",
     "type-check": "vue-tsc --noEmit -p tsconfig.json --composite false",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
-    "migrate-project": "tsx scripts/generate-new-project-file.ts"
+    "migrate-project": "tsx scripts/generate-new-project-file.ts",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:glyphDragger": "vitest tests/unit/glyphDragger",
+    "test:stores": "vitest tests/unit/stores",
+    "test:utils": "vitest tests/unit/utils",
+    "test:services": "vitest tests/unit/services",
+    "test:converter": "vitest tests/unit/converter",
+    "test:renderer": "vitest tests/unit/renderer",
+    "test:script": "vitest tests/unit/script",
+    "test:integration": "vitest tests/integration"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.2",
@@ -66,10 +79,20 @@
     "vfonts": "^0.0.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.40.0",
     "@tauri-apps/cli": "^2.1.0",
+    "@testing-library/user-event": "^14.5.1",
+    "@testing-library/vue": "^8.0.1",
     "@types/node": "^16.11.56",
+    "@vitejs/plugin-vue": "^3.0.3",
+    "@vitest/ui": "^1.0.4",
+    "@vue/test-utils": "^2.4.3",
     "cross-env": "^7.0.3",
+    "fake-indexeddb": "^5.0.2",
+    "happy-dom": "^12.10.3",
+    "jsdom": "^23.0.1",
     "rollup-plugin-visualizer": "^5.12.0",
-    "tsx": "^4.7.0"
+    "tsx": "^4.7.0",
+    "vitest": "^1.0.4"
   }
 }

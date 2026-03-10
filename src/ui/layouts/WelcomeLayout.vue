@@ -2,14 +2,14 @@
   <div class="welcome">
     <div class="main-panel">
       <div class="items-wrapper">
-        <div class="item new-project-item" @pointerdown="handleNewProject">
+        <div class="item new-project-item" data-testid="new-project-button" @click="handleNewProject" @pointerup="handleNewProject">
           <div class="item-icon">
             <font-awesome-icon :icon="['fas', 'plus']" />
           </div>
           <div class="item-name">{{ t('welcome.new.name') }}</div>
           <div class="description">{{ t('welcome.new.description') }}</div>
         </div>
-        <div class="item open-project-item" @pointerdown="handleOpenProject">
+        <div class="item open-project-item" data-testid="open-project-button" @click="handleOpenProject" @pointerup="handleOpenProject">
           <div class="item-icon">
             <font-awesome-icon :icon="['fas', 'folder-open']" />
           </div>
@@ -63,6 +63,7 @@ const router = useRouter()
 const showNewProjectDialog = ref(false)
 
 const _handleNewProject = () => {
+  console.log('handleNewProject')
   showNewProjectDialog.value = true
 }
 

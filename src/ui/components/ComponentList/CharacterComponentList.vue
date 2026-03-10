@@ -1,5 +1,5 @@
 <template>
-  <div class="list-wrapper">
+  <div class="list-wrapper" data-testid="component-list">
     <!-- 组件过滤器选择器 -->
     <div class="filter-header" v-if="editingCharacter && (!editingCharacter.selectedComponentsTree || !editingCharacter.selectedComponentsTree.length)">
       <n-select
@@ -36,46 +36,65 @@
                   'selected': selectedComponentsUUIDs.indexOf(component.uuid) !== -1,
                 }"
                 :draggable="true"
+                :data-testid="`component-item`"
+                :data-type="component.type"
+                :data-uuid="component.uuid"
                 @dragstart="(e: DragEvent) => onDragStart(e, component.uuid)"
                 @dragover="(e: DragEvent) => onDragOver(e, component.uuid)"
                 @dragend="(e: DragEvent) => onDragEnd(e, component.uuid)"
                 @drop="(e: DragEvent) => onDrop(e, component.uuid)"
-                @pointerdown="(e: MouseEvent) => selectComponent(e, component.uuid)"
+                @click="(e: MouseEvent) => selectComponent(e, component.uuid)"
+                @pointerup="(e: MouseEvent) => selectComponent(e, component.uuid)"
                 @contextmenu="(e: MouseEvent) => openPopover(e, component.uuid)"
               >
                 <span class="name">
                   {{ component.name || component.type }}
                 </span>
                 <span class="tool-wrapper">
-                  <n-icon class="tool-icon used-in-character" @pointerdown.stop="(e: MouseEvent) => toggleUsedInCharacter(component.uuid, !component.usedInCharacter, component.type)">
+                  <n-icon class="tool-icon used-in-character" @click.stop="(e: MouseEvent) => toggleUsedInCharacter(component.uuid, !component.usedInCharacter, component.type)" @pointerup.stop="(e: MouseEvent) => toggleUsedInCharacter(component.uuid, !component.usedInCharacter, component.type)">
                     <font-awesome-icon
-                      :icon="component.usedInCharacter ? ['fas', 'circle-check'] : ['fas', 'circle-xmark']"
+                      :icon="['fas', 'circle-check']"
+                      v-if="component.usedInCharacter"
+                    />
+                    <font-awesome-icon
+                      :icon="['fas', 'circle-xmark']"
+                      v-else
                     />
                   </n-icon>
-                  <n-icon class="tool-icon lock" @pointerdown.stop="(e: MouseEvent) => toggleLock(component.uuid, !component.lock)">
+                  <n-icon class="tool-icon lock" @click.stop="(e: MouseEvent) => toggleLock(component.uuid, !component.lock)" @pointerup.stop="(e: MouseEvent) => toggleLock(component.uuid, !component.lock)">
                     <font-awesome-icon
-                      :icon="component.lock ? ['fas', 'lock'] : ['fas', 'lock-open']"
+                      :icon="['fas', 'lock']"
+                      v-if="component.lock"
+                    />
+                    <font-awesome-icon
+                      :icon="['fas', 'lock-open']"
+                      v-else
                     />
                   </n-icon>
-                  <n-icon class="tool-icon visible" @pointerdown.stop="(e: MouseEvent) => toggleVisibility(component.uuid, !component.visible)">
+                  <n-icon class="tool-icon visible" @click.stop="(e: MouseEvent) => toggleVisibility(component.uuid, !component.visible)" @pointerup.stop="(e: MouseEvent) => toggleVisibility(component.uuid, !component.visible)">
                     <font-awesome-icon
-                      :icon="component.visible ? ['fas', 'eye'] : ['fas', 'eye-slash']"
+                      :icon="['fas', 'eye']"
+                      v-if="component.visible"
+                    />
+                    <font-awesome-icon
+                      :icon="['fas', 'eye-slash']"
+                      v-else
                     />
                   </n-icon>
                 </span>
               </div>
             </template>
             <div class="component-menu">
-              <div class="component-menu-item" @pointerdown="(e: MouseEvent) => clip(component.uuid)">
+              <div class="component-menu-item" @click="(e: MouseEvent) => clip(component.uuid)" @pointerup="(e: MouseEvent) => clip(component.uuid)">
                 {{ t('panels.componentList.menu.cut') || '剪切' }}
               </div>
-              <div class="component-menu-item" @pointerdown="(e: MouseEvent) => copy(component.uuid)">
+              <div class="component-menu-item" @click="(e: MouseEvent) => copy(component.uuid)" @pointerup="(e: MouseEvent) => copy(component.uuid)">
                 {{ t('panels.componentList.menu.copy') || '复制' }}
               </div>
-              <div class="component-menu-item" @pointerdown="(e: MouseEvent) => paste(component.uuid)">
+              <div class="component-menu-item" @click="(e: MouseEvent) => paste(component.uuid)" @pointerup="(e: MouseEvent) => paste(component.uuid)">
                 {{ t('panels.componentList.menu.paste') || '粘贴' }}
               </div>
-              <div class="component-menu-item" @pointerdown="(e: MouseEvent) => remove(component.uuid)">
+              <div class="component-menu-item" @click="(e: MouseEvent) => remove(component.uuid)" @pointerup="(e: MouseEvent) => remove(component.uuid)">
                 {{ t('panels.componentList.menu.delete') || '删除' }}
               </div>
             </div>
@@ -102,41 +121,57 @@
                   'component': true,
                   'selected': selectedComponentsUUIDs.indexOf(component.uuid) !== -1,
                 }"
-                @pointerdown="(e: MouseEvent) => selectComponent(e, component.uuid)"
+                @click="(e: MouseEvent) => selectComponent(e, component.uuid)"
+                @pointerup="(e: MouseEvent) => selectComponent(e, component.uuid)"
               >
                 <span class="name">
                   {{ component.name || component.type }}
                 </span>
                 <span class="tool-wrapper">
-                  <font-awesome-icon
-                    class="tool-icon used-in-character"
-                    @pointerdown.stop="(e: MouseEvent) => toggleUsedInCharacter(component.uuid, !component.usedInCharacter, component.type)"
-                    :icon="component.usedInCharacter ? ['fas', 'circle-check'] : ['fas', 'circle-xmark']"
-                  />
-                  <font-awesome-icon
-                    class="tool-icon lock"
-                    @pointerdown.stop="(e: MouseEvent) => toggleLock(component.uuid, !component.lock)"
-                    :icon="component.lock ? ['fas', 'lock'] : ['fas', 'lock-open']"
-                  />
-                  <font-awesome-icon
-                    class="tool-icon visible"
-                    @pointerdown.stop="(e: MouseEvent) => toggleVisibility(component.uuid, !component.visible)"
-                    :icon="component.visible ? ['fas', 'eye'] : ['fas', 'eye-slash']"
-                  />
+                  <n-icon class="tool-icon used-in-character" @click.stop="(e: MouseEvent) => toggleUsedInCharacter(component.uuid, !component.usedInCharacter, component.type)" @pointerup.stop="(e: MouseEvent) => toggleUsedInCharacter(component.uuid, !component.usedInCharacter, component.type)">
+                    <font-awesome-icon
+                      :icon="['fas', 'circle-check']"
+                      v-if="component.usedInCharacter"
+                    />
+                    <font-awesome-icon
+                      :icon="['fas', 'circle-xmark']"
+                      v-else
+                    />
+                  </n-icon>
+                  <n-icon class="tool-icon lock" @click.stop="(e: MouseEvent) => toggleLock(component.uuid, !component.lock)" @pointerup.stop="(e: MouseEvent) => toggleLock(component.uuid, !component.lock)">
+                    <font-awesome-icon
+                      :icon="['fas', 'lock']"
+                      v-if="component.lock"
+                    />
+                    <font-awesome-icon
+                      :icon="['fas', 'lock-open']"
+                      v-else
+                    />
+                  </n-icon>
+                  <n-icon class="tool-icon visible" @click.stop="(e: MouseEvent) => toggleVisibility(component.uuid, !component.visible)" @pointerup.stop="(e: MouseEvent) => toggleVisibility(component.uuid, !component.visible)">
+                    <font-awesome-icon
+                      :icon="['fas', 'eye']"
+                      v-if="component.visible"
+                    />
+                    <font-awesome-icon
+                      :icon="['fas', 'eye-slash']"
+                      v-else
+                    />
+                  </n-icon>
                 </span>
               </div>
             </template>
             <div class="component-menu">
-              <div class="component-menu-item" @pointerdown="(e: MouseEvent) => clip(component.uuid)">
+              <div class="component-menu-item" @click="(e: MouseEvent) => clip(component.uuid)" @pointerup="(e: MouseEvent) => clip(component.uuid)">
                 {{ t('panels.componentList.menu.cut') || '剪切' }}
               </div>
-              <div class="component-menu-item" @pointerdown="(e: MouseEvent) => copy(component.uuid)">
+              <div class="component-menu-item" @click="(e: MouseEvent) => copy(component.uuid)" @pointerup="(e: MouseEvent) => copy(component.uuid)">
                 {{ t('panels.componentList.menu.copy') || '复制' }}
               </div>
-              <div class="component-menu-item" @pointerdown="(e: MouseEvent) => paste(component.uuid)">
+              <div class="component-menu-item" @click="(e: MouseEvent) => paste(component.uuid)" @pointerup="(e: MouseEvent) => paste(component.uuid)">
                 {{ t('panels.componentList.menu.paste') || '粘贴' }}
               </div>
-              <div class="component-menu-item" @pointerdown="(e: MouseEvent) => remove(component.uuid)">
+              <div class="component-menu-item" @click="(e: MouseEvent) => remove(component.uuid)" @pointerup="(e: MouseEvent) => remove(component.uuid)">
                 {{ t('panels.componentList.menu.delete') || '删除' }}
               </div>
             </div>
@@ -157,6 +192,7 @@ import type { IComponent } from '@/core/types'
 import { selectedItemByUUID } from '@/core/utils/component'
 import { genUUID } from '@/utils/uuid'
 import * as R from 'ramda'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t } = useI18n()
 const characterStore = useCharacterStore()
@@ -237,23 +273,27 @@ watch(
 )
 
 // 切换锁定
-const toggleLock = (uuid: string, lock: boolean) => {
+const _toggleLock = (uuid: string, lock: boolean) => {
   characterStore.modifyComponent(uuid, { lock })
 }
+const toggleLock = createDebouncedHandler(_toggleLock, 'CharacterComponentList.toggleLock', (args) => `${args[0]}_${args[1]}`)
 
 // 切换可见性
-const toggleVisibility = (uuid: string, visible: boolean) => {
+const _toggleVisibility = (uuid: string, visible: boolean) => {
   characterStore.modifyComponent(uuid, { visible })
 }
+const toggleVisibility = createDebouncedHandler(_toggleVisibility, 'CharacterComponentList.toggleVisibility', (args) => `${args[0]}_${args[1]}`)
 
 // 切换包含在字符轮廓中
-const toggleUsedInCharacter = (uuid: string, usedInCharacter: boolean, type: string) => {
+const _toggleUsedInCharacter = (uuid: string, usedInCharacter: boolean, type: string) => {
+  console.log('toggleUsedInCharacter', uuid, usedInCharacter, type)
   if (type === 'picture' || type === 'pressPen') return
   characterStore.modifyComponent(uuid, { usedInCharacter })
 }
+const toggleUsedInCharacter = createDebouncedHandler(_toggleUsedInCharacter, 'CharacterComponentList.toggleUsedInCharacter', (args) => `${args[0]}_${args[1]}`)
 
 // 选择组件
-const selectComponent = (e: MouseEvent, uuid: string) => {
+const _selectComponent = (e: MouseEvent, uuid: string) => {
   // 如果点击的是工具图标，不处理选择
   const target = e.target as HTMLElement
   if (target.closest('.tool-wrapper') || target.closest('.tool-icon')) {
@@ -277,6 +317,7 @@ const selectComponent = (e: MouseEvent, uuid: string) => {
     // setGlyphDraggerTool('glyphDragger')
   }
 }
+const selectComponent = createDebouncedHandler(_selectComponent, 'CharacterComponentList.selectComponent', (args) => args[1])
 
 // 拖拽开始
 const onDragStart = (e: DragEvent, uuid: string) => {
@@ -331,7 +372,7 @@ const onDrop = (e: DragEvent, uuid: string) => {
 }
 
 // 剪切
-const clip = (uuid: string) => {
+const _clip = (uuid: string) => {
   if (!selectedComponents.value || !selectedComponents.value.length) {
     const component = orderedListWithItemsForCurrentCharacterFile.value.find(c => c.uuid === uuid)
     if (component) {
@@ -365,9 +406,10 @@ const clip = (uuid: string) => {
   characterStore.setSelection('')
   popoverVisibleMap[uuid] = false
 }
+const clip = createDebouncedHandler(_clip, 'CharacterComponentList.clip', (args) => args[0])
 
 // 复制
-const copy = (uuid: string) => {
+const _copy = (uuid: string) => {
   if (!selectedComponents.value || !selectedComponents.value.length) {
     const component = orderedListWithItemsForCurrentCharacterFile.value.find(c => c.uuid === uuid)
     if (component) {
@@ -395,9 +437,10 @@ const copy = (uuid: string) => {
   }
   popoverVisibleMap[uuid] = false
 }
+const copy = createDebouncedHandler(_copy, 'CharacterComponentList.copy', (args) => args[0])
 
 // 粘贴
-const paste = (uuid: string) => {
+const _paste = (uuid: string) => {
   const components = characterStore.clipBoard.value
   if (!components || components.length === 0) return
   
@@ -419,9 +462,10 @@ const paste = (uuid: string) => {
   
   popoverVisibleMap[uuid] = false
 }
+const paste = createDebouncedHandler(_paste, 'CharacterComponentList.paste', (args) => args[0])
 
 // 删除
-const remove = (uuid: string) => {
+const _remove = (uuid: string) => {
   if (!selectedComponents.value || !selectedComponents.value.length) {
     characterStore.removeComponent(uuid)
   } else {
@@ -446,6 +490,7 @@ const remove = (uuid: string) => {
   characterStore.setSelection('')
   popoverVisibleMap[uuid] = false
 }
+const remove = createDebouncedHandler(_remove, 'CharacterComponentList.remove', (args) => args[0])
 
 // 打开右键菜单
 const openPopover = (e: MouseEvent, uuid: string) => {
@@ -513,6 +558,9 @@ const openPopover = (e: MouseEvent, uuid: string) => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  .n-icon {
+    font-size: 14px !important;
+  }
 }
 
 .component .tool-icon {
@@ -528,14 +576,13 @@ const openPopover = (e: MouseEvent, uuid: string) => {
 
 .component-menu {
   background-color: var(--primary-0);
-  border: 1px solid var(--dark-4);
 }
 
 .component-menu-item {
   height: 30px;
   line-height: 30px;
   cursor: pointer;
-  color: var(--primary-0);
+  color: var(--primary-5);
   padding: 0 10px;
 }
 
