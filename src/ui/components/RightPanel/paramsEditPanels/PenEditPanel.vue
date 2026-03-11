@@ -78,7 +78,7 @@ const handleChangeFillColor = (color: string) => {
     <template v-if="selectedComponent">
       <!-- 组件名称 -->
       <div class="name-wrap">
-        <div class="title">{{ t('panels.paramsPanel.componentName.title') }}</div>
+        <div class="section-title">{{ t('panels.paramsPanel.componentName.title') }}</div>
         <n-form label-placement="left" label-width="80px">
           <n-form-item :label="t('panels.paramsPanel.componentName.label')">
             <n-input
@@ -91,7 +91,7 @@ const handleChangeFillColor = (color: string) => {
       
       <!-- 变换 -->
       <div class="transform-wrap">
-        <div class="title">{{ t('panels.paramsPanel.transform.title') }}</div>
+        <div class="section-title">{{ t('panels.paramsPanel.transform.title') }}</div>
         <n-form label-placement="left" label-width="80px">
           <n-form-item :label="t('panels.paramsPanel.transform.x')">
             <n-input-number
@@ -147,7 +147,7 @@ const handleChangeFillColor = (color: string) => {
       
       <!-- 编辑模式（字符和字形都显示） -->
       <div class="edit-mode-wrap" v-if="selectedComponent.type === 'pen'">
-        <div class="title">{{ t('panels.paramsPanel.editMode.title') }}</div>
+        <div class="section-title">{{ t('panels.paramsPanel.editMode.title') }}</div>
         <n-form label-placement="left" label-width="80px">
           <n-form-item :label="t('panels.paramsPanel.editMode.label')">
             <n-switch
@@ -160,8 +160,8 @@ const handleChangeFillColor = (color: string) => {
       
       <!-- 填充颜色（仅字符模式显示） -->
       <div class="fill-color-wrap" v-if="editStatus === EditStatus.Edit">
-        <div class="title">{{ t('panels.paramsPanel.fillColor.title') }}</div>
-        <n-form label-placement="left" label-width="120px">
+        <div class="section-title">{{ t('panels.paramsPanel.fillColor.title') }}</div>
+        <n-form label-placement="left" label-width="80px">
           <n-form-item :label="t('panels.paramsPanel.fillColor.label')">
             <n-color-picker
               :value="(selectedComponent.value as IPenComponent)?.fillColor || '#000000'"
@@ -177,18 +177,17 @@ const handleChangeFillColor = (color: string) => {
 
 <style scoped>
 .pen-edit-panel {
-  width: 100%;
+  padding: 10px;
   height: 100%;
-}
+  overflow-y: auto;
 
-.title {
-  height: 36px;
-  line-height: 36px;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--dark-4);
-}
-
-.n-form {
-  margin: 10px 0;
+  .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--dark-4);
+    color: var(--text-color-1);
+  }
 }
 </style>

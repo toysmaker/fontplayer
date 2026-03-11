@@ -71,7 +71,7 @@ const handleChangeOpacity = (opacity: number | null) => {
     <template v-if="selectedComponent">
       <!-- 组件名称 -->
       <div class="name-wrap">
-        <div class="title">{{ t('panels.paramsPanel.componentName.title') }}</div>
+        <div class="section-title">{{ t('panels.paramsPanel.componentName.title') }}</div>
         <n-form label-placement="left" label-width="80px">
           <n-form-item :label="t('panels.paramsPanel.componentName.label')">
             <n-input
@@ -84,7 +84,7 @@ const handleChangeOpacity = (opacity: number | null) => {
       
       <!-- 变换 -->
       <div class="transform-wrap">
-        <div class="title">{{ t('panels.paramsPanel.transform.title') }}</div>
+        <div class="section-title">{{ t('panels.paramsPanel.transform.title') }}</div>
         <n-form label-placement="left" label-width="80px">
           <n-form-item :label="t('panels.paramsPanel.transform.x')">
             <n-input-number
@@ -128,7 +128,7 @@ const handleChangeOpacity = (opacity: number | null) => {
       
       <!-- 透明度（字符和字形都显示） -->
       <div class="opacity-wrap">
-        <div class="title">{{ t('panels.paramsPanel.opacity.title') }}</div>
+        <div class="section-title">{{ t('panels.paramsPanel.opacity.title') }}</div>
         <n-form label-placement="left" label-width="80px">
           <n-form-item :label="t('panels.paramsPanel.opacity.opacity')">
             <n-input-number
@@ -158,19 +158,17 @@ const handleChangeOpacity = (opacity: number | null) => {
 
 <style scoped>
 .picture-edit-panel {
-  width: 100%;
+  padding: 10px;
   height: 100%;
   overflow: hidden;
-}
 
-.title {
-  height: 36px;
-  line-height: 36px;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--dark-4);
-}
-
-.n-form {
-  margin: 10px 0;
+  .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--dark-4);
+    color: var(--text-color-1);
+  }
 }
 </style>

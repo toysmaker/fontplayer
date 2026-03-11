@@ -286,7 +286,7 @@ const handleChangeName = (name: string) => {
 .section-title {
   font-size: 14px;
   font-weight: 600;
-  margin-bottom: 15px;
+  margin-bottom: 20px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--dark-4);
   color: var(--text-color-1);

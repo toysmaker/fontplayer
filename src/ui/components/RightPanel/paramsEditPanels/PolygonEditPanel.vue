@@ -64,7 +64,7 @@ const transformToPath = () => {
     <template v-if="selectedComponent">
       <!-- 组件名称 -->
       <div class="name-wrap">
-        <div class="title">{{ t('panels.paramsPanel.componentName.title') }}</div>
+        <div class="section-title">{{ t('panels.paramsPanel.componentName.title') }}</div>
         <n-form label-placement="left" label-width="80px">
           <n-form-item :label="t('panels.paramsPanel.componentName.label')">
             <n-input
@@ -77,7 +77,7 @@ const transformToPath = () => {
       
       <!-- 变换 -->
       <div class="transform-wrap">
-        <div class="title">{{ t('panels.paramsPanel.transform.title') }}</div>
+        <div class="section-title">{{ t('panels.paramsPanel.transform.title') }}</div>
         <n-form label-placement="left" label-width="80px">
           <n-form-item :label="t('panels.paramsPanel.transform.x')">
             <n-input-number
@@ -121,9 +121,10 @@ const transformToPath = () => {
       
       <!-- 转换为曲线（字符和字形都显示） -->
       <div class="transform-to-curve-wrap" v-if="selectedComponent.type === 'polygon'">
-        <div class="title">{{ t('panels.paramsPanel.transformToCurve.title') }}</div>
+        <div class="section-title">{{ t('panels.paramsPanel.transformToCurve.title') }}</div>
         <n-button
           type="primary"
+          class="transform-to-curve-button"
           @click="transformToPath"
           style="width: calc(100% - 20px); margin: 10px;"
         >
@@ -133,8 +134,8 @@ const transformToPath = () => {
       
       <!-- 填充颜色（仅字符模式显示） -->
       <div class="fill-color-wrap" v-if="editStatus === EditStatus.Edit">
-        <div class="title">{{ t('panels.paramsPanel.fillColor.title') }}</div>
-        <n-form label-placement="left" label-width="120px">
+        <div class="section-title">{{ t('panels.paramsPanel.fillColor.title') }}</div>
+        <n-form label-placement="left" label-width="80px">
           <n-form-item :label="t('panels.paramsPanel.fillColor.label')">
             <n-color-picker
               :value="(selectedComponent.value as IPolygonComponent)?.fillColor || '#000000'"
@@ -150,26 +151,22 @@ const transformToPath = () => {
 
 <style scoped>
 .polygon-edit-panel {
-  width: 100%;
+  padding: 10px;
   height: 100%;
   overflow: hidden;
-}
 
-.title {
-  height: 36px;
-  line-height: 36px;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--dark-4);
-}
+  .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--dark-4);
+    color: var(--text-color-1);
+  }
 
-.n-form {
-  margin: 10px 0;
-}
-
-.name-wrap,
-.transform-wrap,
-.transform-to-curve-wrap,
-.fill-color-wrap {
-  margin-bottom: 20px;
+  .transform-to-curve-button {
+    margin-top: 0 !important;
+    margin-bottom: 25px !important;
+  }
 }
 </style>

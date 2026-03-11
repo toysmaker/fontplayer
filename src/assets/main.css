@@ -243,3 +243,7 @@ body {
 .n-switch.n-switch--active .n-switch__rail {
   background-color: var(--n-rail-color-active) !important;
 }
+
+.n-color-picker-trigger {
+  border: none !important;
+}
