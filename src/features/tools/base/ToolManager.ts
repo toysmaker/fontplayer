@@ -74,6 +74,13 @@ export class ToolManager {
   }
 
   /**
+   * 获取指定类型的工具
+   */
+  getTool(toolType: ToolType): BaseTool | null {
+    return this.tools.get(toolType) || null
+  }
+
+  /**
    * 获取工具的渲染函数
    */
   getToolRenderFunction(toolType: ToolType): ToolRenderFunction | null {

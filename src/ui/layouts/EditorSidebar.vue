@@ -147,10 +147,6 @@ const menuList = computed(() => {
   try {
     const web_menu = getWebMenu()
     const menus = traverse_web_menu(web_handlers, web_menu)
-    console.log('Menu list:', menus)
-    if (menus.length > 0 && menus[0].submenu) {
-      console.log('First menu submenu:', menus[0].submenu)
-    }
     return menus
   } catch (error) {
     console.error('Error loading menu:', error)

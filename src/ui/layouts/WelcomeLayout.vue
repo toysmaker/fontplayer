@@ -63,7 +63,6 @@ const router = useRouter()
 const showNewProjectDialog = ref(false)
 
 const _handleNewProject = () => {
-  console.log('handleNewProject')
   showNewProjectDialog.value = true
 }
 

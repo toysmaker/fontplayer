@@ -10,6 +10,7 @@ import { useGlyphStore } from '@/stores/glyph'
 import { useProjectStore } from '@/stores/project'
 import { getBound, transformPoints, isNearPoint } from '@/core/utils/math'
 import { mapCanvasCoords } from '@/utils/canvas'
+import { getStrokeWidth } from '@/utils/canvas-utils'
 import { getCoord } from '../utils/coord'
 import { genUUID } from '@/utils/uuid'
 import { formatPoints, genPolygonContour } from '@/core/utils/contour'
@@ -358,6 +359,10 @@ export class PolygonTool extends BaseTool {
       })
     })
 
+    // 使用全局线宽
+    const strokeWidth = getStrokeWidth()
+    ctx.lineWidth = strokeWidth
+
     ctx.strokeStyle = '#000'
     ctx.beginPath()
     ctx.moveTo(_points[0].x, _points[0].y)
@@ -372,8 +377,8 @@ export class PolygonTool extends BaseTool {
 
     ctx.stroke()
 
-    // 绘制顶点
-    const w = 5
+    // 绘制顶点：内部宽高为 strokeWidth 的两倍
+    const w = strokeWidth * 2
     ctx.fillStyle = '#000'
     for (let i = 0; i < _points.length; i++) {
       ctx.fillRect(_points[i].x - w / 2, _points[i].y - w / 2, w, w)

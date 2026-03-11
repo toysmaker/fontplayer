@@ -380,18 +380,15 @@ onUnmounted(() => {
 // 监听字形列表变化（使用 shallow watch，避免深度监听大数组）
 // 只在引用变化时触发，而不是内容变化
 watch(glyphList, (newList, oldList) => {
-  console.log('glyphList changed', newList, oldList)
   // 只在列表引用真正变化时处理（比如切换文件）
   // 避免在加载过程中频繁触发
   if (newList !== oldList && newList.length > 0) {
     updateContainerSize()
     // 延迟处理，确保文件加载完成后再渲染
     nextTick(() => {
-      console.log('projectStore.loading', projectStore.loading)
       // 只在文件加载完成后才清空缓存和触发渲染
       // 检查是否还在加载中
       if (!projectStore.loading) {
-        console.log('render queue')
         renderCache.clear()
         renderQueue.value = []
         scheduleRender()
@@ -459,8 +456,6 @@ const scheduleRender = () => {
       newItems.push(item.uuid)
     }
   }
-
-  console.log('newItems', newItems)
   
   if (newItems.length > 0) {
     renderQueue.value.push(...newItems)

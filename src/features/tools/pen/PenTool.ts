@@ -16,6 +16,7 @@ import { formatPoints, genPenContour } from '@/core/utils/contour'
 import type { IComponent, IPenComponent } from '@/core/types'
 import type { IPoint } from '@/core/script/types'
 import * as R from 'ramda'
+import { getStrokeWidth } from '@/utils/canvas-utils'
 
 /**
  * 钢笔工具单例
@@ -479,7 +480,7 @@ export class PenTool extends BaseTool {
       }
     })
 
-    const w = 10
+    const w = getStrokeWidth() * 2
     ctx.strokeStyle = '#000'
     ctx.fillStyle = '#000'
     ctx.beginPath()
@@ -503,10 +504,10 @@ export class PenTool extends BaseTool {
         ctx.fillRect(_points[i].x - w / 2, _points[i].y - w / 2, w, w)
       }
       if (i + 1 < _points.length && _points[i + 1].isShow) {
-        ctx.strokeRect(_points[i + 1].x - w / 2, _points[i + 1].y - w / 2, w, w)
+        ctx.strokeRect(_points[i + 1].x - w, _points[i + 1].y - w, w * 2, w * 2)
       }
       if (i + 2 < _points.length && _points[i + 2].isShow) {
-        ctx.strokeRect(_points[i + 2].x - w / 2, _points[i + 2].y - w / 2, w, w)
+        ctx.strokeRect(_points[i + 2].x - w, _points[i + 2].y - w, w * 2, w * 2)
       }
     }
 

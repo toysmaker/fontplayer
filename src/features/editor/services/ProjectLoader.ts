@@ -240,8 +240,6 @@ export class ProjectLoader {
           )
         }
 
-        console.log('compute preview', previews)
-
         // 等待所有 IndexedDB 操作完成
         if (indexDBPromises.length > 0) {
           await Promise.all(indexDBPromises)

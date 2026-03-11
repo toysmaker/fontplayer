@@ -10,6 +10,7 @@ import { useGlyphStore } from '@/stores/glyph'
 import { useProjectStore } from '@/stores/project'
 import { getRectanglePoints, transformPoints } from '@/core/utils/math'
 import { mapCanvasX, mapCanvasY, mapCanvasWidth, mapCanvasHeight } from '@/utils/canvas'
+import { getStrokeWidth } from '@/utils/canvas-utils'
 import { getCoord } from '../utils/coord'
 import { genUUID } from '@/utils/uuid'
 import { formatPoints, genRectangleContour } from '@/core/utils/contour'
@@ -379,10 +380,15 @@ export class RectangleTool extends BaseTool {
     const _w = mapCanvasWidth(this.rectWidth)
     const _h = mapCanvasHeight(this.rectHeight)
 
+    // 使用全局线宽
+    const strokeWidth = getStrokeWidth()
+    ctx.lineWidth = strokeWidth
+
     ctx.strokeStyle = '#000'
     ctx.strokeRect(_x, _y, _w, _h)
 
-    const d = 5
+    // 选择框顶点控件：内部宽高为 strokeWidth 的两倍
+    const d = strokeWidth * 2
     ctx.strokeStyle = '#79bbff'
     ctx.strokeRect(_x, _y, _w, _h)
     ctx.strokeRect(_x - d, _y - d, d * 2, d * 2)

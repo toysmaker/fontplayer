@@ -311,8 +311,6 @@ export const useCharacterStore = defineStore('character', () => {
    * 选择组件
    */
   function selectComponent(uuid: string, tree: string[] = []) {
-    console.log('selectComponent', uuid, tree)
-
     // 统一通过 setSelection 来更新选中状态（包括多选、高亮等）
     // 这样无论是组件列表还是画布上的选择，逻辑保持一致
     setSelection(uuid)

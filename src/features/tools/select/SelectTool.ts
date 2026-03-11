@@ -11,6 +11,7 @@ import { distance, rotatePoint, inComponentBound, leftTop, leftBottom, rightTop,
 import { mapCanvasX, mapCanvasY, mapCanvasWidth, mapCanvasHeight } from '@/utils/canvas'
 import type { IComponent, IPenComponent, IGlyphComponent, ICustomGlyph, IPolygonComponent, IRectangleComponent, IEllipseComponent } from '@/core/types'
 import { computeGlyphComponentBoundingBox } from '@/core/utils/glyphBounds'
+import { getStrokeWidth } from '@/utils/canvas-utils'
 import { PenSelectTool } from './PenSelectTool'
 
 /**
@@ -60,6 +61,13 @@ export class SelectTool extends BaseTool {
 
   get name(): string {
     return 'select'
+  }
+
+  /**
+   * 获取当前选择控制状态（用于鼠标样式）
+   */
+  getSelectControl(): SelectControlType {
+    return this.selectControl
   }
 
   async init(): Promise<void> {
@@ -569,8 +577,6 @@ export class SelectTool extends BaseTool {
     // 收集所有边界框包含点击点的组件
     const candidateComponents: Array<{ component: IComponent; distance: number }> = []
 
-    console.log('clickPoint', clickPoint)
-
     for (let i = orderedList.length - 1; i >= 0; i--) {
       const component = orderedList[i]
       if (!component || !component.type || component.type === 'group' || !component.visible) continue
@@ -579,7 +585,6 @@ export class SelectTool extends BaseTool {
       let isInBounds = false
       if (component.type === 'glyph') {
         // 对于字形组件，优先使用精确检测；如果失败则退回到边界框检测
-        console.log('component', component)
         isInBounds =
           this.glyphComponentContainsPoint(clickPoint, component, 20) ||
           inComponentBound(clickPoint, component, 20)
@@ -755,6 +760,10 @@ export class SelectTool extends BaseTool {
     const _w = mapCanvasWidth(w)
     const _h = mapCanvasHeight(h)
 
+    // 使用全局线宽
+    const strokeWidth = getStrokeWidth()
+    ctx.lineWidth = strokeWidth
+
     ctx.save()
 
     // 应用旋转（保持与组件本身渲染一致）
@@ -765,7 +774,8 @@ export class SelectTool extends BaseTool {
     }
 
     // 高亮边框和四个角的控制点（与 RectangleTool 样式一致）
-    const d = 5
+    // 顶点控件内部宽高为 strokeWidth 的两倍
+    const d = strokeWidth * 2
     ctx.strokeStyle = '#79bbff'
     ctx.strokeRect(_x, _y, _w, _h)
     ctx.strokeRect(_x - d, _y - d, d * 2, d * 2)

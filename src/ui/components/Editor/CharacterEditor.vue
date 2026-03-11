@@ -27,6 +27,18 @@
               class="editor-canvas"
               :class="{
                 'edit-canvas-panel': true,
+                'pen-on-edit': currentTool === 'pen',
+                'rectangle-on-edit': currentTool === 'rectangle',
+                'ellipse-on-edit': currentTool === 'ellipse',
+                'polygon-on-edit': currentTool === 'polygon',
+                'rotate-left-top': selectControl === 'rotate-left-top',
+                'rotate-right-top': selectControl === 'rotate-right-top',
+                'rotate-left-bottom': selectControl === 'rotate-left-bottom',
+                'rotate-right-bottom': selectControl === 'rotate-right-bottom',
+                'scale-left-top': selectControl === 'scale-left-top',
+                'scale-right-top': selectControl === 'scale-right-top',
+                'scale-left-bottom': selectControl === 'scale-left-bottom',
+                'scale-right-bottom': selectControl === 'scale-right-bottom',
               }"
               :style="{
                 'transform': editingCharacter ? `translate3d(${editingCharacter.view.translateX}px, ${editingCharacter.view.translateY}px, 0px)` : 'none',
@@ -87,9 +99,14 @@ const bottomBarToolStore = useBottomBarToolStore()
 const toolStore = useToolStore()
 const canvasRef = ref<HTMLCanvasElement>()
 let dragger: BaseGlyphDragger | null = null
+let selectControlCheckInterval: number | null = null
 
 const selectedComponent = computed(() => characterStore.selectedComponent)
 const editingCharacter = computed(() => characterStore.editingCharacter)
+
+// 当前工具和选择控制状态（用于鼠标样式）
+const currentTool = ref<ToolType | ''>('')
+const selectControl = ref<string>('null')
 
 // Canvas 尺寸
 const canvasWidth = computed(() => {
@@ -148,8 +165,6 @@ const renderCanvas = () => {
       components: components
     })
   }
-  
-  console.log('renderCanvas')
   
   render(canvasRef.value, true, false, {
     mode: 'character',
@@ -390,9 +405,12 @@ onMounted(async () => {
   // 初始化工具系统（必须在 canvas 准备好之后）
   await initTools()
   
+  // 更新当前工具状态
+  currentTool.value = (toolStore.tool as ToolType | '') || ''
+  
   // 初始化 dragger（只有在选择工具激活时才需要）
-  const currentTool = toolManager.getCurrentToolType()
-  if (currentTool === 'select') {
+  const toolType = toolManager.getCurrentToolType()
+  if (toolType === 'select') {
     initDragger()
   }
 
@@ -403,6 +421,11 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  // 清理selectControl检查定时器
+  if (selectControlCheckInterval) {
+    clearInterval(selectControlCheckInterval)
+    selectControlCheckInterval = null
+  }
   cleanupDragger()
   cleanupTools()
   // 清理 BottomBarToolManager
@@ -477,8 +500,8 @@ watch(() => characterStore.orderedListWithItemsForCurrentCharacterFile, async ()
 // 监听选中组件变化
 watch(() => characterStore.selectedComponent, async () => {
   // 只有在选择工具激活时才初始化 dragger
-  const currentTool = toolManager.getCurrentToolType()
-  if (currentTool === 'select') {
+  const toolType = toolManager.getCurrentToolType()
+  if (toolType === 'select') {
     cleanupDragger()
     await nextTick()
     initDragger()
@@ -501,6 +524,9 @@ watch(() => fontRenderStyle.value, async () => {
 watch(() => toolStore.tool, async (newTool) => {
   if (!canvasRef.value) return
 
+  // 更新当前工具状态
+  currentTool.value = (newTool as ToolType | '') || ''
+
   if (newTool) {
     await toolManager.switchTool(newTool as ToolType)
     renderCanvas()
@@ -512,10 +538,43 @@ watch(() => toolStore.tool, async (newTool) => {
     } else if (newTool !== 'select') {
       // 切换到非选择工具时，停用 dragger（其他工具不需要 dragger）
       cleanupDragger()
+      selectControl.value = 'null'
     }
   } else {
     // 如果没有工具，清理 dragger
     cleanupDragger()
+    selectControl.value = 'null'
+  }
+})
+
+// 监听SelectTool的selectControl变化（用于鼠标样式）
+// 使用定时器定期检查selectControl状态（因为SelectTool内部状态变化不会触发Vue响应式更新）
+watch(() => toolStore.tool, (newTool) => {
+  if (selectControlCheckInterval) {
+    clearInterval(selectControlCheckInterval)
+    selectControlCheckInterval = null
+  }
+  
+  if (newTool === 'select') {
+    // 当选择工具激活时，定期检查selectControl状态
+    selectControlCheckInterval = window.setInterval(() => {
+      const selectTool = toolManager.getTool('select') as SelectTool
+      if (selectTool) {
+        const newControl = selectTool.getSelectControl()
+        if (selectControl.value !== newControl) {
+          selectControl.value = newControl
+        }
+      }
+    }, 16) // 约60fps
+  } else {
+    selectControl.value = 'null'
+  }
+}, { immediate: true })
+
+onUnmounted(() => {
+  if (selectControlCheckInterval) {
+    clearInterval(selectControlCheckInterval)
+    selectControlCheckInterval = null
   }
 })
 
@@ -596,6 +655,36 @@ watch(() => toolStore.tool, async (newTool) => {
   /* cursor: crosshair; */
 }
 
+/* 工具鼠标样式 */
+.pen-on-edit {
+  cursor: url('@/assets/icons/pen-cursor.cur'), pointer;
+}
+
+.rectangle-on-edit, .ellipse-on-edit {
+  cursor: crosshair;
+}
+
+.polygon-on-edit {
+  cursor: url('@/assets/icons/square-solid.svg'), pointer;
+}
+
+/* 选择工具控件鼠标样式 */
+.rotate-left-top, .rotate-left-bottom {
+  cursor: url('@/assets/icons/rotate-right-solid.svg'), pointer;
+}
+
+.rotate-right-top, .rotate-right-bottom {
+  cursor: url('@/assets/icons/rotate-left-solid.svg'), pointer;
+}
+
+.scale-left-top, .scale-right-bottom {
+  cursor: nwse-resize;
+}
+
+.scale-left-bottom, .scale-right-top {
+  cursor: nesw-resize;
+}
+
 .right-panel-wrapper {
   height: 100%;
   flex: 0 0 300px;
@@ -617,5 +706,4 @@ watch(() => toolStore.tool, async (newTool) => {
   border-top: 1px solid var(--dark-4);
   background-color: white;
 }
-
 </style>
