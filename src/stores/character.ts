@@ -311,7 +311,13 @@ export const useCharacterStore = defineStore('character', () => {
    * 选择组件
    */
   function selectComponent(uuid: string, tree: string[] = []) {
-    selectedComponentUUID.value = uuid
+    console.log('selectComponent', uuid, tree)
+
+    // 统一通过 setSelection 来更新选中状态（包括多选、高亮等）
+    // 这样无论是组件列表还是画布上的选择，逻辑保持一致
+    setSelection(uuid)
+
+    // 同步 selectedComponentsTree（用于字形嵌套选择）
     selectedComponentsTree.value = tree
     
     // 如果选中的是字形组件，自动勾选 checkJoints 和 checkRefLines
@@ -499,6 +505,30 @@ export const useCharacterStore = defineStore('character', () => {
     clipBoard.value = Array.isArray(components) ? R.clone(components) : [R.clone(components)]
   }
 
+  /**
+   * 添加组件到当前编辑的字符文件
+   */
+  function addComponent(component: IComponent) {
+    if (!editingCharacter.value) return false
+
+    const characterFile = editingCharacter.value
+    characterFile.components.push(component)
+
+    // 添加到 orderedList
+    if (!characterFile.orderedList) {
+      characterFile.orderedList = []
+    }
+    characterFile.orderedList.push({
+      type: 'component',
+      uuid: component.uuid,
+    })
+
+    // 选中新添加的组件
+    selectComponent(component.uuid)
+
+    return true
+  }
+
   return {
     // State
     editingCharacterUUID,
@@ -532,5 +562,6 @@ export const useCharacterStore = defineStore('character', () => {
     setOrderedList,
     setSelection,
     setClipBoard,
+    addComponent,
   }
 })

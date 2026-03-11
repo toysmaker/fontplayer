@@ -7,6 +7,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, reactive } from 'vue'
 import type { ICustomGlyph, IGlyphComponent } from '@/core/types'
 import { useProjectStore } from './project'
+import { useEditorStore } from './editor'
 import { instanceManager } from '@/core/instance'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { selectedItemByUUID } from '@/core/utils/component'
@@ -15,6 +16,7 @@ import * as R from 'ramda'
 
 export const useGlyphStore = defineStore('glyph', () => {
   const projectStore = useProjectStore()
+  const editorStore = useEditorStore()
   
   // 状态
   const editingGlyphUUID = ref<string>('')
@@ -245,8 +247,17 @@ export const useGlyphStore = defineStore('glyph', () => {
    * 选择组件
    */
   function selectComponent(uuid: string, tree: string[] = []) {
-    selectedComponentUUID.value = uuid
+    // 统一通过 setSelection 来更新选中状态（包括多选、高亮等）
+    setSelection(uuid)
+    // 同步记录选中路径（用于嵌套字形组件）
     selectedComponentsTree.value = tree
+
+    // 如果选中的是字形组件，在字形编辑界面同样需要显示骨架与参考线
+    const component = selectedComponent.value
+    if (component && component.type === 'glyph') {
+      editorStore.checkJoints = true
+      editorStore.checkRefLines = true
+    }
   }
 
   /**
@@ -427,6 +438,30 @@ export const useGlyphStore = defineStore('glyph', () => {
   }
 
   /**
+   * 添加组件到当前编辑的字形
+   */
+  function addComponent(component: IGlyphComponent) {
+    if (!editingGlyph.value) return false
+
+    const glyph = editingGlyph.value
+    glyph.components.push(component)
+
+    // 添加到 orderedList
+    if (!glyph.orderedList) {
+      glyph.orderedList = []
+    }
+    glyph.orderedList.push({
+      type: 'component',
+      uuid: component.uuid,
+    })
+
+    // 选中新添加的组件
+    selectComponent(component.uuid)
+
+    return true
+  }
+
+  /**
    * 更新字形参数
    */
   function updateGlyphParameter(glyphUUID: string, paramName: string, value: any) {
@@ -488,5 +523,6 @@ export const useGlyphStore = defineStore('glyph', () => {
     setOrderedList,
     setSelection,
     setClipBoard,
+    addComponent,
   }
 })

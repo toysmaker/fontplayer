@@ -71,10 +71,15 @@ import { useEditorStore } from '@/stores/editor'
 import { fontRenderStyle } from '@/core/script/globals'
 import { bottomBarToolManager } from '@/features/bottomBar/BottomBarToolManager'
 import { useBottomBarToolStore } from '@/stores/bottomBarTool'
+import { toolManager, SelectTool, PenTool, PolygonTool, EllipseTool, RectangleTool } from '@/features/tools'
+import { getCoord } from '@/features/tools/utils/coord'
+import { useToolStore } from '@/stores/tool'
+import type { ToolType } from '@/features/tools'
 
 const glyphStore = useGlyphStore()
 const editorStore = useEditorStore()
 const bottomBarToolStore = useBottomBarToolStore()
+const toolStore = useToolStore()
 const canvasRef = ref<HTMLCanvasElement>()
 let dragger: BaseGlyphDragger | null = null
 
@@ -129,6 +134,14 @@ const renderCanvas = async () => {
       }
     }
   }
+  
+  // 渲染当前工具的额外内容（如选择框、工具预览等）
+  if (canvasRef.value) {
+    const toolRenderFn = toolManager.getCurrentToolRenderFunction()
+    if (toolRenderFn) {
+      toolRenderFn(canvasRef.value)
+    }
+  }
 }
 
 // 初始化拖拽器
@@ -181,6 +194,57 @@ const cleanupDragger = () => {
   }
 }
 
+// 初始化工具系统
+const initTools = async () => {
+  if (!canvasRef.value) return
+  
+  const toolConfig = {
+    canvas: canvasRef.value,
+    mode: 'glyph' as const,
+    getCoord: (coord: number) => {
+      // 动态获取当前的 zoom 值
+      const currentZoom = editingGlyph.value?.view?.zoom || 100
+      return getCoord(coord, 'glyph', currentZoom)
+    },
+    onRender: () => {
+      renderCanvas()
+    },
+  }
+  
+  // 创建并注册所有工具
+  const selectTool = SelectTool.getInstance(canvasRef.value, toolConfig)
+  await selectTool.init()
+  toolManager.registerTool('select', selectTool)
+  
+  const penTool = PenTool.getInstance(canvasRef.value, toolConfig)
+  await penTool.init()
+  toolManager.registerTool('pen', penTool)
+  
+  const polygonTool = PolygonTool.getInstance(canvasRef.value, toolConfig)
+  await polygonTool.init()
+  toolManager.registerTool('polygon', polygonTool)
+  
+  const ellipseTool = EllipseTool.getInstance(canvasRef.value, toolConfig)
+  await ellipseTool.init()
+  toolManager.registerTool('ellipse', ellipseTool)
+  
+  const rectangleTool = RectangleTool.getInstance(canvasRef.value, toolConfig)
+  await rectangleTool.init()
+  toolManager.registerTool('rectangle', rectangleTool)
+  
+  // 默认激活选择工具
+  if (toolStore.tool === '' || toolStore.tool === 'select') {
+    await toolManager.switchTool('select')
+  } else {
+    await toolManager.switchTool(toolStore.tool as ToolType)
+  }
+}
+
+// 清理工具系统
+const cleanupTools = () => {
+  toolManager.cleanupAll()
+}
+
 onMounted(async () => {
   // 如果还没有设置编辑字形，从 UUID 设置
   if (glyphStore.editingGlyphUUID && !glyphStore.editingGlyph) {
@@ -207,7 +271,14 @@ onMounted(async () => {
   // 初始渲染
   await renderCanvas()
   
-  initDragger()
+  // 初始化工具系统（必须在 canvas 准备好之后）
+  await initTools()
+  
+  // 初始化 dragger（只有在选择工具激活时才需要）
+  const currentTool = toolManager.getCurrentToolType()
+  if (currentTool === 'select') {
+    initDragger()
+  }
 
   // 注册 canvas 到 BottomBarToolManager（如果 coordsViewer 已激活）
   if (canvasRef.value && bottomBarToolStore.currentTool === 'coordsViewer') {
@@ -217,6 +288,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   cleanupDragger()
+  cleanupTools()
   // 清理 BottomBarToolManager
   bottomBarToolManager.cleanup()
   // 退出编辑时，将编辑字形的数据同步回列表
@@ -243,7 +315,11 @@ watch(() => glyphStore.editingGlyph, async () => {
   // 重新渲染画布
   await renderCanvas()
   
-  initDragger()
+  // 只有在选择工具激活时才初始化 dragger（与 selectedComponent watch 逻辑保持一致）
+  const currentTool = toolManager.getCurrentToolType()
+  if (currentTool === 'select') {
+    initDragger()
+  }
 
   // 如果 coordsViewer 已激活，重新注册 canvas
   if (canvasRef.value && bottomBarToolStore.currentTool === 'coordsViewer') {
@@ -283,11 +359,16 @@ watch(() => glyphStore.orderedListWithItemsForCurrentGlyph, async () => {
 }, { deep: true })
 
 // 监听选中组件变化
-watch(() => glyphStore.selectedComponent, () => {
-  cleanupDragger()
-  nextTick(() => {
+watch(() => glyphStore.selectedComponent, async () => {
+  // 只有在选择工具激活时才初始化 dragger
+  const currentTool = toolManager.getCurrentToolType()
+  if (currentTool === 'select') {
+    cleanupDragger()
+    await nextTick()
     initDragger()
-  })
+    // 选中组件变化后重新渲染画布，确保选择框/控件同步更新
+    await renderCanvas()
+  }
 })
 
 // 监听关键点和辅助线显示状态变化，重新渲染
@@ -300,7 +381,29 @@ watch(() => fontRenderStyle.value, async () => {
   await renderCanvas()
 })
 
-// 注意：鼠标事件由 dragger 的 activate() 方法自动处理
+// 监听工具切换
+watch(() => toolStore.tool, async (newTool) => {
+  if (!canvasRef.value) return
+
+  if (newTool) {
+    await toolManager.switchTool(newTool as ToolType)
+    await renderCanvas()
+
+    // 选择工具激活时，glyphDragger 和 SelectTool 可以同时存在
+    // glyphDragger 处理字形组件的骨架拖拽，SelectTool 处理其他组件的选择和变换
+    if (newTool === 'select' && glyphStore.selectedComponent) {
+      initDragger()
+    } else if (newTool !== 'select') {
+      // 切换到非选择工具时，停用 dragger（其他工具不需要 dragger）
+      cleanupDragger()
+    }
+  } else {
+    // 如果没有工具，清理 dragger
+    cleanupDragger()
+  }
+})
+
+// 注意：鼠标事件由 dragger 和工具系统的 activate() 方法自动处理
 // 不需要在模板中手动绑定 @mousedown, @mousemove, @mouseup
 </script>
 

@@ -422,6 +422,7 @@ export function renderCanvas(
       ctx.translate(_x + _w / 2, _y + _h / 2)
       ctx.rotate(rotation * Math.PI / 180)
       ctx.translate(-(_x + _w / 2), -(_y + _h / 2))
+      ctx.moveTo(centerX + radiusX, centerY)
       ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
       ctx.closePath()
       

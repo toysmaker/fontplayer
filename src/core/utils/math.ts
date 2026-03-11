@@ -180,3 +180,86 @@ export function translate(
     y: p.y + offset.y,
   }
 }
+
+/**
+ * 计算两点之间的距离
+ */
+export function distance(x1: number, y1: number, x2: number, y2: number): number {
+  return Math.sqrt((y2 - y1) * (y2 - y1) + (x2 - x1) * (x2 - x1))
+}
+
+/**
+ * 判断点是否在组件边界框内
+ */
+export function inComponentBound(
+  point: { x: number; y: number },
+  component: { x: number; y: number; w: number; h: number; rotation: number },
+  d: number = 0
+): boolean {
+  const { x, y, w, h, rotation } = component
+  const { x: _x, y: _y } = rotatePoint(
+    { x: point.x, y: point.y },
+    { x: component.x + component.w / 2, y: component.y + component.h / 2 },
+    -rotation
+  )
+  if (_x >= x - d && _x <= x + w + d && _y >= y - d && _y <= y + h + d) {
+    return true
+  }
+  return false
+}
+
+/**
+ * 判断点是否接近另一个点
+ */
+export function isNearPoint(x1: number, y1: number, x2: number, y2: number, d: number): boolean {
+  return distance(x1, y1, x2, y2) <= d
+}
+
+/**
+ * 判断点是否在左上角旋转控制区域
+ */
+export function leftTop(x1: number, y1: number, x2: number, y2: number, d: number): boolean {
+  if (distance(x1, y1, x2, y2) > 4 * d) return false
+  if (distance(x1, y1, x2, y2) < 2 * d) return false
+  if (x1 < x2 && y1 < y2) return true
+  return false
+}
+
+/**
+ * 判断点是否在左下角旋转控制区域
+ */
+export function leftBottom(x1: number, y1: number, x2: number, y2: number, d: number): boolean {
+  if (distance(x1, y1, x2, y2) > 4 * d) return false
+  if (distance(x1, y1, x2, y2) < 2 * d) return false
+  if (x1 < x2 && y1 > y2) return true
+  return false
+}
+
+/**
+ * 判断点是否在右上角旋转控制区域
+ */
+export function rightTop(x1: number, y1: number, x2: number, y2: number, d: number): boolean {
+  if (distance(x1, y1, x2, y2) > 4 * d) return false
+  if (distance(x1, y1, x2, y2) < 2 * d) return false
+  if (x1 > x2 && y1 < y2) return true
+  return false
+}
+
+/**
+ * 判断点是否在右下角旋转控制区域
+ */
+export function rightBottom(x1: number, y1: number, x2: number, y2: number, d: number): boolean {
+  if (distance(x1, y1, x2, y2) > 4 * d) return false
+  if (distance(x1, y1, x2, y2) < 2 * d) return false
+  if (x1 > x2 && y1 > y2) return true
+  return false
+}
+
+/**
+ * 计算两个向量之间的角度差
+ */
+export function angleBetween(vec1: { x: number; y: number }, vec2: { x: number; y: number }): number {
+  const angle1 = Math.atan2(vec1.y, vec1.x)
+  const angle2 = Math.atan2(vec2.y, vec2.x)
+  return Math.round((angle1 - angle2) * 180 / Math.PI)
+}

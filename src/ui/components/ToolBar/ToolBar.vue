@@ -196,11 +196,13 @@ const toolStore = useToolStore()
 const editStatus = computed(() => editorStore.editStatus)
 const tool = computed(() => toolStore.tool)
 
-// 切换工具（事件处理先留空）
+// 切换工具
 const _switchTool = (toolName: string) => {
-  // TODO: 实现工具切换逻辑
-  console.log('[ToolBar] switchTool:', toolName)
+  if (import.meta.env.DEV) {
+    console.log('[ToolBar] switchTool:', toolName)
+  }
   toolStore.setTool(toolName)
+  // 工具切换逻辑在 Editor 中通过 watch toolStore.tool 实现
 }
 const switchTool = createDebouncedHandler(_switchTool, 'ToolBar.switchTool', (args) => args[0])
 

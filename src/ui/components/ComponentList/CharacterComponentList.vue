@@ -186,6 +186,7 @@
 import { ref, computed, reactive, watch } from 'vue'
 import { NScrollbar, NPopover, NSelect, NIcon } from 'naive-ui'
 import { useCharacterStore } from '@/stores/character'
+import { useToolStore } from '@/stores/tool'
 import { useEditorStore } from '@/stores/editor'
 import { useI18n } from 'vue-i18n'
 import type { IComponent } from '@/core/types'
@@ -196,6 +197,7 @@ import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t } = useI18n()
 const characterStore = useCharacterStore()
+const toolStore = useToolStore()
 const editorStore = useEditorStore()
 
 // 开发模式标志
@@ -315,6 +317,11 @@ const _selectComponent = (e: MouseEvent, uuid: string) => {
   if (component && component.type === 'glyph') {
     // TODO: 触发字形拖拽工具
     // setGlyphDraggerTool('glyphDragger')
+  }
+
+  // 从列表选择组件时，自动切换到选择工具
+  if (toolStore.tool !== 'select') {
+    toolStore.setTool('select')
   }
 }
 const selectComponent = createDebouncedHandler(_selectComponent, 'CharacterComponentList.selectComponent', (args) => args[1])
