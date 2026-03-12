@@ -7,6 +7,7 @@ import { BaseTool } from '../base/BaseTool'
 import type { IToolConfig } from '../base/types'
 import { useCharacterStore } from '@/stores/character'
 import { useGlyphStore } from '@/stores/glyph'
+import { useProjectStore } from '@/stores/project'
 import { distance, rotatePoint, transformPoints, getBound } from '@/core/utils/math'
 import { mapCanvasX, mapCanvasY, mapCanvasWidth, mapCanvasHeight, mapCanvasCoords } from '@/utils/canvas'
 import { getCoord } from '../utils/coord'
@@ -14,6 +15,8 @@ import type { IComponent, IPenComponent } from '@/core/types'
 import type { IPoint } from '@/core/script/types'
 import * as R from 'ramda'
 import { listToMap } from '@/core/utils/data'
+import { formatPoints, genPenContour } from '@/core/utils/contour'
+import { getStrokeWidth } from '@/utils/canvas-utils'
 
 /**
  * 编辑模式下的固定边界框（按组件UUID索引）
@@ -33,6 +36,13 @@ export class PenSelectTool extends BaseTool {
   private lastY: number = -1
   private mousedown: boolean = false
   private initialOriginBounds: { x: number; y: number; w: number; h: number } | null = null
+
+  /**
+   * 检查是否正在拖拽（用于防止在拖拽过程中被停用）
+   */
+  isDragging(): boolean {
+    return this.mousedown && !!this.selectPenPoint
+  }
 
   // 事件处理器引用
   private mouseDownHandler: ((e: MouseEvent) => void) | null = null
@@ -80,6 +90,14 @@ export class PenSelectTool extends BaseTool {
     this.lastX = -1
     this.lastY = -1
     this.mousedown = false
+    this.initialOriginBounds = null
+  }
+
+  /**
+   * 当组件切换时，重置初始边界框
+   * 这样每次进入编辑模式时都会重新计算初始边界框
+   */
+  resetInitialBounds(): void {
     this.initialOriginBounds = null
   }
 
@@ -149,7 +167,7 @@ export class PenSelectTool extends BaseTool {
     const glyphStore = useGlyphStore()
     const isGlyph = this.config.mode === 'glyph'
     
-    const selectedComponent = isGlyph ? glyphStore.selectedComponent : characterStore.selectedComponent
+    const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
     if (!selectedComponent || !selectedComponent.visible || selectedComponent.type !== 'pen') {
       this.mousedown = false
       return
@@ -161,18 +179,24 @@ export class PenSelectTool extends BaseTool {
       return
     }
 
-    const orderedList = isGlyph 
-      ? glyphStore.orderedListWithItemsForCurrentGlyph 
-      : characterStore.orderedListWithItemsForCurrentCharacterFile
+    // 获取正确的鼠标坐标（处理事件可能不在canvas上触发的情况）
+    let offsetX = e.offsetX
+    let offsetY = e.offsetY
+    const target = e.target as HTMLElement
+    if (target !== this.canvas && !this.canvas.contains(target)) {
+      const rect = this.canvas.getBoundingClientRect()
+      offsetX = e.clientX - rect.left
+      offsetY = e.clientY - rect.top
+    }
 
     const { x, y, w, h, rotation } = selectedComponent
     const { x: _x, y: _y } = rotatePoint(
-      { x: this.getCoord(e.offsetX), y: this.getCoord(e.offsetY) },
+      { x: this.getCoord(offsetX), y: this.getCoord(offsetY) },
       { x: x + w / 2, y: y + h / 2 },
       -rotation
     )
 
-    const d = 5
+    const d = getStrokeWidth() * 2//5
     const _points = this.transformPenPoints(selectedComponent, false)
 
     // 检查是否点击在锚点或控制点上
@@ -185,6 +209,7 @@ export class PenSelectTool extends BaseTool {
           this.lastX = _x
           this.lastY = _y
           this.mousedown = true
+          this.triggerRender() // 选中锚点后触发重新渲染
           return
         } else if (this.selectAnchor) {
           // 选择控制点
@@ -201,6 +226,7 @@ export class PenSelectTool extends BaseTool {
             this.lastX = _x
             this.lastY = _y
             this.mousedown = true
+            this.triggerRender() // 选中控制点后触发重新渲染
             return
           } else if (i === 1 && _index === _points.length - 1) {
             // 最后一个锚点（和第一个锚点重合），第二个控制点为第一个锚点的第一个控制点
@@ -208,6 +234,7 @@ export class PenSelectTool extends BaseTool {
             this.lastX = _x
             this.lastY = _y
             this.mousedown = true
+            this.triggerRender() // 选中控制点后触发重新渲染
             return
           }
         }
@@ -219,6 +246,7 @@ export class PenSelectTool extends BaseTool {
     this.selectAnchor = ''
     this.hoverPenPoint = ''
     this.mousedown = false
+    this.triggerRender() // 清除选择后触发重新渲染
   }
 
   /**
@@ -229,15 +257,25 @@ export class PenSelectTool extends BaseTool {
     const glyphStore = useGlyphStore()
     const isGlyph = this.config.mode === 'glyph'
     
-    const selectedComponent = isGlyph ? glyphStore.selectedComponent : characterStore.selectedComponent
+    const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
     if (!selectedComponent || !selectedComponent.visible || selectedComponent.type !== 'pen') return
 
     const penComponent = selectedComponent.value as unknown as IPenComponent
     if (!penComponent.editMode) return
 
+    // 获取正确的鼠标坐标（处理事件可能不在canvas上触发的情况）
+    let offsetX = e.offsetX
+    let offsetY = e.offsetY
+    const target = e.target as HTMLElement
+    if (target !== this.canvas && !this.canvas.contains(target)) {
+      const rect = this.canvas.getBoundingClientRect()
+      offsetX = e.clientX - rect.left
+      offsetY = e.clientY - rect.top
+    }
+
     const { x, y, w, h, rotation, flipX, flipY, uuid } = selectedComponent
     const { x: _x, y: _y } = rotatePoint(
-      { x: this.getCoord(e.offsetX), y: this.getCoord(e.offsetY) },
+      { x: this.getCoord(offsetX), y: this.getCoord(offsetY) },
       { x: x + w / 2, y: y + h / 2 },
       -rotation
     )
@@ -305,7 +343,7 @@ export class PenSelectTool extends BaseTool {
         }
       })
 
-      const modifyComponent = isGlyph ? glyphStore.modifyComponent : characterStore.modifyComponent
+      const modifyComponent = isGlyph ? (glyphStore as any).modifyComponent : (characterStore as any).modifyComponent
       modifyComponent(uuid, {
         value: {
           points: _points
@@ -318,19 +356,36 @@ export class PenSelectTool extends BaseTool {
     if (!this.mousedown) {
       // hover检测
       const _points = this.transformPenPoints(selectedComponent, false)
-      _points.forEach((point: IPoint, index) => {
-        if (distance(_x, _y, point.x, point.y) <= 5) {
+      let foundHover = false
+      const oldHoverPenPoint = this.hoverPenPoint
+      
+      // 先清除hover状态
+      this.hoverPenPoint = ''
+      const d = getStrokeWidth() * 2//5
+
+      // 遍历所有点，找到距离最近的点
+      for (let i = 0; i < _points.length; i++) {
+        const point = _points[i]
+        if (distance(_x, _y, point.x, point.y) <= d) {
           const originalPoint = points.find(p => p.uuid === point.uuid)
           if (originalPoint) {
-            if (originalPoint.type === 'control' && index === points.length - 1 && points.length >= 2 && originalPoint.x === points[1].x && originalPoint.y === points[1].y) {
-              // 如果未闭合路径，且最后一个控制点和第一个控制点重合，改变第一个控制点
-              return
+            if (originalPoint.type === 'control' && i === points.length - 1 && points.length >= 2 && originalPoint.x === points[1].x && originalPoint.y === points[1].y) {
+              // 如果未闭合路径，且最后一个控制点和第一个控制点重合，跳过
+              continue
             } else {
               this.hoverPenPoint = originalPoint.uuid
+              foundHover = true
+              // 找到第一个匹配的点就停止（距离检测已经按顺序进行）
+              break
             }
           }
         }
-      })
+      }
+      
+      // 如果hover状态发生变化，触发重新渲染
+      if (oldHoverPenPoint !== this.hoverPenPoint) {
+        this.triggerRender()
+      }
     }
 
     this.lastX = _x
@@ -345,7 +400,7 @@ export class PenSelectTool extends BaseTool {
     const glyphStore = useGlyphStore()
     const isGlyph = this.config.mode === 'glyph'
     
-    const selectedComponent = isGlyph ? glyphStore.selectedComponent : characterStore.selectedComponent
+    const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
     if (!selectedComponent || !selectedComponent.visible) return
 
     this.modifyComponentValue(selectedComponent, isGlyph)
@@ -361,14 +416,14 @@ export class PenSelectTool extends BaseTool {
       const glyphStore = useGlyphStore()
       const isGlyph = this.config.mode === 'glyph'
       
-      const selectedComponent = isGlyph ? glyphStore.selectedComponent : characterStore.selectedComponent
+      const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
       if (!selectedComponent || !selectedComponent.visible) return
 
       this.modifyComponentValue(selectedComponent, isGlyph)
       if (isGlyph) {
-        glyphStore.clearSelection()
+        (glyphStore as any).clearSelection()
       } else {
-        characterStore.clearSelection()
+        (characterStore as any).clearSelection()
       }
     }
   }
@@ -377,9 +432,61 @@ export class PenSelectTool extends BaseTool {
    * 修改组件值（更新contour和preview）
    */
   private modifyComponentValue(component: IComponent, isGlyph: boolean): void {
-    // TODO: 实现组件值的更新逻辑
-    // 参考原工程 penSelect.ts 的 modifyComponentValue 函数
-    // 需要根据组件类型生成contour和preview
+    if (!component || component.type !== 'pen') return
+    
+    const projectStore = useProjectStore()
+    const characterStore = useCharacterStore()
+    const glyphStore = useGlyphStore()
+    const modifyComponent = isGlyph ? (glyphStore as any).modifyComponent : (characterStore as any).modifyComponent
+    
+    const { x, y, w, h, rotation, flipX, flipY, uuid } = component
+    const penComponent = component.value as unknown as IPenComponent
+    const points = penComponent.points
+    const editMode = penComponent.editMode
+    
+    // 获取字体设置
+    let options = {
+      unitsPerEm: 1000,
+      descender: -200,
+      advanceWidth: 1000,
+    }
+    
+    if (this.config.mode === 'character' && projectStore.selectedFile) {
+      options.unitsPerEm = projectStore.selectedFile.fontSettings?.unitsPerEm || 1000
+      options.descender = projectStore.selectedFile.fontSettings?.descender || -200
+      options.advanceWidth = projectStore.selectedFile.fontSettings?.unitsPerEm || 1000
+    }
+    
+    // 在编辑模式下，使用固定的初始边界框；否则使用当前点的边界框
+    const fixedBounds = editMode ? editModeFixedBounds.get(uuid) : undefined
+    
+    // 转换点（应用组件的变换）
+    // 注意：在编辑模式下，points 是相对于 initialOriginBounds 的，所以需要使用 fixedBounds
+    const transformed_points = transformPoints(points, {
+      x, y, w, h, rotation, flipX, flipY,
+    }, fixedBounds)
+    
+    // 格式化点并生成轮廓
+    const contour_points = formatPoints(transformed_points, options, 1)
+    const contour = genPenContour(contour_points)
+    
+    // 生成预览轮廓
+    const scale = 100 / (options.unitsPerEm as number)
+    const preview_points = transformed_points.map((point) => {
+      return Object.assign({}, point, {
+        x: point.x * scale,
+        y: point.y * scale,
+      })
+    })
+    const preview_contour = genPenContour(preview_points, true)
+    
+    // 更新组件的 contour 和 preview
+    modifyComponent(uuid, {
+      value: {
+        contour: contour,
+        preview: preview_contour,
+      }
+    } as Partial<IComponent>)
   }
 
   /**
@@ -440,7 +547,7 @@ export class PenSelectTool extends BaseTool {
     const glyphStore = useGlyphStore()
     const isGlyph = this.config.mode === 'glyph'
     
-    const selectedComponent = isGlyph ? glyphStore.selectedComponent : characterStore.selectedComponent
+    const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
     if (!selectedComponent || !selectedComponent.visible || selectedComponent.type !== 'pen') return
 
     const penComponent = selectedComponent.value as unknown as IPenComponent
@@ -454,6 +561,28 @@ export class PenSelectTool extends BaseTool {
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+
+    // 使用全局线宽
+    const strokeWidth = getStrokeWidth()
+    ctx.lineWidth = strokeWidth
+
+    ctx.save()
+
+    // 应用旋转（保持与组件本身渲染一致）
+    if (rotation !== 0) {
+      ctx.translate(_x + _w / 2, _y + _h / 2)
+      ctx.rotate(rotation * Math.PI / 180)
+      ctx.translate(-(_x + _w / 2), -(_y + _h / 2))
+    }
+
+    // 渲染包围框（与 SelectTool 样式完全一致）
+    const d = strokeWidth * 2 // 顶点控件内部宽高为 strokeWidth 的两倍
+    ctx.strokeStyle = '#79bbff'
+    ctx.strokeRect(_x, _y, _w, _h)
+    ctx.strokeRect(_x - d, _y - d, d * 2, d * 2)
+    ctx.strokeRect(_x + _w - d, _y - d, d * 2, d * 2)
+    ctx.strokeRect(_x - d, _y + _h - d, d * 2, d * 2)
+    ctx.strokeRect(_x + _w - d, _y + _h - d, d * 2, d * 2)
 
     const _points = this.transformPenPoints(selectedComponent, true)
     const _map = listToMap(_points, 'uuid')
@@ -471,17 +600,8 @@ export class PenSelectTool extends BaseTool {
       return { index: -1, pointType: '' }
     })()
 
-    ctx.save()
+    // 渲染锚点和控制点
     ctx.strokeStyle = '#153063'
-
-    // 应用旋转
-    if (rotation !== 0) {
-      ctx.translate(_x + _w / 2, _y + _h / 2)
-      ctx.rotate(rotation * Math.PI / 180)
-      ctx.translate(-(_x + _w / 2), -(_y + _h / 2))
-    }
-
-    const d = 10
 
     if (!this.selectAnchor) {
       // 显示所有锚点

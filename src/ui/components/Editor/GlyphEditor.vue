@@ -96,8 +96,8 @@ const canvasRef = ref<HTMLCanvasElement>()
 let dragger: BaseGlyphDragger | null = null
 let selectControlCheckInterval: number | null = null
 
-const selectedComponent = computed(() => glyphStore.selectedComponent)
-const editingGlyph = computed(() => glyphStore.editingGlyph)
+const selectedComponent = computed(() => (glyphStore as any).selectedComponent)
+const editingGlyph = computed(() => (glyphStore as any).editingGlyph)
 
 // 当前工具和选择控制状态（用于鼠标样式）
 const currentTool = ref<ToolType | ''>('')
@@ -137,7 +137,7 @@ const renderCanvas = async () => {
   // 渲染关键点和辅助线（在主要渲染之后）
   // 如果当前选中的组件被设置为不可见（visible === false），则不渲染其关键点和辅助线
   if (editorStore.checkJoints || editorStore.checkRefLines) {
-    const selectedComponent = glyphStore.selectedComponent
+    const selectedComponent = (glyphStore as any).selectedComponent
     if (
       selectedComponent &&
       selectedComponent.type === 'glyph' &&
@@ -163,13 +163,13 @@ const renderCanvas = async () => {
 
 // 初始化拖拽器
 const initDragger = () => {
-  if (!canvasRef.value || !glyphStore.editingGlyph) {
+  if (!canvasRef.value || !(glyphStore as any).editingGlyph) {
     cleanupDragger()
     return
   }
 
-  const glyph = glyphStore.editingGlyph
-  const component = glyphStore.selectedComponent
+  const glyph = (glyphStore as any).editingGlyph
+  const component = (glyphStore as any).selectedComponent
   
   // 如果没有选中组件，不初始化拖拽器
   if (!component) {
@@ -185,13 +185,13 @@ const initDragger = () => {
         component,
         componentUUID: component.uuid, // 组件的 UUID，用作 instanceKey
         glyph,
-        selectedComponentsTree: glyphStore.selectedComponentsTree,
+        selectedComponentsTree: (glyphStore as any).selectedComponentsTree,
       },
       onRender: () => {
         // TODO: 触发渲染
       },
       onUpdate: (comp) => {
-        glyphStore.updateComponent(comp.uuid, comp)
+        ;(glyphStore as any).updateComponent(comp.uuid, comp)
       },
       glyphStore: glyphStore, // 传递store实例
     })
@@ -264,8 +264,8 @@ const cleanupTools = () => {
 
 onMounted(async () => {
   // 如果还没有设置编辑字形，从 UUID 设置
-  if (glyphStore.editingGlyphUUID && !glyphStore.editingGlyph) {
-    await glyphStore.setEditGlyphByUUID(glyphStore.editingGlyphUUID, glyphStore.glyphCategory)
+  if ((glyphStore as any).editingGlyphUUID && !(glyphStore as any).editingGlyph) {
+    await (glyphStore as any).setEditGlyphByUUID((glyphStore as any).editingGlyphUUID, (glyphStore as any).glyphCategory)
   }
   
   // 等待 nextTick 确保 editingGlyph 已设置
@@ -317,14 +317,14 @@ onUnmounted(() => {
   // 清理 BottomBarToolManager
   bottomBarToolManager.cleanup()
   // 退出编辑时，将编辑字形的数据同步回列表
-  if (glyphStore.editingGlyphUUID) {
-    glyphStore.updateGlyphListFromEditFile()
-    glyphStore.resetEditGlyph()
+  if ((glyphStore as any).editingGlyphUUID) {
+    ;(glyphStore as any).updateGlyphListFromEditFile()
+    ;(glyphStore as any).resetEditGlyph()
   }
 })
 
 // 监听编辑字形变化
-watch(() => glyphStore.editingGlyph, async () => {
+watch(() => (glyphStore as any).editingGlyph, async () => {
   cleanupDragger()
   await nextTick()
   
@@ -379,19 +379,47 @@ watch(() => bottomBarToolStore.currentTool, (newTool) => {
 })
 
 // 监听组件列表变化，重新渲染
-watch(() => glyphStore.orderedListWithItemsForCurrentGlyph, async () => {
+watch(() => (glyphStore as any).orderedListWithItemsForCurrentGlyph, async () => {
   await renderCanvas()
 }, { deep: true })
 
 // 监听选中组件变化
-watch(() => glyphStore.selectedComponent, async () => {
+watch(() => (glyphStore as any).selectedComponent, async () => {
   // 只有在选择工具激活时才初始化 dragger
   const toolType = toolManager.getCurrentToolType()
   if (toolType === 'select') {
     cleanupDragger()
     await nextTick()
     initDragger()
+    
+    // 更新 penSelectTool 状态（如果选择工具激活）
+    const selectTool = toolManager.getTool('select')
+    if (selectTool && typeof (selectTool as any).updatePenSelectToolState === 'function') {
+      (selectTool as any).updatePenSelectToolState()
+    }
+    
     // 选中组件变化后重新渲染画布，确保选择框/控件同步更新
+    await renderCanvas()
+  }
+}, { deep: true })
+
+// 监听钢笔组件的 editMode 变化
+watch(() => {
+  const component = (glyphStore as any).selectedComponent
+  if (component && component.type === 'pen') {
+    const penComponent = component.value as any
+    return penComponent?.editMode
+  }
+  return false
+}, async () => {
+  const toolType = toolManager.getCurrentToolType()
+  if (toolType === 'select') {
+    // 更新 penSelectTool 状态
+    const selectTool = toolManager.getTool('select')
+    if (selectTool && typeof (selectTool as any).updatePenSelectToolState === 'function') {
+      (selectTool as any).updatePenSelectToolState()
+    }
+    // 重新渲染画布
     await renderCanvas()
   }
 })
@@ -419,7 +447,7 @@ watch(() => toolStore.tool, async (newTool) => {
 
     // 选择工具激活时，glyphDragger 和 SelectTool 可以同时存在
     // glyphDragger 处理字形组件的骨架拖拽，SelectTool 处理其他组件的选择和变换
-    if (newTool === 'select' && glyphStore.selectedComponent) {
+    if (newTool === 'select' && (glyphStore as any).selectedComponent) {
       initDragger()
     } else if (newTool !== 'select') {
       // 切换到非选择工具时，停用 dragger（其他工具不需要 dragger）

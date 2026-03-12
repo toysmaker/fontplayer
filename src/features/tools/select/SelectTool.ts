@@ -81,6 +81,48 @@ export class SelectTool extends BaseTool {
     this.isActive = true
     this.bindEvents()
     this.setRenderFunction(this.renderSelectEditor.bind(this))
+    // 检查当前选中的组件是否是钢笔组件且处于编辑模式
+    this.updatePenSelectToolState()
+  }
+
+  /**
+   * 更新 penSelectTool 的激活状态
+   * 根据当前选中的组件类型和编辑模式来决定是否激活 penSelectTool
+   */
+  private updatePenSelectToolState(): void {
+    if (!this.penSelectTool) return
+
+    const characterStore = useCharacterStore()
+    const glyphStore = useGlyphStore()
+    const isGlyph = this.config.mode === 'glyph'
+    
+    const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
+
+    // 检查是否是钢笔组件且处于编辑模式
+    if (selectedComponent && selectedComponent.type === 'pen') {
+      const penComponent = selectedComponent.value as unknown as IPenComponent
+      // 确保 editMode 属性存在（可能因为 modifyComponent 更新时被保留）
+      if (penComponent && penComponent.editMode === true) {
+        // 激活 penSelectTool
+        if (!this.penSelectTool.isToolActive()) {
+          // 重置初始边界框，确保每次进入编辑模式时重新计算
+          this.penSelectTool.resetInitialBounds()
+          this.penSelectTool.activate()
+        }
+        return
+      }
+    }
+
+    // 不是钢笔组件或不在编辑模式，停用 penSelectTool
+    // 但是，如果 penSelectTool 正在拖拽中，不要停用
+    if (this.penSelectTool.isToolActive()) {
+      // 检查是否正在拖拽
+      if (!this.penSelectTool.isDragging()) {
+        this.penSelectTool.deactivate()
+        // 重置初始边界框，为下次进入编辑模式做准备
+        this.penSelectTool.resetInitialBounds()
+      }
+    }
   }
 
   deactivate(): void {
@@ -309,20 +351,66 @@ export class SelectTool extends BaseTool {
     const glyphStore = useGlyphStore()
     const isGlyph = this.config.mode === 'glyph'
     
-    const selectedComponent = isGlyph ? glyphStore.selectedComponent : characterStore.selectedComponent
+    const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
     
-    // 检查是否是钢笔组件且处于编辑模式
-    if (selectedComponent && selectedComponent.type === 'pen') {
-      const penComponent = selectedComponent.value as unknown as IPenComponent
-      if (penComponent.editMode) {
-        // 切换到钢笔编辑模式
-        if (this.penSelectTool) {
-          this.penSelectTool.activate()
-          this.penSelectTool.onMouseDown(e)
-        }
+    // 先检查点击位置，判断点击的是哪个组件
+    const clickPoint = {
+      x: this.getCoord(e.offsetX),
+      y: this.getCoord(e.offsetY),
+    }
+    
+    // 查找点击的组件
+    const orderedList = isGlyph 
+      ? (glyphStore as any).orderedListWithItemsForCurrentGlyph 
+      : (characterStore as any).orderedListWithItemsForCurrentCharacterFile
+    
+    // 收集所有边界框包含点击点的组件
+    const candidateComponents: Array<{ component: IComponent; distance: number }> = []
+    
+    for (let i = orderedList.length - 1; i >= 0; i--) {
+      const component = orderedList[i]
+      if (!component || !component.type || component.type === 'group' || !component.visible) continue
+      
+      // 先检查边界框
+      let isInBounds = false
+      if (component.type === 'glyph') {
+        isInBounds =
+          this.glyphComponentContainsPoint(clickPoint, component, 20) ||
+          inComponentBound(clickPoint, component, 20)
+      } else {
+        isInBounds = inComponentBound(clickPoint, component, 20)
+      }
+      
+      if (isInBounds) {
+        const centerX = component.x + component.w / 2
+        const centerY = component.y + component.h / 2
+        const dist = Math.sqrt(
+          Math.pow(clickPoint.x - centerX, 2) + Math.pow(clickPoint.y - centerY, 2)
+        )
+        candidateComponents.push({ component, distance: dist })
+      }
+    }
+    
+    // 如果有候选组件，找到最近的
+    let clickedComponent: IComponent | null = null
+    if (candidateComponents.length > 0) {
+      candidateComponents.sort((a, b) => a.distance - b.distance)
+      clickedComponent = candidateComponents[0].component
+    }
+    
+    // 如果点击的是钢笔组件且处于编辑模式，且点击在当前选中的钢笔组件上
+    // 让 penSelectTool 处理点编辑，SelectTool 不处理选择切换
+    if (clickedComponent && clickedComponent.type === 'pen' && selectedComponent && selectedComponent.uuid === clickedComponent.uuid) {
+      const penComponent = clickedComponent.value as unknown as IPenComponent
+      if (penComponent.editMode && this.penSelectTool && this.penSelectTool.isToolActive()) {
+        // 点击在当前选中的钢笔组件上，让 penSelectTool 处理点编辑
+        // SelectTool 不处理选择切换（因为点击的就是当前选中的组件）
         return
       }
     }
+    
+    // 如果点击的是其他组件（不是当前选中的钢笔组件），正常处理选择切换
+    // 但需要先检查是否点击在当前选中组件的控制点上
 
     this.mousedown = true
     this.mousemove = false
@@ -363,6 +451,17 @@ export class SelectTool extends BaseTool {
       rightBottom(_x, _y, right_bottom.x, right_bottom.y, d)
 
     const clickedOnInnerArea = inComponentBound({ x: _x, y: _y }, selectedComponent)
+
+    // 如果点击的是钢笔组件且处于编辑模式，且点击在当前选中的钢笔组件内部（非控制点），让 penSelectTool 处理
+    if (selectedComponent.type === 'pen') {
+      const penComponent = selectedComponent.value as unknown as IPenComponent
+      if (penComponent.editMode && clickedOnInnerArea && !clickedOnScaleControl && !clickedOnRotateControl) {
+        // 点击在当前选中的钢笔组件内部（非控制点），让 penSelectTool 处理，不处理选择切换
+        this.mousedown = false
+        this.selectControl = 'null'
+        return
+      }
+    }
 
     if (!clickedOnScaleControl && !clickedOnRotateControl && !clickedOnInnerArea) {
       // 点击空白处，标记为需要处理点击选择，但不立即处理
@@ -409,7 +508,17 @@ export class SelectTool extends BaseTool {
     const glyphStore = useGlyphStore()
     const isGlyph = this.config.mode === 'glyph'
     
-    const selectedComponent = isGlyph ? glyphStore.selectedComponent : characterStore.selectedComponent
+    const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
+    
+    // 检查是否是钢笔组件且处于编辑模式
+    // 如果是，penSelectTool 会处理事件，SelectTool 直接返回，不处理
+    if (selectedComponent && selectedComponent.type === 'pen') {
+      const penComponent = selectedComponent.value as unknown as IPenComponent
+      if (penComponent.editMode && this.penSelectTool && this.penSelectTool.isToolActive()) {
+        // penSelectTool 已激活，让它处理事件，SelectTool 不处理
+        return
+      }
+    }
     
     if (!selectedComponent || !selectedComponent.visible) return
 
@@ -420,7 +529,7 @@ export class SelectTool extends BaseTool {
       -rotation
     )
 
-    const modifyComponent = isGlyph ? glyphStore.modifyComponent : characterStore.modifyComponent
+    const modifyComponent = isGlyph ? (glyphStore as any).modifyComponent : (characterStore as any).modifyComponent
 
     if (this.mousedown && this.selectControl !== 'null') {
       switch (this.selectControl) {
@@ -571,8 +680,8 @@ export class SelectTool extends BaseTool {
 
     // 查找点击的组件
     const orderedList = isGlyph 
-      ? glyphStore.orderedListWithItemsForCurrentGlyph 
-      : characterStore.orderedListWithItemsForCurrentCharacterFile
+      ? (glyphStore as any).orderedListWithItemsForCurrentGlyph 
+      : (characterStore as any).orderedListWithItemsForCurrentCharacterFile
 
     // 收集所有边界框包含点击点的组件
     const candidateComponents: Array<{ component: IComponent; distance: number }> = []
@@ -604,18 +713,30 @@ export class SelectTool extends BaseTool {
       }
     }
 
-    // 如果点击的是已选中的组件，优先保持选中（不切换）
-    // 这样当点击字形组件关键点时，glyphDragger 可以响应，而 SelectTool 不会切换选择
+    // 如果点击的是已选中的组件，需要特殊处理
+    // 对于字形组件：优先保持选中（不切换），让 glyphDragger 响应关键点拖拽
+    // 对于钢笔组件且处于编辑模式：让 penSelectTool 处理点编辑，不切换选择
+    // 对于其他组件：正常处理选择切换（虽然点击的是已选中的组件，但可能需要处理其他逻辑）
     const currentSelectedUUID = isGlyph
-      ? glyphStore.selectedComponentUUID
-      : characterStore.selectedComponentUUID
+      ? (glyphStore as any).selectedComponentUUID
+      : (characterStore as any).selectedComponentUUID
     if (currentSelectedUUID) {
       const currentSelected = candidateComponents.find(c => c.component.uuid === currentSelectedUUID)
       if (currentSelected) {
-        // 已选中组件在候选列表中，优先保持选中（即使有其他组件更近）
-        // 这样可以确保点击当前选中的字形组件时，glyphDragger 可以响应关键点拖拽
-        // 而 SelectTool 不会切换选择，避免冲突
-        return
+        // 如果是字形组件，优先保持选中（不切换），让 glyphDragger 响应关键点拖拽
+        if (currentSelected.component.type === 'glyph') {
+          return
+        }
+        // 如果是钢笔组件且处于编辑模式，让 penSelectTool 处理点编辑，不切换选择
+        if (currentSelected.component.type === 'pen') {
+          const penComponent = currentSelected.component.value as unknown as IPenComponent
+          if (penComponent.editMode && this.penSelectTool && this.penSelectTool.isToolActive()) {
+            // 点击在当前选中的钢笔组件上，让 penSelectTool 处理，不切换选择
+            return
+          }
+        }
+        // 对于其他组件，即使点击的是已选中的组件，也允许处理（比如可能需要重新触发某些逻辑）
+        // 但这里不返回，继续处理选择切换
       }
     }
 
@@ -626,9 +747,9 @@ export class SelectTool extends BaseTool {
       const closestComponent = candidateComponents[0].component
 
       if (isGlyph) {
-        glyphStore.selectComponent(closestComponent.uuid)
+        (glyphStore as any).selectComponent(closestComponent.uuid)
       } else {
-        characterStore.selectComponent(closestComponent.uuid)
+        (characterStore as any).selectComponent(closestComponent.uuid)
       }
       // 选择变更后触发重新渲染（包括控件框和 dragger）
       this.triggerRender()
@@ -637,9 +758,9 @@ export class SelectTool extends BaseTool {
 
     // 没有找到任何组件，清除选择
     if (isGlyph) {
-      glyphStore.clearSelection()
+      (glyphStore as any).clearSelection()
     } else {
-      characterStore.clearSelection()
+      (characterStore as any).clearSelection()
     }
     // 清除选择后也需要重新渲染，移除控件框
     this.triggerRender()
@@ -653,7 +774,21 @@ export class SelectTool extends BaseTool {
     const glyphStore = useGlyphStore()
     const isGlyph = this.config.mode === 'glyph'
     
-    const selectedComponent = isGlyph ? glyphStore.selectedComponent : characterStore.selectedComponent
+    const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
+
+    // 检查是否是钢笔组件且处于编辑模式，且 penSelectTool 正在拖拽
+    // 如果是，penSelectTool 会处理事件，SelectTool 直接返回，不处理
+    if (selectedComponent && selectedComponent.type === 'pen') {
+      const penComponent = selectedComponent.value as unknown as IPenComponent
+      if (penComponent.editMode && this.penSelectTool && this.penSelectTool.isToolActive()) {
+        // 如果 penSelectTool 正在拖拽，让它处理事件，SelectTool 不处理
+        if (this.penSelectTool.isDragging()) {
+          return
+        }
+        // 如果 penSelectTool 没有在拖拽，但点击的是当前选中的钢笔组件，也不处理选择切换
+        // 这个逻辑已经在 onMouseDown 和 handleClickSelection 中处理了，这里不需要再次检查
+      }
+    }
 
     // 如果点击的不是canvas，忽略这个事件
     const target = e.target as HTMLElement
@@ -689,7 +824,7 @@ export class SelectTool extends BaseTool {
       const glyphStore = useGlyphStore()
       const isGlyph = this.config.mode === 'glyph'
       
-      const selectedComponent = isGlyph ? glyphStore.selectedComponent : characterStore.selectedComponent
+      const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
       if (!selectedComponent || !selectedComponent.visible) return
 
       if (selectedComponent.type !== 'picture') {
@@ -697,9 +832,9 @@ export class SelectTool extends BaseTool {
       }
 
       if (isGlyph) {
-        glyphStore.clearSelection()
+        (glyphStore as any).clearSelection()
       } else {
-        characterStore.clearSelection()
+        (characterStore as any).clearSelection()
       }
     }
   }
@@ -721,16 +856,40 @@ export class SelectTool extends BaseTool {
     const glyphStore = useGlyphStore()
     const isGlyph = this.config.mode === 'glyph'
     
-    const selectedComponent = isGlyph ? glyphStore.selectedComponent : characterStore.selectedComponent
-    if (!selectedComponent || !selectedComponent.visible) return
+    const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
+    if (!selectedComponent || !selectedComponent.visible) {
+      // 没有选中组件时，停用 penSelectTool
+      if (this.penSelectTool && this.penSelectTool.isToolActive()) {
+        this.penSelectTool.deactivate()
+      }
+      return
+    }
 
     // 检查是否是钢笔组件且处于编辑模式
     if (selectedComponent.type === 'pen') {
       const penComponent = selectedComponent.value as unknown as IPenComponent
       if (penComponent.editMode && this.penSelectTool) {
+        // 确保 penSelectTool 已激活
+        if (!this.penSelectTool.isToolActive()) {
+          this.penSelectTool.activate()
+        }
         // 使用钢笔编辑工具渲染
         this.penSelectTool.render(canvas)
         return
+      } else {
+        // 钢笔组件但不在编辑模式，停用 penSelectTool（除非正在拖拽）
+        if (this.penSelectTool && this.penSelectTool.isToolActive()) {
+          if (!this.penSelectTool.isDragging()) {
+            this.penSelectTool.deactivate()
+          }
+        }
+      }
+    } else {
+      // 不是钢笔组件，停用 penSelectTool（除非正在拖拽）
+      if (this.penSelectTool && this.penSelectTool.isToolActive()) {
+        if (!this.penSelectTool.isDragging()) {
+          this.penSelectTool.deactivate()
+        }
       }
     }
 

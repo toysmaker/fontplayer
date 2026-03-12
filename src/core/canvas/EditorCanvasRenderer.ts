@@ -17,6 +17,7 @@ import { CustomGlyph } from '../instance/CustomGlyph'
 import { fontRenderStyle } from '../script/globals'
 import { orderedListWithItemsForGlyph } from '../utils/glyph'
 import { instanceManager } from '../instance/InstanceManager'
+import { editModeFixedBounds } from '@/features/tools/select/PenSelectTool'
 
 /**
  * 清空画布
@@ -302,6 +303,7 @@ export function renderCanvas(
         fillColor,
         points,
         closePath,
+        editMode,
       } = component.value as IPenComponent
       ctx.lineWidth = getStrokeWidth()
 
@@ -309,10 +311,11 @@ export function renderCanvas(
         ctx.beginPath()
       }
 
-      // TODO: 支持 editModeFixedBounds
+      // 在编辑模式下，使用固定的初始边界框；否则使用当前点的边界框
+      const fixedBounds = editMode ? editModeFixedBounds.get(component.uuid) : undefined
       let _points = transformPoints(points, {
         x, y, w, h, rotation: 0, flipX, flipY,
-      })
+      }, fixedBounds)
       _points = _points.map((point) => {
         return mapCanvasCoords({
           x: point.x * scale,

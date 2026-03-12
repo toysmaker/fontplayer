@@ -312,10 +312,10 @@ export class PenTool extends BaseTool {
       const isGlyph = this.config.mode === 'glyph'
       if (isGlyph) {
         const glyphStore = useGlyphStore()
-        glyphStore.addComponent(component)
+        ;(glyphStore as any).addComponent(component)
       } else {
         const characterStore = useCharacterStore()
-        characterStore.addComponent(component)
+        ;(characterStore as any).addComponent(component)
       }
       this.triggerRender()
     }
@@ -362,10 +362,10 @@ export class PenTool extends BaseTool {
       const isGlyph = this.config.mode === 'glyph'
       if (isGlyph) {
         const glyphStore = useGlyphStore()
-        glyphStore.addComponent(this.genPenComponent(R.clone(this.points), true))
+        ;(glyphStore as any).addComponent(this.genPenComponent(R.clone(this.points), true))
       } else {
         const characterStore = useCharacterStore()
-        characterStore.addComponent(this.genPenComponent(R.clone(this.points), true))
+        ;(characterStore as any).addComponent(this.genPenComponent(R.clone(this.points), true))
       }
       this.points = []
       this._lastControl = undefined

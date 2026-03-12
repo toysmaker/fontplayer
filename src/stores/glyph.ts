@@ -292,12 +292,14 @@ export const useGlyphStore = defineStore('glyph', () => {
     if (!component) return false
     
     Object.keys(options).forEach((key: string) => {
-      const value = (options as any)[key]
-      if (key === 'value' && typeof value === 'object') {
-        // 深拷贝 value 对象
-        (component as any).value = R.clone(value)
+      const optionValue = (options as any)[key]
+      if (key === 'value' && typeof optionValue === 'object') {
+        // 合并 value 对象，保留现有属性（如 editMode）
+        const compAny = component as any
+        const currentValue = compAny.value || {}
+        compAny.value = { ...currentValue, ...R.clone(optionValue) }
       } else {
-        (component as any)[key] = value
+        (component as any)[key] = optionValue
       }
     })
     

@@ -101,8 +101,8 @@ const canvasRef = ref<HTMLCanvasElement>()
 let dragger: BaseGlyphDragger | null = null
 let selectControlCheckInterval: number | null = null
 
-const selectedComponent = computed(() => characterStore.selectedComponent)
-const editingCharacter = computed(() => characterStore.editingCharacter)
+const selectedComponent = computed(() => (characterStore as any).selectedComponent)
+const editingCharacter = computed(() => (characterStore as any).editingCharacter)
 
 // 当前工具和选择控制状态（用于鼠标样式）
 const currentTool = ref<ToolType | ''>('')
@@ -153,7 +153,7 @@ const renderCanvas = () => {
     return
   }
   
-  const components = characterStore.orderedListWithItemsForCurrentCharacterFile
+  const components = (characterStore as any).orderedListWithItemsForCurrentCharacterFile
   
   if (import.meta.env.DEV) {
     console.log('[CharacterEditor] Rendering canvas:', {
@@ -177,7 +177,7 @@ const renderCanvas = () => {
   // 渲染关键点和辅助线（在主要渲染之后）
   // 如果当前选中的组件被设置为不可见（visible === false），则不渲染其关键点和辅助线
   if (editorStore.checkJoints || editorStore.checkRefLines) {
-    const selectedComponent = characterStore.selectedComponent
+    const selectedComponent = (characterStore as any).selectedComponent
     if (
       selectedComponent &&
       selectedComponent.type === 'glyph' &&
@@ -251,13 +251,13 @@ const renderCanvas = () => {
 
 // 初始化拖拽器
 const initDragger = () => {
-  if (!canvasRef.value || !characterStore.editingCharacter) {
+  if (!canvasRef.value || !(characterStore as any).editingCharacter) {
     cleanupDragger()
     return
   }
 
-  const character = characterStore.editingCharacter
-  const component = characterStore.selectedComponent
+  const character = (characterStore as any).editingCharacter
+  const component = (characterStore as any).selectedComponent
   
   // 如果没有选中组件，不初始化拖拽器
   if (!component) {
@@ -274,14 +274,14 @@ const initDragger = () => {
         componentUUID: component.uuid, // 组件的 UUID，用作 instanceKey
         glyph: component.type === 'glyph' ? (component.value as any) : undefined,
         character: character as ICharacterFileLite, // 类型断言：编辑时字符数据应该已加载
-        selectedComponentsTree: characterStore.selectedComponentsTree,
+        selectedComponentsTree: (characterStore as any).selectedComponentsTree,
       },
       onRender: () => {
         // 拖拽骨架关键点后触发重新渲染
         renderCanvas()
       },
       onUpdate: (comp) => {
-        characterStore.updateComponent(comp.uuid, comp)
+        ;(characterStore as any).updateComponent(comp.uuid, comp)
       },
       characterStore: characterStore, // 传递store实例
     })
@@ -354,18 +354,18 @@ const cleanupTools = () => {
 
 onMounted(async () => {
   // 如果还没有设置编辑字符，从 UUID 设置
-  if (characterStore.editingCharacterUUID) {
-    if (!characterStore.editingCharacter) {
+  if ((characterStore as any).editingCharacterUUID) {
+    if (!(characterStore as any).editingCharacter) {
       if (import.meta.env.DEV) {
-        console.log('[CharacterEditor] onMounted: setting edit character from UUID', characterStore.editingCharacterUUID)
+        console.log('[CharacterEditor] onMounted: setting edit character from UUID', (characterStore as any).editingCharacterUUID)
       }
-      await characterStore.setEditCharacterFileByUUID(characterStore.editingCharacterUUID)
+      await (characterStore as any).setEditCharacterFileByUUID((characterStore as any).editingCharacterUUID)
     } else {
       if (import.meta.env.DEV) {
         console.log('[CharacterEditor] onMounted: editingCharacter already set', {
-          uuid: characterStore.editingCharacterUUID,
-          componentsCount: characterStore.editingCharacter.components?.length || 0,
-          orderedListCount: characterStore.editingCharacter.orderedList?.length || 0
+          uuid: (characterStore as any).editingCharacterUUID,
+          componentsCount: (characterStore as any).editingCharacter.components?.length || 0,
+          orderedListCount: (characterStore as any).editingCharacter.orderedList?.length || 0
         })
       }
     }
@@ -379,9 +379,9 @@ onMounted(async () => {
   await nextTick()
   if (import.meta.env.DEV) {
     console.log('[CharacterEditor] onMounted after nextTick:', {
-      editingCharacter: !!characterStore.editingCharacter,
-      componentsCount: characterStore.editingCharacter?.components?.length || 0,
-      orderedListCount: characterStore.editingCharacter?.orderedList?.length || 0
+      editingCharacter: !!(characterStore as any).editingCharacter,
+      componentsCount: (characterStore as any).editingCharacter?.components?.length || 0,
+      orderedListCount: (characterStore as any).editingCharacter?.orderedList?.length || 0
     })
   }
   
@@ -431,14 +431,14 @@ onUnmounted(() => {
   // 清理 BottomBarToolManager
   bottomBarToolManager.cleanup()
   // 退出编辑时，将编辑字符的数据同步回列表
-  if (characterStore.editingCharacterUUID) {
-    characterStore.updateCharacterListFromEditFile()
-    characterStore.resetEditCharacterFile()
+  if ((characterStore as any).editingCharacterUUID) {
+    ;(characterStore as any).updateCharacterListFromEditFile()
+    ;(characterStore as any).resetEditCharacterFile()
   }
 })
 
 // 监听编辑字符变化
-watch(() => characterStore.editingCharacter, async () => {
+watch(() => (characterStore as any).editingCharacter, async () => {
   cleanupDragger()
   await nextTick()
   
@@ -493,19 +493,47 @@ watch(() => bottomBarToolStore.currentTool, (newTool) => {
 })
 
 // 监听组件列表变化，重新渲染
-watch(() => characterStore.orderedListWithItemsForCurrentCharacterFile, async () => {
+watch(() => (characterStore as any).orderedListWithItemsForCurrentCharacterFile, async () => {
   renderCanvas()
 }, { deep: true })
 
 // 监听选中组件变化
-watch(() => characterStore.selectedComponent, async () => {
+watch(() => (characterStore as any).selectedComponent, async () => {
   // 只有在选择工具激活时才初始化 dragger
   const toolType = toolManager.getCurrentToolType()
   if (toolType === 'select') {
     cleanupDragger()
     await nextTick()
     initDragger()
+    
+    // 更新 penSelectTool 状态（如果选择工具激活）
+    const selectTool = toolManager.getTool('select')
+    if (selectTool && typeof (selectTool as any).updatePenSelectToolState === 'function') {
+      (selectTool as any).updatePenSelectToolState()
+    }
+    
     // 选中组件变化后重新渲染画布，确保选择框/控件同步更新
+    renderCanvas()
+  }
+}, { deep: true })
+
+// 监听钢笔组件的 editMode 变化
+watch(() => {
+  const component = (characterStore as any).selectedComponent
+  if (component && component.type === 'pen') {
+    const penComponent = component.value as any
+    return penComponent?.editMode
+  }
+  return false
+}, async () => {
+  const toolType = toolManager.getCurrentToolType()
+  if (toolType === 'select') {
+    // 更新 penSelectTool 状态
+    const selectTool = toolManager.getTool('select')
+    if (selectTool && typeof (selectTool as any).updatePenSelectToolState === 'function') {
+      (selectTool as any).updatePenSelectToolState()
+    }
+    // 重新渲染画布
     renderCanvas()
   }
 })
@@ -533,7 +561,7 @@ watch(() => toolStore.tool, async (newTool) => {
 
     // 选择工具激活时，glyphDragger 和 SelectTool 可以同时存在
     // glyphDragger 处理字形组件的骨架拖拽，SelectTool 处理其他组件的选择和变换
-    if (newTool === 'select' && characterStore.selectedComponent) {
+    if (newTool === 'select' && (characterStore as any).selectedComponent) {
       initDragger()
     } else if (newTool !== 'select') {
       // 切换到非选择工具时，停用 dragger（其他工具不需要 dragger）
