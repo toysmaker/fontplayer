@@ -11,6 +11,7 @@ tests/
 │   ├── converter/                 # 转换器测试
 │   ├── renderer/                  # 渲染器测试
 │   ├── script/                    # 脚本功能测试
+│   ├── tools/                     # 工具测试
 │   └── glyphDragger/              # glyphDragger测试
 ├── integration/                   # 集成测试
 │   ├── project-flow.test.ts
@@ -110,6 +111,14 @@ npx playwright test --ui
 - ✅ ScriptExecutor
 - ✅ 脚本组件类（PenComponent, PolygonComponent等）
 - ✅ 脚本环境（ConstantsMap, ParametersMap, CustomGlyph, Joint）
+
+### 工具模块
+- ✅ PenTool（钢笔工具）
+- ✅ PolygonTool（多边形工具）
+- ✅ RectangleTool（矩形工具）
+- ✅ EllipseTool（椭圆工具）
+- ✅ SelectTool（选择工具）
+- ✅ PenSelectTool（钢笔编辑工具）
 
 ### glyphDragger
 - ✅ BaseGlyphDragger
