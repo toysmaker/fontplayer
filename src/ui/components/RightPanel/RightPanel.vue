@@ -9,9 +9,6 @@ import { NEmpty } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from './composables/useComponentEditor'
 import { EditStatus } from '@/core/types'
-
-const { t } = useI18n()
-
 // 导入各个参数编辑面板
 import PenEditPanel from './paramsEditPanels/PenEditPanel.vue'
 import EllipseEditPanel from './paramsEditPanels/EllipseEditPanel.vue'
@@ -19,6 +16,8 @@ import RectangleEditPanel from './paramsEditPanels/RectangleEditPanel.vue'
 import PolygonEditPanel from './paramsEditPanels/PolygonEditPanel.vue'
 import PictureEditPanel from './paramsEditPanels/PictureEditPanel.vue'
 import GlyphEditPanel from './paramsEditPanels/GlyphEditPanel.vue'
+
+const { t } = useI18n()
 
 const { selectedComponent, selectedComponentUUID, editStatus } = useComponentEditor()
 

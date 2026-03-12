@@ -1,4 +1,4 @@
-import { loaded, loading, loadingMsg, total } from '../../fontEditor/stores/global'
+import { loaded, loading, loadingMsg, total } from './loading'
 
 /**
  * 简单的 sleep，默认让出事件循环一帧

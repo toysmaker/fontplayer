@@ -7,7 +7,7 @@
     "skipLibCheck": true,
 
     /* Bundler mode */
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "allowImportingTsExtensions": true,
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
@@ -26,6 +26,13 @@
     }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],
-  "exclude": ["node_modules", "dist", "build"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "**/node_modules/**",
+    "**/node_modules",
+    "**/node_modules/**/tsconfig.json"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

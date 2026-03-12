@@ -152,7 +152,7 @@ const renderJoints = (rootComponent, canvas) => {
 				jointsCount: joints?.length || 0,
 				hasGlyphJoints: !!_component.value.joints,
 				glyphJointsCount: _component.value.joints?.length || 0,
-				instanceJointsCount: glyphInstance._joints?.length || 0,
+				instanceJointsCount: joints?.length || 0,
 			})
 		}
 		if (!joints || joints.length === 0) {
@@ -237,7 +237,7 @@ const renderRefLines = (rootComponent, canvas) => {
 				reflinesCount: reflines?.length || 0,
 				hasGlyphReflines: !!_component.value.reflines,
 				glyphReflinesCount: _component.value.reflines?.length || 0,
-				instanceReflinesCount: glyphInstance._reflines?.length || 0,
+				instanceReflinesCount: reflines?.length || 0,
 			})
 		}
 		if (!reflines || reflines.length === 0) {

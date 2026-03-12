@@ -6,7 +6,7 @@
  * For variable fonts: Build IGlyfTable and ILocaTable from ICharacter array
  */
 
-import { loaded, loading, total } from '../../fontEditor/stores/global'
+import { loaded, loading, total } from './loading'
 import type { ICharacter } from '../character'
 import { PathType } from '../character'
 import type { IGlyfTable } from '../tables/glyf'
