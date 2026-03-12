@@ -140,15 +140,12 @@ const { locale, t } = useI18n()
 
 // 处理语言切换
 const handleLanguageChange = async (lang: 'zh' | 'en') => {
-  console.log('Changing language to:', lang)
   locale.value = lang
   // 更新 Tauri 菜单
   if (isTauri()) {
     try {
       const { invoke } = await import('@tauri-apps/api/core')
-      console.log('Calling update_menu_language with:', lang)
       const result = await invoke('update_menu_language', { language: lang })
-      console.log('Menu language updated:', result)
     } catch (error) {
       console.error('Failed to update menu language:', error)
     }

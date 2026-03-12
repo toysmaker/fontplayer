@@ -381,8 +381,6 @@ export class EllipseTool extends BaseTool {
       flipX: false,
       flipY: false,
       usedInCharacter: true,
-      ox: 0,
-      oy: 0,
     }
   }
 

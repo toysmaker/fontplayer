@@ -803,8 +803,6 @@ export class ContourConverter {
         flipX: false,
         flipY: false,
         usedInCharacter: true,
-        ox: 0,
-        oy: 0,
         value: {
           points: formattedPoints,
           fillColor: '',

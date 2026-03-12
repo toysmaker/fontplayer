@@ -196,8 +196,8 @@ export type IComponentValue =
  */
 export interface IComponent extends IComponentBase {
   value: IComponentValue
-  ox: number // x-offset
-  oy: number // y-offset
+  ox?: number // x-offset
+  oy?: number // y-offset
 }
 
 /**
@@ -205,8 +205,8 @@ export interface IComponent extends IComponentBase {
  */
 export interface IGlyphComponent extends IComponentBase {
   value: IComponentValue
-  ox: number
-  oy: number
+  ox?: number
+  oy?: number
 }
 
 /**
