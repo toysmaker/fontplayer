@@ -68,6 +68,9 @@ import { NCard, NEmpty } from 'naive-ui'
 import { useGlyphStore } from '@/stores/glyph'
 import { getOrCreateDragger } from '@/features/tools/glyphDragger'
 import type { BaseGlyphDragger } from '@/features/tools/glyphDragger'
+import { instanceManager } from '@/core/instance/InstanceManager'
+import { CustomGlyph } from '@/core/instance/CustomGlyph'
+import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import ToolBar from '@/ui/components/ToolBar/ToolBar.vue'
 import GlyphComponentList from '@/ui/components/ComponentList/GlyphComponentList.vue'
 import RightPanel from '@/ui/components/RightPanel/RightPanel.vue'
@@ -127,9 +130,23 @@ const defaultGrid: IGrid = {
 const renderCanvas = async () => {
   if (!canvasRef.value || !editingGlyph.value) return
   
+  const components = (glyphStore as any).orderedListWithItemsForCurrentGlyph
+  
+  if (import.meta.env.DEV) {
+    console.log('[GlyphEditor] Rendering canvas:', {
+      componentsCount: components.length,
+      canvasSize: { width: canvasRef.value.width, height: canvasRef.value.height },
+      editingGlyphUUID: editingGlyph.value.uuid,
+      editingGlyphComponentsCount: editingGlyph.value.components?.length || 0,
+      editingGlyphOrderedListCount: editingGlyph.value.orderedList?.length || 0,
+      components: components
+    })
+  }
+  
   await render(canvasRef.value, true, false, {
     mode: 'glyph',
     glyph: editingGlyph.value,
+    components: components, // 传入组件列表，用于渲染字形内部的组件
     background: defaultBackground,
     grid: defaultGrid,
   })
@@ -296,6 +313,28 @@ onMounted(async () => {
     canvasRef.value.style.height = `${styleHeight}px`
   }
   
+  // 确保字形实例已执行脚本（在初始渲染前）
+  if (editingGlyph.value) {
+    const instanceKey = editingGlyph.value.uuid
+    const glyphInstance = instanceManager.getInstance(
+      instanceKey,
+      () => new CustomGlyph(editingGlyph.value!),
+      'glyph'
+    ) as CustomGlyph | null
+    
+    // 如果实例存在但 _components 为空，执行脚本
+    if (glyphInstance && (!glyphInstance._components || !glyphInstance._components.length)) {
+      if (import.meta.env.DEV) {
+        console.log('[GlyphEditor.onMounted] Executing script for initial render:', {
+          instanceKey,
+          hasInstance: !!glyphInstance,
+          componentsCount: glyphInstance._components?.length || 0
+        })
+      }
+      executeGlyphScript(editingGlyph.value, instanceKey)
+    }
+  }
+  
   // 初始渲染
   await renderCanvas()
   
@@ -327,9 +366,23 @@ onUnmounted(() => {
   cleanupTools()
   // 清理 BottomBarToolManager
   bottomBarToolManager.cleanup()
+  
   // 退出编辑时，将编辑字形的数据同步回列表
-  if ((glyphStore as any).editingGlyphUUID) {
+  const editingGlyphUUID = (glyphStore as any).editingGlyphUUID
+  if (editingGlyphUUID) {
     ;(glyphStore as any).updateGlyphListFromEditFile()
+    
+    // 取消编辑标记并释放字形实例（字形编辑界面全程维护该字形本身的实例）
+    if (import.meta.env.DEV) {
+      console.log('[GlyphEditor.onUnmounted] Releasing glyph instance:', {
+        editingGlyphUUID,
+        isEditing: instanceManager.isEditing(editingGlyphUUID),
+        isTemporary: instanceManager.isTemporary(editingGlyphUUID)
+      })
+    }
+    instanceManager.unmarkEditing(editingGlyphUUID)
+    instanceManager.releaseInstance(editingGlyphUUID)
+    
     ;(glyphStore as any).resetEditGlyph()
   }
 })

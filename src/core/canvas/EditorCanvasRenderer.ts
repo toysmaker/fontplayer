@@ -591,12 +591,236 @@ export function render(
       }
     }
   } else if (options.mode === 'glyph') {
-    if (options.glyph) {
+    // 如果传入了 components，优先使用 components 渲染（字形编辑界面）
+    if (options.components && options.components.length > 0) {
+      if (import.meta.env.DEV) {
+        console.log('[EditorCanvasRenderer] Rendering glyph components:', {
+          componentsCount: options.components.length,
+          componentTypes: options.components.map(c => c.type)
+        })
+      }
+      // 1. 先渲染外部组件（editingGlyph.value.components）
+      renderCanvas(options.components, canvas, {
+        forceUpdate,
+        fill: false,
+        offset: { x: 0, y: 0 },
+        scale: 1, // scale 保持为 1，坐标映射由 mapCanvasX/Y 处理
+      })
+      
+      // 2. 然后渲染内部组件（字形实例的 _components，即脚本生成的组件）
+      if (options.glyph) {
+        const instanceKey = options.glyph.uuid
+        
+        // 先检查实例是否存在，以及是否有 tempData（正在拖拽中）
+        let existingInstance: CustomGlyph | null = null
+        if (instanceManager.isTemporary(instanceKey)) {
+          existingInstance = instanceManager.acquireTemporaryInstance(
+            instanceKey,
+            () => new CustomGlyph(options.glyph!),
+            'glyph'
+          ) as CustomGlyph
+        } else if (instanceManager.isEditing(instanceKey)) {
+          existingInstance = instanceManager.getInstance(
+            instanceKey,
+            () => new CustomGlyph(options.glyph!),
+            'glyph'
+          ) as CustomGlyph
+        }
+        
+        if (import.meta.env.DEV) {
+          console.log('[EditorCanvasRenderer] Checking instance for internal components:', {
+            instanceKey,
+            hasExistingInstance: !!existingInstance,
+            isEditing: instanceManager.isEditing(instanceKey),
+            isTemporary: instanceManager.isTemporary(instanceKey),
+            hasTempData: !!existingInstance?.tempData,
+            componentsCount: existingInstance?._components?.length || 0,
+            forceUpdate
+          })
+        }
+        
+        // 如果实例有 tempData（正在拖拽中），不应该执行脚本（避免重置拖拽修改）
+        const hasTempData = !!existingInstance?.tempData
+        const needsScriptExecution = (!existingInstance ||
+          !existingInstance._components ||
+          !existingInstance._components.length ||
+          forceUpdate) && !hasTempData
+        
+        if (needsScriptExecution) {
+          if (import.meta.env.DEV) {
+            console.log('[EditorCanvasRenderer] ✅ Executing script for internal components:', {
+              instanceKey,
+              hasExistingInstance: !!existingInstance,
+              hasTempData: false,
+              needsScriptExecution,
+              reason: !existingInstance ? 'no instance' : 
+                      (!existingInstance._components || !existingInstance._components.length) ? 'no components' : 
+                      forceUpdate ? 'forceUpdate' : 'unknown'
+            })
+          }
+          // 执行脚本（脚本内部会获取或创建实例）
+          executeGlyphScript(options.glyph, instanceKey)
+          
+          // 脚本执行后，立即重新获取实例，确保获取到最新的 _components
+          if (instanceManager.isEditing(instanceKey)) {
+            existingInstance = instanceManager.getInstance(
+              instanceKey,
+              () => new CustomGlyph(options.glyph!),
+              'glyph'
+            ) as CustomGlyph
+          } else if (instanceManager.isTemporary(instanceKey)) {
+            existingInstance = instanceManager.acquireTemporaryInstance(
+              instanceKey,
+              () => new CustomGlyph(options.glyph!),
+              'glyph'
+            ) as CustomGlyph
+          }
+          
+          if (import.meta.env.DEV) {
+            console.log('[EditorCanvasRenderer] After script execution:', {
+              instanceKey,
+              hasInstance: !!existingInstance,
+              componentsCount: existingInstance?._components?.length || 0
+            })
+          }
+        } else {
+          if (import.meta.env.DEV) {
+            console.log('[EditorCanvasRenderer] ⚠️ Skipping script execution:', {
+              instanceKey,
+              hasExistingInstance: !!existingInstance,
+              hasTempData,
+              hasComponents: !!existingInstance?._components?.length,
+              componentsCount: existingInstance?._components?.length || 0,
+              forceUpdate
+            })
+          }
+        }
+        
+        // 使用 existingInstance（如果脚本已执行，existingInstance 已经是最新的）
+        // 否则重新获取实例（确保获取到最新的实例）
+        let glyphInstance: CustomGlyph | null = existingInstance
+        
+        if (!glyphInstance) {
+          // 如果 existingInstance 不存在，重新获取实例
+          if (instanceManager.isEditing(instanceKey)) {
+            // 字形编辑界面，使用 getInstance（编辑状态）
+            glyphInstance = instanceManager.getInstance(
+              instanceKey,
+              () => new CustomGlyph(options.glyph!),
+              'glyph'
+            ) as CustomGlyph
+          } else if (instanceManager.isTemporary(instanceKey)) {
+            // 临时实例（可能是从其他场景创建的）
+            glyphInstance = instanceManager.acquireTemporaryInstance(
+              instanceKey,
+              () => new CustomGlyph(options.glyph!),
+              'glyph'
+            ) as CustomGlyph
+          } else {
+            // 其他情况，使用 getOrCreateGlyphInstance
+            glyphInstance = instanceManager.getOrCreateGlyphInstance(
+              options.glyph,
+              () => new CustomGlyph(options.glyph!)
+            ) as CustomGlyph
+          }
+        }
+        
+        if (!glyphInstance) {
+          if (import.meta.env.DEV) {
+            console.warn('[EditorCanvasRenderer] Failed to get glyph instance:', {
+              instanceKey,
+              isEditing: instanceManager.isEditing(instanceKey),
+              isTemporary: instanceManager.isTemporary(instanceKey)
+            })
+          }
+          return
+        }
+        
+        if (import.meta.env.DEV) {
+          console.log('[EditorCanvasRenderer] Final instance for rendering:', {
+            instanceKey,
+            hasInstance: !!glyphInstance,
+            componentsCount: glyphInstance._components?.length || 0,
+            componentTypes: glyphInstance._components?.map((c: any) => c.type || 'unknown') || []
+          })
+        }
+        
+        // 渲染内部组件（_components）
+        if (glyphInstance && glyphInstance._components && glyphInstance._components.length > 0) {
+          if (import.meta.env.DEV) {
+            console.log('[EditorCanvasRenderer] Rendering internal components (_components):', {
+              instanceKey,
+              internalComponentsCount: glyphInstance._components.length,
+              componentTypes: glyphInstance._components.map((c: any) => c.type || 'unknown')
+            })
+          }
+          
+          const ctx = canvas.getContext('2d', { willReadFrequently: true })
+          if (ctx) {
+            // 确保清除之前可能留下的路径状态
+            ctx.beginPath()
+            
+            // 调用每个内部组件的 render 方法
+            glyphInstance._components.forEach((component: any, index: number) => {
+              if (component.render) {
+                if (import.meta.env.DEV) {
+                  console.log(`[EditorCanvasRenderer] Rendering internal component ${index}:`, {
+                    type: component.type,
+                    hasRender: !!component.render
+                  })
+                }
+                component.render(canvas, {
+                  offset: { x: 0, y: 0 },
+                  scale: 1,
+                  fillColor: '#000',
+                })
+              } else {
+                if (import.meta.env.DEV) {
+                  console.warn(`[EditorCanvasRenderer] Internal component ${index} has no render method:`, {
+                    type: component.type,
+                    component: component
+                  })
+                }
+              }
+            })
+            
+            // 根据渲染样式填充
+            if (fontRenderStyle.value === 'black' || forceUpdate) {
+              ctx.fillStyle = '#000'
+              ctx.fill("nonzero")
+              ctx.closePath()
+            } else if (fontRenderStyle.value === 'color') {
+              ctx.fillStyle = '#000'
+              ctx.fill("nonzero")
+              ctx.closePath()
+            } else {
+              // 线框模式下，确保路径被清除，避免残留
+              ctx.closePath()
+            }
+          }
+        } else {
+          if (import.meta.env.DEV) {
+            console.log('[EditorCanvasRenderer] No internal components to render:', {
+              instanceKey,
+              hasInstance: !!glyphInstance,
+              hasComponents: !!glyphInstance?._components,
+              componentsCount: glyphInstance?._components?.length || 0,
+              hasTempData: !!glyphInstance?.tempData
+            })
+          }
+        }
+      }
+    } else if (options.glyph) {
+      // 如果没有传入 components，使用字形实例的 render 方法（用于预览等场景）
       const glyphInstance = instanceManager.getOrCreateGlyphInstance(
         options.glyph,
         () => new CustomGlyph(options.glyph!)
       ) as CustomGlyph
       renderGlyph(glyphInstance, canvas, renderBackground, false, false)
+    } else {
+      if (import.meta.env.DEV) {
+        console.warn('[EditorCanvasRenderer] No components or glyph to render for glyph mode')
+      }
     }
   }
 }

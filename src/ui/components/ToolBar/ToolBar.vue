@@ -12,7 +12,7 @@
           @click="switchTool('select')"
           @pointerup="switchTool('select')"
           size="40"
-          v-show="editStatus === EditStatus.Edit">
+          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
           <font-awesome-icon
             icon="fa-solid fa-arrow-pointer"
           />
@@ -27,7 +27,7 @@
           @click="switchTool('pen')"
           @pointerup="switchTool('pen')"
           size="40"
-          v-show="editStatus === EditStatus.Edit">
+          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
           <font-awesome-icon
             icon="fa-solid fa-pen-nib"
           />
@@ -42,7 +42,7 @@
           @click="switchTool('ellipse')"
           @pointerup="switchTool('ellipse')"
           size="40"
-          v-show="editStatus === EditStatus.Edit">
+          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
           <font-awesome-icon
             icon="fa-regular fa-circle"
           />
@@ -57,7 +57,7 @@
           @click="switchTool('rectangle')"
           @pointerup="switchTool('rectangle')"
           size="40"
-          v-show="editStatus === EditStatus.Edit">
+          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
           <font-awesome-icon
             icon="fa-regular fa-square"
           />
@@ -87,7 +87,7 @@
           @click="switchTool('picture')"
           @pointerup="switchTool('picture')"
           size="40"
-          v-show="editStatus === EditStatus.Edit">
+          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
           <font-awesome-icon
             icon="fa-solid fa-image"
           />
@@ -137,12 +137,12 @@
         <n-icon
           class="tool-icon"
           :class="{
-            'selected': tool === 'params',
+            'selected': tool === 'grid',
           }"
           size="40"
           @click="switchTool('grid')"
           @pointerup="switchTool('grid')"
-          v-show="editStatus === EditStatus.Edit">
+          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
           <font-awesome-icon
             :class="{
               'selected': tool === 'grid',
@@ -155,12 +155,12 @@
         <n-icon
           class="tool-icon"
           :class="{
-            'selected': tool === 'params',
+            'selected': tool === 'metrics',
           }"
           size="40"
           @click="switchTool('metrics')"
           @pointerup="switchTool('metrics')"
-          v-show="editStatus === EditStatus.Edit">
+          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
           <font-awesome-icon
             :class="{
               'selected': tool === 'metrics',
