@@ -121,6 +121,9 @@ export class InstanceManager {
     instance.lastUsed = Date.now()
     this.instancePool.set(uuid, instance)
     
+    // 触发清理（虽然临时实例不会被清理，但可以清理其他非临时实例）
+    this.cleanupPool()
+    
     return instance
   }
 

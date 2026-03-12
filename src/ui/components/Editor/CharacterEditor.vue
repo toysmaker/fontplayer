@@ -265,6 +265,17 @@ const initDragger = () => {
     return
   }
 
+  // 如果是字形组件，确保使用最新的 component.value（从 store 中获取）
+  // 因为字形实例的参数可能已经被修改，需要确保使用最新的数据
+  let glyphValue = component.type === 'glyph' ? (component.value as any) : undefined
+  if (component.type === 'glyph' && glyphValue) {
+    // 从 store 中重新获取组件，确保使用最新的 value
+    const latestComponent = (characterStore as any).selectedComponent
+    if (latestComponent && latestComponent.type === 'glyph' && latestComponent.value) {
+      glyphValue = latestComponent.value
+    }
+  }
+
   try {
     dragger = getOrCreateDragger(canvasRef.value, 'character', {
       canvas: canvasRef.value,
@@ -272,7 +283,7 @@ const initDragger = () => {
         mode: 'character',
         component,
         componentUUID: component.uuid, // 组件的 UUID，用作 instanceKey
-        glyph: component.type === 'glyph' ? (component.value as any) : undefined,
+        glyph: glyphValue,
         character: character as ICharacterFileLite, // 类型断言：编辑时字符数据应该已加载
         selectedComponentsTree: (characterStore as any).selectedComponentsTree,
       },
@@ -303,7 +314,24 @@ const cleanupDragger = () => {
 
 // 初始化工具系统
 const initTools = async () => {
+  debugger
   if (!canvasRef.value) return
+
+  // 每次进入字符编辑界面时，重置所有工具的单例实例，确保绑定当前 canvas
+  // 避免上一次编辑留下的实例仍然持有旧的 canvas 引用，导致事件监听失效
+  try {
+    SelectTool.reset()
+    PenTool.reset()
+    PolygonTool.reset()
+    EllipseTool.reset()
+    RectangleTool.reset()
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.warn('[CharacterEditor] initTools: tool reset failed (can be ignored in some environments)', e)
+    }
+  }
+  // 同时清理 ToolManager 中已注册的旧工具
+  toolManager.cleanupAll()
   
   const toolConfig = {
     canvas: canvasRef.value,
@@ -341,7 +369,13 @@ const initTools = async () => {
   
   // 默认激活选择工具
   if (toolStore.tool === '' || toolStore.tool === 'select') {
+    if (import.meta.env.DEV) {
+      console.log('[CharacterEditor] initTools: toolStore.tool before switchTool:', toolStore.tool)
+    }
     await toolManager.switchTool('select')
+    if (import.meta.env.DEV) {
+      console.log('[CharacterEditor] initTools: switched to select tool, toolStore.tool after switchTool:', toolStore.tool)
+    }
   } else {
     await toolManager.switchTool(toolStore.tool as ToolType)
   }
@@ -502,6 +536,20 @@ watch(() => (characterStore as any).selectedComponent, async () => {
   // 只有在选择工具激活时才初始化 dragger
   const toolType = toolManager.getCurrentToolType()
   if (toolType === 'select') {
+    // 如果 dragger 正在拖拽，不要清理和重新初始化，避免中断拖拽
+    if (dragger && dragger.isDragging()) {
+      if (import.meta.env.DEV) {
+        console.log('[CharacterEditor] Skipping dragger cleanup/reinit: dragger is dragging')
+      }
+      // 只更新 penSelectTool 状态和重新渲染
+      const selectTool = toolManager.getTool('select')
+      if (selectTool && typeof (selectTool as any).updatePenSelectToolState === 'function') {
+        (selectTool as any).updatePenSelectToolState()
+      }
+      renderCanvas()
+      return
+    }
+    
     cleanupDragger()
     await nextTick()
     initDragger()
@@ -550,12 +598,23 @@ watch(() => fontRenderStyle.value, async () => {
 
 // 监听工具切换
 watch(() => toolStore.tool, async (newTool) => {
-  if (!canvasRef.value) return
+  if (import.meta.env.DEV) {
+    console.log('[CharacterEditor] watch toolStore.tool triggered:', newTool)
+  }
+  if (!canvasRef.value) {
+    if (import.meta.env.DEV) {
+      console.log('[CharacterEditor] watch toolStore.tool: canvas not ready, returning')
+    }
+    return
+  }
 
   // 更新当前工具状态
   currentTool.value = (newTool as ToolType | '') || ''
 
   if (newTool) {
+    if (import.meta.env.DEV) {
+      console.log('[CharacterEditor] watch toolStore.tool: calling toolManager.switchTool:', newTool)
+    }
     await toolManager.switchTool(newTool as ToolType)
     renderCanvas()
 

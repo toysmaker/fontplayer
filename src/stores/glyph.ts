@@ -266,6 +266,10 @@ export const useGlyphStore = defineStore('glyph', () => {
   function clearSelection() {
     selectedComponentUUID.value = ''
     selectedComponentsTree.value = []
+    // 同时清除 editingGlyph 中的 selectedComponentsUUIDs，确保组件列表的高亮状态也被清除
+    if (editingGlyph.value) {
+      editingGlyph.value.selectedComponentsUUIDs = []
+    }
   }
 
   /**

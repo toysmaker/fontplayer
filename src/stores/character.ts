@@ -332,6 +332,10 @@ export const useCharacterStore = defineStore('character', () => {
   function clearSelection() {
     selectedComponentUUID.value = ''
     selectedComponentsTree.value = []
+    // 同时清除 editingCharacter 中的 selectedComponentsUUIDs，确保组件列表的高亮状态也被清除
+    if (editingCharacter.value) {
+      editingCharacter.value.selectedComponentsUUIDs = []
+    }
   }
 
   /**

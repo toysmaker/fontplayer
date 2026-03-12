@@ -9,6 +9,9 @@ import { ScriptExecutor } from './ScriptExecutor'
 import type { IDragContext, IDraggerConfig, IJoint } from './types'
 import type { ICustomGlyph, IComponent } from '@/core/types'
 import { computeGlyphComponentBoundingBox } from '@/core/utils/glyphBounds'
+import { instanceManager } from '@/core/instance/InstanceManager'
+import { CustomGlyph } from '@/core/instance/CustomGlyph'
+import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 
 export abstract class BaseGlyphDragger {
   protected canvas: HTMLCanvasElement
@@ -29,20 +32,107 @@ export abstract class BaseGlyphDragger {
   // 节流函数（单例，避免重复创建）
   private throttledSkeletonDrag = throttle(
     (glyph: ICustomGlyph, componentUUID: string, joint: IJoint, dx: number, dy: number) => {
-      if (import.meta.env.DEV) {
-        console.log('[BaseGlyphDragger.throttledSkeletonDrag] Executing:', {
+      console.log('[BaseGlyphDragger.throttledSkeletonDrag] START:', {
           componentUUID,
           jointName: joint.name,
           dx,
           dy,
-          hasOnRender: !!this.config.onRender
+        hasOnRender: !!this.config.onRender,
+        hasGlyph: !!glyph
         })
-      }
+      
+      console.log('[BaseGlyphDragger.throttledSkeletonDrag] Calling ScriptExecutor.executeDrag')
       ScriptExecutor.executeDrag(glyph, componentUUID, {
         draggingJoint: joint,
         deltaX: dx,
         deltaY: dy
       })
+      console.log('[BaseGlyphDragger.throttledSkeletonDrag] ScriptExecutor.executeDrag completed')
+      
+      // 骨架拖拽后，需要同步参数到组件 value，确保修改被保存
+      if (this.context.component && this.context.component.type === 'glyph') {
+        console.log('[BaseGlyphDragger.throttledSkeletonDrag] Syncing parameters to component.value')
+        
+        // 获取字形实例，确保参数已更新
+        // ScriptExecutor.executeDrag 已经获取了实例，这里直接获取已存在的实例
+        // 使用和 ScriptExecutor 相同的方式获取实例
+        let glyphInstance: CustomGlyph | null = null
+        const isTemporary = instanceManager.isTemporary(componentUUID)
+        console.log('[BaseGlyphDragger.throttledSkeletonDrag] Instance check:', {
+          componentUUID,
+          isTemporary
+        })
+        
+        if (isTemporary) {
+          glyphInstance = instanceManager.acquireTemporaryInstance(
+            componentUUID,
+            () => new CustomGlyph(glyph),
+            'glyph'
+          ) as CustomGlyph
+        } else {
+          // 如果实例不存在，说明有问题，但为了兼容性，仍然尝试获取
+          console.warn('[BaseGlyphDragger.throttledSkeletonDrag] Instance not temporary, creating new one')
+          glyphInstance = instanceManager.acquireTemporaryInstance(
+            componentUUID,
+            () => new CustomGlyph(glyph),
+            'glyph'
+          ) as CustomGlyph
+        }
+        
+        console.log('[BaseGlyphDragger.throttledSkeletonDrag] Got instance:', {
+          hasInstance: !!glyphInstance,
+          hasParameters: !!glyphInstance?._glyph?.parameters,
+          parametersLength: glyphInstance?._glyph?.parameters?.length || 0,
+          parameters: glyphInstance?._glyph?.parameters
+        })
+        
+        if (glyphInstance && glyphInstance._glyph.parameters) {
+          // 从字形实例获取最新的参数（使用 _glyph 而不是传入的 glyph）
+          const updatedGlyphValue: ICustomGlyph = {
+            ...glyphInstance._glyph, // 使用实例的 _glyph，确保包含所有最新数据
+            parameters: [...(glyphInstance._glyph.parameters || [])], // 创建新数组以触发响应式更新
+          }
+          
+          const oldValue = (this.context.component as IComponent).value as any
+          console.log('[BaseGlyphDragger.throttledSkeletonDrag] Updating component.value:', {
+            componentUUID,
+            oldParameters: oldValue?.parameters,
+            newParameters: updatedGlyphValue.parameters
+          })
+          
+          // 更新 component.value
+          ;(this.context.component as IComponent).value = updatedGlyphValue
+          
+          // 直接调用 store 的 modifyComponent 方法，确保参数被正确保存
+          // 检查是否有 characterStore 或 glyphStore
+          if ((this.config as any).characterStore) {
+            console.log('[BaseGlyphDragger.throttledSkeletonDrag] Calling characterStore.modifyComponent')
+            ;(this.config as any).characterStore.modifyComponent(
+              (this.context.component as IComponent).uuid,
+              { value: updatedGlyphValue }
+            )
+          } else if ((this.config as any).glyphStore) {
+            console.log('[BaseGlyphDragger.throttledSkeletonDrag] Calling glyphStore.modifyComponent')
+            ;(this.config as any).glyphStore.modifyComponent(
+              (this.context.component as IComponent).uuid,
+              { value: updatedGlyphValue }
+            )
+          } else {
+            console.warn('[BaseGlyphDragger.throttledSkeletonDrag] No store found!')
+          }
+          
+          // 触发 onUpdate 回调，确保组件更新被保存
+          console.log('[BaseGlyphDragger.throttledSkeletonDrag] Calling onUpdate callback')
+          this.config.onUpdate?.(this.context.component)
+        } else {
+          console.warn('[BaseGlyphDragger.throttledSkeletonDrag] No instance or parameters, still calling onUpdate')
+          // 如果没有实例，仍然触发 onUpdate（可能是其他类型的更新）
+          this.config.onUpdate?.(this.context.component)
+        }
+      } else {
+        console.log('[BaseGlyphDragger.throttledSkeletonDrag] Not a glyph component, skipping parameter sync')
+      }
+      
       if (import.meta.env.DEV) {
         console.log('[BaseGlyphDragger.throttledSkeletonDrag] Calling onRender')
       }
@@ -147,7 +237,19 @@ export abstract class BaseGlyphDragger {
   
   // 统一的事件处理
   protected onMouseDown = (e: MouseEvent) => {
-    if (!this.canDrag()) return
+    console.log('[BaseGlyphDragger.onMouseDown] START', {
+      canDrag: this.canDrag(),
+      hasComponent: !!this.context.component,
+      componentType: this.context.component?.type,
+      componentUUID: this.context.componentUUID,
+      hasGlyph: !!this.context.glyph,
+      isActive: this._isActive
+    })
+    
+    if (!this.canDrag()) {
+      console.log('[BaseGlyphDragger.onMouseDown] Cannot drag, returning')
+      return
+    }
     
     const rect = this.canvas.getBoundingClientRect()
     const mouseX = this.getCoord(e.clientX - rect.left)
@@ -157,12 +259,28 @@ export abstract class BaseGlyphDragger {
     const coordX = this.convertDisplayToCoord(mouseX, true)
     const coordY = this.convertDisplayToCoord(mouseY, false)
     
+    console.log('[BaseGlyphDragger.onMouseDown] Mouse position:', {
+      mouseX,
+      mouseY,
+      coordX,
+      coordY
+    })
+    
     const joints = this.getJoints()
+    console.log('[BaseGlyphDragger.onMouseDown] Joints:', {
+      jointsCount: joints.length,
+      joints: joints.map(j => ({ name: j.name, x: typeof j.x === 'function' ? j.x() : j.x, y: typeof j.y === 'function' ? j.y() : j.y }))
+    })
+    
     let hitJoint: IJoint | null = null
     
     // 检测是否点击了关键点
     if (this.shouldCheckJoints()) {
       hitJoint = JointManager.findHitJoint(joints, coordX, coordY, 20)
+      console.log('[BaseGlyphDragger.onMouseDown] Hit joint check:', {
+        shouldCheckJoints: this.shouldCheckJoints(),
+        hitJoint: hitJoint ? { name: hitJoint.name } : null
+      })
     }
     
     // 检测是否在组件包围框内（且并非关键点）
@@ -173,6 +291,10 @@ export abstract class BaseGlyphDragger {
         this.context.componentUUID
       )
       isInBoundingBox = this.isPointInBoundingBox(coordX, coordY, bbox)
+      console.log('[BaseGlyphDragger.onMouseDown] Bounding box check:', {
+        bbox,
+        isInBoundingBox
+      })
     }
     
     if (hitJoint) {
@@ -180,36 +302,59 @@ export abstract class BaseGlyphDragger {
       this.draggingJoint = hitJoint
       this.isDraggingFirstJoint = JointManager.isFirstJoint(hitJoint, joints)
       
-      if (import.meta.env.DEV) {
         console.log('[BaseGlyphDragger.onMouseDown] Hit joint:', {
           jointName: hitJoint.name,
           isFirstJoint: this.isDraggingFirstJoint,
           hasGlyph: !!this.context.glyph,
           componentUUID: this.context.componentUUID
         })
-      }
       
       // 调用脚本回调（非第一个关键点）
       if (!this.isDraggingFirstJoint && this.context.glyph) {
+        // 确保实例已创建并执行过脚本（如果还没有）
+        // 这样 onSkeletonDragStart 等回调才能正确设置
+        const instanceKey = this.context.componentUUID
+        const isTemporary = instanceManager.isTemporary(instanceKey)
+        console.log('[BaseGlyphDragger.onMouseDown] Instance check:', {
+          instanceKey,
+          isTemporary,
+          hasGlyph: !!this.context.glyph
+        })
+        
+        if (!isTemporary) {
+          // 如果实例不存在，先执行脚本创建实例
+          console.log('[BaseGlyphDragger.onMouseDown] Executing script to create instance')
+          executeGlyphScript(this.context.glyph, instanceKey)
+          
+          // 检查实例是否创建成功
+          const instanceAfter = instanceManager.isTemporary(instanceKey)
+          console.log('[BaseGlyphDragger.onMouseDown] Instance after script execution:', {
+            instanceKey,
+            isTemporary: instanceAfter
+          })
+        }
+        
+        console.log('[BaseGlyphDragger.onMouseDown] Calling executeDragStart')
         ScriptExecutor.executeDragStart(
           this.context.glyph,
           this.context.componentUUID,
           hitJoint
         )
+      } else {
+        console.log('[BaseGlyphDragger.onMouseDown] Skipping executeDragStart:', {
+          isFirstJoint: this.isDraggingFirstJoint,
+          hasGlyph: !!this.context.glyph
+        })
       }
     } else if (isInBoundingBox) {
       // 在包围框内但并非关键点，准备移动组件
       this.draggingJoint = null
       this.isDraggingFirstJoint = false
       
-      if (import.meta.env.DEV) {
         console.log('[BaseGlyphDragger.onMouseDown] In bounding box, will drag component')
-      }
     } else {
       // 不在包围框内，也不在关键点上，不处理
-      if (import.meta.env.DEV) {
-        console.log('[BaseGlyphDragger.onMouseDown] Not in bounding box or on joint')
-      }
+      console.log('[BaseGlyphDragger.onMouseDown] Not in bounding box or on joint, returning')
       return
     }
     
@@ -224,13 +369,108 @@ export abstract class BaseGlyphDragger {
     this.initialOx = this.origin.ox
     this.initialOy = this.origin.oy
     
+    console.log('[BaseGlyphDragger.onMouseDown] Drag started:', {
+      isDragging: this._isDragging,
+      draggingJoint: this.draggingJoint?.name,
+      lastX: this.lastX,
+      lastY: this.lastY,
+      origin: this.origin
+    })
+    
+    // 在 window 上监听 mousemove 和 mouseup，确保即使鼠标移出 canvas 也能继续拖拽
+    window.addEventListener('mousemove', this.onMouseMove)
     window.addEventListener('mouseup', this.onMouseUp)
   }
   
   protected onMouseMove = (e: MouseEvent) => {
+    console.log('[BaseGlyphDragger.onMouseMove] CALLED:', {
+      isDragging: this._isDragging,
+      draggingJoint: this.draggingJoint?.name,
+      target: e.target,
+      clientX: e.clientX,
+      clientY: e.clientY
+    })
+    
     if (!this._isDragging) {
-      // 更新悬停关键点
+      // 更新悬停关键点（只在 canvas 上时更新）
+      if (e.target === this.canvas || this.canvas.contains(e.target as Node)) {
       this.updateHoverJoint(e)
+      }
+      return
+    }
+    
+    console.log('[BaseGlyphDragger.onMouseMove] Dragging:', {
+      draggingJoint: this.draggingJoint?.name,
+      isDraggingFirstJoint: this.isDraggingFirstJoint,
+      hasGlyph: !!this.context.glyph,
+      componentType: this.context.component?.type,
+      target: e.target,
+      isOnCanvas: e.target === this.canvas || this.canvas.contains(e.target as Node)
+    })
+    
+    // 计算鼠标相对于 canvas 的位置（即使事件不在 canvas 上触发）
+    const rect = this.canvas.getBoundingClientRect()
+    const mouseX = this.getCoord(e.clientX - rect.left)
+    const mouseY = this.getCoord(e.clientY - rect.top)
+    
+    // 将显示坐标转换为坐标尺寸，用于计算拖拽增量
+    const coordX = this.convertDisplayToCoord(mouseX, true)
+    const coordY = this.convertDisplayToCoord(mouseY, false)
+    const dx = coordX - this.lastX
+    const dy = coordY - this.lastY
+    
+    console.log('[BaseGlyphDragger.onMouseMove] Position delta:', {
+      coordX,
+      coordY,
+      lastX: this.lastX,
+      lastY: this.lastY,
+      dx,
+      dy
+    })
+    
+    // 处理关键点拖拽
+    if (this.draggingJoint && !this.isDraggingFirstJoint && this.context.glyph) {
+      // 拖拽骨架（如果脚本支持）
+      // 执行骨架拖拽脚本，并在节流函数中触发重新渲染
+      console.log('[BaseGlyphDragger.onMouseMove] Calling throttledSkeletonDrag:', {
+          jointName: this.draggingJoint.name,
+          dx,
+          dy,
+          componentUUID: this.context.componentUUID
+        })
+      this.throttledSkeletonDrag(
+        this.context.glyph,
+        this.context.componentUUID,
+        this.draggingJoint!,
+        dx,
+        dy
+      )
+    } else if (!this.draggingJoint && this.context.component && this.context.component.type === 'glyph') {
+      // 没有拖拽关键点，但在包围框内，移动组件
+      console.log('[BaseGlyphDragger.onMouseMove] Calling throttledGlyphDrag')
+      this.throttledGlyphDrag(dx, dy)
+    } else {
+      console.log('[BaseGlyphDragger.onMouseMove] No drag action:', {
+        hasDraggingJoint: !!this.draggingJoint,
+        isDraggingFirstJoint: this.isDraggingFirstJoint,
+        hasGlyph: !!this.context.glyph,
+        componentType: this.context.component?.type
+      })
+    }
+    
+    // 注意：不要更新 lastX 和 lastY！
+    // dx 和 dy 应该始终相对于 mousedown 时的初始位置计算
+  }
+  
+  protected onMouseUp = (e: MouseEvent) => {
+    console.log('[BaseGlyphDragger.onMouseUp] CALLED:', {
+      isDragging: this._isDragging,
+      draggingJoint: this.draggingJoint?.name,
+      target: e.target
+    })
+    
+    if (!this._isDragging) {
+      console.log('[BaseGlyphDragger.onMouseUp] Not dragging, returning')
       return
     }
     
@@ -244,50 +484,11 @@ export abstract class BaseGlyphDragger {
     const dx = coordX - this.lastX
     const dy = coordY - this.lastY
     
-    // 处理关键点拖拽
-    if (this.draggingJoint && !this.isDraggingFirstJoint && this.context.glyph) {
-      // 拖拽骨架（如果脚本支持）
-      // 执行骨架拖拽脚本，并在节流函数中触发重新渲染
-      if (import.meta.env.DEV) {
-        console.log('[BaseGlyphDragger.onMouseMove] Dragging skeleton joint:', {
-          jointName: this.draggingJoint.name,
-          dx,
-          dy,
-          componentUUID: this.context.componentUUID
-        })
-      }
-      this.throttledSkeletonDrag(
-        this.context.glyph,
-        this.context.componentUUID,
-        this.draggingJoint!,
-        dx,
-        dy
-      )
-    } else if (!this.draggingJoint && this.context.component && this.context.component.type === 'glyph') {
-      // 没有拖拽关键点，但在包围框内，移动组件
-      if (import.meta.env.DEV) {
-        console.log('[BaseGlyphDragger.onMouseMove] Dragging component:', {
-          dx,
-          dy,
-          componentUUID: this.context.componentUUID
-        })
-      }
-      this.throttledGlyphDrag(dx, dy)
-    }
-  }
-  
-  protected onMouseUp = (e: MouseEvent) => {
-    if (!this._isDragging) return
-    
-    const rect = this.canvas.getBoundingClientRect()
-    const mouseX = this.getCoord(e.clientX - rect.left)
-    const mouseY = this.getCoord(e.clientY - rect.top)
-    
-    // 将显示坐标转换为坐标尺寸，用于计算拖拽增量
-    const coordX = this.convertDisplayToCoord(mouseX, true)
-    const coordY = this.convertDisplayToCoord(mouseY, false)
-    const dx = coordX - this.lastX
-    const dy = coordY - this.lastY
+    console.log('[BaseGlyphDragger.onMouseUp] Drag end:', {
+      dx,
+      dy,
+      draggingJoint: this.draggingJoint?.name
+    })
     
     // 调用脚本回调（非第一个关键点）
     if (
@@ -295,6 +496,7 @@ export abstract class BaseGlyphDragger {
       this.draggingJoint &&
       !this.isDraggingFirstJoint
     ) {
+      console.log('[BaseGlyphDragger.onMouseUp] Calling executeDragEnd')
       ScriptExecutor.executeDragEnd(
         this.context.glyph,
         this.context.componentUUID,
@@ -306,7 +508,9 @@ export abstract class BaseGlyphDragger {
       )
     }
     
+    console.log('[BaseGlyphDragger.onMouseUp] Calling handleDragEnd')
     this.handleDragEnd()
+    console.log('[BaseGlyphDragger.onMouseUp] Calling cleanup')
     this.cleanup()
   }
   
@@ -357,6 +561,11 @@ export abstract class BaseGlyphDragger {
   }
   
   private cleanup() {
+    if (this._isDragging) {
+      console.log('[BaseGlyphDragger.cleanup] ⚠️ Cleaning up while dragging!', {
+        stackTrace: new Error().stack?.split('\n').slice(1, 5).join('\n')
+      })
+    }
     this._isDragging = false
     this.draggingJoint = null
     this.isDraggingFirstJoint = false
@@ -364,6 +573,7 @@ export abstract class BaseGlyphDragger {
     this.lastX = 0
     this.lastY = 0
     window.removeEventListener('mouseup', this.onMouseUp)
+    window.removeEventListener('mousemove', this.onMouseMove) // 移除 window 上的监听器
   }
   
   // 公共方法
@@ -425,9 +635,15 @@ export abstract class BaseGlyphDragger {
   }
   
   activate() {
+    console.log('[BaseGlyphDragger.activate] Activating dragger:', {
+      canvas: !!this.canvas,
+      hasComponent: !!this.context.component,
+      componentType: this.context.component?.type
+    })
     this._isActive = true
     this.canvas.addEventListener('mousedown', this.onMouseDown)
     this.canvas.addEventListener('mousemove', this.onMouseMove)
+    console.log('[BaseGlyphDragger.activate] Event listeners added')
   }
   
   deactivate() {
@@ -436,6 +652,7 @@ export abstract class BaseGlyphDragger {
     // 1. 移除所有事件监听器
     this.canvas.removeEventListener('mousedown', this.onMouseDown)
     this.canvas.removeEventListener('mousemove', this.onMouseMove)
+    window.removeEventListener('mousemove', this.onMouseMove) // 移除 window 上的监听器
     window.removeEventListener('mouseup', this.onMouseUp)
     
     // 2. 清理状态

@@ -17,7 +17,13 @@ export const useToolStore = defineStore('tool', () => {
    * 设置当前工具
    */
   function setTool(newTool: string) {
+    if (import.meta.env.DEV) {
+      console.log('[useToolStore.setTool] Called with:', newTool, 'current value:', tool.value)
+    }
     tool.value = newTool
+    if (import.meta.env.DEV) {
+      console.log('[useToolStore.setTool] tool.value after assignment:', tool.value)
+    }
   }
 
   /**

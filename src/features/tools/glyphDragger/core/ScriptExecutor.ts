@@ -24,19 +24,43 @@ export class ScriptExecutor {
     
     // 如果临时实例已存在，直接获取
     if (instanceManager.isTemporary(instanceKey)) {
-      return instanceManager.acquireTemporaryInstance(
+      const instance = instanceManager.acquireTemporaryInstance(
         instanceKey,
         () => new CustomGlyph(glyph),
         'glyph'
       ) as CustomGlyph
+      
+      if (import.meta.env.DEV) {
+        console.log('[ScriptExecutor.getGlyphInstance] Got existing temporary instance:', {
+          instanceKey,
+          hasOnSkeletonDragStart: !!instance.onSkeletonDragStart,
+          hasOnSkeletonDrag: !!instance.onSkeletonDrag,
+          hasOnSkeletonDragEnd: !!instance.onSkeletonDragEnd,
+          hasTempData: !!instance.tempData
+        })
+      }
+      
+      return instance
     }
     
     // 否则尝试获取或创建实例
-    return instanceManager.acquireTemporaryInstance(
+    const instance = instanceManager.acquireTemporaryInstance(
       instanceKey,
       () => new CustomGlyph(glyph),
       'glyph'
     ) as CustomGlyph
+    
+    if (import.meta.env.DEV) {
+      console.log('[ScriptExecutor.getGlyphInstance] Created new instance:', {
+        instanceKey,
+        hasOnSkeletonDragStart: !!instance.onSkeletonDragStart,
+        hasOnSkeletonDrag: !!instance.onSkeletonDrag,
+        hasOnSkeletonDragEnd: !!instance.onSkeletonDragEnd,
+        hasTempData: !!instance.tempData
+      })
+    }
+    
+    return instance
   }
 
   /**
@@ -144,13 +168,57 @@ export class ScriptExecutor {
     event: IDragEvent
   ): void {
     const glyphInstance = this.getGlyphInstance(glyph, componentUUID)
-    if (!glyphInstance) return
+    if (!glyphInstance) {
+      if (import.meta.env.DEV) {
+        console.warn('[ScriptExecutor.executeDragEnd] No glyph instance found for', componentUUID)
+      }
+      return
+    }
+    
+    if (import.meta.env.DEV) {
+      const paramsBefore = glyphInstance._glyph.parameters?.map((p: any) => ({ name: p.name, value: p.value })) || []
+      console.log('[ScriptExecutor.executeDragEnd] Before onSkeletonDragEnd:', {
+        componentUUID,
+        hasOnSkeletonDragEnd: !!glyphInstance.onSkeletonDragEnd,
+        hasTempData: !!glyphInstance.tempData,
+        parametersBefore: paramsBefore
+      })
+    }
     
     if (glyphInstance.onSkeletonDragEnd) {
       try {
+        const paramsBefore = glyphInstance._glyph.parameters?.map((p: any) => ({ name: p.name, value: p.value })) || []
         glyphInstance.onSkeletonDragEnd(event)
+        
+        if (import.meta.env.DEV) {
+          const paramsAfter = glyphInstance._glyph.parameters?.map((p: any) => ({ name: p.name, value: p.value })) || []
+          const paramChanges: any[] = []
+          for (let i = 0; i < Math.max(paramsBefore.length, paramsAfter.length); i++) {
+            const oldParam = paramsBefore[i]
+            const newParam = paramsAfter[i]
+            if (oldParam && newParam && oldParam.value !== newParam.value) {
+              paramChanges.push({
+                name: oldParam.name,
+                oldValue: oldParam.value,
+                newValue: newParam.value
+              })
+            }
+          }
+          console.log('[ScriptExecutor.executeDragEnd] After onSkeletonDragEnd:', {
+            componentUUID,
+            hasTempData: !!glyphInstance.tempData,
+            parametersAfter: paramsAfter,
+            paramChanges: paramChanges.length > 0 ? paramChanges : 'NO CHANGES',
+            allParamsBefore: paramsBefore,
+            allParamsAfter: paramsAfter
+          })
+        }
       } catch (error) {
         console.error('Error in onSkeletonDragEnd:', error)
+      }
+    } else {
+      if (import.meta.env.DEV) {
+        console.warn('[ScriptExecutor.executeDragEnd] No onSkeletonDragEnd callback for', componentUUID, '- parameters will be synced from onSkeletonDrag')
       }
     }
   }

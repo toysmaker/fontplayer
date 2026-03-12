@@ -52,9 +52,9 @@ export function useEditFilesBar() {
     set: (value: string) => {
       // 类型断言，确保值符合类型要求
       if (value === 'color' || value === 'contour' || value === 'black') {
-        fontRenderStyle.value = value
-        // TODO: 触发重新渲染
-        // emitter.emit('renderPreviewCanvas')
+      fontRenderStyle.value = value
+      // TODO: 触发重新渲染
+      // emitter.emit('renderPreviewCanvas')
       }
     },
   })

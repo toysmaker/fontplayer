@@ -47,16 +47,29 @@ export function executeGlyphScript(
   targetGlyph: ICustomGlyph,
   instanceKey?: string
 ): void {
+  const key = instanceKey || targetGlyph.uuid
+  console.log('[executeGlyphScript] CALLED:', {
+    key,
+    glyphUUID: targetGlyph.uuid,
+    glyphName: targetGlyph.name,
+    stackTrace: new Error().stack?.split('\n').slice(1, 4).join('\n')
+  })
+  
   try {
     // 使用 instanceKey 或 targetGlyph.uuid 作为实例池的 key
     // 当从 characterFile 的 component 调用时，使用 component.uuid 确保每个组件有独立的实例
-    const key = instanceKey || targetGlyph.uuid
     
     // 如果字形实例缓存了数据，表示字形正在拖拽编辑中，则返回不执行脚本运行操作
     let existingInstance: CustomGlyph | null = null
     
     // 尝试获取已存在的实例
-    if (instanceManager.isTemporary(key)) {
+    const isTemporary = instanceManager.isTemporary(key)
+    console.log('[executeGlyphScript] Instance check:', {
+      key,
+      isTemporary
+    })
+    
+    if (isTemporary) {
       existingInstance = instanceManager.acquireTemporaryInstance(
         key,
         () => new CustomGlyph(targetGlyph),
@@ -69,16 +82,24 @@ export function executeGlyphScript(
     ) as CustomGlyph
     }
     
+    console.log('[executeGlyphScript] Got instance:', {
+      key,
+      hasInstance: !!existingInstance,
+      hasTempData: !!existingInstance?.tempData,
+      tempDataKeys: existingInstance?.tempData ? Object.keys(existingInstance.tempData) : [],
+      componentsCount: existingInstance?._components?.length || 0
+    })
+    
     if (existingInstance.tempData) {
-      if (import.meta.env.DEV) {
-        console.log('[executeGlyphScript] Skipping script execution due to tempData:', {
+      console.log('[executeGlyphScript] ⚠️ SKIPPING script execution due to tempData:', {
           key,
           tempDataKeys: Object.keys(existingInstance.tempData),
           componentsCount: existingInstance._components?.length || 0
         })
-      }
       return
     }
+    
+    console.log('[executeGlyphScript] ✅ Proceeding with script execution (no tempData)')
 
     // TODO: 处理 skeleton 类型的字形
     // if (targetGlyph.skeleton) {

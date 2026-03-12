@@ -5,6 +5,7 @@
 
 import type { BaseTool } from './BaseTool'
 import type { ToolType, ToolRenderFunction } from './types'
+import { useToolStore } from '@/stores/tool'
 
 /**
  * 工具管理器单例
@@ -37,6 +38,10 @@ export class ToolManager {
    * 切换工具
    */
   async switchTool(toolType: ToolType): Promise<void> {
+    if (import.meta.env.DEV) {
+      console.log('[ToolManager.switchTool] Called with:', toolType)
+    }
+    
     // 停用当前工具
     if (this.currentTool) {
       this.currentTool.deactivate()
@@ -51,6 +56,19 @@ export class ToolManager {
       this.currentTool = tool
       // 更新渲染函数
       this.renderFunctions.set(toolType, tool.getRenderFunction())
+      // 同步更新 toolStore，确保 ToolBar 显示正确的选中状态
+      const toolStore = useToolStore()
+      if (import.meta.env.DEV) {
+        console.log('[ToolManager.switchTool] Setting toolStore.tool to:', toolType, 'current value:', toolStore.tool)
+      }
+      toolStore.setTool(toolType)
+      if (import.meta.env.DEV) {
+        console.log('[ToolManager.switchTool] toolStore.tool after setTool:', toolStore.tool)
+      }
+    } else {
+      if (import.meta.env.DEV) {
+        console.warn('[ToolManager.switchTool] Tool not found:', toolType)
+      }
     }
   }
 

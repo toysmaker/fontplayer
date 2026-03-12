@@ -234,24 +234,39 @@ export function renderCanvas(
       }
       
       // 如果实例没有脚本生成的组件，执行脚本
-      // executeGlyphScript 内部会检查 tempData，如果有则跳过执行（避免重置拖拽修改）
-      const needsScriptExecution = !glyphInstance._components ||
+      // 但是，如果实例有 tempData（正在拖拽中），不应该执行脚本（避免重置拖拽修改）
+      const hasTempData = !!glyphInstance.tempData
+      const needsScriptExecution = (!glyphInstance._components ||
         !glyphInstance._components.length ||
-        options.forceUpdate
+        options.forceUpdate) && !hasTempData
       
       if (import.meta.env.DEV) {
         console.log('[EditorCanvasRenderer] Checking script execution:', {
           instanceKey,
           hasComponents: !!glyphInstance._components?.length,
           componentsCount: glyphInstance._components?.length || 0,
-          hasTempData: !!glyphInstance.tempData,
+          hasTempData,
           needsScriptExecution,
-          forceUpdate: options.forceUpdate
+          forceUpdate: options.forceUpdate,
+          willSkipDueToTempData: hasTempData && (!glyphInstance._components || !glyphInstance._components.length || options.forceUpdate)
         })
       }
       
       if (needsScriptExecution) {
+        console.log('[EditorCanvasRenderer] ✅ Calling executeGlyphScript during render (no tempData):', {
+          instanceKey,
+          hasTempData: false,
+          needsScriptExecution,
+          forceUpdate: options.forceUpdate
+        })
         executeGlyphScript(glyphValue, instanceKey)
+      } else if (hasTempData && (!glyphInstance._components || !glyphInstance._components.length || options.forceUpdate)) {
+        console.log('[EditorCanvasRenderer] ⚠️ SKIPPING executeGlyphScript due to tempData (drag in progress):', {
+          instanceKey,
+          hasTempData: true,
+          tempDataKeys: glyphInstance.tempData ? Object.keys(glyphInstance.tempData) : [],
+          wouldNeedExecution: !glyphInstance._components || !glyphInstance._components.length || options.forceUpdate
+        })
         // 脚本执行后，重新获取实例
         glyphInstance = instanceManager.acquireTemporaryInstance(
           instanceKey,

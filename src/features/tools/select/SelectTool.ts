@@ -13,6 +13,8 @@ import type { IComponent, IPenComponent, IGlyphComponent, ICustomGlyph, IPolygon
 import { computeGlyphComponentBoundingBox } from '@/core/utils/glyphBounds'
 import { getStrokeWidth } from '@/utils/canvas-utils'
 import { PenSelectTool } from './PenSelectTool'
+import { instanceManager } from '@/core/instance/InstanceManager'
+import { DraggerManager } from '../glyphDragger'
 
 /**
  * 选择工具单例
@@ -201,23 +203,39 @@ export class SelectTool extends BaseTool {
     }
 
     const bbox = computeGlyphComponentBoundingBox(component, origin)
-    if (!bbox) return false
+    if (!bbox) {
+      console.log('[glyphComponentContainsPoint] bbox is null', {
+        componentUUID: component.uuid,
+        origin,
+        hasValue: !!component.value,
+      })
+      return false
+    }
 
     const { x, y, w, h } = bbox
     const px = point.x
     const py = point.y
 
     // 在包围框基础上增加容差
-    if (
+    const isInBounds = (
       px >= x - tolerance &&
       px <= x + w + tolerance &&
       py >= y - tolerance &&
       py <= y + h + tolerance
-    ) {
-      return true
-    }
+    )
 
-    return false
+    console.log('[glyphComponentContainsPoint]', {
+      componentUUID: component.uuid,
+      point: { x: px, y: py },
+      origin,
+      bbox: { x, y, w, h },
+      tolerance,
+      isInBounds,
+      checkX: `${px} >= ${x - tolerance} && ${px} <= ${x + w + tolerance}`,
+      checkY: `${py} >= ${y - tolerance} && ${py} <= ${y + h + tolerance}`,
+    })
+
+    return isInBounds
   }
 
   /**
@@ -377,6 +395,8 @@ export class SelectTool extends BaseTool {
         isInBounds =
           this.glyphComponentContainsPoint(clickPoint, component, 20) ||
           inComponentBound(clickPoint, component, 20)
+
+          console.log('glyphComponentContainsPoint', isInBounds, component.uuid, clickPoint.x, clickPoint.y)
       } else {
         isInBounds = inComponentBound(clickPoint, component, 20)
       }
@@ -520,6 +540,15 @@ export class SelectTool extends BaseTool {
       }
     }
     
+    // 如果选中的是字形组件，且正在拖拽（mousedown），让 glyphDragger 处理，SelectTool 不处理
+    if (this.mousedown && selectedComponent && selectedComponent.type === 'glyph') {
+      console.log('[SelectTool.onMouseMove] Skipping - glyph component drag handled by glyphDragger:', {
+        componentUUID: selectedComponent.uuid,
+        selectControl: this.selectControl
+      })
+      return
+    }
+    
     if (!selectedComponent || !selectedComponent.visible) return
 
     const { x, y, w, h, rotation, uuid } = selectedComponent
@@ -655,6 +684,7 @@ export class SelectTool extends BaseTool {
    * 处理点击选择逻辑
    */
   private handleClickSelection(e: MouseEvent): void {
+    console.log('handleClickSelection')
     const characterStore = useCharacterStore()
     const glyphStore = useGlyphStore()
     const isGlyph = this.config.mode === 'glyph'
@@ -667,16 +697,20 @@ export class SelectTool extends BaseTool {
 
     let offsetX = e.offsetX
     let offsetY = e.offsetY
+    console.log('offsetX, offsetY', offsetX, offsetY)
     if (target !== this.canvas) {
       const rect = this.canvas.getBoundingClientRect()
       offsetX = e.clientX - rect.left
       offsetY = e.clientY - rect.top
     }
+    console.log('clickPoint', offsetX, offsetY)
 
     const clickPoint = {
       x: this.getCoord(offsetX),
       y: this.getCoord(offsetY),
     }
+
+    console.log('clickPoint 2', clickPoint.x, clickPoint.y)
 
     // 查找点击的组件
     const orderedList = isGlyph 
@@ -697,6 +731,8 @@ export class SelectTool extends BaseTool {
         isInBounds =
           this.glyphComponentContainsPoint(clickPoint, component, 20) ||
           inComponentBound(clickPoint, component, 20)
+
+          console.log('glyphComponentContainsPoint 2', isInBounds, component.uuid)
       } else {
         // 对于其他组件，边界框检测已足够
         isInBounds = inComponentBound(clickPoint, component, 20)
@@ -725,6 +761,7 @@ export class SelectTool extends BaseTool {
       if (currentSelected) {
         // 如果是字形组件，优先保持选中（不切换），让 glyphDragger 响应关键点拖拽
         if (currentSelected.component.type === 'glyph') {
+          console.log('glyph component', currentSelected.component.uuid)
           return
         }
         // 如果是钢笔组件且处于编辑模式，让 penSelectTool 处理点编辑，不切换选择
@@ -750,6 +787,7 @@ export class SelectTool extends BaseTool {
         (glyphStore as any).selectComponent(closestComponent.uuid)
       } else {
         (characterStore as any).selectComponent(closestComponent.uuid)
+        console.log('selectComponent', closestComponent.uuid)
       }
       // 选择变更后触发重新渲染（包括控件框和 dragger）
       this.triggerRender()
@@ -801,6 +839,8 @@ export class SelectTool extends BaseTool {
       return
     }
 
+    console.log('onMouseUp', this.mousemove)
+
     // 如果用户没有移动鼠标，说明是点击操作，需要处理点击选择
     if (!this.mousemove) {
       this.handleClickSelection(e)
@@ -808,6 +848,28 @@ export class SelectTool extends BaseTool {
 
     if (selectedComponent && selectedComponent.visible && selectedComponent.type !== 'picture') {
       this.modifyComponentValue(selectedComponent, isGlyph)
+    }
+
+    // 释放所有临时实例（在 mouseup 时释放，避免内存泄漏）
+    // 这样可以确保在 mousedown 和 mouseup 之间实例保持存在，但在 mouseup 后释放
+    // 但是，如果 glyphDragger 正在拖拽，不要释放临时实例，让 glyphDragger 自己处理
+    const dragger = DraggerManager.get(this.canvas)
+    const isDraggerDragging = dragger && dragger.isDragging()
+    
+    if (!isDraggerDragging) {
+      const orderedList = isGlyph 
+        ? (glyphStore as any).orderedListWithItemsForCurrentGlyph 
+        : (characterStore as any).orderedListWithItemsForCurrentCharacterFile
+      
+      for (const comp of orderedList) {
+        if (comp && comp.type === 'glyph' && instanceManager.isTemporary(comp.uuid)) {
+          instanceManager.releaseTemporaryInstance(comp.uuid)
+        }
+      }
+    } else {
+      if (import.meta.env.DEV) {
+        console.log('[SelectTool.onMouseUp] Skipping instance release: glyphDragger is dragging')
+      }
     }
 
     this.mousedown = false
