@@ -19,6 +19,17 @@
       >
         <GlyphItem :glyph="item" />
       </div>
+
+      <!-- 列表末尾的“添加字形”按钮，作为一个虚拟的 item 排列在最后 -->
+      <div
+        v-if="showAddButton"
+        class="glyph-item default-glyph"
+        data-testid="glyph-add-item"
+        @click="handleAddGlyph"
+        @pointerup="handleAddGlyph"
+      >
+        <div class="add-glyph-btn-wrapper"></div>
+      </div>
     </div>
   </div>
 </template>
@@ -80,6 +91,15 @@ const glyphList = computed(() => {
   
   const glyphType = props.glyphType || 'glyphs'
   return selectedFile[glyphType] || []
+})
+
+// 是否显示“添加字形”按钮：
+// 当滚动到列表底部（可见范围的 end 覆盖到实际列表末尾）时显示；
+// 如果列表为空，则始终显示该按钮。
+const showAddButton = computed(() => {
+  if (!projectStore.selectedFile) return false
+  if (glyphList.value.length === 0) return true
+  return visibleRange.value.end >= glyphList.value.length
 })
 
 // 计算每行字符数（响应式，参考原工程的容错机制）
@@ -268,6 +288,30 @@ const handleItemClick = createDebouncedHandler(
   _handleItemClick,
   'VirtualGlyphList.itemClick',
   (args) => args[0].uuid // 使用UUID作为比较参数
+)
+
+// “添加字形”按钮点击处理
+const _handleAddGlyph = () => {
+  const glyphType = props.glyphType || 'glyphs'
+  // 触发添加字形事件，由上层统一处理对话框逻辑（区分 glyphType）
+  if (import.meta.env.DEV) {
+    console.log('[VirtualGlyphList] handleAddGlyph:', {
+      glyphType,
+    })
+  }
+  window.dispatchEvent(
+    new CustomEvent('editor-add-glyph', {
+      detail: {
+        glyphType,
+      },
+    }),
+  )
+}
+
+// 使用防重复调用包装，避免 pointerup 与 click 重复触发
+const handleAddGlyph = createDebouncedHandler(
+  _handleAddGlyph,
+  'VirtualGlyphList.addGlyph'
 )
 
 // 更新容器尺寸
@@ -554,6 +598,8 @@ const processRenderQueue = async () => {
   display: grid;
   grid-template-columns: repeat(auto-fill, 86px);
   gap: 10px;
+  padding: 0 10px; /* 额外的左右内边距，避免 item 紧贴容器左右边缘 */
+  box-sizing: border-box;
   /* 使用 will-change 提示浏览器优化 */
   will-change: transform;
   /* 使用 contain 隔离渲染，提升性能 */
@@ -562,9 +608,52 @@ const processRenderQueue = async () => {
 
 .glyph-item {
   width: 86px;
+  height: 112px; /* 与 itemHeight 保持一致，确保默认“添加”按钮有正确高度 */
   /* 使用 will-change 提示浏览器优化 */
   will-change: transform;
   /* 使用 contain 隔离渲染，提升性能 */
   contain: layout style paint;
+}
+
+/* “添加字形”按钮样式，参考原工程的 default-character/default-glyph */
+.default-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--primary-0);
+  cursor: pointer;
+  &:hover {
+    background-color: var(--primary-1);
+  }
+}
+
+.add-glyph-btn-wrapper {
+  width: 60%;
+  height: 60%;
+  border-radius: 4px;
+  position: relative;
+}
+
+.add-glyph-btn-wrapper::before,
+.add-glyph-btn-wrapper::after {
+  content: '';
+  position: absolute;
+  background-color: rgba(255, 255, 255, 0.85);
+}
+
+.add-glyph-btn-wrapper::before {
+  left: 50%;
+  top: 10%;
+  bottom: 10%;
+  width: 2px;
+  transform: translateX(-50%);
+}
+
+.add-glyph-btn-wrapper::after {
+  top: 50%;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  transform: translateY(-50%);
 }
 </style>

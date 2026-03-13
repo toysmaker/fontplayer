@@ -43,8 +43,6 @@
               :style="{
                 'transform': editingGlyph ? `translate3d(${editingGlyph.view.translateX}px, ${editingGlyph.view.translateY}px, 0px)` : 'none',
               }"
-              :width="canvasWidth"
-              :height="canvasHeight"
             />
           </div>
         </div>
@@ -132,11 +130,24 @@ const renderCanvas = async () => {
   
   const components = (glyphStore as any).orderedListWithItemsForCurrentGlyph
   
+  // 获取 Canvas 的显示尺寸（CSS style）
+  const computedStyle = window.getComputedStyle(canvasRef.value)
+  const displayWidth = parseFloat(computedStyle.width) || 0
+  const displayHeight = parseFloat(computedStyle.height) || 0
+  const zoom = editingGlyph.value.view?.zoom || 100
+  
   if (import.meta.env.DEV) {
     console.log('[GlyphEditor] Rendering canvas:', {
       componentsCount: components.length,
-      canvasSize: { width: canvasRef.value.width, height: canvasRef.value.height },
+      canvasActualSize: { width: canvasRef.value.width, height: canvasRef.value.height },
+      canvasDisplaySize: { width: displayWidth, height: displayHeight },
+      canvasSizeRatio: { 
+        widthRatio: canvasRef.value.width / (displayWidth || 1), 
+        heightRatio: canvasRef.value.height / (displayHeight || 1) 
+      },
+      zoom: zoom,
       editingGlyphUUID: editingGlyph.value.uuid,
+      editingGlyphName: editingGlyph.value.name,
       editingGlyphComponentsCount: editingGlyph.value.components?.length || 0,
       editingGlyphOrderedListCount: editingGlyph.value.orderedList?.length || 0,
       components: components
@@ -150,6 +161,9 @@ const renderCanvas = async () => {
     background: defaultBackground,
     grid: defaultGrid,
   })
+  
+  // 注意：render() 函数内部会检查实例状态并执行脚本（如果需要）
+  // 如果脚本在 onMounted 中已执行，render() 会检测到实例已有 _components，不会重复执行
   
   // 渲染关键点和辅助线（在主要渲染之后）
   // 如果当前选中的组件被设置为不可见（visible === false），则不渲染其关键点和辅助线
@@ -216,7 +230,8 @@ const initDragger = () => {
         selectedComponentsTree: (glyphStore as any).selectedComponentsTree,
       },
       onRender: () => {
-        // TODO: 触发渲染
+        // 拖拽骨架关键点后触发重新渲染
+        renderCanvas()
       },
       onUpdate: (comp) => {
         ;(glyphStore as any).updateComponent(comp.uuid, comp)
@@ -242,6 +257,22 @@ const cleanupDragger = () => {
 // 初始化工具系统
 const initTools = async () => {
   if (!canvasRef.value) return
+
+  // 每次进入字形编辑界面时，重置所有工具的单例实例，确保绑定当前 canvas
+  // 避免上一次编辑留下的实例仍然持有旧的 canvas 引用和配置，导致事件监听失效或调用错误的渲染函数
+  try {
+    SelectTool.reset()
+    PenTool.reset()
+    PolygonTool.reset()
+    EllipseTool.reset()
+    RectangleTool.reset()
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.warn('[GlyphEditor] initTools: tool reset failed (can be ignored in some environments)', e)
+    }
+  }
+  // 同时清理 ToolManager 中已注册的旧工具
+  toolManager.cleanupAll()
   
   const toolConfig = {
     canvas: canvasRef.value,
@@ -299,7 +330,83 @@ onMounted(async () => {
   // 等待 nextTick 确保 editingGlyph 已设置
   await nextTick()
   
-  // 初始化画布尺寸
+  // 确保字形实例已执行脚本（在初始渲染前，必须在 Canvas 尺寸设置之前）
+  // 直接更新实例，确保使用最新的 editingGlyph.value 数据，避免缓存问题
+  if (editingGlyph.value) {
+    const instanceKey = editingGlyph.value.uuid
+    
+    if (import.meta.env.DEV) {
+      console.log('[GlyphEditor.onMounted] Updating instance for editGlyph:', {
+        instanceKey,
+        glyphUUID: editingGlyph.value.uuid,
+        glyphName: editingGlyph.value.name
+      })
+    }
+    
+    // 直接释放旧实例（如果存在），确保使用最新的 editingGlyph.value 数据
+    // 这样可以避免从字符编辑界面创建的临时实例影响字形编辑界面
+    if (instanceManager.isTemporary(instanceKey)) {
+      instanceManager.releaseTemporaryInstance(instanceKey)
+    }
+    // 释放旧实例（如果存在）
+    if (instanceManager.isEditing(instanceKey)) {
+      // 如果已经在编辑状态，先释放（releaseInstance 会从 editingUUIDs 中删除）
+      instanceManager.releaseInstance(instanceKey)
+    }
+    
+    // 重新标记为编辑状态
+    instanceManager.markEditing(instanceKey)
+    
+    // 重新创建实例（使用最新的 editingGlyph.value 数据）
+    const glyphInstance = instanceManager.getInstance(
+      instanceKey,
+      () => new CustomGlyph(editingGlyph.value!),
+      'glyph'
+    ) as CustomGlyph | null
+    
+    if (import.meta.env.DEV) {
+      console.log('[GlyphEditor.onMounted] Instance created/updated:', {
+        instanceKey,
+        hasInstance: !!glyphInstance,
+        componentsCount: glyphInstance?._components?.length || 0,
+        isEditing: instanceManager.isEditing(instanceKey)
+      })
+    }
+    
+    // 执行脚本生成新的 _components（无论实例是否已有 _components，都重新执行以确保数据最新）
+    if (import.meta.env.DEV) {
+      console.log('[GlyphEditor.onMounted] Executing script for initial render:', {
+        instanceKey,
+        hasInstance: !!glyphInstance
+      })
+    }
+    
+    // 执行脚本
+    executeGlyphScript(editingGlyph.value, instanceKey)
+    
+    // 等待脚本执行完成
+    await nextTick()
+    
+    // 重新获取实例，确保获取到脚本执行后的最新状态
+    const finalInstance = instanceManager.getInstance(
+      instanceKey,
+      () => new CustomGlyph(editingGlyph.value!),
+      'glyph'
+    ) as CustomGlyph | null
+    
+    if (import.meta.env.DEV && finalInstance) {
+      console.log('[GlyphEditor.onMounted] After script execution:', {
+        instanceKey,
+        hasInstance: !!finalInstance,
+        componentsCount: finalInstance._components?.length || 0,
+        isEditing: instanceManager.isEditing(instanceKey),
+        isTemporary: instanceManager.isTemporary(instanceKey),
+        componentTypes: finalInstance._components?.map((c: any) => c.type || 'unknown') || []
+      })
+    }
+  }
+  
+  // 初始化画布尺寸（必须在脚本执行之后，确保编辑字形已设置）
   if (canvasRef.value && editingGlyph.value) {
     // 设置 canvas 的实际尺寸（用于渲染，高分辨率）
     canvasRef.value.width = canvasWidth.value
@@ -311,28 +418,6 @@ onMounted(async () => {
     const styleHeight = displayHeight.value * zoom / 100
     canvasRef.value.style.width = `${styleWidth}px`
     canvasRef.value.style.height = `${styleHeight}px`
-  }
-  
-  // 确保字形实例已执行脚本（在初始渲染前）
-  if (editingGlyph.value) {
-    const instanceKey = editingGlyph.value.uuid
-    const glyphInstance = instanceManager.getInstance(
-      instanceKey,
-      () => new CustomGlyph(editingGlyph.value!),
-      'glyph'
-    ) as CustomGlyph | null
-    
-    // 如果实例存在但 _components 为空，执行脚本
-    if (glyphInstance && (!glyphInstance._components || !glyphInstance._components.length)) {
-      if (import.meta.env.DEV) {
-        console.log('[GlyphEditor.onMounted] Executing script for initial render:', {
-          instanceKey,
-          hasInstance: !!glyphInstance,
-          componentsCount: glyphInstance._components?.length || 0
-        })
-      }
-      executeGlyphScript(editingGlyph.value, instanceKey)
-    }
   }
   
   // 初始渲染

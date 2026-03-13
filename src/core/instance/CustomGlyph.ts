@@ -129,6 +129,11 @@ export class CustomGlyph implements IInstance {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     
+    // 获取 Canvas 的显示尺寸（CSS style）
+    const computedStyle = window.getComputedStyle(canvas)
+    const displayWidth = parseFloat(computedStyle.width) || 0
+    const displayHeight = parseFloat(computedStyle.height) || 0
+    
     // 渲染字形组件列表（components，即字形内部的组件，如 pen, polygon 等）
     const glyphComponents = orderedListWithItemsForGlyph(this._glyph)
     if (import.meta.env.DEV) {
@@ -138,7 +143,15 @@ export class CustomGlyph implements IInstance {
         glyphComponentsCount: glyphComponents.length,
         _componentsCount: this._components.length,
         hasGlyphComponents: glyphComponents.length > 0,
-        has_components: this._components.length > 0
+        has_components: this._components.length > 0,
+        canvasActualSize: { width: canvas.width, height: canvas.height },
+        canvasDisplaySize: { width: displayWidth, height: displayHeight },
+        canvasSizeRatio: { 
+          widthRatio: canvas.width / (displayWidth || 1), 
+          heightRatio: canvas.height / (displayHeight || 1) 
+        },
+        offset: offset,
+        scale: scale
       })
     }
     if (glyphComponents.length > 0) {
@@ -163,10 +176,29 @@ export class CustomGlyph implements IInstance {
     this._components.forEach((component: any, index: number) => {
       if (component.render) {
         if (import.meta.env.DEV) {
+          // 获取点的坐标范围（用于调试）
+          const points = component.points || []
+          let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+          if (points.length > 0) {
+            points.forEach((p: any) => {
+              if (p.x !== undefined) {
+                minX = Math.min(minX, p.x)
+                maxX = Math.max(maxX, p.x)
+              }
+              if (p.y !== undefined) {
+                minY = Math.min(minY, p.y)
+                maxY = Math.max(maxY, p.y)
+              }
+            })
+          }
           console.log(`[CustomGlyph.render] Rendering _component ${index}:`, {
             type: component.type,
-            pointsCount: component.points?.length || 0,
-            hasRender: !!component.render
+            pointsCount: points.length,
+            hasRender: !!component.render,
+            pointBounds: points.length > 0 ? { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY } : null,
+            firstPoint: points[0] ? { x: points[0].x, y: points[0].y } : null,
+            lastPoint: points[points.length - 1] ? { x: points[points.length - 1].x, y: points[points.length - 1].y } : null,
+            renderOptions: { offset, scale, fillColor }
           })
         }
         component.render(canvas, {

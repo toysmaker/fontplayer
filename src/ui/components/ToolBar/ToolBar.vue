@@ -72,7 +72,7 @@
           @click="switchTool('polygon')"
           @pointerup="switchTool('polygon')"
           size="40"
-          v-show="editStatus === EditStatus.Edit">
+          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
           <font-awesome-icon
             icon="fa-solid fa-draw-polygon"
           />

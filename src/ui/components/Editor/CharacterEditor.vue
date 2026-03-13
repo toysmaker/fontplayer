@@ -314,7 +314,6 @@ const cleanupDragger = () => {
 
 // 初始化工具系统
 const initTools = async () => {
-  debugger
   if (!canvasRef.value) return
 
   // 每次进入字符编辑界面时，重置所有工具的单例实例，确保绑定当前 canvas

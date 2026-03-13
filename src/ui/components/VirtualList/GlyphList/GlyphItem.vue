@@ -549,8 +549,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   position: relative;
-  background-color: var(--dark-1);
-  border: 1px solid var(--dark-3);
+  background-color: var(--primary-0);
+  border: 3px solid var(--primary-0);
   cursor: pointer;
   transition: border-color 0.2s ease;
 }
@@ -597,14 +597,14 @@ onUnmounted(() => {
 }
 
 .glyph .info {
-  flex: 0 0 32px;
+  /* flex: 0 0 32px; */
+  height: 32px;
   width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4px;
-  background-color: var(--dark-1);
+  background-color: var(--primary-0);
   color: var(--light-0);
   font-size: 12px;
 }

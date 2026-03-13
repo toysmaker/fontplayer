@@ -197,7 +197,23 @@ export function renderCanvas(
       
       // 执行字形脚本（如果需要）
       // 使用 component.uuid 作为实例 key，确保与 ScriptExecutor 使用相同的 key
+      // 注意：字符编辑界面使用 component.uuid，字形编辑界面使用 glyph.uuid
+      // 这样可以确保同一个字形在不同场景下使用不同的实例，避免冲突
       const instanceKey = component.uuid
+      
+      if (import.meta.env.DEV) {
+        console.log('[EditorCanvasRenderer.renderCanvas] Rendering glyph component:', {
+          componentUUID: component.uuid,
+          glyphUUID: glyphValue.uuid,
+          glyphName: glyphValue.name,
+          instanceKey,
+          usingComponentUUID: true, // 明确标识使用 component.uuid
+          isEditing: instanceManager.isEditing(instanceKey),
+          isTemporary: instanceManager.isTemporary(instanceKey),
+          glyphIsEditing: instanceManager.isEditing(glyphValue.uuid),
+          glyphIsTemporary: instanceManager.isTemporary(glyphValue.uuid)
+        })
+      }
       
       // 检查实例是否已有脚本生成的组件
       let glyphInstance: CustomGlyph | null = null
@@ -541,7 +557,26 @@ export function render(
     grid?: IGrid
   } = { mode: 'character' }
 ): void {
-  console.log('renderEditorCanvasRenderer render')
+  if (import.meta.env.DEV) {
+    const computedStyle = window.getComputedStyle(canvas)
+    const displayWidth = parseFloat(computedStyle.width) || 0
+    const displayHeight = parseFloat(computedStyle.height) || 0
+    console.log('[EditorCanvasRenderer.render] Starting render:', {
+      mode: options.mode,
+      canvasActualSize: { width: canvas.width, height: canvas.height },
+      canvasDisplaySize: { width: displayWidth, height: displayHeight },
+      canvasSizeRatio: { 
+        widthRatio: canvas.width / (displayWidth || 1), 
+        heightRatio: canvas.height / (displayHeight || 1) 
+      },
+      hasCharacter: !!options.character,
+      hasGlyph: !!options.glyph,
+      glyphUUID: options.glyph?.uuid,
+      glyphName: options.glyph?.name,
+      componentsCount: options.components?.length || 0,
+      forceUpdate
+    })
+  }
   clearCanvas(canvas)
   
   // 默认背景和网格配置
@@ -608,19 +643,21 @@ export function render(
       })
       
       // 2. 然后渲染内部组件（字形实例的 _components，即脚本生成的组件）
-      if (options.glyph) {
+    if (options.glyph) {
         const instanceKey = options.glyph.uuid
         
         // 先检查实例是否存在，以及是否有 tempData（正在拖拽中）
+        // 注意：优先检查编辑状态，因为编辑状态的实例应该优先使用
+        // 如果实例既在编辑状态又在临时状态（比如脚本执行后），应该使用编辑状态的实例
         let existingInstance: CustomGlyph | null = null
-        if (instanceManager.isTemporary(instanceKey)) {
-          existingInstance = instanceManager.acquireTemporaryInstance(
+        if (instanceManager.isEditing(instanceKey)) {
+          existingInstance = instanceManager.getInstance(
             instanceKey,
             () => new CustomGlyph(options.glyph!),
             'glyph'
           ) as CustomGlyph
-        } else if (instanceManager.isEditing(instanceKey)) {
-          existingInstance = instanceManager.getInstance(
+        } else if (instanceManager.isTemporary(instanceKey)) {
+          existingInstance = instanceManager.acquireTemporaryInstance(
             instanceKey,
             () => new CustomGlyph(options.glyph!),
             'glyph'
@@ -641,10 +678,26 @@ export function render(
         
         // 如果实例有 tempData（正在拖拽中），不应该执行脚本（避免重置拖拽修改）
         const hasTempData = !!existingInstance?.tempData
-        const needsScriptExecution = (!existingInstance ||
-          !existingInstance._components ||
-          !existingInstance._components.length ||
-          forceUpdate) && !hasTempData
+        
+        // 检查是否需要执行脚本
+        // 注意：如果实例存在但 _components 为空，需要执行脚本
+        // 但如果实例不存在，可能是第一次进入，需要先获取实例再判断
+        let needsScriptExecution = false
+        if (!existingInstance) {
+          // 如果实例不存在，需要执行脚本
+          needsScriptExecution = true
+        } else if (!existingInstance._components || !existingInstance._components.length) {
+          // 如果实例存在但 _components 为空，需要执行脚本
+          needsScriptExecution = true
+        } else if (forceUpdate) {
+          // 如果强制更新，需要执行脚本
+          needsScriptExecution = true
+        }
+        
+        // 如果有 tempData，不应该执行脚本
+        if (hasTempData) {
+          needsScriptExecution = false
+        }
         
         if (needsScriptExecution) {
           if (import.meta.env.DEV) {
@@ -812,10 +865,27 @@ export function render(
       }
     } else if (options.glyph) {
       // 如果没有传入 components，使用字形实例的 render 方法（用于预览等场景）
+      if (import.meta.env.DEV) {
+        console.log('[EditorCanvasRenderer] Using renderGlyph path (no components):', {
+          glyphUUID: options.glyph.uuid,
+          glyphName: options.glyph.name,
+          canvasActualSize: { width: canvas.width, height: canvas.height },
+          computedStyle: window.getComputedStyle(canvas)
+        })
+      }
       const glyphInstance = instanceManager.getOrCreateGlyphInstance(
         options.glyph,
         () => new CustomGlyph(options.glyph!)
       ) as CustomGlyph
+      if (import.meta.env.DEV) {
+        console.log('[EditorCanvasRenderer] Glyph instance before renderGlyph:', {
+          instanceKey: options.glyph.uuid,
+          hasInstance: !!glyphInstance,
+          _componentsCount: glyphInstance._components?.length || 0,
+          isEditing: instanceManager.isEditing(options.glyph.uuid),
+          isTemporary: instanceManager.isTemporary(options.glyph.uuid)
+        })
+      }
       renderGlyph(glyphInstance, canvas, renderBackground, false, false)
     } else {
       if (import.meta.env.DEV) {

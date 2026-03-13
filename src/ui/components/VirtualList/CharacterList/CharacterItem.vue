@@ -462,7 +462,8 @@ onUnmounted(() => {
 .info {
   display: flex;
   flex-direction: row;
-  flex: 0 0 32px;
+  /* flex: 0 0 32px; */
+  height: 32px;
   line-height: 32px;
   background-color: var(--primary-0);
   color: var(--primary-5);

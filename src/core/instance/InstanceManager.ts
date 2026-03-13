@@ -171,27 +171,53 @@ export class InstanceManager {
       return
     }
 
-    // 找到最久未使用的实例（排除正在编辑和临时使用的）
-    const candidates: Array<{ uuid: string; lastUsed: number }> = []
+    // 找到最久未使用的实例
+    // 优先清理：不在编辑状态且不是临时实例的实例
+    // 如果还不够，清理不在编辑状态的临时实例（最久未使用的）
+    const nonTemporaryCandidates: Array<{ uuid: string; lastUsed: number }> = []
+    const temporaryCandidates: Array<{ uuid: string; lastUsed: number }> = []
     
     for (const [uuid, instance] of this.instancePool.entries()) {
-      // 跳过正在编辑或临时使用的实例
-      if (this.isEditing(uuid) || this.isTemporary(uuid)) {
+      // 跳过正在编辑的实例（无论是否为临时实例）
+      if (this.isEditing(uuid)) {
         continue
       }
-      candidates.push({
-        uuid,
-        lastUsed: instance.lastUsed,
-      })
+      
+      if (this.isTemporary(uuid)) {
+        // 临时实例候选（不在编辑状态）
+        temporaryCandidates.push({
+          uuid,
+          lastUsed: instance.lastUsed,
+        })
+      } else {
+        // 非临时实例候选
+        nonTemporaryCandidates.push({
+          uuid,
+          lastUsed: instance.lastUsed,
+        })
+      }
     }
 
     // 按最后使用时间排序
-    candidates.sort((a, b) => a.lastUsed - b.lastUsed)
+    nonTemporaryCandidates.sort((a, b) => a.lastUsed - b.lastUsed)
+    temporaryCandidates.sort((a, b) => a.lastUsed - b.lastUsed)
 
-    // 移除最久未使用的实例，直到池大小符合要求
+    // 计算需要移除的数量
     const toRemove = this.instancePool.size - this.maxPoolSize
-    for (let i = 0; i < toRemove && i < candidates.length; i++) {
-      this.releaseInstance(candidates[i].uuid)
+    
+    // 优先移除非临时实例
+    let removed = 0
+    for (let i = 0; i < toRemove && i < nonTemporaryCandidates.length; i++) {
+      this.releaseInstance(nonTemporaryCandidates[i].uuid)
+      removed++
+    }
+    
+    // 如果还不够，移除临时实例（最久未使用的）
+    if (removed < toRemove) {
+      for (let i = 0; i < (toRemove - removed) && i < temporaryCandidates.length; i++) {
+        // 释放临时实例（会从 temporaryInstances 集合中移除）
+        this.releaseTemporaryInstance(temporaryCandidates[i].uuid)
+      }
     }
   }
 

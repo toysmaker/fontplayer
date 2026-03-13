@@ -29,11 +29,14 @@
             v-for="subMenu in menu.submenu"
             :key="subMenu.key"
             class="menu-dropdown-item"
-            :class="{ 'has-children': subMenu.submenu && subMenu.submenu.length > 0 }"
+            :class="{ 
+              'has-children': subMenu.submenu && subMenu.submenu.length > 0,
+              'menu-item-disabled': subMenu.disabled 
+            }"
             @mouseenter="handleSubMenuEnter(subMenu.key)"
             @mouseleave="handleSubMenuLeave(subMenu.key)"
-            @click="handleMenuSelect(subMenu.key)"
-            @pointerup="handleMenuSelect(subMenu.key)"
+            @click="!subMenu.disabled && handleMenuSelect(subMenu.key)"
+            @pointerup="!subMenu.disabled && handleMenuSelect(subMenu.key)"
           >
             <span>{{ subMenu.label }}</span>
             <!-- 嵌套子菜单 -->
@@ -62,24 +65,42 @@
       v-model:show="showNewProjectDialog"
       @confirm="handleProjectCreated"
     />
+    <AddCharacterDialog v-model:show="showAddCharacterDialog" />
+    <AddIconDialog v-model:show="showAddIconDialog" />
+    <AddGlyphDialog
+      v-model:show="showAddGlyphDialog"
+      :category="addGlyphCategory"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
 import { fileHandler } from '@/features/editor/services/FileHandler'
 import { useProjectStore } from '@/stores/project'
+import { useEditorStore } from '@/stores/editor'
+import { EditStatus } from '@/core/types'
+import { isTauri } from '@/utils/env'
 import NewProjectDialog from '@/ui/dialogs/NewProjectDialog.vue'
+import AddCharacterDialog from '@/ui/dialogs/AddCharacterDialog.vue'
+import AddIconDialog from '@/ui/dialogs/AddIconDialog.vue'
+import AddGlyphDialog from '@/ui/dialogs/AddGlyphDialog.vue'
 import { getWebMenu, traverse_web_menu } from '@/features/editor/menus/web_menus'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t } = useI18n()
 const message = useMessage()
 const router = useRouter()
+const projectStore = useProjectStore()
+const editorStore = useEditorStore()
 const showNewProjectDialog = ref(false)
+const showAddCharacterDialog = ref(false)
+const showAddIconDialog = ref(false)
+const showAddGlyphDialog = ref(false)
+const addGlyphCategory = ref<'glyphs' | 'stroke_glyphs' | 'radical_glyphs' | 'comp_glyphs'>('glyphs')
 const hoveredMenu = ref<string | null>(null)
 const hoveredSubMenu = ref<string | null>(null)
 let menuLeaveTimer: number | null = null
@@ -142,12 +163,89 @@ const web_handlers: Record<string, Function> = {
   'format-current-character': handleFormatCurrentCharacter,
 }
 
-// 获取菜单列表
+// 菜单启用/禁用逻辑函数
+const enable = () => true
+
+const enableAtEdit = () => {
+  return editorStore.editStatus === EditStatus.Edit || editorStore.editStatus === EditStatus.Glyph
+}
+
+const enableAtCharacterEdit = () => {
+  return editorStore.editStatus === EditStatus.Edit
+}
+
+const enableAtList = () => {
+  return editorStore.editStatus === EditStatus.CharacterList ||
+         editorStore.editStatus === EditStatus.GlyphList ||
+         editorStore.editStatus === EditStatus.StrokeGlyphList ||
+         editorStore.editStatus === EditStatus.RadicalGlyphList ||
+         editorStore.editStatus === EditStatus.CompGlyphList
+}
+
+const templateEnable = () => {
+  return editorStore.editStatus !== EditStatus.Edit &&
+         editorStore.editStatus !== EditStatus.Glyph &&
+         editorStore.editStatus !== EditStatus.Pic
+}
+
+// 菜单启用/禁用映射（参考原工程）
+const web_disabled: Record<string, () => boolean> = {
+  'create-file': enableAtList,
+  'open-file': enableAtList,
+  'save-file': enable,
+  'clear-cache': enable,
+  'sync-data': enableAtList,
+  'save-as-json': enable,
+  'undo': enableAtEdit,
+  'redo': enableAtEdit,
+  'cut': enableAtEdit,
+  'copy': enableAtEdit,
+  'paste': enableAtEdit,
+  'delete': enableAtEdit,
+  'import-font-file': enableAtList,
+  'import-glyphs': enableAtList,
+  'import-pic': enableAtEdit,
+  'import-svg': enableAtEdit,
+  'export-font-file': enable,
+  'export-var-font-file': enable,
+  'export-color-font': enable,
+  'export-glyphs': enableAtList,
+  'export-jpeg': enableAtEdit,
+  'export-png': enableAtEdit,
+  'export-svg': enableAtEdit,
+  'add-character': enableAtList,
+  'add-icon': enableAtList,
+  'font-settings': enable,
+  'preference-settings': enable,
+  'language-settings': enable,
+  'template-2': templateEnable,
+  'template-3': templateEnable,
+  'template-5': templateEnable,
+  'template-6': templateEnable,
+  'template-7': templateEnable,
+  'template-8': templateEnable,
+  'template-digits': templateEnable,
+  'template-letters': templateEnable,
+  'template-symbols': templateEnable,
+  'template-test': templateEnable,
+  'remove_overlap': enableAtCharacterEdit,
+  'format-all-characters': enableAtList,
+  'format-current-character': enableAtCharacterEdit,
+}
+
+// 获取菜单列表（带禁用状态）
 const menuList = computed(() => {
   try {
     const web_menu = getWebMenu()
     const menus = traverse_web_menu(web_handlers, web_menu)
-    return menus
+    // 为每个菜单项添加禁用状态
+    return menus.map(menu => ({
+      ...menu,
+      submenu: menu.submenu?.map(subMenu => ({
+        ...subMenu,
+        disabled: web_disabled[subMenu.key] ? !web_disabled[subMenu.key]() : false,
+      })),
+    }))
   } catch (error) {
     console.error('Error loading menu:', error)
     return []
@@ -197,9 +295,24 @@ const _handleMenuSelect = async (key: string) => {
 // 使用防重复调用包装，避免 click 和 pointerup 同时触发时重复调用
 const handleMenuSelect = createDebouncedHandler(_handleMenuSelect, 'EditorSidebar.menuSelect', (args) => args[0])
 
-// 监听 Tauri 菜单事件（新建工程）
+// 监听 Tauri / 全局事件（新建工程、添加字符、添加图标）
 const handleShowNewProjectDialog = () => {
   showNewProjectDialog.value = true
+}
+
+const handleShowAddCharacterDialog = () => {
+  showAddCharacterDialog.value = true
+}
+
+const handleShowAddIconDialog = () => {
+  showAddIconDialog.value = true
+}
+
+const handleShowAddGlyphDialog = (event?: Event) => {
+  const customEvent = event as CustomEvent<{ glyphType?: string }> | undefined
+  const glyphType = customEvent?.detail?.glyphType || 'glyphs'
+  addGlyphCategory.value = glyphType as typeof addGlyphCategory.value
+  showAddGlyphDialog.value = true
 }
 
 // 监听警告消息事件
@@ -215,14 +328,65 @@ const handleEditorDelete = () => {
   handleDelete()
 }
 
+// 将 EditStatus 转换为 Rust 端能理解的字符串格式
+const editStatusToRustString = (status: EditStatus): string => {
+  switch (status) {
+    case EditStatus.Edit:
+      return 'edit'
+    case EditStatus.Glyph:
+      return 'glyph'
+    case EditStatus.Pic:
+      return 'pic'
+    case EditStatus.CharacterList:
+      return 'characterlist'
+    case EditStatus.GlyphList:
+      return 'glyphlist'
+    case EditStatus.StrokeGlyphList:
+      return 'strokeglyphlist'
+    case EditStatus.RadicalGlyphList:
+      return 'radicalglyphlist'
+    case EditStatus.CompGlyphList:
+      return 'compglyphlist'
+    default:
+      return 'characterlist'
+  }
+}
+
+// 更新 Tauri 菜单的启用/禁用状态
+const updateTauriMenuDisabled = async () => {
+  if (!isTauri()) return
+  
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const statusString = editStatusToRustString(editorStore.editStatus)
+    await invoke('toggle_menu_disabled', { editStatus: statusString })
+  } catch (error) {
+    console.error('Failed to update Tauri menu disabled state:', error)
+  }
+}
+
+// 监听编辑状态变化，更新菜单禁用状态
+watch(() => editorStore.editStatus, () => {
+  updateTauriMenuDisabled()
+}, { immediate: true })
+
 onMounted(() => {
   window.addEventListener('editor-show-new-project-dialog', handleShowNewProjectDialog)
+  window.addEventListener('editor-add-character', handleShowAddCharacterDialog)
+  window.addEventListener('editor-add-icon', handleShowAddIconDialog)
+  window.addEventListener('editor-add-glyph', handleShowAddGlyphDialog)
   window.addEventListener('show-warning-message', handleShowWarningMessage)
   window.addEventListener('editor-delete', handleEditorDelete)
+  
+  // 初始化 Tauri 菜单状态
+  updateTauriMenuDisabled()
 })
 
 onUnmounted(() => {
   window.removeEventListener('editor-show-new-project-dialog', handleShowNewProjectDialog)
+  window.removeEventListener('editor-add-character', handleShowAddCharacterDialog)
+  window.removeEventListener('editor-add-icon', handleShowAddIconDialog)
+  window.removeEventListener('editor-add-glyph', handleShowAddGlyphDialog)
   window.removeEventListener('show-warning-message', handleShowWarningMessage)
   window.removeEventListener('editor-delete', handleEditorDelete)
 })
@@ -342,11 +506,11 @@ function handleExportSvg() {
 
 // 字符操作
 function handleAddCharacter() {
-  console.log('Add character')
+  window.dispatchEvent(new CustomEvent('editor-add-character'))
 }
 
 function handleAddIcon() {
-  console.log('Add icon')
+  window.dispatchEvent(new CustomEvent('editor-add-icon'))
 }
 
 // 设置操作
@@ -535,5 +699,16 @@ const handleProjectCreated = () => {
 .menu-dropdown-nested .menu-dropdown-item:hover {
   background-color: transparent;
   color: var(--primary-4);
+}
+
+.menu-dropdown-item.menu-item-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.menu-dropdown-item.menu-item-disabled:hover {
+  background-color: transparent;
+  color: var(--light-0);
 }
 </style>

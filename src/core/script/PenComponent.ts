@@ -165,6 +165,54 @@ class PenComponent {
 	}) {
 		const scale = options.scale
 		if (this.points.length >= 4) {
+			// 获取 Canvas 的显示尺寸（CSS style）
+			const computedStyle = window.getComputedStyle(canvas)
+			const displayWidth = parseFloat(computedStyle.width) || 0
+			const displayHeight = parseFloat(computedStyle.height) || 0
+
+			// 计算原始坐标范围
+			let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+			this.points.forEach((p: any) => {
+				if (p.x !== undefined) {
+					minX = Math.min(minX, p.x)
+					maxX = Math.max(maxX, p.x)
+				}
+				if (p.y !== undefined) {
+					minY = Math.min(minY, p.y)
+					maxY = Math.max(maxY, p.y)
+				}
+			})
+
+			// 计算每个点映射后的坐标（用于详细调试）
+			const mappedPoints = this.points.map((p: any, index: number) => ({
+				index,
+				original: { x: p.x, y: p.y },
+				mapped: {
+					x: mapCanvasX(p.x) * scale,
+					y: mapCanvasY(p.y) * scale,
+				},
+				type: p.type,
+			}))
+
+			if (import.meta.env.DEV) {
+				console.log('[PenComponent.render] Rendering pen component (full points):', {
+					pointsCount: this.points.length,
+					originalBounds: { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY },
+					canvasActualSize: { width: canvas.width, height: canvas.height },
+					canvasDisplaySize: { width: displayWidth, height: displayHeight },
+					canvasSizeRatio: {
+						widthRatio: canvas.width / (displayWidth || 1),
+						heightRatio: canvas.height / (displayHeight || 1),
+					},
+					renderOptions: { offset: options.offset, scale },
+					offsetMapped: {
+						x: mapCanvasX(options.offset.x) * scale,
+						y: mapCanvasY(options.offset.y) * scale,
+					},
+					points: mappedPoints,
+				})
+			}
+
 			const ctx = canvas.getContext('2d') as CanvasRenderingContext2D
 			ctx.strokeStyle = options.fillColor || '#000'
 			ctx.lineWidth = getStrokeWidth()
@@ -178,7 +226,12 @@ class PenComponent {
 				)
 			}
 			ctx.stroke()
-			console.log('render PenComponent stroke', ctx.strokeStyle)
+			if (import.meta.env.DEV) {
+				console.log('[PenComponent.render] Stroke completed:', {
+					strokeStyle: ctx.strokeStyle,
+					lineWidth: ctx.lineWidth,
+				})
+			}
 			ctx.setTransform(1, 0, 0, 1, 0, 0)
 		}
 	}

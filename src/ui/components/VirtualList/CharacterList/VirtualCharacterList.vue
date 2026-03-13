@@ -20,6 +20,17 @@
       >
         <CharacterItem :character="item" />
       </div>
+
+      <!-- 列表末尾的“添加字符”按钮，作为一个虚拟的 item 排列在最后 -->
+      <div
+        v-if="showAddButton"
+        class="character-item default-character"
+        data-testid="character-add-item"
+        @click="handleAddCharacter"
+        @pointerup="handleAddCharacter"
+      >
+        <div class="add-text-btn-wrapper"></div>
+      </div>
     </div>
   </div>
 </template>
@@ -152,6 +163,19 @@ const visibleItems = ref<ICharacterFileLite[]>([])
 
 // 组件实例缓存（用于复用组件，避免频繁创建/销毁）
 const componentInstances = new Map<string, any>()
+
+// 是否显示“添加字符”按钮：
+// 当滚动到列表底部（可见范围的 end 覆盖到实际列表末尾）时显示；
+// 如果列表为空，则始终显示该按钮。
+const showAddButton = computed(() => {
+  if (!projectStore.selectedFile) return false
+  // 搜索模式下仅显示搜索结果，不显示“添加”按钮
+  if (editorStore.isCharacterSearching && editorStore.characterSearchKeyword) {
+    return false
+  }
+  if (characterList.value.length === 0) return true
+  return visibleRange.value.end >= characterList.value.length
+})
 
 // 更新可见项（使用更智能的更新策略，减少DOM操作）
 const updateVisibleItems = async () => {
@@ -331,6 +355,21 @@ const handleItemClick = createDebouncedHandler(
   _handleItemClick,
   'VirtualCharacterList.itemClick',
   (args) => args[0].uuid // 使用UUID作为比较参数
+)
+
+// “添加字符”按钮点击处理
+const _handleAddCharacter = () => {
+  // 触发添加字符事件，由上层（如 EditorSidebar）统一处理对话框逻辑
+  if (import.meta.env.DEV) {
+    console.log('[VirtualCharacterList] handleAddCharacter')
+  }
+  window.dispatchEvent(new CustomEvent('editor-add-character'))
+}
+
+// 使用防重复调用包装，避免 pointerup 与 click 重复触发
+const handleAddCharacter = createDebouncedHandler(
+  _handleAddCharacter,
+  'VirtualCharacterList.addCharacter'
 )
 
 // 更新容器尺寸
@@ -638,6 +677,8 @@ const processRenderQueue = async () => {
   display: grid;
   grid-template-columns: repeat(auto-fill, 86px);
   gap: 10px;
+  padding: 0 10px; /* 额外的左右内边距，避免 item 紧贴容器左右边缘 */
+  box-sizing: border-box;
   /* 使用 will-change 提示浏览器优化 */
   will-change: transform;
   /* 使用 contain 隔离渲染，提升性能 */
@@ -646,9 +687,52 @@ const processRenderQueue = async () => {
 
 .character-item {
   width: 86px;
+  height: 112px; /* 与 itemHeight 保持一致，确保默认“添加”按钮有正确高度 */
   /* 使用 will-change 提示浏览器优化 */
   will-change: transform;
   /* 使用 contain 隔离渲染，提升性能 */
   contain: layout style paint;
+}
+
+/* “添加字符”按钮样式，参考原工程的 default-character */
+.default-character {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--primary-0);
+  cursor: pointer;
+  &:hover {
+    background-color: var(--primary-1);
+  }
+}
+
+.add-text-btn-wrapper {
+  width: 60%;
+  height: 60%;
+  border-radius: 4px;
+  position: relative;
+}
+
+.add-text-btn-wrapper::before,
+.add-text-btn-wrapper::after {
+  content: '';
+  position: absolute;
+  background-color: rgba(255, 255, 255, 0.85);
+}
+
+.add-text-btn-wrapper::before {
+  left: 50%;
+  top: 10%;
+  bottom: 10%;
+  width: 2px;
+  transform: translateX(-50%);
+}
+
+.add-text-btn-wrapper::after {
+  top: 50%;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  transform: translateY(-50%);
 }
 </style>

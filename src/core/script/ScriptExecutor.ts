@@ -82,13 +82,36 @@ export function executeGlyphScript(
     ) as CustomGlyph
     }
     
-    console.log('[executeGlyphScript] Got instance:', {
-      key,
-      hasInstance: !!existingInstance,
-      hasTempData: !!existingInstance?.tempData,
-      tempDataKeys: existingInstance?.tempData ? Object.keys(existingInstance.tempData) : [],
-      componentsCount: existingInstance?._components?.length || 0
-    })
+    // 添加调试信息：检查实例的来源
+    if (import.meta.env.DEV) {
+      const instancePool = (instanceManager as any).instancePool
+      const poolInstance = instancePool?.get(key)
+      const isEditing = instanceManager.isEditing(key)
+      const isTemporaryAfter = instanceManager.isTemporary(key)
+      
+      console.log('[executeGlyphScript] Got instance:', {
+        key,
+        glyphUUID: targetGlyph.uuid,
+        glyphName: targetGlyph.name,
+        hasInstance: !!existingInstance,
+        instanceUUID: existingInstance?.uuid,
+        instanceType: existingInstance?.type,
+        hasTempData: !!existingInstance?.tempData,
+        tempDataKeys: existingInstance?.tempData ? Object.keys(existingInstance.tempData) : [],
+        componentsCount: existingInstance?._components?.length || 0,
+        isEditing,
+        isTemporary: isTemporaryAfter,
+        poolInstanceExists: !!poolInstance,
+        poolInstanceUUID: poolInstance?.uuid,
+        poolInstanceComponentsCount: poolInstance?._components?.length || 0,
+        instancePoolSize: instancePool?.size || 0,
+        allInstanceKeys: instancePool ? Array.from(instancePool.keys()) : [],
+        // 检查实例是否来自不同的 glyph（可能是缓存错误）
+        instanceGlyphUUID: existingInstance?._glyph?.uuid,
+        targetGlyphUUID: targetGlyph.uuid,
+        glyphUUIDMatch: existingInstance?._glyph?.uuid === targetGlyph.uuid
+      })
+    }
     
     if (existingInstance.tempData) {
       console.log('[executeGlyphScript] ⚠️ SKIPPING script execution due to tempData:', {

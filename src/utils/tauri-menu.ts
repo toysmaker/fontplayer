@@ -112,6 +112,17 @@ export async function initTauriMenu() {
       console.log('Edit -> Delete')
       // TODO: 实现删除逻辑
     })
+
+    // 监听字符菜单事件
+    listen('add-character', () => {
+      console.log('Character -> Add Character')
+      window.dispatchEvent(new CustomEvent('editor-add-character'))
+    })
+
+    listen('add-icon', () => {
+      console.log('Character -> Add Icon')
+      window.dispatchEvent(new CustomEvent('editor-add-icon'))
+    })
     
     console.log('Tauri menu event listeners initialized')
   } catch (error) {

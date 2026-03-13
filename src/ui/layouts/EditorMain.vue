@@ -155,7 +155,7 @@ const handleTabChange = (status: EditStatus) => {
 .list-switch .radical-glyph-list:hover,
 .list-switch .stroke-glyph-list:hover,
 .list-switch .comp-glyph-list:hover {
-  color: var(--primary-1);
+  background-color: var(--primary-1);
 }
 
 .list-switch .character-list.selected,
