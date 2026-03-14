@@ -14,6 +14,7 @@ import { useGlyphStore } from '@/stores/glyph'
 import { useProjectStore } from '@/stores/project'
 import { EditStatus, ParameterType, IParameter, ICustomGlyph } from '@/core/types'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+import { roundToPrecision } from '@/utils/number'
 
 const { t } = useI18n()
 
@@ -66,6 +67,14 @@ const handleChangeParameter = async (parameter: IParameter, value: number | stri
     return
   }
   
+  // 如果是数值类型，限制精度
+  let processedValue: number | string = value
+  if (typeof value === 'number' && parameter.type === ParameterType.Number) {
+    // 根据参数的最大值决定精度：如果 max <= 10，使用2位小数，否则使用0位小数
+    const precision = parameter.max && parameter.max <= 10 ? 2 : 0
+    processedValue = roundToPrecision(value, precision)
+  }
+  
   // 如果是 Constant 类型，更新全局常量的值
   if (parameter.type === ParameterType.Constant) {
     const constantUUID = String(parameter.value)
@@ -73,16 +82,19 @@ const handleChangeParameter = async (parameter: IParameter, value: number | stri
     
     if (constantsMap) {
       // 对于 Constant 类型，value 应该是 number（因为 IConstant.value 是 number）
-      const numericValue = typeof value === 'number' ? value : Number(value)
+      const numericValue = typeof processedValue === 'number' ? processedValue : Number(processedValue)
+      // 限制精度
+      const precision = parameter.max && parameter.max <= 10 ? 2 : 0
+      const roundedValue = roundToPrecision(numericValue, precision)
       
       // 更新 ConstantsMap 中的常量值
-      constantsMap.updateConstantValue(constantUUID, numericValue)
+      constantsMap.updateConstantValue(constantUUID, roundedValue)
       
       // 更新 selectedFile.constants 中的常量值（用于持久化，但不触发列表更新）
       if (projectStore.selectedFile?.constants) {
         const constant = projectStore.selectedFile.constants.find(c => c.uuid === constantUUID)
         if (constant) {
-          constant.value = numericValue
+          constant.value = roundedValue
         }
       }
     }
@@ -93,7 +105,7 @@ const handleChangeParameter = async (parameter: IParameter, value: number | stri
       return
     }
     
-    param.value = value
+    param.value = processedValue
   }
   
   // 更新组件数据（触发响应式更新）
@@ -124,12 +136,14 @@ const handleChangeParameter = async (parameter: IParameter, value: number | stri
 
 const handleChangeOX = (ox: number | null) => {
   if (ox === null || !selectedComponentUUID.value) return
-  modifyComponent({ ox })
+  // 限制精度为1位小数（与 input-number 的 precision="1" 保持一致）
+  modifyComponent({ ox: roundToPrecision(ox, 1) })
 }
 
 const handleChangeOY = (oy: number | null) => {
   if (oy === null || !selectedComponentUUID.value) return
-  modifyComponent({ oy })
+  // 限制精度为1位小数（与 input-number 的 precision="1" 保持一致）
+  modifyComponent({ oy: roundToPrecision(oy, 1) })
 }
 
 const handleChangeName = (name: string) => {

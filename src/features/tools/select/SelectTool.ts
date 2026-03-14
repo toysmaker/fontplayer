@@ -15,6 +15,7 @@ import { getStrokeWidth } from '@/utils/canvas-utils'
 import { PenSelectTool } from './PenSelectTool'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { DraggerManager } from '../glyphDragger'
+import { roundToPrecision } from '@/utils/number'
 
 /**
  * 选择工具单例
@@ -562,82 +563,126 @@ export class SelectTool extends BaseTool {
 
     if (this.mousedown && this.selectControl !== 'null') {
       switch (this.selectControl) {
-        case 'scale-left-top':
+        case 'scale-left-top': {
+          const newW = roundToPrecision(w + x - _x)
+          const newH = roundToPrecision(h + y - _y)
+          const newX = roundToPrecision(_x)
+          const newY = roundToPrecision(_y)
           modifyComponent(uuid, {
-            w: w + x - _x,
-            h: h + y - _y,
-            x: _x,
-            y: _y,
+            w: newW,
+            h: newH,
+            x: newX,
+            y: newY,
           } as Partial<IComponent>)
           break
-        case 'scale-right-top':
+        }
+        case 'scale-right-top': {
+          const newW = roundToPrecision(_x - x)
+          const newH = roundToPrecision(h + y - _y)
+          const newY = roundToPrecision(_y)
           modifyComponent(uuid, {
-            w: _x - x,
-            h: h + y - _y,
-            y: _y,
+            w: newW,
+            h: newH,
+            y: newY,
           } as Partial<IComponent>)
           break
-        case 'scale-left-bottom':
+        }
+        case 'scale-left-bottom': {
+          const newW = roundToPrecision(w + x - _x)
+          const newX = roundToPrecision(_x)
+          const newH = roundToPrecision(_y - y)
           modifyComponent(uuid, {
-            w: w + x - _x,
-            x: _x,
-            h: _y - y,
+            w: newW,
+            x: newX,
+            h: newH,
           } as Partial<IComponent>)
           break
-        case 'scale-right-bottom':
+        }
+        case 'scale-right-bottom': {
+          const newW = roundToPrecision(_x - x)
+          const newH = roundToPrecision(_y - y)
           modifyComponent(uuid, {
-            w: _x - x,
-            h: _y - y,
+            w: newW,
+            h: newH,
           } as Partial<IComponent>)
           break
+        }
         case 'inner-area':
           // 字形组件的移动由 glyphDragger 处理，SelectTool 不处理
           if (selectedComponent.type === 'glyph') {
             // 字形组件不在这里处理移动，由 glyphDragger 处理
             break
           }
+          // 检查 lastX 和 lastY 是否有效，如果无效则使用当前鼠标位置作为基准
+          // 这可以防止在反复拖拽后出现坐标错误
+          if (this.lastX < 0 || this.lastY < 0) {
+            // 如果 lastX 或 lastY 无效，初始化为当前鼠标位置
+            this.lastX = _x
+            this.lastY = _y
+            // 不更新组件位置，因为这是第一次移动
+            break
+          }
+          // 计算移动增量
+          const dx = _x - this.lastX
+          const dy = _y - this.lastY
           modifyComponent(uuid, {
-            x: x + _x - this.lastX,
-            y: y + _y - this.lastY,
+            x: roundToPrecision(x + dx),
+            y: roundToPrecision(y + dy),
           } as Partial<IComponent>)
           break
         case 'rotate-left-top': {
           const left_top = { x, y }
-          modifyComponent(uuid, {
-            rotation: rotation + angleBetween(
+          const newRotation = roundToPrecision(
+            rotation + angleBetween(
               { x: _x - (x + w / 2), y: _y - (y + h / 2) },
               { x: left_top.x - (x + w / 2), y: left_top.y - (y + h / 2) }
-            )
+            ),
+            1
+          )
+          modifyComponent(uuid, {
+            rotation: newRotation,
           } as Partial<IComponent>)
           break
         }
         case 'rotate-right-top': {
           const right_top = { x: x + w, y }
-          modifyComponent(uuid, {
-            rotation: rotation + angleBetween(
+          const newRotation = roundToPrecision(
+            rotation + angleBetween(
               { x: _x - (x + w / 2), y: _y - (y + h / 2) },
               { x: right_top.x - (x + w / 2), y: right_top.y - (y + h / 2) }
-            )
+            ),
+            1
+          )
+          modifyComponent(uuid, {
+            rotation: newRotation,
           } as Partial<IComponent>)
           break
         }
         case 'rotate-left-bottom': {
           const left_bottom = { x, y: y + h }
-          modifyComponent(uuid, {
-            rotation: rotation + angleBetween(
+          const newRotation = roundToPrecision(
+            rotation + angleBetween(
               { x: _x - (x + w / 2), y: _y - (y + h / 2) },
               { x: left_bottom.x - (x + w / 2), y: left_bottom.y - (y + h / 2) }
-            )
+            ),
+            1
+          )
+          modifyComponent(uuid, {
+            rotation: newRotation,
           } as Partial<IComponent>)
           break
         }
         case 'rotate-right-bottom': {
           const right_bottom = { x: x + w, y: y + h }
-          modifyComponent(uuid, {
-            rotation: rotation + angleBetween(
+          const newRotation = roundToPrecision(
+            rotation + angleBetween(
               { x: _x - (x + w / 2), y: _y - (y + h / 2) },
               { x: right_bottom.x - (x + w / 2), y: right_bottom.y - (y + h / 2) }
-            )
+            ),
+            1
+          )
+          modifyComponent(uuid, {
+            rotation: newRotation,
           } as Partial<IComponent>)
           break
         }
@@ -674,10 +719,13 @@ export class SelectTool extends BaseTool {
       } else {
         this.selectControl = 'null'
       }
+      // 只有在 mousedown 时才更新 lastX 和 lastY，避免在鼠标移动时覆盖拖拽基准点
+      // 注意：这里不更新 lastX 和 lastY，因为它们应该在 onMouseDown 时设置
+    } else {
+      // 在拖拽过程中更新 lastX 和 lastY，用于下一次移动计算
+      this.lastX = _x
+      this.lastY = _y
     }
-
-    this.lastX = _x
-    this.lastY = _y
   }
 
   /**
