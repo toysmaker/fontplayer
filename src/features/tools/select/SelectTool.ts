@@ -28,6 +28,11 @@ export class SelectTool extends BaseTool {
   private mousedown: boolean = false
   private mousemove: boolean = false
   private penSelectTool: PenSelectTool | null = null
+  // 记录拖拽开始时的包围框，用于旋转+缩放时保持稳定的旋转中心
+  private initialBBox: { x: number; y: number; w: number; h: number } | null = null
+  // 记录移动操作时上一帧鼠标的屏幕空间坐标（不经旋转变换，避免旋转组件移动时跳动）
+  private lastMX: number = -1
+  private lastMY: number = -1
 
   // 事件处理器引用（用于解绑）
   private mouseDownHandler: ((e: MouseEvent) => void) | null = null
@@ -136,6 +141,9 @@ export class SelectTool extends BaseTool {
     this.mousemove = false
     this.lastX = -1
     this.lastY = -1
+    this.lastMX = -1
+    this.lastMY = -1
+    this.initialBBox = null
   }
 
   cleanup(): void {
@@ -494,6 +502,9 @@ export class SelectTool extends BaseTool {
 
     this.lastX = _x
     this.lastY = _y
+    // 同时记录屏幕空间鼠标坐标，供 inner-area 移动使用（不受旋转影响）
+    this.lastMX = this.getCoord(e.offsetX)
+    this.lastMY = this.getCoord(e.offsetY)
 
     // 根据点击位置设置 selectControl
     if (clickedOnScaleControl) {
@@ -506,6 +517,8 @@ export class SelectTool extends BaseTool {
       } else if (distance(_x, _y, right_bottom.x, right_bottom.y) <= d) {
         this.selectControl = 'scale-right-bottom'
       }
+      // 缩放开始时记录初始包围框，用于在有旋转的情况下保持稳定的旋转中心
+      this.initialBBox = { x, y, w, h }
     } else if (clickedOnRotateControl) {
       if (leftTop(_x, _y, left_top.x, left_top.y, d)) {
         this.selectControl = 'rotate-left-top'
@@ -553,8 +566,20 @@ export class SelectTool extends BaseTool {
     if (!selectedComponent || !selectedComponent.visible) return
 
     const { x, y, w, h, rotation, uuid } = selectedComponent
+
+    // 修复Bug2: mousemove 绑定在 document 上，e.offsetX/offsetY 是相对于鼠标所在元素的，
+    // 鼠标移出 canvas 后坐标系突变导致跳动。改用 clientX/Y 减去 canvas 的 boundingRect。
+    const rect = this.canvas.getBoundingClientRect()
+    const canvasRelX = e.clientX - rect.left
+    const canvasRelY = e.clientY - rect.top
+
+    // 鼠标在逻辑坐标系中的位置（屏幕空间，包含旋转）
+    const mx = this.getCoord(canvasRelX)
+    const my = this.getCoord(canvasRelY)
+
+    // 鼠标在组件局部坐标系中的位置（用于旋转、移动、hover 检测）
     const { x: _x, y: _y } = rotatePoint(
-      { x: this.getCoord(e.offsetX), y: this.getCoord(e.offsetY) },
+      { x: mx, y: my },
       { x: x + w / 2, y: y + h / 2 },
       -rotation
     )
@@ -563,72 +588,83 @@ export class SelectTool extends BaseTool {
 
     if (this.mousedown && this.selectControl !== 'null') {
       switch (this.selectControl) {
-        case 'scale-left-top': {
-          const newW = roundToPrecision(w + x - _x)
-          const newH = roundToPrecision(h + y - _y)
-          const newX = roundToPrecision(_x)
-          const newY = roundToPrecision(_y)
-          modifyComponent(uuid, {
-            w: newW,
-            h: newH,
-            x: newX,
-            y: newY,
-          } as Partial<IComponent>)
-          break
-        }
-        case 'scale-right-top': {
-          const newW = roundToPrecision(_x - x)
-          const newH = roundToPrecision(h + y - _y)
-          const newY = roundToPrecision(_y)
-          modifyComponent(uuid, {
-            w: newW,
-            h: newH,
-            y: newY,
-          } as Partial<IComponent>)
-          break
-        }
-        case 'scale-left-bottom': {
-          const newW = roundToPrecision(w + x - _x)
-          const newX = roundToPrecision(_x)
-          const newH = roundToPrecision(_y - y)
-          modifyComponent(uuid, {
-            w: newW,
-            x: newX,
-            h: newH,
-          } as Partial<IComponent>)
-          break
-        }
+        // 修复Bug3: 旋转后缩放对角顶点漂移问题。
+        // 正确算法：新的旋转中心 = 鼠标（屏幕空间）与固定对角顶点（屏幕空间）的中点。
+        // 从新中心出发，将鼠标反旋转到局部坐标，推算新的 x/y/w/h。
+        // 这样对角顶点在屏幕空间始终保持不动。
+        case 'scale-left-top':
+        case 'scale-right-top':
+        case 'scale-left-bottom':
         case 'scale-right-bottom': {
-          const newW = roundToPrecision(_x - x)
-          const newH = roundToPrecision(_y - y)
-          modifyComponent(uuid, {
-            w: newW,
-            h: newH,
-          } as Partial<IComponent>)
+          const b = this.initialBBox ?? { x, y, w, h }
+          const initCenter = { x: b.x + b.w / 2, y: b.y + b.h / 2 }
+
+          // 各缩放手柄对应的固定对角顶点（局部坐标）
+          const fixedLocalMap: Record<string, { x: number; y: number }> = {
+            'scale-left-top':     { x: b.x + b.w, y: b.y + b.h }, // 固定右下
+            'scale-right-top':    { x: b.x,       y: b.y + b.h }, // 固定左下
+            'scale-left-bottom':  { x: b.x + b.w, y: b.y       }, // 固定右上
+            'scale-right-bottom': { x: b.x,       y: b.y       }, // 固定左上
+          }
+          const fixedLocal = fixedLocalMap[this.selectControl]
+
+          // 将固定顶点旋转到屏幕空间
+          const fixedScreen = rotatePoint(fixedLocal, initCenter, rotation)
+
+          // 新的旋转中心 = 鼠标与固定顶点的中点（屏幕空间）
+          const Cnew = { x: (mx + fixedScreen.x) / 2, y: (my + fixedScreen.y) / 2 }
+
+          // 鼠标在新中心坐标系下的局部位置（消去旋转）
+          const Mlocal = rotatePoint({ x: mx, y: my }, Cnew, -rotation)
+
+          // 根据拖拽的是哪个角来计算新宽高
+          let newW: number, newH: number
+          switch (this.selectControl) {
+            case 'scale-left-top':
+              newW = roundToPrecision(2 * (Cnew.x - Mlocal.x))
+              newH = roundToPrecision(2 * (Cnew.y - Mlocal.y))
+              break
+            case 'scale-right-top':
+              newW = roundToPrecision(2 * (Mlocal.x - Cnew.x))
+              newH = roundToPrecision(2 * (Cnew.y - Mlocal.y))
+              break
+            case 'scale-left-bottom':
+              newW = roundToPrecision(2 * (Cnew.x - Mlocal.x))
+              newH = roundToPrecision(2 * (Mlocal.y - Cnew.y))
+              break
+            default: // scale-right-bottom
+              newW = roundToPrecision(2 * (Mlocal.x - Cnew.x))
+              newH = roundToPrecision(2 * (Mlocal.y - Cnew.y))
+          }
+          const newX = roundToPrecision(Cnew.x - newW / 2)
+          const newY = roundToPrecision(Cnew.y - newH / 2)
+          modifyComponent(uuid, { w: newW, h: newH, x: newX, y: newY } as Partial<IComponent>)
           break
         }
         case 'inner-area':
           // 字形组件的移动由 glyphDragger 处理，SelectTool 不处理
           if (selectedComponent.type === 'glyph') {
-            // 字形组件不在这里处理移动，由 glyphDragger 处理
             break
           }
-          // 检查 lastX 和 lastY 是否有效，如果无效则使用当前鼠标位置作为基准
-          // 这可以防止在反复拖拽后出现坐标错误
-          if (this.lastX < 0 || this.lastY < 0) {
-            // 如果 lastX 或 lastY 无效，初始化为当前鼠标位置
-            this.lastX = _x
-            this.lastY = _y
-            // 不更新组件位置，因为这是第一次移动
+          // 修复移动跳动：平移不需要旋转变换，直接在屏幕空间（mx/my）计算增量。
+          // 若用局部坐标 _x/_y，每帧移动后 x/y 变化导致旋转中心漂移，_x/_y 随之跳变。
+          if (this.lastMX < 0 || this.lastMY < 0) {
+            this.lastMX = mx
+            this.lastMY = my
             break
           }
-          // 计算移动增量
-          const dx = _x - this.lastX
-          const dy = _y - this.lastY
-          modifyComponent(uuid, {
-            x: roundToPrecision(x + dx),
-            y: roundToPrecision(y + dy),
-          } as Partial<IComponent>)
+          {
+            const dx = mx - this.lastMX
+            const dy = my - this.lastMY
+            const logicalW = this.getCoord(this.canvas.offsetWidth || 500)
+            const logicalH = this.getCoord(this.canvas.offsetHeight || 500)
+            const newX = Math.max(0, Math.min(logicalW - w, roundToPrecision(x + dx)))
+            const newY = Math.max(0, Math.min(logicalH - h, roundToPrecision(y + dy)))
+            modifyComponent(uuid, {
+              x: newX,
+              y: newY,
+            } as Partial<IComponent>)
+          }
           break
         case 'rotate-left-top': {
           const left_top = { x, y }
@@ -722,9 +758,13 @@ export class SelectTool extends BaseTool {
       // 只有在 mousedown 时才更新 lastX 和 lastY，避免在鼠标移动时覆盖拖拽基准点
       // 注意：这里不更新 lastX 和 lastY，因为它们应该在 onMouseDown 时设置
     } else {
-      // 在拖拽过程中更新 lastX 和 lastY，用于下一次移动计算
+      // 在拖拽过程中更新坐标记录
       this.lastX = _x
       this.lastY = _y
+      this.lastMX = mx
+      this.lastMY = my
+      // 标记为拖拽（非点击），防止 onMouseUp 时错误触发 handleClickSelection
+      this.mousemove = true
     }
   }
 
@@ -923,6 +963,9 @@ export class SelectTool extends BaseTool {
     this.mousedown = false
     this.mousemove = false
     this.selectControl = 'null'
+    this.initialBBox = null
+    this.lastMX = -1
+    this.lastMY = -1
   }
 
   /**
