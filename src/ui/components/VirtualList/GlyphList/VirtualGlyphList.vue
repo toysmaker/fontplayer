@@ -421,6 +421,13 @@ onUnmounted(() => {
   }
 })
 
+// 监听预览样式变化，清空所有缓存并重新渲染
+watch(() => projectStore.fontPreviewStyle, () => {
+  renderCache.clear()
+  CanvasManager.forceCleanupAllCache()
+  scheduleRender()
+})
+
 // 监听字形列表更新信号（退出编辑时触发），强制刷新被编辑项的预览
 watch(() => glyphStore.glyphListVersion, () => {
   const uuid = glyphStore.lastUpdatedGlyphUUID

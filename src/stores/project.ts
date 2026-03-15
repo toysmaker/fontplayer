@@ -21,6 +21,9 @@ export const useProjectStore = defineStore('project', () => {
   // ConstantsMap 实例（统一维护）
   const constantsMap = ref<ConstantsMap | null>(null)
 
+  // 预览渲染模式（字符/字形列表）
+  const fontPreviewStyle = ref<'black' | 'color'>('black')
+
   // Getters
   const selectedFile = computed(() => {
     return files.value.find(f => f.uuid === selectedFileUUID.value) || null
@@ -133,6 +136,7 @@ export const useProjectStore = defineStore('project', () => {
     loadingTotal,
     loadingMessage,
     constantsMap,
+    fontPreviewStyle,
     
     // Getters
     selectedFile,

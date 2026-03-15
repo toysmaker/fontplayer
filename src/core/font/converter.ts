@@ -62,7 +62,8 @@ export class ContourConverter {
   static async componentsToContours(
     components: IComponent[],
     options: IConvertOptions,
-    offset: { x: number; y: number } = { x: 0, y: 0 }
+    offset: { x: number; y: number } = { x: 0, y: 0 },
+    solidFlagsOut?: boolean[]
   ): Promise<IContours> {
     const contours: IContours = []
     const { preview = true, forceUpdate = false, grid, useSkeletonGrid = false } = options
@@ -120,6 +121,7 @@ export class ContourConverter {
           } else {
             contours.push(penValue.preview as IContour)
           }
+          solidFlagsOut?.push(false)
           break
         }
 
@@ -160,6 +162,7 @@ export class ContourConverter {
           } else {
             contours.push(polygonValue.preview as IContour)
           }
+          solidFlagsOut?.push(false)
           break
         }
 
@@ -201,6 +204,7 @@ export class ContourConverter {
           } else {
             contours.push(rectValue.preview as IContour)
           }
+          solidFlagsOut?.push(true)
           break
         }
 
@@ -248,6 +252,7 @@ export class ContourConverter {
           } else {
             contours.push(ellipseValue.preview as IContour)
           }
+          solidFlagsOut?.push(true)
           break
         }
 
@@ -272,10 +277,12 @@ export class ContourConverter {
           if (!preview) {
             if (scriptComp.contour && scriptComp.contour.length > 0) {
               contours.push(scriptComp.contour as IContour)
+              solidFlagsOut?.push(false)
             }
           } else {
             if (scriptComp.preview && scriptComp.preview.length > 0) {
               contours.push(scriptComp.preview as IContour)
+              solidFlagsOut?.push(false)
             }
           }
           break
@@ -298,10 +305,12 @@ export class ContourConverter {
           if (!preview) {
             if (scriptComp.contour && scriptComp.contour.length > 0) {
               contours.push(scriptComp.contour as IContour)
+              solidFlagsOut?.push(false)
             }
           } else {
             if (scriptComp.preview && scriptComp.preview.length > 0) {
               contours.push(scriptComp.preview as IContour)
+              solidFlagsOut?.push(false)
             }
           }
           break
@@ -324,10 +333,12 @@ export class ContourConverter {
           if (!preview) {
             if (scriptComp.contour && scriptComp.contour.length > 0) {
               contours.push(scriptComp.contour as IContour)
+              solidFlagsOut?.push(true)
             }
           } else {
             if (scriptComp.preview && scriptComp.preview.length > 0) {
               contours.push(scriptComp.preview as IContour)
+              solidFlagsOut?.push(true)
             }
           }
           break
@@ -350,10 +361,12 @@ export class ContourConverter {
           if (!preview) {
             if (scriptComp.contour && scriptComp.contour.length > 0) {
               contours.push(scriptComp.contour as IContour)
+              solidFlagsOut?.push(true)
             }
           } else {
             if (scriptComp.preview && scriptComp.preview.length > 0) {
               contours.push(scriptComp.preview as IContour)
+              solidFlagsOut?.push(true)
             }
           }
           break
@@ -549,6 +562,8 @@ export class ContourConverter {
                         console.log(`  Converted ${convertedContour.length} segments`)
                         if (convertedContour.length > 0) {
                           contours.push(convertedContour)
+                          const isSolid = scriptComp.type === 'glyph-rectangle' || scriptComp.type === 'glyph-ellipse'
+                          solidFlagsOut?.push(isSolid)
                         }
                       } else {
                         console.warn(`  Script contour is empty or invalid`)
@@ -561,12 +576,15 @@ export class ContourConverter {
                     console.log(`  Not a script component (type: ${scriptComp.type}), checking if it's a glyph component`)
                     if (scriptComp.type === 'glyph' && scriptComp.value) {
                       const subGlyphValue = scriptComp.value as ICustomGlyph
+                      const subSolidFlags: boolean[] | undefined = solidFlagsOut ? [] : undefined
                       const subContours = await this.componentsToContours(
                         subGlyphValue.components || [],
                         options,
-                        { x: offset.x + ox + (scriptComp.ox || 0), y: offset.y + oy + (scriptComp.oy || 0) }
+                        { x: offset.x + ox + (scriptComp.ox || 0), y: offset.y + oy + (scriptComp.oy || 0) },
+                        subSolidFlags
                       )
                       contours.push(...subContours)
+                      if (subSolidFlags) solidFlagsOut!.push(...subSolidFlags)
                     }
                   }
                 }
@@ -583,12 +601,15 @@ export class ContourConverter {
               // 没有脚本组件或脚本执行失败，使用数据中的组件
               if (glyphValue.components && glyphValue.components.length > 0) {
                 console.log(`Using fallback components for glyph ${component.uuid}, count: ${glyphValue.components.length}`)
+                const subSolidFlags1: boolean[] | undefined = solidFlagsOut ? [] : undefined
                 const subContours = await this.componentsToContours(
                   glyphValue.components,
                   options,
-                  { x: offset.x + ox, y: offset.y + oy }
+                  { x: offset.x + ox, y: offset.y + oy },
+                  subSolidFlags1
                 )
                 contours.push(...subContours)
+                if (subSolidFlags1) solidFlagsOut!.push(...subSolidFlags1)
               } else {
                 console.warn(`No components available for glyph ${component.uuid} (scriptExecuted: ${scriptExecuted}, hasInstance: ${!!glyphInstance})`)
               }
@@ -685,12 +706,15 @@ export class ContourConverter {
             console.error(`Error processing glyph component ${component.uuid}:`, error)
             // 如果脚本执行失败，尝试使用已有的组件数据
             if (glyphValue.components && glyphValue.components.length > 0) {
+              const subSolidFlags2: boolean[] | undefined = solidFlagsOut ? [] : undefined
               const subContours = await this.componentsToContours(
                 glyphValue.components,
                 options,
-                { x: offset.x + ox, y: offset.y + oy }
+                { x: offset.x + ox, y: offset.y + oy },
+                subSolidFlags2
               )
               contours.push(...subContours)
+              if (subSolidFlags2) solidFlagsOut!.push(...subSolidFlags2)
             }
           }
           break
@@ -700,6 +724,7 @@ export class ContourConverter {
           // 未知类型的组件，返回空轮廓
           const emptyContour: IContour = []
           contours.push(emptyContour)
+          solidFlagsOut?.push(false)
           break
         }
       }

@@ -200,13 +200,15 @@ const glyphsCount = computed(() => {
 const searchCharacterDialogVisible = ref(false)
 const searchInput = ref('')
 
-// 预览样式（列表模式使用）
-const fontPreviewStyle = ref('black')
+// 预览样式（列表模式使用，使用全局 store）
+const fontPreviewStyle = computed({
+  get: () => projectStore.fontPreviewStyle,
+  set: (val) => { projectStore.fontPreviewStyle = val },
+})
 
 // 处理预览样式变化
 const handlePreviewStyleChange = () => {
-  // TODO: 触发画布重新渲染
-  console.log('Preview style changed:', fontPreviewStyle.value)
+  // 全局变量已更新，列表将在下次渲染时使用新样式
 }
 
 // 处理设置按钮点击

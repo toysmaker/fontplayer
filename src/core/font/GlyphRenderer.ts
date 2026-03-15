@@ -56,41 +56,42 @@ export class GlyphRenderer {
       }
 
       // 优先从 IndexedDB 加载预览数据（如果已计算过）
-      let contours: IContours | null = null
-      
+      let nonzeroContours: IContours | null = null
+      let solidContours: IContours = []
+
       if (glyph.previewRef) {
         try {
-          contours = await indexedDBManager.get<IContours>(glyph.previewRef)
-          if (contours && contours.length > 0) {
-            // 成功从 IndexedDB 加载，直接使用
+          const stored = await indexedDBManager.get<IContours | { nonzero: IContours; solid: IContours }>(glyph.previewRef)
+          if (stored) {
+            if ('nonzero' in (stored as any)) {
+              const grouped = stored as { nonzero: IContours; solid: IContours }
+              nonzeroContours = grouped.nonzero
+              solidContours = grouped.solid || []
+            } else {
+              nonzeroContours = stored as IContours
+              solidContours = []
+            }
             if (import.meta.env.DEV) {
               console.log(`[GlyphRenderer] Loaded preview from IndexedDB for ${glyph.uuid}`)
             }
-          } else {
-            contours = null
           }
         } catch (error) {
           console.warn(`[GlyphRenderer] Failed to load preview from IndexedDB for ${glyph.uuid}:`, error)
-          contours = null
+          nonzeroContours = null
         }
       }
 
       // 如果没有预览数据，需要计算
-      if (!contours || contours.length === 0) {
-      // 获取组件列表
+      if (!nonzeroContours) {
         let components = glyph.components || []
 
         // 字形有脚本时，必须执行脚本才能获得完整组件列表（包含脚本生成的内置组件）
-        // 注意：glyph.components 只包含用户定义的组件引用，
-        //       脚本生成的内置组件（PenComponent 等）存在实例的 _components 中，
-        //       需通过 instance.components 获取两者合并后的完整列表
         if (glyph.script || glyph.script_reference) {
           try {
             const { executeGlyphScript } = await import('../script/ScriptExecutor')
             const { instanceManager } = await import('../instance/InstanceManager')
             const { CustomGlyph } = await import('../instance/CustomGlyph')
 
-            // 创建临时实例并执行脚本
             const instanceKey = glyph.uuid
             const glyphInstance = instanceManager.acquireTemporaryInstance(
               instanceKey,
@@ -100,7 +101,6 @@ export class GlyphRenderer {
 
             try {
               await executeGlyphScript(glyph, instanceKey)
-              // 从实例获取执行脚本后的完整组件（用户组件 + 内置组件）
               components = glyphInstance.components || []
             } finally {
               instanceManager.releaseTemporaryInstance(instanceKey)
@@ -110,34 +110,30 @@ export class GlyphRenderer {
           }
         }
 
-      if (components.length === 0) {
-        // 没有组件，清空Canvas
-        RenderEngine.clearCanvas(canvas)
-        return true
-      }
+        if (components.length === 0) {
+          RenderEngine.clearCanvas(canvas)
+          return true
+        }
 
-      // 准备转换选项
-      const unitsPerEm = fontSettings?.unitsPerEm || 1000
-      const descender = fontSettings?.descender || -200
+        const unitsPerEm = fontSettings?.unitsPerEm || 1000
+        const descender = fontSettings?.descender || -200
 
-      // 转换为轮廓（字形使用与字符相同的转换逻辑）
-        // 注意：ContourConverter 会自动处理字形组件中的脚本执行
-        contours = await ContourConverter.componentsToContours(
-        components as any,
-        {
-          unitsPerEm,
-          descender,
-          advanceWidth: unitsPerEm,
-          preview: true,
-        },
-        { x: 0, y: 0 }
-      )
+        const solidFlagsOut: boolean[] = []
+        const allContours = await ContourConverter.componentsToContours(
+          components as any,
+          { unitsPerEm, descender, advanceWidth: unitsPerEm, preview: true },
+          { x: 0, y: 0 },
+          solidFlagsOut
+        )
 
-        // 如果计算出了轮廓，存储到 IndexedDB（异步，不阻塞渲染）
-        if (contours.length > 0 && !glyph.previewRef) {
+        nonzeroContours = allContours.filter((_, i) => !solidFlagsOut[i])
+        solidContours = allContours.filter((_, i) => solidFlagsOut[i])
+
+        // 异步存储新格式到 IndexedDB
+        if (allContours.length > 0 && !glyph.previewRef) {
           const { IndexedDBManager } = await import('../storage/IndexedDBManager')
           const previewKey = IndexedDBManager.generatePreviewKey(glyph.uuid)
-          indexedDBManager.set(previewKey, contours).then(() => {
+          indexedDBManager.set(previewKey, { nonzero: nonzeroContours, solid: solidContours }).then(() => {
             glyph.previewRef = previewKey
             if (import.meta.env.DEV) {
               console.log(`[GlyphRenderer] Saved preview to IndexedDB for ${glyph.uuid}`)
@@ -148,18 +144,20 @@ export class GlyphRenderer {
         }
       }
 
-      if (contours.length === 0) {
+      const allContoursCombined = [...(nonzeroContours || []), ...solidContours]
+      if (allContoursCombined.length === 0) {
         RenderEngine.clearCanvas(canvas)
         return true
       }
 
-      // 获取填充颜色（如果有）
-      const fillColors: string[] = []
-      // TODO: 从字形数据中提取填充颜色
+      // 获取预览样式（从全局 store）
+      const { useProjectStore } = await import('@/stores/project')
+      const projectStore = useProjectStore()
+      const previewStyle = projectStore.fontPreviewStyle
 
-      // 为了居中，需要计算内容的边界框
+      // 计算所有轮廓的边界框（用于居中）
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-      for (const contour of contours) {
+      for (const contour of allContoursCombined) {
         for (const path of contour) {
           minX = Math.min(minX, path.start.x, path.end.x)
           minY = Math.min(minY, path.start.y, path.end.y)
@@ -181,18 +179,17 @@ export class GlyphRenderer {
         }
       }
 
-      // 计算居中偏移
       const contentWidth = maxX - minX
       const contentHeight = maxY - minY
       const offsetX = (canvas.width - contentWidth) / 2 - minX
       const offsetY = (canvas.height - contentHeight) / 2 - minY
 
-      // 渲染到Canvas
-      RenderEngine.renderPreview(canvas, contours, {
-        fillColors,
-        previewStyle: fillColors.length > 0 ? 'color' : 'black',
+      RenderEngine.renderPreview(canvas, nonzeroContours || [], {
+        fillColors: [],
+        previewStyle,
         scale: 1,
         offset: { x: offsetX, y: offsetY },
+        solidContours,
       })
 
       // 标记 Canvas 已渲染

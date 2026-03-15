@@ -22,6 +22,12 @@ export interface IRenderOptions {
   scale?: number
   /** 偏移量 */
   offset?: { x: number; y: number }
+  /**
+   * 需要实心填充的轮廓（矩形、椭圆）。
+   * 这些轮廓在 pen/polygon 路径之后单独绘制，始终填充为实心，
+   * 不参与 pen/polygon 的非零环绕规则计算。
+   */
+  solidContours?: IContours
 }
 
 /**
@@ -49,74 +55,70 @@ export class RenderEngine {
       previewStyle = 'black',
       scale = 1,
       offset = { x: 0, y: 0 },
+      solidContours = [],
     } = options
 
     // 清空并填充背景
     ctx.fillStyle = backgroundColor
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-    if (previewStyle === 'black') {
-      ctx.beginPath()
-    }
+    // 应用缩放和偏移
+    const applyTransform = (point: { x: number; y: number }) => ({
+      x: point.x * scale + offset.x,
+      y: point.y * scale + offset.y,
+    })
 
-    // 渲染每个轮廓
-    for (let i = 0; i < contours.length; i++) {
-      const contour = contours[i]
-      if (!contour || !contour.length) continue
-
-      if (previewStyle === 'color') {
-        ctx.beginPath()
-      }
-
-      // 应用缩放和偏移
-      const applyTransform = (point: { x: number; y: number }) => ({
-        x: point.x * scale + offset.x,
-        y: point.y * scale + offset.y,
-      })
-
-      // 移动到起始点
+    const drawContourPath = (contour: IContours[number]) => {
+      if (!contour || !contour.length) return
       const startPoint = applyTransform(contour[0].start)
       ctx.moveTo(startPoint.x, startPoint.y)
-
-      // 绘制路径
-      for (let j = 0; j < contour.length; j++) {
-        const path = contour[j]
+      for (const path of contour) {
         const endPoint = applyTransform(path.end)
-
         if (path.type === PathType.LINE) {
           ctx.lineTo(endPoint.x, endPoint.y)
         } else if (path.type === PathType.QUADRATIC_BEZIER) {
-          const quadraticPath = path as { control: { x: number; y: number } }
-          const control = applyTransform(quadraticPath.control)
+          const qPath = path as { control: { x: number; y: number } }
+          const control = applyTransform(qPath.control)
           ctx.quadraticCurveTo(control.x, control.y, endPoint.x, endPoint.y)
         } else if (path.type === PathType.CUBIC_BEZIER) {
-          const cubicPath = path as { control1: { x: number; y: number }; control2: { x: number; y: number } }
-          const control1 = applyTransform(cubicPath.control1)
-          const control2 = applyTransform(cubicPath.control2)
-          ctx.bezierCurveTo(
-            control1.x,
-            control1.y,
-            control2.x,
-            control2.y,
-            endPoint.x,
-            endPoint.y
-          )
+          const cPath = path as { control1: { x: number; y: number }; control2: { x: number; y: number } }
+          const control1 = applyTransform(cPath.control1)
+          const control2 = applyTransform(cPath.control2)
+          ctx.bezierCurveTo(control1.x, control1.y, control2.x, control2.y, endPoint.x, endPoint.y)
         }
       }
+    }
 
-      // 填充轮廓
-      if (previewStyle === 'color') {
+    if (previewStyle === 'color') {
+      // 彩色模式：每个轮廓单独填充（nonzero）
+      for (let i = 0; i < contours.length; i++) {
+        const contour = contours[i]
+        if (!contour || !contour.length) continue
+        ctx.beginPath()
+        drawContourPath(contour)
         ctx.closePath()
         ctx.fillStyle = fillColors[i] || fillColor
         ctx.fill('nonzero')
       }
-    }
-
-    // 统一填充（黑色模式）
-    if (previewStyle === 'black') {
+    } else {
+      // 黑色模式：Pass 1 - 所有非实心轮廓（pen/polygon）合并到一个路径，使用非零环绕规则
+      ctx.beginPath()
+      for (const contour of contours) {
+        drawContourPath(contour)
+      }
       ctx.closePath()
       ctx.fillStyle = fillColor
       ctx.fill('nonzero')
+    }
+
+    // Pass 2 - 实心轮廓（矩形/椭圆）单独绘制，始终实心填充，最后绘制以覆盖在上方
+    for (const contour of solidContours) {
+      if (!contour || !contour.length) continue
+      ctx.beginPath()
+      drawContourPath(contour)
+      ctx.closePath()
+      ctx.fillStyle = fillColor
+      ctx.fill()
     }
   }
 
