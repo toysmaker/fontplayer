@@ -17,6 +17,7 @@ import * as R from 'ramda'
 import { listToMap } from '@/core/utils/data'
 import { formatPoints, genPenContour } from '@/core/utils/contour'
 import { getStrokeWidth } from '@/utils/canvas-utils'
+import { roundToPrecision } from '@/utils/number'
 
 /**
  * 编辑模式下的固定边界框（按组件UUID索引）
@@ -349,22 +350,22 @@ export class PenSelectTool extends BaseTool {
             if (index < 2) {
               for(let i = _points.length - 2; i < _points.length; i++) {
                 if (_points[i].type === 'anchor' && _points[i].x === point.x && _points[i].y === point.y) {
-                  _points[i].x = mousePoint.x
-                  _points[i].y = mousePoint.y
+                  _points[i].x = roundToPrecision(mousePoint.x, 2)
+                  _points[i].y = roundToPrecision(mousePoint.y, 2)
                 }
               }
             } else if (index > _points.length - 3) {
               for(let i = 0; i < 2; i++) {
                 if (points[i].type === 'anchor' && _points[i].x === point.x && _points[i].y === point.y) {
-                  _points[i].x = mousePoint.x
-                  _points[i].y = mousePoint.y
+                  _points[i].x = roundToPrecision(mousePoint.x, 2)
+                  _points[i].y = roundToPrecision(mousePoint.y, 2)
                 }
               }
             }
           }
 
-          point.x = mousePoint.x
-          point.y = mousePoint.y
+          point.x = roundToPrecision(mousePoint.x, 2)
+          point.y = roundToPrecision(mousePoint.y, 2)
         }
       })
 

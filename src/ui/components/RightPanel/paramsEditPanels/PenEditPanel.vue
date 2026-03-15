@@ -79,8 +79,26 @@ const handleChangeEditMode = (editMode: boolean) => {
       const { x, y, w, h } = comp
 
       if (ow > 0 && oh > 0) {
-        updates.x = roundToPrecision(x + (nx - ox) * w / ow)
-        updates.y = roundToPrecision(y + (ny - oy) * h / oh)
+        const { rotation, flipX, flipY } = comp
+        const r = (rotation || 0) * Math.PI / 180
+        const cos_r = Math.cos(r)
+        const sin_r = Math.sin(r)
+
+        // 旋转后，包围框中心偏移量（设计空间坐标）
+        // 若中心偏移非零且存在旋转，旋转轴跟着移动，路径会整体跳位
+        const Mx = (nx + nw / 2 - ox - ow / 2) * w / ow
+        const My = (ny + nh / 2 - oy - oh / 2) * h / oh
+
+        // 翻转时原始公式会引入额外的前旋转坐标偏移 σ
+        const sx = flipX ? (2 * (nx - ox) + (nw - ow)) * w / ow : 0
+        const sy = flipY ? (2 * (ny - oy) + (nh - oh)) * h / oh : 0
+
+        // 修正量 δ = (R-I)*M - R*σ，消除旋转轴偏移带来的视觉跳位
+        const dx = (cos_r - 1) * Mx - sin_r * My - (cos_r * sx - sin_r * sy)
+        const dy = sin_r * Mx + (cos_r - 1) * My - (sin_r * sx + cos_r * sy)
+
+        updates.x = roundToPrecision(x + (nx - ox) * w / ow + dx)
+        updates.y = roundToPrecision(y + (ny - oy) * h / oh + dy)
         updates.w = roundToPrecision(nw * w / ow)
         updates.h = roundToPrecision(nh * h / oh)
       }
