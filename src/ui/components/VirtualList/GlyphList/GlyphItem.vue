@@ -449,9 +449,10 @@ watch(() => props.glyph, (newGlyph, oldGlyph) => {
   // 如果Canvas已有内容且缓存存在，且内容未变化，直接跳过
   if (oldGlyph && newGlyph.uuid === oldGlyph.uuid) {
     // UUID相同，检查内容是否变化
-    const contentChanged = 
+    const contentChanged =
       newGlyph.name !== oldGlyph.name ||
-      (newGlyph.components?.length || 0) !== (oldGlyph.components?.length || 0)
+      (newGlyph.components?.length || 0) !== (oldGlyph.components?.length || 0) ||
+      newGlyph.previewRef !== oldGlyph.previewRef
     
     if (!contentChanged) {
       // 内容未变化，尝试从缓存恢复（如果Canvas被清空了）

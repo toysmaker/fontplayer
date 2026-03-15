@@ -13,6 +13,7 @@ import { Character } from '@/core/instance/Character'
 import { selectedItemByUUID } from '@/core/utils/component'
 import { genUUID } from '@/utils/uuid'
 import * as R from 'ramda'
+import { characterDataManager } from '@/core/storage/CharacterDataManager'
 
 export const useCharacterStore = defineStore('character', () => {
   const projectStore = useProjectStore()
@@ -22,6 +23,10 @@ export const useCharacterStore = defineStore('character', () => {
   const editingCharacterUUID = ref<string>('')
   const selectedComponentUUID = ref<string>('')
   const selectedComponentsTree = ref<string[]>([])
+
+  // 字符列表更新信号：退出编辑时递增，供虚拟列表监听以强制刷新预览
+  const characterListVersion = ref(0)
+  const lastUpdatedCharacterUUID = ref<string>('')
 
   // 剪贴板
   const clipBoard = reactive<{ value: Array<IComponent> }>({
@@ -266,15 +271,28 @@ export const useCharacterStore = defineStore('character', () => {
    */
   function updateCharacterListFromEditFile() {
     if (!editingCharacter.value || !projectStore.selectedFile) return
-    
+
+    // 清除预览和轮廓缓存引用，使列表项在重新可见时重新计算最新内容
+    // previewRef 置空后，列表组件的 watcher 会检测到变化并触发重新渲染
+    // contourRef 置空后，下次导出时轮廓会重新计算，确保导出内容是最新的
+    editingCharacter.value.previewRef = undefined
+    editingCharacter.value.contourRef = undefined
+
     const characterList = projectStore.selectedFile.characterList
     const index = characterList.findIndex(
       c => c.uuid === editingCharacterUUID.value
     )
-    
+
     if (index >= 0) {
       // 深拷贝编辑字符的数据回列表
-      characterList[index] = R.clone(editingCharacter.value) as ICharacterFileLite
+      const updatedCharacter = R.clone(editingCharacter.value) as ICharacterFileLite
+      characterList[index] = updatedCharacter
+      // 同步更新 characterDataManager 缓存，确保 loadFullCharacter 返回最新数据
+      const fileUUID = projectStore.selectedFile.uuid
+      characterDataManager.updateCharacter(fileUUID, updatedCharacter)
+      // 更新信号，通知虚拟列表强制刷新该项预览
+      lastUpdatedCharacterUUID.value = editingCharacterUUID.value
+      characterListVersion.value++
     }
   }
 
@@ -540,6 +558,8 @@ export const useCharacterStore = defineStore('character', () => {
     selectedComponentsTree,
     clipBoard,
     enableMultiSelect,
+    characterListVersion,
+    lastUpdatedCharacterUUID,
     
     // Getters
     editingCharacter,

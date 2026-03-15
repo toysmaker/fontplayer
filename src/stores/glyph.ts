@@ -24,6 +24,10 @@ export const useGlyphStore = defineStore('glyph', () => {
   const selectedComponentsTree = ref<string[]>([])
   const glyphCategory = ref<'glyphs' | 'stroke_glyphs' | 'radical_glyphs' | 'comp_glyphs'>('glyphs')
 
+  // 字形列表更新信号：退出编辑时递增，供虚拟列表监听以强制刷新预览
+  const glyphListVersion = ref(0)
+  const lastUpdatedGlyphUUID = ref<string>('')
+
   // 剪贴板（复用字符的剪贴板，因为两者可以互相复制粘贴）
   // 注意：这里暂时使用独立的剪贴板，后续可以考虑统一管理
   const clipBoard = reactive<{ value: Array<IGlyphComponent> }>({
@@ -202,15 +206,24 @@ export const useGlyphStore = defineStore('glyph', () => {
    */
   function updateGlyphListFromEditFile() {
     if (!editingGlyph.value || !projectStore.selectedFile) return
-    
+
+    // 清除预览和轮廓缓存引用，使列表项在重新可见时重新计算最新内容
+    // previewRef 置空后，列表组件的 watcher 会检测到变化并触发重新渲染
+    // contourRef 置空后，下次导出时轮廓会重新计算，确保导出内容是最新的
+    editingGlyph.value.previewRef = undefined
+    editingGlyph.value.contourRef = undefined
+
     const glyphList = projectStore.selectedFile[glyphCategory.value] || []
     const index = glyphList.findIndex(
       g => g.uuid === editingGlyphUUID.value
     )
-    
+
     if (index >= 0) {
       // 深拷贝编辑字形的数据回列表
       glyphList[index] = R.clone(editingGlyph.value) as ICustomGlyph
+      // 更新信号，通知虚拟列表强制刷新该项预览
+      lastUpdatedGlyphUUID.value = editingGlyphUUID.value
+      glyphListVersion.value++
     }
   }
 
@@ -502,6 +515,8 @@ export const useGlyphStore = defineStore('glyph', () => {
     glyphCategory,
     clipBoard,
     enableMultiSelect,
+    glyphListVersion,
+    lastUpdatedGlyphUUID,
     
     // Getters
     editingGlyph,

@@ -489,6 +489,26 @@ onUnmounted(() => {
   }
 })
 
+// 监听字符列表更新信号（退出编辑时触发），强制刷新被编辑项的预览
+watch(() => characterStore.characterListVersion, () => {
+  const uuid = characterStore.lastUpdatedCharacterUUID
+  if (!uuid) return
+
+  // 清除本地渲染缓存，让 scheduleRender 重新渲染
+  renderCache.delete(`${uuid}_rendered`)
+
+  // 如果该项当前可见，直接替换 visibleItems 中的引用，触发 CharacterItem watcher
+  const freshItem = characterList.value.find(c => c.uuid === uuid)
+  if (freshItem) {
+    const idx = visibleItems.value.findIndex(item => item.uuid === uuid)
+    if (idx >= 0) {
+      const newVisible = [...visibleItems.value]
+      newVisible[idx] = freshItem
+      visibleItems.value = newVisible
+    }
+  }
+})
+
 // 监听字符列表变化（使用 shallow watch，避免深度监听大数组）
 // 只在引用变化时触发，而不是内容变化
 watch(characterList, (newList, oldList) => {

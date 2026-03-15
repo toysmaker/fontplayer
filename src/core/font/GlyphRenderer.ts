@@ -80,14 +80,16 @@ export class GlyphRenderer {
       // 获取组件列表
         let components = glyph.components || []
 
-        // 如果组件为空但字形有脚本，需要先执行脚本生成组件
-        // 注意：正常情况下，ProjectLoader 应该已经处理过，这里只是兜底
-        if (components.length === 0 && (glyph.script || glyph.script_reference)) {
+        // 字形有脚本时，必须执行脚本才能获得完整组件列表（包含脚本生成的内置组件）
+        // 注意：glyph.components 只包含用户定义的组件引用，
+        //       脚本生成的内置组件（PenComponent 等）存在实例的 _components 中，
+        //       需通过 instance.components 获取两者合并后的完整列表
+        if (glyph.script || glyph.script_reference) {
           try {
             const { executeGlyphScript } = await import('../script/ScriptExecutor')
             const { instanceManager } = await import('../instance/InstanceManager')
             const { CustomGlyph } = await import('../instance/CustomGlyph')
-            
+
             // 创建临时实例并执行脚本
             const instanceKey = glyph.uuid
             const glyphInstance = instanceManager.acquireTemporaryInstance(
@@ -95,14 +97,13 @@ export class GlyphRenderer {
               () => new CustomGlyph(glyph),
               'glyph'
             )
-            
+
             try {
               await executeGlyphScript(glyph, instanceKey)
-              // 从实例获取执行脚本后的组件
+              // 从实例获取执行脚本后的完整组件（用户组件 + 内置组件）
               components = glyphInstance.components || []
             } finally {
               instanceManager.releaseTemporaryInstance(instanceKey)
-              // 不再维护 glyph._o，统一从 InstanceManager 管理
             }
           } catch (error) {
             console.warn(`[GlyphRenderer] Failed to execute script for ${glyph.uuid}:`, error)

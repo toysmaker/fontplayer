@@ -260,10 +260,11 @@ watch(() => props.character, (newChar, oldChar) => {
   // 如果Canvas已有内容且缓存存在，且内容未变化，直接跳过
   if (oldChar && newChar.uuid === oldChar.uuid) {
     // UUID相同，检查内容是否变化
-    const contentChanged = 
+    const contentChanged =
       newChar.character?.text !== oldChar.character?.text ||
       newChar.character?.unicode !== oldChar.character?.unicode ||
-      (newChar.components?.length || 0) !== (oldChar.components?.length || 0)
+      (newChar.components?.length || 0) !== (oldChar.components?.length || 0) ||
+      newChar.previewRef !== oldChar.previewRef
     
     if (!contentChanged) {
       // 内容未变化，尝试从缓存恢复（如果Canvas被清空了）

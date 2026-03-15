@@ -175,18 +175,17 @@ export class CharacterDataManager {
 
   /**
    * 更新字符数据（同时更新缓存和IndexedDB）
+   * 先同步更新内存缓存，再异步写入IndexedDB，避免 loadCharacter 竞态读到旧数据
    */
   async updateCharacter(fileUUID: string, character: ICharacterFileLite): Promise<void> {
     const key = CharacterDataManager.generateCharacterKey(fileUUID, character.uuid)
     const cacheKey = `${fileUUID}_${character.uuid}`
 
-    // 更新IndexedDB
-    await indexedDBManager.set(key, character)
+    // 先同步更新内存缓存（无论之前是否存在），避免后续 loadCharacter 读到旧数据
+    this.addToCache(cacheKey, character)
 
-    // 更新缓存
-    if (this.cache.has(cacheKey)) {
-      this.cache.set(cacheKey, character)
-    }
+    // 再异步更新IndexedDB
+    await indexedDBManager.set(key, character)
   }
 
   /**
