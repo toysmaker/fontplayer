@@ -8,6 +8,8 @@ import { NInputNumber, NForm, NFormItem, NSwitch, NInput, NColorPicker } from 'n
 import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from '../composables/useComponentEditor'
 import { EditStatus, IPenComponent } from '@/core/types'
+import { editModeFixedBounds } from '@/features/tools/select/PenSelectTool'
+import { getBound } from '@/core/utils/math'
 
 const { t } = useI18n()
 
@@ -53,12 +55,41 @@ const handleChangeName = (name: string) => {
 const handleChangeEditMode = (editMode: boolean) => {
   if (!selectedComponent.value?.value) return
   const currentValue = selectedComponent.value.value as IPenComponent
-  modifyComponent({
+  const updates: Record<string, any> = {
     value: {
       ...currentValue,
       editMode,
     },
-  })
+  }
+
+  // 关闭编辑模式时，根据编辑后的原始点位置重新计算组件的包围框。
+  // 编辑期间 editModeFixedBounds 固定原始点边界，transformPoints 用它映射到 {x,y,w,h}。
+  // 关闭后 transformPoints 改用 getBound(points) 作为原点，若此时 {x,y,w,h} 未更新，形状会跳位。
+  if (!editMode) {
+    const comp = selectedComponent.value
+    const uuid = comp.uuid
+    const fixedBounds = editModeFixedBounds.get(uuid)
+    const points = currentValue.points
+
+    if (fixedBounds && points && points.length > 0) {
+      const { x: ox, y: oy, w: ow, h: oh } = fixedBounds
+      const newRaw = getBound(points)
+      const { x: nx, y: ny, w: nw, h: nh } = newRaw
+      const { x, y, w, h } = comp
+
+      if (ow > 0 && oh > 0) {
+        updates.x = x + (nx - ox) * w / ow
+        updates.y = y + (ny - oy) * h / oh
+        updates.w = nw * w / ow
+        updates.h = nh * h / oh
+      }
+    }
+
+    // 清理 editModeFixedBounds，避免旧数据影响下次进入编辑模式
+    editModeFixedBounds.delete(uuid)
+  }
+
+  modifyComponent(updates)
 }
 
 const handleChangeFillColor = (color: string) => {

@@ -481,6 +481,7 @@ export class PenTool extends BaseTool {
     const w = getStrokeWidth() * 2
     ctx.strokeStyle = '#000'
     ctx.fillStyle = '#000'
+    ctx.lineWidth = getStrokeWidth()
     ctx.beginPath()
     ctx.moveTo(_points[0].x, _points[0].y)
 

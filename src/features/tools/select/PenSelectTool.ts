@@ -103,6 +103,29 @@ export class PenSelectTool extends BaseTool {
 
   activate(): void {
     this.isActive = true
+
+    // 立即初始化 editModeFixedBounds，确保首次渲染时有正确的固定边界框
+    // 不能等到第一次鼠标移动时才设置，否则渲染时会回退到动态 getBound(points)，
+    // 导致拖拽锚点/控制点出包围框后其他点被压缩至包围框内。
+    const characterStore = useCharacterStore()
+    const glyphStore = useGlyphStore()
+    const isGlyph = this.config.mode === 'glyph'
+    const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
+    if (selectedComponent && selectedComponent.type === 'pen') {
+      const penComponent = selectedComponent.value as unknown as IPenComponent
+      const { points } = penComponent
+      if (points && points.length > 0) {
+        const bounds = getBound(
+          points.reduce((arr: Array<{ x: number; y: number }>, point: IPoint) => {
+            arr.push({ x: point.x, y: point.y })
+            return arr
+          }, [])
+        )
+        this.initialOriginBounds = bounds
+        editModeFixedBounds.set(selectedComponent.uuid, bounds)
+      }
+    }
+
     this.bindEvents()
     this.setRenderFunction(this.render.bind(this))
   }
