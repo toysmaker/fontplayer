@@ -65,6 +65,9 @@ export class SelectTool extends BaseTool {
       SelectTool.instance.cleanup()
       SelectTool.instance = null
     }
+    // 同时重置 PenSelectTool 单例，避免切换编辑界面（字符↔字形）时
+    // PenSelectTool 仍持有旧 canvas 引用和错误的 mode 配置
+    PenSelectTool.reset()
   }
 
   get name(): string {
@@ -427,13 +430,14 @@ export class SelectTool extends BaseTool {
       clickedComponent = candidateComponents[0].component
     }
     
-    // 如果点击的是钢笔组件且处于编辑模式，且点击在当前选中的钢笔组件上
-    // 让 penSelectTool 处理点编辑，SelectTool 不处理选择切换
-    if (clickedComponent && clickedComponent.type === 'pen' && selectedComponent && selectedComponent.uuid === clickedComponent.uuid) {
-      const penComponent = clickedComponent.value as unknown as IPenComponent
-      if (penComponent.editMode && this.penSelectTool && this.penSelectTool.isToolActive()) {
-        // 点击在当前选中的钢笔组件上，让 penSelectTool 处理点编辑
-        // SelectTool 不处理选择切换（因为点击的就是当前选中的组件）
+    // 如果当前选中的是钢笔组件且处于编辑模式，所有鼠标交互都交由 PenSelectTool 处理。
+    // 这里必须拦截全部情况（包括缩放/旋转手柄），防止 SelectTool 在编辑期间
+    // 修改 {x,y,w,h}/rotation，导致 editModeFixedBounds 坐标系失效。
+    if (selectedComponent && selectedComponent.type === 'pen') {
+      const penComponent = selectedComponent.value as unknown as IPenComponent
+      if (penComponent.editMode) {
+        this.mousedown = false
+        this.selectControl = 'null'
         return
       }
     }
@@ -480,17 +484,6 @@ export class SelectTool extends BaseTool {
       rightBottom(_x, _y, right_bottom.x, right_bottom.y, d)
 
     const clickedOnInnerArea = inComponentBound({ x: _x, y: _y }, selectedComponent)
-
-    // 如果点击的是钢笔组件且处于编辑模式，且点击在当前选中的钢笔组件内部（非控制点），让 penSelectTool 处理
-    if (selectedComponent.type === 'pen') {
-      const penComponent = selectedComponent.value as unknown as IPenComponent
-      if (penComponent.editMode && clickedOnInnerArea && !clickedOnScaleControl && !clickedOnRotateControl) {
-        // 点击在当前选中的钢笔组件内部（非控制点），让 penSelectTool 处理，不处理选择切换
-        this.mousedown = false
-        this.selectControl = 'null'
-        return
-      }
-    }
 
     if (!clickedOnScaleControl && !clickedOnRotateControl && !clickedOnInnerArea) {
       // 点击空白处，标记为需要处理点击选择，但不立即处理

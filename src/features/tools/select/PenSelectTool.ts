@@ -115,14 +115,19 @@ export class PenSelectTool extends BaseTool {
       const penComponent = selectedComponent.value as unknown as IPenComponent
       const { points } = penComponent
       if (points && points.length > 0) {
-        const bounds = getBound(
-          points.reduce((arr: Array<{ x: number; y: number }>, point: IPoint) => {
-            arr.push({ x: point.x, y: point.y })
-            return arr
-          }, [])
-        )
-        this.initialOriginBounds = bounds
-        editModeFixedBounds.set(selectedComponent.uuid, bounds)
+        // 只有在 editModeFixedBounds 中尚无该 uuid 的条目时才写入新边界。
+        // 若工具切换后重新激活（编辑模式仍开着），保留原有边界避免坐标系跳变。
+        // 条目应仅在 handleChangeEditMode(false) 关闭编辑模式时被删除。
+        if (!editModeFixedBounds.has(selectedComponent.uuid)) {
+          const bounds = getBound(
+            points.reduce((arr: Array<{ x: number; y: number }>, point: IPoint) => {
+              arr.push({ x: point.x, y: point.y })
+              return arr
+            }, [])
+          )
+          editModeFixedBounds.set(selectedComponent.uuid, bounds)
+        }
+        this.initialOriginBounds = editModeFixedBounds.get(selectedComponent.uuid)!
       }
     }
 
@@ -202,15 +207,11 @@ export class PenSelectTool extends BaseTool {
       return
     }
 
-    // 获取正确的鼠标坐标（处理事件可能不在canvas上触发的情况）
-    let offsetX = e.offsetX
-    let offsetY = e.offsetY
-    const target = e.target as HTMLElement
-    if (target !== this.canvas && !this.canvas.contains(target)) {
-      const rect = this.canvas.getBoundingClientRect()
-      offsetX = e.clientX - rect.left
-      offsetY = e.clientY - rect.top
-    }
+    // 统一使用 clientX - rect.left 计算鼠标坐标，与 onMouseMove 保持一致，
+    // 避免 canvas 有叠加层时 offsetX/Y 相对于错误元素产生偏移。
+    const rect = this.canvas.getBoundingClientRect()
+    const offsetX = e.clientX - rect.left
+    const offsetY = e.clientY - rect.top
 
     const { x, y, w, h, rotation } = selectedComponent
     const { x: _x, y: _y } = rotatePoint(
@@ -219,11 +220,11 @@ export class PenSelectTool extends BaseTool {
       -rotation
     )
 
-    const d = getStrokeWidth() * 2//5
+    const d = getStrokeWidth() * 2
     const _points = this.transformPenPoints(selectedComponent, false)
 
-    // 检查是否点击在锚点或控制点上
-    for (let i = 0; i < _points.length - 1; i++) {
+    // 检查是否点击在锚点或控制点上（含最后一个点，修复开放路径末端锚点无法选中的问题）
+    for (let i = 0; i < _points.length; i++) {
       const point = _points[i]
       if (distance(_x, _y, point.x, point.y) <= d) {
         if (point.type === 'anchor') {
@@ -305,18 +306,19 @@ export class PenSelectTool extends BaseTool {
 
     const { points, closePath } = penComponent
 
-    // 在首次进入编辑模式时，保存初始边界框
+    // 首次鼠标移动时，若 initialOriginBounds 未设置（activate 未能读到组件），在此补充设置。
+    // 与 activate() 保持相同策略：editModeFixedBounds 有条目时不覆盖，确保同一次编辑会话中原点不变。
     if (!this.initialOriginBounds) {
-      this.initialOriginBounds = getBound(
-        points.reduce((arr: Array<{x: number, y: number }>, point: IPoint) => {
-          arr.push({
-            x: point.x,
-            y: point.y,
-          })
-          return arr
-        }, [])
-      )
-      editModeFixedBounds.set(uuid, this.initialOriginBounds)
+      if (!editModeFixedBounds.has(uuid)) {
+        const bounds = getBound(
+          points.reduce((arr: Array<{x: number, y: number }>, point: IPoint) => {
+            arr.push({ x: point.x, y: point.y })
+            return arr
+          }, [])
+        )
+        editModeFixedBounds.set(uuid, bounds)
+      }
+      this.initialOriginBounds = editModeFixedBounds.get(uuid)!
     }
 
     const { x: origin_x, y: origin_y, w: origin_w, h: origin_h } = this.initialOriginBounds

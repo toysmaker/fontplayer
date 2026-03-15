@@ -17,6 +17,7 @@ import type { IComponent, IPenComponent } from '@/core/types'
 import type { IPoint } from '@/core/script/types'
 import * as R from 'ramda'
 import { getStrokeWidth } from '@/utils/canvas-utils'
+import { roundToPrecision } from '@/utils/number'
 
 /**
  * 钢笔工具单例
@@ -386,15 +387,16 @@ export class PenTool extends BaseTool {
     strokeColor: string = '#000'
   ): IComponent {
     const projectStore = useProjectStore()
-    const { x, y, w, h } = getBound(
+    const _rawBound = getBound(
       points.reduce((arr: Array<{ x: number; y: number }>, point: IPoint) => {
-        arr.push({
-          x: point.x,
-          y: point.y,
-        })
+        arr.push({ x: point.x, y: point.y })
         return arr
       }, [])
     )
+    const x = roundToPrecision(_rawBound.x)
+    const y = roundToPrecision(_rawBound.y)
+    const w = roundToPrecision(_rawBound.w)
+    const h = roundToPrecision(_rawBound.h)
 
     const rotation = 0
     const flipX = false

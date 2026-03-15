@@ -10,6 +10,7 @@ import { useComponentEditor } from '../composables/useComponentEditor'
 import { EditStatus, IPenComponent } from '@/core/types'
 import { editModeFixedBounds } from '@/features/tools/select/PenSelectTool'
 import { getBound } from '@/core/utils/math'
+import { roundToPrecision } from '@/utils/number'
 
 const { t } = useI18n()
 
@@ -78,10 +79,10 @@ const handleChangeEditMode = (editMode: boolean) => {
       const { x, y, w, h } = comp
 
       if (ow > 0 && oh > 0) {
-        updates.x = x + (nx - ox) * w / ow
-        updates.y = y + (ny - oy) * h / oh
-        updates.w = nw * w / ow
-        updates.h = nh * h / oh
+        updates.x = roundToPrecision(x + (nx - ox) * w / ow)
+        updates.y = roundToPrecision(y + (ny - oy) * h / oh)
+        updates.w = roundToPrecision(nw * w / ow)
+        updates.h = roundToPrecision(nh * h / oh)
       }
     }
 
