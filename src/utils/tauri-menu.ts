@@ -57,19 +57,34 @@ export async function initTauriMenu() {
       }
     })
     
-    listen('open-file', () => {
+    listen('open-file', async () => {
       console.log('File -> Open')
-      // TODO: 实现打开工程逻辑
+      try {
+        const { fileHandler } = await import('@/features/editor/services/FileHandler')
+        await fileHandler.openFile()
+      } catch (error) {
+        console.error('Failed to handle open-file event:', error)
+      }
     })
     
-    listen('save-file', () => {
+    listen('save-file', async () => {
       console.log('File -> Save')
-      // TODO: 实现保存工程逻辑
+      try {
+        const { fileHandler } = await import('@/features/editor/services/FileHandler')
+        await fileHandler.saveProjectTauriRememberPath()
+      } catch (error) {
+        console.error('Failed to handle save-file event:', error)
+      }
     })
     
-    listen('save-as', () => {
+    listen('save-as', async () => {
       console.log('File -> Save As')
-      // TODO: 实现另存为逻辑
+      try {
+        const { fileHandler } = await import('@/features/editor/services/FileHandler')
+        await fileHandler.saveProjectTauriAs()
+      } catch (error) {
+        console.error('Failed to handle save-as event:', error)
+      }
     })
     
     listen('export-font-file', () => {

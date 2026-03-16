@@ -184,7 +184,7 @@ const dialogs = {
 			removeAxis: 'Remove Axis',
 		},
 		saveDialog: {
-			title: 'Save Project',
+			title: 'Cache Project',
 			confirm: 'Confirm',
 			cancel: 'Cancel',
 		},

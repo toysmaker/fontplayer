@@ -3,6 +3,8 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::fs;
+use std::path::PathBuf;
 use tauri::menu::{Menu, MenuItemBuilder, MenuItemKind, Submenu};
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -31,9 +33,6 @@ struct FileMenuTexts {
     open: &'static str,
     save: &'static str,
     saveas: &'static str,
-    clear: &'static str,
-    export: &'static str,
-    sync_data: &'static str,
 }
 
 struct EditMenuTexts {
@@ -110,9 +109,6 @@ fn get_menu_texts(lang: &str) -> MenuTexts {
                 open: "Open File",
                 save: "Save",
                 saveas: "Save As",
-                clear: "Clear Cache",
-                export: "Export Project",
-                sync_data: "Sync Data",
             },
             edit: EditMenuTexts {
                 edit: "Edit",
@@ -180,9 +176,6 @@ fn get_menu_texts(lang: &str) -> MenuTexts {
                 open: "打开工程",
                 save: "保存工程",
                 saveas: "另存为",
-                clear: "清空缓存",
-                export: "导出工程",
-                sync_data: "同步缓存",
             },
             edit: EditMenuTexts {
                 edit: "编辑",
@@ -484,9 +477,6 @@ fn build_menu_enabled_map() -> HashMap<String, Box<dyn Fn(&str) -> bool>> {
     map.insert("open-file".to_string(), Box::new(enable_at_list));
     map.insert("save-file".to_string(), Box::new(enable));
     map.insert("save-as".to_string(), Box::new(enable));
-    map.insert("clear-cache".to_string(), Box::new(enable));
-    map.insert("save-as-json".to_string(), Box::new(enable));
-    map.insert("sync-data".to_string(), Box::new(enable));
     map.insert("undo".to_string(), Box::new(enable_at_edit));
     map.insert("redo".to_string(), Box::new(enable_at_edit));
     map.insert("cut".to_string(), Box::new(enable_at_edit));
@@ -526,6 +516,39 @@ fn build_menu_enabled_map() -> HashMap<String, Box<dyn Fn(&str) -> bool>> {
     map
 }
 
+// 保存工程：由前端负责弹出对话框并传入路径，Rust 侧只负责写入文件
+// 对话框必须在前端（JS 侧）通过 tauri-plugin-dialog 显示，
+// 不能在 Tauri command（后台线程）中调用原生对话框，否则在 macOS 上会崩溃。
+#[tauri::command]
+fn save_project(data: String, path: String) -> Result<(), String> {
+    let target = PathBuf::from(&path);
+    fs::write(&target, data).map_err(|e| e.to_string())
+}
+
+// 流式写入工程文件的单个 chunk
+// append=false 时截断并从头写（第一块），append=true 时追加写（后续块）
+// 使用 write_all 保证整个 chunk 都被写入，不会出现部分写入导致 JSON 损坏的问题
+#[tauri::command]
+fn write_file_chunk(path: String, chunk: String, append: bool) -> Result<(), String> {
+    use std::io::Write;
+    let target = PathBuf::from(&path);
+    let mut file = if append {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .append(true)
+            .open(&target)
+            .map_err(|e| format!("open for append: {}", e))?
+    } else {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&target)
+            .map_err(|e| format!("open for write: {}", e))?
+    };
+    file.write_all(chunk.as_bytes()).map_err(|e| format!("write_all: {}", e))
+}
+
 // 更新菜单启用/禁用状态
 #[tauri::command]
 fn toggle_menu_disabled(app: AppHandle, edit_status: String) {
@@ -562,9 +585,6 @@ fn get_menu_item_text<'a>(id: &str, texts: &'a MenuTexts) -> Option<&'a str> {
         "open-file" => Some(texts.file.open),
         "save-file" => Some(texts.file.save),
         "save-as" => Some(texts.file.saveas),
-        "clear-cache" => Some(texts.file.clear),
-        "save-as-json" => Some(texts.file.export),
-        "sync-data" => Some(texts.file.sync_data),
         "undo" => Some(texts.edit.undo),
         "redo" => Some(texts.edit.redo),
         "cut" => Some(texts.edit.cut),
@@ -711,15 +731,6 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>, texts: &MenuTexts) -> Resul
                         .build(app)
                         ?,
                     &MenuItemBuilder::with_id("save-as", texts.file.saveas)
-                        .build(app)
-                        ?,
-                    &MenuItemBuilder::with_id("clear-cache", texts.file.clear)
-                        .build(app)
-                        ?,
-                    &MenuItemBuilder::with_id("save-as-json", texts.file.export)
-                        .build(app)
-                        ?,
-                    &MenuItemBuilder::with_id("sync-data", texts.file.sync_data)
                         .build(app)
                         ?,
                 ],
@@ -983,7 +994,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             toggle_menu_disabled,
-            update_menu_language
+            update_menu_language,
+            save_project,
+            write_file_chunk
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

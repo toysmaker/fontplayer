@@ -40,7 +40,7 @@ const getWebMenu = (): Array<IMenu> => {
 				}
 			},
 			{
-				label: tm('menus.file.save'),
+				label: tm('menus.file.cache'),
 				key: 'save-file',
 				click: (handlers: IHandlerMap) => {
 					handlers['save-file']()

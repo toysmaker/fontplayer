@@ -8,8 +8,12 @@ import { projectCreator } from './ProjectCreator'
 import { useProjectStore } from '@/stores/project'
 import { isTauri } from '@/utils/env'
 import type { ProjectConfig } from './ProjectCreator'
+import localForage from 'localforage'
 
 export class FileHandler {
+  /** 记住上一次保存路径（Tauri 环境） */
+  private lastSavedPath: string | null = null
+
   /**
    * 获取 projectStore（延迟获取，避免在模块加载时调用）
    */
@@ -233,6 +237,67 @@ export class FileHandler {
   }
 
   /**
+   * Tauri：保存工程（记忆上一次保存路径，直接覆盖；首次保存时弹出对话框）
+   * 注意：对话框必须在 JS 侧调用，不能在 Tauri command 线程中调用原生对话框（macOS 会崩溃）
+   */
+  async saveProjectTauriRememberPath(): Promise<void> {
+    if (!isTauri()) {
+      throw new Error('Not in Tauri environment')
+    }
+
+    const file = this.projectStore.selectedFile
+    if (!file) {
+      throw new Error('No file selected')
+    }
+
+    let filePath = this.lastSavedPath
+
+    if (!filePath) {
+      // 还没有保存路径，弹出对话框让用户选择
+      const { save } = await import('@tauri-apps/plugin-dialog')
+      const result = await save({
+        defaultPath: `${file.name}.json`,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      })
+      if (!result) return // 用户取消
+      filePath = result
+      this.lastSavedPath = filePath
+    }
+
+    // 流式写入，避免大工程 JSON.stringify 导致 OOM 崩溃
+    await this.writeProjectStream(file, filePath)
+    this.projectStore.markFileSaved(file.uuid)
+  }
+
+  /**
+   * Tauri：另存为（每次弹出保存对话框，并更新记忆路径）
+   * 注意：对话框必须在 JS 侧调用，不能在 Tauri command 线程中调用原生对话框（macOS 会崩溃）
+   */
+  async saveProjectTauriAs(): Promise<void> {
+    if (!isTauri()) {
+      throw new Error('Not in Tauri environment')
+    }
+
+    const file = this.projectStore.selectedFile
+    if (!file) {
+      throw new Error('No file selected')
+    }
+
+    const { save } = await import('@tauri-apps/plugin-dialog')
+    const filePath = await save({
+      defaultPath: `${file.name}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (!filePath) return // 用户取消
+
+    this.lastSavedPath = filePath
+
+    // 流式写入，避免大工程 JSON.stringify 导致 OOM 崩溃
+    await this.writeProjectStream(file, filePath)
+    this.projectStore.markFileSaved(file.uuid)
+  }
+
+  /**
    * 保存工程文件（自动选择Web或Tauri）
    */
   async saveFile(): Promise<void> {
@@ -244,35 +309,226 @@ export class FileHandler {
   }
 
   /**
-   * 序列化工程数据
+   * 将当前工程缓存到 Web（localForage），用于“缓存工程”功能
+   */
+  async cacheProjectToWeb(): Promise<void> {
+    const file = this.projectStore.selectedFile
+    if (!file) {
+      throw new Error('No file selected')
+    }
+
+    const projectData = await this.serializeProjectData(file)
+    // 使用 JSON 字符串而不是原始对象，避免 IndexedDB 克隆失败（DataCloneError）
+    const json = JSON.stringify(projectData)
+    await localForage.setItem('project_cache_v2', json)
+    await localForage.setItem('project_cache_v2_timestamp', Date.now())
+  }
+
+  /**
+   * 清空工程缓存（Web）
+   */
+  async clearProjectCache(): Promise<void> {
+    await localForage.removeItem('project_cache_v2')
+    await localForage.removeItem('project_cache_v2_timestamp')
+  }
+
+  /**
+   * 从 Web 缓存同步工程（如果当前没有打开工程）
+   */
+  async syncProjectFromCache(): Promise<void> {
+    if (this.projectStore.hasFiles) {
+      throw new Error('当前已存在打开的工程，请先关闭工程再同步缓存。')
+    }
+
+    const json = await localForage.getItem<string | null>('project_cache_v2')
+    if (!json) {
+      throw new Error('暂无可用的工程缓存。')
+    }
+
+    const data = JSON.parse(json)
+    const file = await projectLoader.loadProject(data)
+    const success = this.projectStore.addFile(file)
+    if (success) {
+      this.projectStore.selectFile(file.uuid)
+    } else {
+      throw new Error('Failed to add file from cache')
+    }
+  }
+
+  /**
+   * 导出工程（左侧”导出工程”按钮）
+   * - Web：触发浏览器下载（先全量序列化，小工程可接受）
+   * - Tauri：流式写入文件（逐字符序列化，避免大工程 OOM 崩溃）
+   */
+  async exportProject(): Promise<void> {
+    const file = this.projectStore.selectedFile
+    if (!file) {
+      throw new Error('No file selected')
+    }
+
+    if (isTauri()) {
+      const { save } = await import('@tauri-apps/plugin-dialog')
+      const filePath = await save({
+        defaultPath: `${file.name}.json`,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      })
+      if (!filePath) return
+      await this.writeProjectStream(file, filePath)
+    } else {
+      // Web 环境：全量序列化后触发浏览器下载
+      const projectData = await this.serializeProjectData(file)
+      this.logProjectDataSummary(projectData)
+      let json: string
+      try {
+        json = JSON.stringify(projectData)
+      } catch (error) {
+        console.error('[FileHandler.exportProject] JSON.stringify failed:', error)
+        this.logProjectDataDetails(projectData)
+        throw error
+      }
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${file.name}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }
+  }
+
+  /**
+   * Tauri 专用：流式写入工程文件
+   *
+   * 大工程（7000字+）序列化为一个完整 JSON 字符串会消耗数百 MB 内存，
+   * 导致 WKWebView 进程 OOM 崩溃。此方法逐字符从 IndexedDB 读取并写入文件，
+   * 内存中同时只有一个字符的数据，彻底避免 OOM。
+   *
+   * 使用 invoke('write_file_chunk') Rust 命令，该命令内部使用 write_all
+   * 保证每个 chunk 完整写入，避免 plugin-fs FileHandle.write() 可能的部分写入。
+   */
+  private async writeProjectStream(file: any, filePath: string): Promise<void> {
+    const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
+    const { invoke } = await import('@tauri-apps/api/core')
+    const store = this.projectStore
+
+    const characterList: any[] = file.characterList || []
+    const total = characterList.length
+
+    // 显示进度条
+    store.loadingMessage = '正在保存工程...'
+    store.loadingProgress = 0
+    store.loadingTotal = total
+    store.loading = true
+
+    // 缓冲区：积累到 64KB 再 flush，减少 IPC 往返次数
+    // 用 Rust write_file_chunk 写入，保证 write_all 不会部分写
+    const FLUSH_SIZE = 64 * 1024
+    let pending = ''
+    let isFirstChunk = true
+
+    const flush = async () => {
+      if (pending.length === 0) return
+      await invoke('write_file_chunk', { path: filePath, chunk: pending, append: !isFirstChunk })
+      isFirstChunk = false
+      pending = ''
+    }
+
+    const write = async (s: string) => {
+      pending += s
+      if (pending.length >= FLUSH_SIZE) {
+        await flush()
+      }
+    }
+
+    try {
+      // 字形数组（通常远少于字符数，一次性序列化即可）
+      const glyphs = this.cleanupGlyphArray(file.glyphs)
+      const strokeGlyphs = this.cleanupGlyphArray(file.stroke_glyphs)
+      const radicalGlyphs = this.cleanupGlyphArray(file.radical_glyphs)
+      const compGlyphs = this.cleanupGlyphArray(file.comp_glyphs)
+
+      // 写入 JSON 头部：顶层对象和 file 对象
+      await write('{"version":"2.0","file":{')
+      await write('"uuid":' + JSON.stringify(file.uuid) + ',')
+      await write('"name":' + JSON.stringify(file.name) + ',')
+      await write('"width":' + JSON.stringify(file.width ?? null) + ',')
+      await write('"height":' + JSON.stringify(file.height ?? null) + ',')
+      await write('"saved":true,')
+      await write('"iconsCount":' + JSON.stringify(file.iconsCount ?? 0) + ',')
+      await write('"fontSettings":' + JSON.stringify(file.fontSettings ?? null) + ',')
+      await write('"variants":' + JSON.stringify(file.variants ?? null) + ',')
+      await write('"characterList":[')
+
+      // 逐字符流式写入（核心：每个字符序列化后立即写入并释放内存）
+      let firstChar = true
+      for (let i = 0; i < characterList.length; i++) {
+        const metadata = characterList[i]
+        const char = await characterDataManager.loadCharacter(file.uuid, metadata.uuid)
+        if (!firstChar) await write(',')
+        firstChar = false
+        if (char) {
+          await write(JSON.stringify(this.plainCharacter(char)))
+        } else {
+          console.warn(`[writeProjectStream] missing character ${metadata.uuid}, using metadata`)
+          await write(JSON.stringify(metadata))
+        }
+
+        // 更新进度
+        store.loadingProgress = i + 1
+      }
+
+      // 关闭 characterList 和 file 对象，并准备写顶层其他字段
+      await write(']},')
+
+      // 写入字形数组（逐条写入，防止字形数组也过大）
+      const glyphGroups: [string, any[]][] = [
+        ['glyphs', glyphs],
+        ['stroke_glyphs', strokeGlyphs],
+        ['radical_glyphs', radicalGlyphs],
+        ['comp_glyphs', compGlyphs],
+      ]
+
+      for (let gi = 0; gi < glyphGroups.length; gi++) {
+        const [key, arr] = glyphGroups[gi]
+        await write(`"${key}":[`)
+        let firstGlyph = true
+        for (const g of arr) {
+          if (!firstGlyph) await write(',')
+          firstGlyph = false
+          await write(JSON.stringify(g))
+        }
+        await write('],')
+      }
+
+      // constants 和 constantGlyphMap（最后一个字段后不再加逗号）
+      await write('"constants":' + JSON.stringify(file.constants ?? []))
+      await write(',"constantGlyphMap":{}}')
+
+      await flush()
+    } finally {
+      store.loading = false
+    }
+  }
+
+  /**
+   * 序列化工程数据（适用于小工程或 Web 环境）
+   * 大工程在 Tauri 端请改用 writeProjectStream，避免全量 JSON 导致 OOM。
    */
   private async serializeProjectData(file: any): Promise<any> {
     const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
-    
-    // 1. 从 IndexedDB 加载所有字符数据
-    // 注意：重构工程中，内存只保存 metadata（uuid, type, character），完整数据在 IndexedDB
-    // characterDataManager.loadCharacter 会从 IndexedDB 加载完整的 ICharacterFileLite，包括：
-    // - components（所有组件数据）
-    // - groups, orderedList
-    // - view, info
-    // - script, glyph_script
-    // - selectedComponentsTree, selectedComponentsUUIDs
-    // - contourRef, previewRef（IndexedDB 引用，保存时需要移除）
+
     const characterList: any[] = []
     for (const metadata of file.characterList) {
-      // 从 IndexedDB 加载完整的字符数据
       const character = await characterDataManager.loadCharacter(file.uuid, metadata.uuid)
       if (character) {
-        // 确认：此时 character 已经是完整的 ICharacterFileLite，包含所有必要数据
-        // plainCharacter 的作用是清理运行时缓存数据（contour/preview），移除 IndexedDB 引用
-        const plainCharacter = this.plainCharacter(character)
-        characterList.push(plainCharacter)
+        characterList.push(this.plainCharacter(character))
       } else {
         console.warn(`Failed to load character ${metadata.uuid} from IndexedDB`)
       }
     }
 
-    // 2. 构建工程数据
     return {
       version: '2.0',
       file: {
@@ -286,12 +542,197 @@ export class FileHandler {
         characterList,
         variants: file.variants,
       },
-      glyphs: file.glyphs || [],
-      stroke_glyphs: file.stroke_glyphs || [],
-      radical_glyphs: file.radical_glyphs || [],
-      comp_glyphs: file.comp_glyphs || [],
+      glyphs: this.cleanupGlyphArray(file.glyphs),
+      stroke_glyphs: this.cleanupGlyphArray(file.stroke_glyphs),
+      radical_glyphs: this.cleanupGlyphArray(file.radical_glyphs),
+      comp_glyphs: this.cleanupGlyphArray(file.comp_glyphs),
       constants: file.constants || [],
-      constantGlyphMap: {}, // TODO: 如果需要，从 store 获取
+      constantGlyphMap: {},
+    }
+  }
+
+  /** 清理组件运行时缓存字段（contour / preview 等） */
+  private cleanupGlyphComponents(components: any[]): any[] {
+    return (components || []).map((component: any) => {
+      if (!component) return component
+      const cleanComponent: any = { ...component }
+      if (cleanComponent.value) {
+        const value = { ...cleanComponent.value }
+        delete value.contour
+        delete value.preview
+        delete value.contour2
+        if (cleanComponent.type === 'glyph' && value.components) {
+          value.components = this.cleanupGlyphComponents(value.components)
+        }
+        cleanComponent.value = value
+      }
+      if ('_o' in cleanComponent) delete cleanComponent._o
+      return cleanComponent
+    })
+  }
+
+  /** 清理字形数组运行时缓存字段 */
+  private cleanupGlyphArray(glyphs: any[] | undefined): any[] {
+    return (glyphs || []).map((glyph: any) => {
+      const cleanGlyph: any = { ...glyph }
+      if (cleanGlyph.components) {
+        cleanGlyph.components = this.cleanupGlyphComponents(cleanGlyph.components)
+      }
+      if ('_o' in cleanGlyph) delete cleanGlyph._o
+      return cleanGlyph
+    })
+  }
+
+  /**
+   * 调试用：输出工程数据的概要信息（不会打印完整数据）
+   */
+  private logProjectDataSummary(projectData: any): void {
+    try {
+      const file = projectData?.file || {}
+      const glyphs = projectData?.glyphs || []
+      const strokeGlyphs = projectData?.stroke_glyphs || []
+      const radicalGlyphs = projectData?.radical_glyphs || []
+      const compGlyphs = projectData?.comp_glyphs || []
+      const constants = projectData?.constants || []
+
+      const characterList = file.characterList || []
+
+      // 找一个有真实文字的字符（跳过 .notdef / space 等空字符）
+      const meaningfulChar = characterList.find((ch: any) => {
+        const text = ch?.character?.text
+        return text && text.trim() !== '' && text !== '.notdef'
+      })
+      const sampleGlyph = glyphs[0]
+
+      console.log('[FileHandler.exportProject] project summary:', {
+        version: projectData?.version,
+        file: {
+          uuid: file.uuid,
+          name: file.name,
+          width: file.width,
+          height: file.height,
+          iconsCount: file.iconsCount,
+          characterCount: characterList.length,
+        },
+        glyphCounts: {
+          glyphs: glyphs.length,
+          stroke_glyphs: strokeGlyphs.length,
+          radical_glyphs: radicalGlyphs.length,
+          comp_glyphs: compGlyphs.length,
+        },
+        constantsCount: constants.length,
+        sampleCharacterText: meaningfulChar?.character?.text,
+        sampleCharacterKeys: meaningfulChar ? Object.keys(meaningfulChar) : [],
+        sampleGlyphKeys: sampleGlyph ? Object.keys(sampleGlyph) : [],
+      })
+
+      // 估算一个小样本 JSON 的长度，帮助判断整体规模
+      const sampleData = {
+        version: projectData?.version,
+        file: {
+          ...file,
+          characterList: characterList.slice(0, 3),
+        },
+        glyphs: glyphs.slice(0, 3),
+        stroke_glyphs: strokeGlyphs.slice(0, 3),
+        radical_glyphs: radicalGlyphs.slice(0, 3),
+        comp_glyphs: compGlyphs.slice(0, 3),
+        constants: constants.slice(0, 10),
+      }
+      const sampleJson = JSON.stringify(sampleData)
+      console.log('[FileHandler.exportProject] sample JSON length (3 chars / 3 glyphs):', sampleJson.length)
+    } catch (e) {
+      console.warn('[FileHandler.exportProject] logProjectDataSummary failed:', e)
+    }
+  }
+
+  /**
+   * 调试用：更细致地检查是否还残留 contour / preview / _o 等大字段
+   * 只抽样前若干个字符和字形，避免再次触发性能问题
+   */
+  private logProjectDataDetails(projectData: any): void {
+    try {
+      const file = projectData?.file || {}
+      const characterList = file.characterList || []
+      const glyphs = projectData?.glyphs || []
+
+      const checkComponents = (components: any[]) => {
+        let hasContour = false
+        let hasPreview = false
+        let hasO = false
+
+        for (const comp of components || []) {
+          if (!comp || !comp.value) continue
+          const v = comp.value
+          if (v.contour !== undefined) hasContour = true
+          if (v.preview !== undefined) hasPreview = true
+          if (v.contour2 !== undefined) hasPreview = true
+          if ('_o' in comp) hasO = true
+          if (comp.type === 'glyph' && v.components) {
+            const nested = checkComponents(v.components)
+            hasContour = hasContour || nested.hasContour
+            hasPreview = hasPreview || nested.hasPreview
+            hasO = hasO || nested.hasO
+          }
+        }
+
+        return { hasContour, hasPreview, hasO }
+      }
+
+      // 抽样前若干字符（优先找有文字内容的，例如“测”等）
+      const charSampleSize = Math.min(20, characterList.length)
+      let charHasContour = false
+      let charHasPreview = false
+      const charSamples: Array<{ text: string; keys: string[] }> = []
+      for (let i = 0; i < charSampleSize; i++) {
+        const ch = characterList[i]
+        const text = ch?.character?.text
+        if (text) {
+          charSamples.push({
+            text,
+            keys: Object.keys(ch),
+          })
+        }
+        if (!ch?.components) continue
+        const res = checkComponents(ch.components)
+        charHasContour = charHasContour || res.hasContour
+        charHasPreview = charHasPreview || res.hasPreview
+      }
+
+      // 抽样前若干字形
+      const glyphSampleSize = Math.min(20, glyphs.length)
+      let glyphHasContour = false
+      let glyphHasPreview = false
+      let glyphHasO = false
+      const glyphSamples: Array<{ name: string; keys: string[] }> = []
+      for (let i = 0; i < glyphSampleSize; i++) {
+        const g = glyphs[i]
+        if (g?.name) {
+          glyphSamples.push({
+            name: g.name,
+            keys: Object.keys(g),
+          })
+        }
+        if (!g?.components) continue
+        const res = checkComponents(g.components)
+        glyphHasContour = glyphHasContour || res.hasContour
+        glyphHasPreview = glyphHasPreview || res.hasPreview
+        glyphHasO = glyphHasO || res.hasO
+      }
+
+      console.log('[FileHandler.exportProject] detail check:', {
+        sampledCharacters: charSampleSize,
+        sampledGlyphs: glyphSampleSize,
+        characterSamples: charSamples.slice(0, 5),
+        glyphSamples: glyphSamples.slice(0, 5),
+        characterSampleHasContourField: charHasContour,
+        characterSampleHasPreviewField: charHasPreview,
+        glyphSampleHasContourField: glyphHasContour,
+        glyphSampleHasPreviewField: glyphHasPreview,
+        glyphSampleHasOField: glyphHasO,
+      })
+    } catch (e) {
+      console.warn('[FileHandler.exportProject] logProjectDataDetails failed:', e)
     }
   }
 

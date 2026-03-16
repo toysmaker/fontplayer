@@ -377,6 +377,21 @@ onMounted(() => {
   window.addEventListener('editor-add-glyph', handleShowAddGlyphDialog)
   window.addEventListener('show-warning-message', handleShowWarningMessage)
   window.addEventListener('editor-delete', handleEditorDelete)
+  // 监听 Tauri 菜单触发的保存事件
+  window.addEventListener('save-file', async () => {
+    try {
+      await fileHandler.saveProjectTauriRememberPath()
+    } catch (error) {
+      console.error('Failed to save project from Tauri menu:', error)
+    }
+  })
+  window.addEventListener('save-as', async () => {
+    try {
+      await fileHandler.saveProjectTauriAs()
+    } catch (error) {
+      console.error('Failed to save-as project from Tauri menu:', error)
+    }
+  })
   
   // 初始化 Tauri 菜单状态
   updateTauriMenuDisabled()
@@ -389,6 +404,8 @@ onUnmounted(() => {
   window.removeEventListener('editor-add-glyph', handleShowAddGlyphDialog)
   window.removeEventListener('show-warning-message', handleShowWarningMessage)
   window.removeEventListener('editor-delete', handleEditorDelete)
+  window.removeEventListener('save-file', () => {})
+  window.removeEventListener('save-as', () => {})
 })
 
 // 文件操作
@@ -415,22 +432,42 @@ async function handleOpenFile() {
 
 async function handleSaveFile() {
   try {
-    await fileHandler.saveFile()
+    // 左侧栏“缓存工程”按钮：无论是否在 Tauri，都使用缓存逻辑
+    await fileHandler.cacheProjectToWeb()
+    message.success(t('panels.editorSidebar.cacheSuccess'))
   } catch (error) {
-    console.error('Failed to save file:', error)
+    console.error('Failed to cache project:', error)
+    message.error((error as Error).message || '缓存工程失败')
   }
 }
 
-function handleClearCache() {
-  console.log('Clear cache')
+async function handleClearCache() {
+  try {
+    await fileHandler.clearProjectCache()
+    message.success(t('panels.editorSidebar.clearCacheSuccess'))
+  } catch (error) {
+    console.error('Failed to clear cache:', error)
+    message.error((error as Error).message || '清空缓存失败')
+  }
 }
 
-function handleSyncData() {
-  console.log('Sync data')
+async function handleSyncData() {
+  try {
+    await fileHandler.syncProjectFromCache()
+    message.success(t('panels.editorSidebar.syncCacheSuccess'))
+  } catch (error) {
+    console.error('Failed to sync cache:', error)
+    message.error((error as Error).message || '同步缓存失败')
+  }
 }
 
-function handleSaveAsJson() {
-  console.log('Save as JSON')
+async function handleSaveAsJson() {
+  try {
+    await fileHandler.exportProject()
+  } catch (error) {
+    console.error('Failed to export project:', error)
+    message.error((error as Error).message || '导出工程失败')
+  }
 }
 
 // 编辑操作

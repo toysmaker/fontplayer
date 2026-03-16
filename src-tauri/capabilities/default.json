@@ -14,12 +14,16 @@
     {
       "identifier": "fs:scope",
       "allow": [
-        {
-          "path": "$APPDATA"
-        },
-        {
-          "path": "$APPDATA/**"
-        }
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**" },
+        { "path": "$HOME" },
+        { "path": "$HOME/**" },
+        { "path": "$DESKTOP" },
+        { "path": "$DESKTOP/**" },
+        { "path": "$DOCUMENT" },
+        { "path": "$DOCUMENT/**" },
+        { "path": "$DOWNLOAD" },
+        { "path": "$DOWNLOAD/**" }
       ]
     },
     "core:default",
@@ -27,6 +31,7 @@
     "fs:write-files",
     "fs:allow-appdata-read-recursive",
     "fs:allow-appdata-write-recursive",
+    "fs:allow-open",
     "fs:default",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
