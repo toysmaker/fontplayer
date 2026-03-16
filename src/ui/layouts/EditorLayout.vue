@@ -145,9 +145,11 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* 确保sider不裁剪子菜单 */
+/* 确保 sider 不裁剪子菜单，并且整体层级高于 FilesBar */
 :deep(.n-layout-sider) {
   overflow: visible !important;
+  position: relative;  /* 创建 stacking context */
+  z-index: 2000;       /* 高于 .files-bar 的 99 */
 }
 
 :deep(.n-layout-sider .n-layout-sider-scroll-container) {

@@ -589,7 +589,7 @@ const handleProjectCreated = () => {
 
 <style scoped>
 .side-bar {
-  z-index: 99;
+  z-index: 10000;
   height: 100%;
   background-color: var(--dark-0);
   padding: 5px;

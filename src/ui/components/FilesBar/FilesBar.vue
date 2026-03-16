@@ -19,9 +19,9 @@
             {{ file.name }}
           </span>
         </span>
-        <!-- <span class="close-btn" @pointerup="() => closeFile(file.uuid)">
+        <span class="close-btn" @pointerup="() => closeFile(file.uuid)">
           <font-awesome-icon :icon="['fas', 'xmark']" />
-        </span> -->
+        </span>
       </span>
       <span class="advanced-edit-btn" v-show="files.length > 0">
         <n-button type="primary" size="small">
@@ -225,8 +225,15 @@ const selectFile = createDebouncedHandler(_selectFile, 'FilesBar.selectFile', (a
 
 // 关闭文件
 const closeFile = (uuid: string) => {
-  // TODO: 实现关闭文件逻辑
-  console.log('Close file:', uuid)
+  const file = files.value.find(f => f.uuid === uuid)
+  if (!file) return
+
+  // 如果文件未保存，给出简单提示（保持与当前交互风格一致，先不弹确认框）
+  if (!file.saved) {
+    message.warning(t('dialogs.tipsDialog.unsavedWarning'))
+  }
+
+  projectStore.removeFile(uuid)
 }
 
 // 搜索文件功能
@@ -346,8 +353,9 @@ const cancelSearch = () => {
 }
 
 .close-btn:hover {
-  background-color: var(--primary-2);
-  border-radius: 2px;
+  background-color: var(--primary-4);
+  height: 20px;
+  margin: auto;
 }
 
 .advanced-edit-btn {
