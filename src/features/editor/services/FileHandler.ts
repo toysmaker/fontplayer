@@ -169,25 +169,44 @@ export class FileHandler {
       throw new Error('No file selected')
     }
 
-    // 1. 收集所有数据
-    const projectData = await this.serializeProjectData(file)
-    
-    // 2. 创建下载链接
-    const json = JSON.stringify(projectData, null, 2)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${file.name}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    
-    URL.revokeObjectURL(url)
-    
-    // 3. 标记为已保存
-    this.projectStore.markFileSaved(file.uuid)
+    // 1. 收集所有数据（带进度条）
+    const store = this.projectStore
+    const total = file.characterList?.length || 0
+    store.loadingMessage = '正在保存工程...'
+    store.loadingTotal = total
+    store.loadingProgress = 0
+    store.loading = true
+
+    try {
+      const projectData = await this.serializeProjectData(file, (index) => {
+        store.loadingProgress = index
+      })
+      
+      // 2. 创建下载链接
+      const json = JSON.stringify(projectData, null, 2)
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${file.name}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      
+      URL.revokeObjectURL(url)
+      
+      // 3. 标记为已保存
+      this.projectStore.markFileSaved(file.uuid)
+    } finally {
+      store.loading = false
+      try {
+        const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
+        characterDataManager.forceCleanupAllCache()
+      } catch (e) {
+        console.warn('[saveFileWeb] failed to cleanup character cache:', e)
+      }
+    }
   }
 
   /**
@@ -317,11 +336,30 @@ export class FileHandler {
       throw new Error('No file selected')
     }
 
-    const projectData = await this.serializeProjectData(file)
-    // 使用 JSON 字符串而不是原始对象，避免 IndexedDB 克隆失败（DataCloneError）
-    const json = JSON.stringify(projectData)
-    await localForage.setItem('project_cache_v2', json)
-    await localForage.setItem('project_cache_v2_timestamp', Date.now())
+    const store = this.projectStore
+    const total = file.characterList?.length || 0
+    store.loadingMessage = '正在缓存工程...'
+    store.loadingTotal = total
+    store.loadingProgress = 0
+    store.loading = true
+
+    try {
+      const projectData = await this.serializeProjectData(file, (index) => {
+        store.loadingProgress = index
+      })
+      // 使用 JSON 字符串而不是原始对象，避免 IndexedDB 克隆失败（DataCloneError）
+      const json = JSON.stringify(projectData)
+      await localForage.setItem('project_cache_v2', json)
+      await localForage.setItem('project_cache_v2_timestamp', Date.now())
+    } finally {
+      store.loading = false
+      try {
+        const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
+        characterDataManager.forceCleanupAllCache()
+      } catch (e) {
+        console.warn('[cacheProjectToWeb] failed to cleanup character cache:', e)
+      }
+    }
   }
 
   /**
@@ -375,26 +413,45 @@ export class FileHandler {
       if (!filePath) return
       await this.writeProjectStream(file, filePath)
     } else {
-      // Web 环境：全量序列化后触发浏览器下载
-      const projectData = await this.serializeProjectData(file)
-      this.logProjectDataSummary(projectData)
-      let json: string
+      // Web 环境：全量序列化后触发浏览器下载（带进度条）
+      const store = this.projectStore
+      const total = file.characterList?.length || 0
+      store.loadingMessage = '正在导出工程...'
+      store.loadingTotal = total
+      store.loadingProgress = 0
+      store.loading = true
+
       try {
-        json = JSON.stringify(projectData)
-      } catch (error) {
-        console.error('[FileHandler.exportProject] JSON.stringify failed:', error)
-        this.logProjectDataDetails(projectData)
-        throw error
+        const projectData = await this.serializeProjectData(file, (index) => {
+          store.loadingProgress = index
+        })
+        this.logProjectDataSummary(projectData)
+        let json: string
+        try {
+          json = JSON.stringify(projectData)
+        } catch (error) {
+          console.error('[FileHandler.exportProject] JSON.stringify failed:', error)
+          this.logProjectDataDetails(projectData)
+          throw error
+        }
+        const blob = new Blob([json], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${file.name}.json`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      } finally {
+        store.loading = false
+        try {
+          const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
+          characterDataManager.forceCleanupAllCache()
+        } catch (e) {
+          console.warn('[exportProject] failed to cleanup character cache:', e)
+        }
       }
-      const blob = new Blob([json], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${file.name}.json`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
     }
   }
 
@@ -516,16 +573,24 @@ export class FileHandler {
    * 序列化工程数据（适用于小工程或 Web 环境）
    * 大工程在 Tauri 端请改用 writeProjectStream，避免全量 JSON 导致 OOM。
    */
-  private async serializeProjectData(file: any): Promise<any> {
+  private async serializeProjectData(
+    file: any,
+    onCharacterProgress?: (index: number) => void,
+  ): Promise<any> {
     const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
 
     const characterList: any[] = []
-    for (const metadata of file.characterList) {
+    const list: any[] = file.characterList || []
+    for (let i = 0; i < list.length; i++) {
+      const metadata = list[i]
       const character = await characterDataManager.loadCharacter(file.uuid, metadata.uuid)
       if (character) {
         characterList.push(this.plainCharacter(character))
       } else {
         console.warn(`Failed to load character ${metadata.uuid} from IndexedDB`)
+      }
+      if (onCharacterProgress) {
+        onCharacterProgress(i + 1)
       }
     }
 
