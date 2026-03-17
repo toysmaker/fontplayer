@@ -395,6 +395,40 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   /**
+   * 将一个字形组件格式化为一组普通组件（用于“格式化字形组件”功能）
+   */
+  function replaceGlyphComponentWithComponents(
+    uuid: string,
+    components: IComponent[],
+    orderedItems: { type: string; uuid: string }[],
+  ) {
+    if (!editingCharacter.value) return false
+
+    const file = editingCharacter.value
+    const index = file.components.findIndex((c) => c.uuid === uuid)
+    if (index === -1) return false
+
+    // 删除原组件
+    file.components.splice(index, 1)
+
+    // 追加新组件
+    components.forEach((c) => file.components.push(c))
+
+    // 更新 orderedList：用新的 orderedItems 替换原来的那个 uuid
+    if (!file.orderedList) file.orderedList = []
+    const oldIndex = file.orderedList.findIndex((i) => i.uuid === uuid)
+    if (oldIndex >= 0) {
+      file.orderedList.splice(oldIndex, 1, ...orderedItems)
+    } else {
+      file.orderedList.push(...orderedItems)
+    }
+
+    // 清除选中
+    clearSelection()
+    return true
+  }
+
+  /**
    * 删除组件
    */
   function removeComponent(uuid: string) {
@@ -581,6 +615,7 @@ export const useCharacterStore = defineStore('character', () => {
     clearSelection,
     updateComponent,
     modifyComponent,
+    replaceGlyphComponentWithComponents,
     removeComponent,
     insertComponent,
     setOrderedList,

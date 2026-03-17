@@ -85,12 +85,15 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useMessage } from 'naive-ui'
+import { useMessage, useDialog } from 'naive-ui'
 import { fileHandler } from '@/features/editor/services/FileHandler'
 import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
+import { useCharacterStore } from '@/stores/character'
 import { EditStatus } from '@/core/types'
 import { ImportExportSvgService } from '@/features/editor/services/ImportExportSvgService'
+import { formatContainerGlyphComponents } from '@/features/editor/services/FormatGlyphService'
+import type { IComponent } from '@/core/types'
 import { isTauri } from '@/utils/env'
 import NewProjectDialog from '@/ui/dialogs/NewProjectDialog.vue'
 import AddCharacterDialog from '@/ui/dialogs/AddCharacterDialog.vue'
@@ -107,6 +110,7 @@ import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t } = useI18n()
 const message = useMessage()
+const dialog = useDialog()
 const router = useRouter()
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
@@ -683,11 +687,86 @@ function handleRemoveOverlap() {
 }
 
 function handleFormatAllCharacters() {
-  console.log('Format all characters')
+  const file = projectStore.selectedFile
+  if (!file) return
+
+  const doFormat = () => {
+    const loadingMsg = message.loading('正在格式化全部字符...', { duration: 0 })
+    let changed = false
+    file.characterList.forEach((ch: any) => {
+      if (!ch.components || !ch.components.length) return
+      const container = {
+        components: ch.components as IComponent[],
+        orderedList: ch.orderedList as any,
+      }
+      if (formatContainerGlyphComponents(container)) {
+        changed = true
+        ch.components = container.components
+        ch.orderedList = container.orderedList
+        // 清除预览/轮廓缓存，强制列表预览重算
+        ch.previewRef = undefined
+        ch.contourRef = undefined
+      }
+    })
+    try {
+      if (changed) {
+        projectStore.markFileUnsaved(file.uuid)
+        message.success('全部字符已格式化（脚本字形组件已展开为普通轮廓组件）。')
+      } else {
+        message.info('当前工程中没有可格式化的字形组件。')
+      }
+    } finally {
+      loadingMsg.destroy()
+    }
+  }
+
+  dialog.warning({
+    title: '格式化全部字符',
+    content:
+      '将对当前工程中的所有字符执行“格式化字形组件”，把脚本字形组件转换为普通轮廓组件。该操作不可撤销，建议先保存工程，是否继续？',
+    positiveText: '继续格式化',
+    negativeText: '取消',
+    onPositiveClick: doFormat,
+  })
 }
 
 function handleFormatCurrentCharacter() {
-  console.log('Format current character')
+  const file = projectStore.selectedFile
+  const characterStore = useCharacterStore()
+  const editing = characterStore.editingCharacter
+  if (!file || !editing) return
+
+  const doFormat = () => {
+    const container = {
+      components: editing.components as IComponent[],
+      orderedList: editing.orderedList as any,
+    }
+    const changed = formatContainerGlyphComponents(container)
+    if (!changed) {
+      message.info('当前字符中没有可格式化的字形组件。')
+      return
+    }
+
+    editing.components = container.components
+    editing.orderedList = container.orderedList
+    // 清除当前编辑字符的预览/轮廓缓存，并通知字符列表刷新预览
+    ;(editing as any).previewRef = undefined
+    ;(editing as any).contourRef = undefined
+    characterStore.lastUpdatedCharacterUUID = editing.uuid
+    characterStore.characterListVersion++
+
+    projectStore.markFileUnsaved(file.uuid)
+    message.success('当前字符已格式化（脚本字形组件已展开为普通轮廓组件）。')
+  }
+
+  dialog.warning({
+    title: '格式化当前字符',
+    content:
+      '将把当前编辑字符中的所有脚本字形组件转换为普通轮廓组件。该操作不可撤销，建议先保存工程，是否继续？',
+    positiveText: '继续格式化',
+    negativeText: '取消',
+    onPositiveClick: doFormat,
+  })
 }
 
 const handleProjectCreated = () => {

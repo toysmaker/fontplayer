@@ -5,7 +5,7 @@
  */
 
 import { ref, computed, watch } from 'vue'
-import { NInputNumber, NForm, NFormItem, NInput, NEmpty, NSlider, NSelect, NSwitch, NIcon } from 'naive-ui'
+import { NInputNumber, NForm, NFormItem, NInput, NEmpty, NSlider, NSelect, NSwitch, NIcon, NButton } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from '../composables/useComponentEditor'
 import { useEditorStore } from '@/stores/editor'
@@ -14,6 +14,8 @@ import { useGlyphStore } from '@/stores/glyph'
 import { useProjectStore } from '@/stores/project'
 import { EditStatus, ParameterType, IParameter, ICustomGlyph } from '@/core/types'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+import { expandGlyphComponent } from '@/features/editor/services/FormatGlyphService'
+import { useDialog } from 'naive-ui'
 import { roundToPrecision } from '@/utils/number'
 
 const { t } = useI18n()
@@ -150,6 +152,57 @@ const handleChangeName = (name: string) => {
   if (!selectedComponentUUID.value) return
   modifyComponent({ name })
 }
+
+  const dialog = useDialog()
+
+const handleFormatGlyphComponent = () => {
+  if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') {
+    dialog.warning({
+      title: t('panels.paramsPanel.formatComponent.title'),
+      content:
+        '请先选择一个字形组件。格式化会把脚本字形组件转换为普通轮廓组件，此操作不可撤销，继续前请确认已保存工程。',
+      positiveText: '确定',
+    })
+    return
+  }
+
+  const glyphComponent = selectedComponent.value as any
+  const { components, orderedItems } = expandGlyphComponent(glyphComponent)
+
+  if (!components.length) {
+    dialog.warning({
+      title: t('panels.paramsPanel.formatComponent.title'),
+      content:
+        '该字形组件没有可转换的轮廓组件。格式化只对由脚本生成的笔画/几何组件生效。',
+      positiveText: '确定',
+    })
+    return
+  }
+
+  dialog.warning({
+    title: t('panels.paramsPanel.formatComponent.title'),
+    content:
+      '格式化会把当前选中的脚本字形组件转换为一组普通轮廓组件，并删除原脚本及参数，无法自动还原。是否继续？',
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: () => {
+      if (editStatus.value === EditStatus.Edit) {
+        characterStore.replaceGlyphComponentWithComponents(
+          glyphComponent.uuid,
+          components as any,
+          orderedItems,
+        )
+      } else if (editStatus.value === EditStatus.Glyph) {
+        glyphStore.replaceGlyphComponentWithComponents(
+          glyphComponent.uuid,
+          components as any,
+          orderedItems,
+        )
+      }
+      projectStore.markFileUnsaved(projectStore.selectedFile!.uuid)
+    },
+  })
+}
 </script>
 
 <template>
@@ -282,6 +335,24 @@ const handleChangeName = (name: string) => {
           </n-form-item>
         </n-form>
       </div>
+
+      <!-- 格式化字形组件 -->
+      <div
+        class="format-component-wrap"
+        v-if="selectedComponent && selectedComponent.type === 'glyph'"
+      >
+        <div class="section-title">
+          {{ t('panels.paramsPanel.formatComponent.title') }}
+        </div>
+        <n-button
+          type="warning"
+          block
+          class="format-button"
+          @click="handleFormatGlyphComponent"
+        >
+          {{ t('panels.paramsPanel.formatComponent.button') }}
+        </n-button>
+      </div>
     </template>
     
     <div v-else class="empty-state">
@@ -348,6 +419,14 @@ const handleChangeName = (name: string) => {
 
 .constant-note-text {
   margin-right: 5px;
+}
+
+.format-component-wrap {
+  margin-top: 24px;
+}
+
+.format-button {
+  margin-top: 8px;
 }
 
 .empty-state {

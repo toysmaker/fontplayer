@@ -382,6 +382,40 @@ export const useGlyphStore = defineStore('glyph', () => {
   }
 
   /**
+   * 将一个字形组件格式化为一组普通组件（用于“格式化字形组件”在字形编辑界面）
+   */
+  function replaceGlyphComponentWithComponents(
+    uuid: string,
+    components: IGlyphComponent[],
+    orderedItems: { type: string; uuid: string }[],
+  ) {
+    if (!editingGlyph.value) return false
+    const glyph = editingGlyph.value
+
+    const index = glyph.components.findIndex((c) => c.uuid === uuid)
+    if (index === -1) return false
+
+    // 删除原组件
+    glyph.components.splice(index, 1)
+
+    // 追加新组件（直接按 IGlyphComponent 使用）
+    components.forEach((c) => glyph.components.push(c))
+
+    // 更新 orderedList：用新的 orderedItems 替换原来的那个 uuid
+    if (!glyph.orderedList) glyph.orderedList = []
+    const oldIndex = glyph.orderedList.findIndex((i) => i.uuid === uuid)
+    if (oldIndex >= 0) {
+      glyph.orderedList.splice(oldIndex, 1, ...orderedItems)
+    } else {
+      glyph.orderedList.push(...orderedItems)
+    }
+
+    // 清除选择
+    clearSelection()
+    return true
+  }
+
+  /**
    * 插入 orderedList 项目
    */
   function insertOrderedItem(
@@ -544,6 +578,7 @@ export const useGlyphStore = defineStore('glyph', () => {
     setOrderedList,
     setSelection,
     setClipBoard,
+    replaceGlyphComponentWithComponents,
     addComponent,
   }
 })
