@@ -63,6 +63,10 @@ const themeOverrides: GlobalThemeOverrides = {
   Popover: {
     color: getCSSVariable('--primary-0', '#153063'),
   },
+  Tabs: {
+    tabTextColorActiveLine: getCSSVariable('--primary-3', '#153063'),
+    tabTextColorHoverLine: getCSSVariable('--primary-3', '#153063'),
+  },
 }
 </script>
 

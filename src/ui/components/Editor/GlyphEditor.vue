@@ -77,8 +77,8 @@ import EditFilesBar from '@/ui/components/FilesBar/EditFilesBar.vue'
 import type { ICustomGlyph } from '@/core/types'
 import { render } from '@/core/canvas/EditorCanvasRenderer'
 import { mapCanvasWidth, mapCanvasHeight } from '@/utils/canvas'
-import { BackgroundType, GridType } from '@/core/canvas/types'
 import type { IBackground, IGrid } from '@/core/canvas/types'
+import { useEditorPreferenceStore } from '@/stores/editorPreference'
 import { renderJoints, renderRefLines } from '@/core/script/Joint'
 import { useEditorStore } from '@/stores/editor'
 import { fontRenderStyle } from '@/core/script/globals'
@@ -91,6 +91,7 @@ import type { ToolType } from '@/features/tools'
 
 const glyphStore = useGlyphStore()
 const editorStore = useEditorStore()
+const editorPreference = useEditorPreferenceStore()
 const bottomBarToolStore = useBottomBarToolStore()
 const toolStore = useToolStore()
 const canvasRef = ref<HTMLCanvasElement>()
@@ -113,16 +114,9 @@ const canvasHeight = computed(() => mapCanvasHeight(defaultUnitsPerEm))
 const displayWidth = computed(() => 500)
 const displayHeight = computed(() => 500)
 
-// 默认背景和网格配置
-const defaultBackground: IBackground = {
-  type: BackgroundType.Transparent,
-  color: '#FFFFFF'
-}
-
-const defaultGrid: IGrid = {
-  type: GridType.None,
-  precision: 20
-}
+// 从偏好 store 读取背景和网格
+const editorBackground = computed<IBackground>(() => editorPreference.background)
+const editorGrid = computed<IGrid>(() => editorPreference.grid)
 
 // 渲染画布
 const renderCanvas = async () => {
@@ -158,8 +152,8 @@ const renderCanvas = async () => {
     mode: 'glyph',
     glyph: editingGlyph.value,
     components: components, // 传入组件列表，用于渲染字形内部的组件
-    background: defaultBackground,
-    grid: defaultGrid,
+    background: editorBackground.value,
+    grid: editorGrid.value,
   })
   
   // 注意：render() 函数内部会检查实例状态并执行脚本（如果需要）
@@ -595,6 +589,10 @@ watch([() => editorStore.checkJoints, () => editorStore.checkRefLines], async ()
 // 监听渲染样式变化，重新渲染
 watch(() => fontRenderStyle.value, async () => {
   await renderCanvas()
+})
+
+watch([() => editorPreference.background, () => editorPreference.grid], () => {
+  renderCanvas()
 })
 
 // 监听工具切换

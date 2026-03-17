@@ -124,6 +124,18 @@ export async function initTauriMenu() {
       window.dispatchEvent(new CustomEvent('editor-delete'))
     })
 
+    listen('font-settings', () => {
+      window.dispatchEvent(new CustomEvent('editor-font-settings'))
+    })
+
+    listen('preference-settings', () => {
+      window.dispatchEvent(new CustomEvent('editor-preference-settings'))
+    })
+
+    listen('language-settings', () => {
+      window.dispatchEvent(new CustomEvent('editor-language-settings'))
+    })
+
     // 监听字符菜单事件
     listen('add-character', () => {
       console.log('Character -> Add Character')

@@ -71,6 +71,13 @@
       v-model:show="showAddGlyphDialog"
       :category="addGlyphCategory"
     />
+    <FontSettingsDialog
+      v-model:show="showFontSettingsDialog"
+      @open-more="handleFontSettingsOpenMore"
+    />
+    <FontSettingsMoreDialog v-model:show="showFontSettingsMoreDialog" />
+    <PreferenceSettingsDialog v-model:show="showPreferenceSettingsDialog" />
+    <LanguageSettingsDialog v-model:show="showLanguageSettingsDialog" />
   </div>
 </template>
 
@@ -88,6 +95,10 @@ import NewProjectDialog from '@/ui/dialogs/NewProjectDialog.vue'
 import AddCharacterDialog from '@/ui/dialogs/AddCharacterDialog.vue'
 import AddIconDialog from '@/ui/dialogs/AddIconDialog.vue'
 import AddGlyphDialog from '@/ui/dialogs/AddGlyphDialog.vue'
+import FontSettingsDialog from '@/ui/dialogs/FontSettingsDialog.vue'
+import FontSettingsMoreDialog from '@/ui/dialogs/FontSettingsMoreDialog.vue'
+import PreferenceSettingsDialog from '@/ui/dialogs/PreferenceSettingsDialog.vue'
+import LanguageSettingsDialog from '@/ui/dialogs/LanguageSettingsDialog.vue'
 import { getWebMenu, traverse_web_menu } from '@/features/editor/menus/web_menus'
 import { doCut, doCopy, doPaste, doDelete } from '@/features/editor/actions/editActions'
 import { createDebouncedHandler } from '@/utils/debounce-click'
@@ -102,6 +113,10 @@ const showAddCharacterDialog = ref(false)
 const showAddIconDialog = ref(false)
 const showAddGlyphDialog = ref(false)
 const addGlyphCategory = ref<'glyphs' | 'stroke_glyphs' | 'radical_glyphs' | 'comp_glyphs'>('glyphs')
+const showFontSettingsDialog = ref(false)
+const showFontSettingsMoreDialog = ref(false)
+const showPreferenceSettingsDialog = ref(false)
+const showLanguageSettingsDialog = ref(false)
 const hoveredMenu = ref<string | null>(null)
 const hoveredSubMenu = ref<string | null>(null)
 let menuLeaveTimer: number | null = null
@@ -381,6 +396,9 @@ onMounted(() => {
   window.addEventListener('editor-cut', handleCut)
   window.addEventListener('editor-copy', handleCopy)
   window.addEventListener('editor-paste', handlePaste)
+  window.addEventListener('editor-font-settings', handleFontSettings)
+  window.addEventListener('editor-preference-settings', handlePreferenceSettings)
+  window.addEventListener('editor-language-settings', handleLanguageSettings)
   // 监听 Tauri 菜单触发的保存事件
   window.addEventListener('save-file', async () => {
     try {
@@ -411,6 +429,9 @@ onUnmounted(() => {
   window.removeEventListener('editor-cut', handleCut)
   window.removeEventListener('editor-copy', handleCopy)
   window.removeEventListener('editor-paste', handlePaste)
+  window.removeEventListener('editor-font-settings', handleFontSettings)
+  window.removeEventListener('editor-preference-settings', handlePreferenceSettings)
+  window.removeEventListener('editor-language-settings', handleLanguageSettings)
   window.removeEventListener('save-file', () => {})
   window.removeEventListener('save-as', () => {})
 })
@@ -563,15 +584,24 @@ function handleAddIcon() {
 
 // 设置操作
 function handleFontSettings() {
-  console.log('Font settings')
+  if (!projectStore.selectedFile) {
+    message.warning('请先打开工程')
+    return
+  }
+  showFontSettingsDialog.value = true
+}
+
+function handleFontSettingsOpenMore() {
+  showFontSettingsDialog.value = false
+  showFontSettingsMoreDialog.value = true
 }
 
 function handlePreferenceSettings() {
-  console.log('Preference settings')
+  showPreferenceSettingsDialog.value = true
 }
 
 function handleLanguageSettings() {
-  console.log('Language settings')
+  showLanguageSettingsDialog.value = true
 }
 
 // 模板操作

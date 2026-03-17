@@ -106,7 +106,9 @@ const dialogs = {
 			cancel: '取消',
 			confirm: '更改设置',
 			nameTableTip: 'name表定义了不同语言环境下，与字体相关的字符串信息。',
+			nameTableEmpty: '暂无数据。从字体文件加载工程后，name 表记录会显示在此。',
 			addItem: '添加',
+			delete: '删除',
 			moreSettings: '更多设置',
 		},
 		preferenceDialog: {
@@ -265,7 +267,9 @@ const dialogs = {
 			cancel: 'Cancel',
 			confirm: 'Confirm',
 			nameTableTip: 'The name table defines font-related string information for different language environments.',
+			nameTableEmpty: 'No data. Name table entries will appear here after loading from a font file.',
 			addItem: 'Add Item',
+			delete: 'Delete',
 			moreSettings: 'More Settings',
 		},
 		preferenceDialog: {

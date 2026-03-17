@@ -6,6 +6,46 @@
 import type { IFile, IFontSettings } from '@/core/types'
 import { genUUID } from '@/utils/uuid'
 import { useProjectStore } from '@/stores/project'
+import { hasChineseChar } from '@/fontManager/utils'
+import { convertToPinyin } from 'tiny-pinyin'
+
+/** Name table entry shape for fontSettings.tables.name (matches FontSettingsMoreDialog) */
+interface NameTableEntry {
+  nameID: number
+  nameLabel: string
+  platformID: number
+  encodingID: number
+  langID: number
+  value: string
+  default?: boolean
+}
+
+function getEnName(name: string): string {
+  if (hasChineseChar(name)) {
+    return convertToPinyin(name)
+  }
+  return name
+}
+
+/**
+ * 创建工程时预设的 name 表必须字段（参考原工程 CreateFileDialog）
+ */
+function createDefaultNameTable(fontName: string): NameTableEntry[] {
+  const enName = getEnName(fontName)
+  const postScriptValue = (enName + '-Regular').replace(/\s/g, '').slice(0, 63)
+  return [
+    { nameID: 1, nameLabel: 'fontFamily', platformID: 3, encodingID: 1, langID: 0x804, value: fontName, default: true },
+    { nameID: 1, nameLabel: 'fontFamily', platformID: 3, encodingID: 1, langID: 0x409, value: fontName, default: true },
+    { nameID: 2, nameLabel: 'fontSubfamily', platformID: 3, encodingID: 1, langID: 0x804, value: '常规体', default: true },
+    { nameID: 2, nameLabel: 'fontSubfamily', platformID: 3, encodingID: 1, langID: 0x409, value: 'Regular', default: true },
+    { nameID: 4, nameLabel: 'fullName', platformID: 3, encodingID: 1, langID: 0x804, value: fontName + ' 常规体', default: true },
+    { nameID: 4, nameLabel: 'fullName', platformID: 3, encodingID: 1, langID: 0x409, value: fontName + ' Regular', default: true },
+    { nameID: 5, nameLabel: 'version', platformID: 3, encodingID: 1, langID: 0x804, value: 'Version 1.0', default: true },
+    { nameID: 5, nameLabel: 'version', platformID: 3, encodingID: 1, langID: 0x409, value: 'Version 1.0', default: true },
+    { nameID: 6, nameLabel: 'postScriptName', platformID: 3, encodingID: 1, langID: 0x804, value: postScriptValue, default: true },
+    { nameID: 6, nameLabel: 'postScriptName', platformID: 3, encodingID: 1, langID: 0x409, value: postScriptValue, default: true },
+  ]
+}
 
 /**
  * 工程配置接口
@@ -51,7 +91,7 @@ export class ProjectCreator {
     // 1. 验证配置
     this.validateConfig(config)
 
-    // 2. 创建工程结构
+    // 2. 创建工程结构（预设 name 表必须字段，参考原工程 CreateFileDialog）
     const project: IFile = {
       uuid: genUUID(),
       name: config.name,
@@ -63,6 +103,9 @@ export class ProjectCreator {
         unitsPerEm: config.unitsPerEm,
         ascender: config.ascender,
         descender: config.descender,
+        tables: {
+          name: createDefaultNameTable(config.name),
+        },
       },
       characterList: [],
       glyphs: [],
