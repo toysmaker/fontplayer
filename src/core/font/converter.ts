@@ -393,7 +393,8 @@ export class ContourConverter {
           const previewScale = preview ? 100 / options.unitsPerEm : 1
           const ox = (glyphComponent.ox || 0) * previewScale
           const oy = (glyphComponent.oy || 0) * previewScale
-          
+          const instanceKeyForRelease = component.uuid
+
           try {
             // 导入脚本执行器和实例管理器（动态导入避免循环依赖）
             const { executeGlyphScript } = await import('../script/ScriptExecutor')
@@ -592,8 +593,8 @@ export class ContourConverter {
               
               console.log(`Generated ${contours.length} contours from script components for glyph ${component.uuid}`)
               
-              // 释放临时实例（如果是在这里创建的）
-              if (wasInstanceCreatedHere && glyphInstance) {
+              // 用完后立即释放，避免递归时实例数超过池容量导致 LRU 误删仍在用的父级实例
+              if (glyphInstance && instanceManager.isTemporary(instanceKey)) {
                 instanceManager.releaseTemporaryInstance(instanceKey)
               }
               break
@@ -613,8 +614,7 @@ export class ContourConverter {
               } else {
                 console.warn(`No components available for glyph ${component.uuid} (scriptExecuted: ${scriptExecuted}, hasInstance: ${!!glyphInstance})`)
               }
-              // 如果重新获取了实例，需要释放它
-              if (wasInstanceCreatedHere && glyphInstance) {
+              if (glyphInstance && instanceManager.isTemporary(instanceKey)) {
                 instanceManager.releaseTemporaryInstance(instanceKey)
               }
               break
@@ -698,12 +698,16 @@ export class ContourConverter {
               }
             }
             
-            // 转换完成后，释放临时实例（让实例池管理，或者延迟释放）
-            // 注意：这里不立即释放，让实例池的 LRU 策略管理
-            // 如果立即释放，可能会导致后续访问时实例不存在
-            // 实例会在不再使用时由 LRU 策略自动清理
+            // 用完后立即释放，避免递归深度大时实例数超过池容量导致 LRU 误删仍在用的实例
+            if (glyphInstance && instanceManager.isTemporary(instanceKey)) {
+              instanceManager.releaseTemporaryInstance(instanceKey)
+            }
           } catch (error) {
             console.error(`Error processing glyph component ${component.uuid}:`, error)
+            try {
+              const { instanceManager: im } = await import('../instance/InstanceManager')
+              if (im.isTemporary(instanceKeyForRelease)) im.releaseTemporaryInstance(instanceKeyForRelease)
+            } catch (_) { /* ignore */ }
             // 如果脚本执行失败，尝试使用已有的组件数据
             if (glyphValue.components && glyphValue.components.length > 0) {
               const subSolidFlags2: boolean[] | undefined = solidFlagsOut ? [] : undefined

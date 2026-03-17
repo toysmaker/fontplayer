@@ -1,11 +1,19 @@
 /**
  * 实例化管理器
  * 实现延迟实例化策略，减少内存占用
- * 
+ *
  * 策略：
- * 1. 只在编辑时才创建实例
- * 2. 使用 LRU 缓存管理实例池
- * 3. 自动清理不使用的实例
+ * 1. 只在编辑时才创建实例（或临时获取用于渲染/导出）
+ * 2. 使用 LRU 缓存管理实例池，默认最大 10 个实例
+ * 3. 编辑中的实例（markEditing）永不参与 LRU 清理；临时实例（acquireTemporary）在用完后应 release，否则可能被 LRU 清理
+ *
+ * 生命周期约定：
+ * - 编辑界面：当前编辑字符/字形在进入编辑时 markEditing + getInstance，仅在对应 Editor 的 onUnmounted 中 unmarkEditing + releaseInstance，不在导出 SVG/图片时释放。
+ * - 画布渲染（EditorCanvasRenderer）：字形组件通过 acquireTemporaryInstance 获取实例，不主动 release，由池子与 LRU 管理。
+ * - 导出（ImportExportSvgService）：仅 getInstance / getOrCreateGlyphInstance，不释放。
+ * - 轮廓转换（ContourConverter）/ 字体预览（GlyphRenderer）：使用临时实例，用完后立即 releaseTemporaryInstance，避免递归时超过池容量导致 LRU 误删仍在用的实例。
+ *
+ * 复杂字符：若单字符包含大量字形组件，池容量可能不足，可调用 setMaxPoolSize 增大（或接受部分实例被 LRU 回收后按需重建）。
  */
 
 import type { ICharacterFileLite, ICustomGlyph } from '../types'

@@ -90,6 +90,7 @@ import { fileHandler } from '@/features/editor/services/FileHandler'
 import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
 import { EditStatus } from '@/core/types'
+import { ImportExportSvgService } from '@/features/editor/services/ImportExportSvgService'
 import { isTauri } from '@/utils/env'
 import NewProjectDialog from '@/ui/dialogs/NewProjectDialog.vue'
 import AddCharacterDialog from '@/ui/dialogs/AddCharacterDialog.vue'
@@ -544,7 +545,18 @@ function handleImportPic() {
 }
 
 function handleImportSvg() {
-  console.log('Import SVG')
+  if (!projectStore.selectedFile) {
+    message.warning('请先打开工程')
+    return
+  }
+  ImportExportSvgService.importSvg()
+    .then(() => {
+      message.success('SVG 导入成功')
+    })
+    .catch((err) => {
+      console.error('Import SVG failed:', err)
+      message.error('SVG 导入失败')
+    })
 }
 
 // 导出操作
@@ -565,15 +577,48 @@ function handleExportGlyphs() {
 }
 
 function handleExportJpeg() {
-  console.log('Export JPEG')
+  if (!projectStore.selectedFile) {
+    message.warning('请先打开工程')
+    return
+  }
+  ImportExportSvgService.exportCurrentToJpeg()
+    .then(() => {
+      message.success('导出 JPEG 成功')
+    })
+    .catch((err) => {
+      console.error('Export JPEG failed:', err)
+      message.error('导出 JPEG 失败')
+    })
 }
 
 function handleExportPng() {
-  console.log('Export PNG')
+  if (!projectStore.selectedFile) {
+    message.warning('请先打开工程')
+    return
+  }
+  ImportExportSvgService.exportCurrentToPng()
+    .then(() => {
+      message.success('导出 PNG 成功')
+    })
+    .catch((err) => {
+      console.error('Export PNG failed:', err)
+      message.error('导出 PNG 失败')
+    })
 }
 
 function handleExportSvg() {
-  console.log('Export SVG')
+  if (!projectStore.selectedFile) {
+    message.warning('请先打开工程')
+    return
+  }
+  ImportExportSvgService.exportCurrentToSvg()
+    .then(() => {
+      message.success('导出 SVG 成功')
+    })
+    .catch((err) => {
+      console.error('Export SVG failed:', err)
+      message.error('导出 SVG 失败')
+    })
 }
 
 // 字符操作

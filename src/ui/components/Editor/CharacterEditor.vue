@@ -67,6 +67,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { NCard, NEmpty } from 'naive-ui'
 import { useCharacterStore } from '@/stores/character'
 import { useProjectStore } from '@/stores/project'
+import { instanceManager } from '@/core/instance/InstanceManager'
 import { getOrCreateDragger } from '@/features/tools/glyphDragger'
 import type { BaseGlyphDragger } from '@/features/tools/glyphDragger'
 import ToolBar from '@/ui/components/ToolBar/ToolBar.vue'
@@ -457,9 +458,12 @@ onUnmounted(() => {
   cleanupTools()
   // 清理 BottomBarToolManager
   bottomBarToolManager.cleanup()
-  // 退出编辑时，将编辑字符的数据同步回列表
-  if ((characterStore as any).editingCharacterUUID) {
+  // 退出编辑时，将编辑字符的数据同步回列表，并释放字符实例（统一在 unmount 中释放）
+  const editingCharacterUUID = (characterStore as any).editingCharacterUUID
+  if (editingCharacterUUID) {
     ;(characterStore as any).updateCharacterListFromEditFile()
+    instanceManager.unmarkEditing(editingCharacterUUID)
+    instanceManager.releaseInstance(editingCharacterUUID)
     ;(characterStore as any).resetEditCharacterFile()
   }
 })
