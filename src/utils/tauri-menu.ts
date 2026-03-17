@@ -60,7 +60,7 @@ export async function initTauriMenu() {
     listen('open-file', async () => {
       console.log('File -> Open')
       try {
-        const { fileHandler } = await import('@/features/editor/services/FileHandler')
+        const { fileHandler } = await import('@/features/editor/menus/FileHandler')
         await fileHandler.openFile()
       } catch (error) {
         console.error('Failed to handle open-file event:', error)
@@ -70,7 +70,7 @@ export async function initTauriMenu() {
     listen('save-file', async () => {
       console.log('File -> Save')
       try {
-        const { fileHandler } = await import('@/features/editor/services/FileHandler')
+        const { fileHandler } = await import('@/features/editor/menus/FileHandler')
         await fileHandler.saveProjectTauriRememberPath()
       } catch (error) {
         console.error('Failed to handle save-file event:', error)
@@ -80,7 +80,7 @@ export async function initTauriMenu() {
     listen('save-as', async () => {
       console.log('File -> Save As')
       try {
-        const { fileHandler } = await import('@/features/editor/services/FileHandler')
+        const { fileHandler } = await import('@/features/editor/menus/FileHandler')
         await fileHandler.saveProjectTauriAs()
       } catch (error) {
         console.error('Failed to handle save-as event:', error)

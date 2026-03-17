@@ -3,11 +3,11 @@
  * 处理工程文件的打开、保存等操作
  */
 
-import { projectLoader } from './ProjectLoader'
-import { projectCreator } from './ProjectCreator'
+import { projectLoader } from '../services/ProjectLoader'
+import { projectCreator } from '../services/ProjectCreator'
 import { useProjectStore } from '@/stores/project'
 import { isTauri } from '@/utils/env'
-import type { ProjectConfig } from './ProjectCreator'
+import type { ProjectConfig } from '../services/ProjectCreator'
 import localForage from 'localforage'
 
 export class FileHandler {
@@ -901,3 +901,4 @@ export class FileHandler {
 
 // 导出单例
 export const fileHandler = new FileHandler()
+

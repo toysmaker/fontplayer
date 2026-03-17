@@ -86,7 +86,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMessage, useDialog } from 'naive-ui'
-import { fileHandler } from '@/features/editor/services/FileHandler'
+import { fileHandler } from '@/features/editor/menus/FileHandler'
 import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
 import { useCharacterStore } from '@/stores/character'
@@ -105,8 +105,9 @@ import PreferenceSettingsDialog from '@/ui/dialogs/PreferenceSettingsDialog.vue'
 import LanguageSettingsDialog from '@/ui/dialogs/LanguageSettingsDialog.vue'
 import { getWebMenu, traverse_web_menu } from '@/features/editor/menus/web_menus'
 import { templateHandlers } from '@/features/editor/menus/templatesHandlers'
-import { doCut, doCopy, doPaste, doDelete } from '@/features/editor/actions/editActions'
 import { createDebouncedHandler } from '@/utils/debounce-click'
+import { createMenuHandlers, createDisabledRules } from '@/features/editor/menus/menuHandlers'
+import type { MenuHandlerContext } from '@/features/editor/menus/menuHandlerTypes'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -140,120 +141,25 @@ const web_menu_icons: Record<string, any> = {
   'tools': ['fas', 'wrench'],
 }
 
-// 菜单处理器
-const web_handlers: Record<string, Function> = {
-  'create-file': handleNewFile,
-  'open-file': handleOpenFile,
-  'save-file': handleSaveFile,
-  'clear-cache': handleClearCache,
-  'sync-data': handleSyncData,
-  'save-as-json': handleSaveAsJson,
-  'undo': handleUndo,
-  'redo': handleRedo,
-  'cut': handleCut,
-  'copy': handleCopy,
-  'paste': handlePaste,
-  'delete': handleDelete,
-  'import-font-file': handleImportFont,
-  'import-glyphs': handleImportGlyphs,
-  'import-pic': handleImportPic,
-  'import-svg': handleImportSvg,
-  'export-font-file': handleExportFont,
-  'export-var-font-file': handleExportVarFont,
-  'export-color-font': handleExportColorFont,
-  'export-glyphs': handleExportGlyphs,
-  'export-jpeg': handleExportJpeg,
-  'export-png': handleExportPng,
-  'export-svg': handleExportSvg,
-  'add-character': handleAddCharacter,
-  'add-icon': handleAddIcon,
-  'font-settings': handleFontSettings,
-  'preference-settings': handlePreferenceSettings,
-  'language-settings': handleLanguageSettings,
-  'template-2': () => handleTemplate('template-2'),
-  'template-3': () => handleTemplate('template-3'),
-  'template-5': () => handleTemplate('template-5'),
-  'template-6': () => handleTemplate('template-6'),
-  'template-7': () => handleTemplate('template-7'),
-  'template-8': () => handleTemplate('template-8'),
-  'template-digits': () => handleTemplate('template-digits'),
-  'template-letters': () => handleTemplate('template-letters'),
-  'template-symbols': () => handleTemplate('template-symbols'),
-  'template-test': () => handleTemplate('template-test'),
-  'remove_overlap': handleRemoveOverlap,
-  'format-all-characters': handleFormatAllCharacters,
-  'format-current-character': handleFormatCurrentCharacter,
+// 菜单处理器与禁用规则（由统一的 handlers 模块提供）
+const characterStore = useCharacterStore()
+
+const handlerContext: MenuHandlerContext = {
+  projectStore,
+  editorStore,
+  characterStore,
+  message,
+  dialog,
+  t,
+  router,
+  fileHandler,
+  ImportExportSvgService,
+  formatContainerGlyphComponents,
+  templateHandlers,
 }
 
-// 菜单启用/禁用逻辑函数
-const enable = () => true
-
-const enableAtEdit = () => {
-  return editorStore.editStatus === EditStatus.Edit || editorStore.editStatus === EditStatus.Glyph
-}
-
-const enableAtCharacterEdit = () => {
-  return editorStore.editStatus === EditStatus.Edit
-}
-
-const enableAtList = () => {
-  return editorStore.editStatus === EditStatus.CharacterList ||
-         editorStore.editStatus === EditStatus.GlyphList ||
-         editorStore.editStatus === EditStatus.StrokeGlyphList ||
-         editorStore.editStatus === EditStatus.RadicalGlyphList ||
-         editorStore.editStatus === EditStatus.CompGlyphList
-}
-
-const templateEnable = () => {
-  return editorStore.editStatus !== EditStatus.Edit &&
-         editorStore.editStatus !== EditStatus.Glyph &&
-         editorStore.editStatus !== EditStatus.Pic
-}
-
-// 菜单启用/禁用映射（参考原工程）
-const web_disabled: Record<string, () => boolean> = {
-  'create-file': enableAtList,
-  'open-file': enableAtList,
-  'save-file': enable,
-  'clear-cache': enable,
-  'sync-data': enableAtList,
-  'save-as-json': enable,
-  'undo': enableAtEdit,
-  'redo': enableAtEdit,
-  'cut': enableAtEdit,
-  'copy': enableAtEdit,
-  'paste': enableAtEdit,
-  'delete': enableAtEdit,
-  'import-font-file': enableAtList,
-  'import-glyphs': enableAtList,
-  'import-pic': enableAtEdit,
-  'import-svg': enableAtEdit,
-  'export-font-file': enable,
-  'export-var-font-file': enable,
-  'export-color-font': enable,
-  'export-glyphs': enableAtList,
-  'export-jpeg': enableAtEdit,
-  'export-png': enableAtEdit,
-  'export-svg': enableAtEdit,
-  'add-character': enableAtList,
-  'add-icon': enableAtList,
-  'font-settings': enable,
-  'preference-settings': enable,
-  'language-settings': enable,
-  'template-2': templateEnable,
-  'template-3': templateEnable,
-  'template-5': templateEnable,
-  'template-6': templateEnable,
-  'template-7': templateEnable,
-  'template-8': templateEnable,
-  'template-digits': templateEnable,
-  'template-letters': templateEnable,
-  'template-symbols': templateEnable,
-  'template-test': templateEnable,
-  'remove_overlap': enableAtCharacterEdit,
-  'format-all-characters': enableAtList,
-  'format-current-character': enableAtCharacterEdit,
-}
+const web_handlers = createMenuHandlers(handlerContext)
+const web_disabled = createDisabledRules({ editorStore })
 
 // 获取菜单列表（带禁用状态）
 const menuList = computed(() => {
@@ -345,9 +251,9 @@ const handleShowWarningMessage = (event: Event) => {
   }
 }
 
-// 监听删除事件
+// 监听删除事件（仍沿用 tools handler，通过菜单 handlers 触发）
 const handleEditorDelete = () => {
-  handleDelete()
+  web_handlers['delete'] && web_handlers['delete']()
 }
 
 // 将 EditStatus 转换为 Rust 端能理解的字符串格式
@@ -399,12 +305,12 @@ onMounted(() => {
   window.addEventListener('editor-add-glyph', handleShowAddGlyphDialog)
   window.addEventListener('show-warning-message', handleShowWarningMessage)
   window.addEventListener('editor-delete', handleEditorDelete)
-  window.addEventListener('editor-cut', handleCut)
-  window.addEventListener('editor-copy', handleCopy)
-  window.addEventListener('editor-paste', handlePaste)
-  window.addEventListener('editor-font-settings', handleFontSettings)
-  window.addEventListener('editor-preference-settings', handlePreferenceSettings)
-  window.addEventListener('editor-language-settings', handleLanguageSettings)
+  window.addEventListener('editor-cut', () => web_handlers['cut'] && web_handlers['cut']())
+  window.addEventListener('editor-copy', () => web_handlers['copy'] && web_handlers['copy']())
+  window.addEventListener('editor-paste', () => web_handlers['paste'] && web_handlers['paste']())
+  window.addEventListener('editor-font-settings', () => { showFontSettingsDialog.value = true })
+  window.addEventListener('editor-preference-settings', () => { showPreferenceSettingsDialog.value = true })
+  window.addEventListener('editor-language-settings', () => { showLanguageSettingsDialog.value = true })
   window.addEventListener('editor-template', handleEditorTemplate)
   // 监听 Tauri 菜单触发的保存事件
   window.addEventListener('save-file', async () => {
@@ -433,358 +339,28 @@ onUnmounted(() => {
   window.removeEventListener('editor-add-glyph', handleShowAddGlyphDialog)
   window.removeEventListener('show-warning-message', handleShowWarningMessage)
   window.removeEventListener('editor-delete', handleEditorDelete)
-  window.removeEventListener('editor-cut', handleCut)
-  window.removeEventListener('editor-copy', handleCopy)
-  window.removeEventListener('editor-paste', handlePaste)
-  window.removeEventListener('editor-font-settings', handleFontSettings)
-  window.removeEventListener('editor-preference-settings', handlePreferenceSettings)
-  window.removeEventListener('editor-language-settings', handleLanguageSettings)
+  window.removeEventListener('editor-cut', () => {})
+  window.removeEventListener('editor-copy', () => {})
+  window.removeEventListener('editor-paste', () => {})
+  window.removeEventListener('editor-font-settings', () => {})
+  window.removeEventListener('editor-preference-settings', () => {})
+  window.removeEventListener('editor-language-settings', () => {})
   window.removeEventListener('editor-template', handleEditorTemplate)
   window.removeEventListener('save-file', () => {})
   window.removeEventListener('save-as', () => {})
 })
-
-// 文件操作
-async function handleNewFile() {
-  try {
-    const projectStore = useProjectStore()
-    if (projectStore.hasFiles) {
-      message.warning(t('panels.editorSidebar.onlyOneProjectWarning'))
-      return
-    }
-    showNewProjectDialog.value = true
-  } catch (error) {
-    console.error('Failed to create new project:', error)
-  }
-}
-
-async function handleOpenFile() {
-  try {
-    await fileHandler.openFile()
-  } catch (error) {
-    console.error('Failed to open file:', error)
-  }
-}
-
-async function handleSaveFile() {
-  try {
-    // 左侧栏“缓存工程”按钮：无论是否在 Tauri，都使用缓存逻辑
-    await fileHandler.cacheProjectToWeb()
-    message.success(t('panels.editorSidebar.cacheSuccess'))
-  } catch (error) {
-    console.error('Failed to cache project:', error)
-    message.error((error as Error).message || '缓存工程失败')
-  }
-}
-
-async function handleClearCache() {
-  try {
-    await fileHandler.clearProjectCache()
-    message.success(t('panels.editorSidebar.clearCacheSuccess'))
-  } catch (error) {
-    console.error('Failed to clear cache:', error)
-    message.error((error as Error).message || '清空缓存失败')
-  }
-}
-
-async function handleSyncData() {
-  try {
-    await fileHandler.syncProjectFromCache()
-    message.success(t('panels.editorSidebar.syncCacheSuccess'))
-  } catch (error) {
-    console.error('Failed to sync cache:', error)
-    message.error((error as Error).message || '同步缓存失败')
-  }
-}
-
-async function handleSaveAsJson() {
-  try {
-    await fileHandler.exportProject()
-  } catch (error) {
-    console.error('Failed to export project:', error)
-    message.error((error as Error).message || '导出工程失败')
-  }
-}
-
-// 编辑操作
-function handleUndo() {
-  console.log('Undo')
-}
-
-function handleRedo() {
-  console.log('Redo')
-}
-
-function handleCut() {
-  if (!enableAtEdit()) return
-  doCut()
-}
-
-function handleCopy() {
-  if (!enableAtEdit()) return
-  doCopy()
-}
-
-function handlePaste() {
-  if (!enableAtEdit()) return
-  doPaste()
-}
-
-function handleDelete() {
-  if (!enableAtEdit()) return
-  doDelete()
-}
-
-// 导入操作
-function handleImportFont() {
-  console.log('Import font')
-}
-
-function handleImportGlyphs() {
-  console.log('Import glyphs')
-}
-
-function handleImportPic() {
-  console.log('Import picture')
-}
-
-function handleImportSvg() {
-  if (!projectStore.selectedFile) {
-    message.warning('请先打开工程')
-    return
-  }
-  ImportExportSvgService.importSvg()
-    .then(() => {
-      message.success('SVG 导入成功')
-    })
-    .catch((err) => {
-      console.error('Import SVG failed:', err)
-      message.error('SVG 导入失败')
-    })
-}
-
-// 导出操作
-function handleExportFont() {
-  console.log('Export font')
-}
-
-function handleExportVarFont() {
-  console.log('Export variable font')
-}
-
-function handleExportColorFont() {
-  console.log('Export color font')
-}
-
-function handleExportGlyphs() {
-  console.log('Export glyphs')
-}
-
-function handleExportJpeg() {
-  if (!projectStore.selectedFile) {
-    message.warning('请先打开工程')
-    return
-  }
-  ImportExportSvgService.exportCurrentToJpeg()
-    .then(() => {
-      message.success('导出 JPEG 成功')
-    })
-    .catch((err) => {
-      console.error('Export JPEG failed:', err)
-      message.error('导出 JPEG 失败')
-    })
-}
-
-function handleExportPng() {
-  if (!projectStore.selectedFile) {
-    message.warning('请先打开工程')
-    return
-  }
-  ImportExportSvgService.exportCurrentToPng()
-    .then(() => {
-      message.success('导出 PNG 成功')
-    })
-    .catch((err) => {
-      console.error('Export PNG failed:', err)
-      message.error('导出 PNG 失败')
-    })
-}
-
-function handleExportSvg() {
-  if (!projectStore.selectedFile) {
-    message.warning('请先打开工程')
-    return
-  }
-  ImportExportSvgService.exportCurrentToSvg()
-    .then(() => {
-      message.success('导出 SVG 成功')
-    })
-    .catch((err) => {
-      console.error('Export SVG failed:', err)
-      message.error('导出 SVG 失败')
-    })
-}
-
-// 字符操作
-function handleAddCharacter() {
-  window.dispatchEvent(new CustomEvent('editor-add-character'))
-}
-
-function handleAddIcon() {
-  window.dispatchEvent(new CustomEvent('editor-add-icon'))
-}
-
-// 设置操作
-function handleFontSettings() {
-  if (!projectStore.selectedFile) {
-    message.warning('请先打开工程')
-    return
-  }
-  showFontSettingsDialog.value = true
-}
 
 function handleFontSettingsOpenMore() {
   showFontSettingsDialog.value = false
   showFontSettingsMoreDialog.value = true
 }
 
-function handlePreferenceSettings() {
-  showPreferenceSettingsDialog.value = true
-}
-
-function handleLanguageSettings() {
-  showLanguageSettingsDialog.value = true
-}
-
 // 模板操作（Tauri 菜单通过 editor-template 事件触发）
 function handleEditorTemplate(event: Event) {
   const key = (event as CustomEvent<{ templateKey: string }>).detail?.templateKey
-  if (key) handleTemplate(key)
-}
-
-async function handleTemplate(templateKey: string) {
-  const handler = templateHandlers[templateKey]
-  if (!handler) {
-    message.warning(t('panels.editorSidebar.templateNotFound') || `未知模板: ${templateKey}`)
-    return
+  if (key && web_handlers[key]) {
+    web_handlers[key]()
   }
-  if (!projectStore.selectedFile) {
-    message.warning(t('panels.editorSidebar.openProjectFirst') || '请先新建或打开工程')
-    return
-  }
-  try {
-    await handler()
-    message.success(t('panels.editorSidebar.templateImportSuccess') || '模板导入成功')
-  } catch (err) {
-    console.error('Template import failed:', err)
-    message.error((err as Error).message || '模板导入失败')
-  }
-}
-
-// 工具操作
-function handleRemoveOverlap() {
-  console.log('Remove overlap')
-}
-
-function handleFormatAllCharacters() {
-  const file = projectStore.selectedFile
-  if (!file) return
-
-  // 异步格式化：从 IndexedDB 逐个加载字符，格式化后保存回去
-  // 内存中的 characterList 只有元数据（uuid/type/character），完整组件在 IndexedDB
-  const doFormat = async () => {
-    const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
-    const { CanvasManager } = await import('@/core/canvas/CanvasManager')
-
-    projectStore.loadingMessage = '正在格式化字符...'
-    projectStore.loadingProgress = 0
-    projectStore.loadingTotal = file.characterList.length
-    projectStore.loading = true
-
-    let changed = 0
-    try {
-      for (let i = 0; i < file.characterList.length; i++) {
-        const metadata = file.characterList[i]
-        const ch = await characterDataManager.loadCharacter(file.uuid, metadata.uuid)
-
-        if (ch && ch.components && ch.components.length > 0) {
-          const container = {
-            components: ch.components as IComponent[],
-            orderedList: (ch as any).orderedList,
-          }
-          if (formatContainerGlyphComponents(container)) {
-            changed++
-            ch.components = container.components
-            ;(ch as any).orderedList = container.orderedList
-            ch.previewRef = undefined
-            ch.contourRef = undefined
-            await characterDataManager.updateCharacter(file.uuid, ch)
-          }
-        }
-
-        projectStore.loadingProgress = i + 1
-      }
-
-    } finally {
-      projectStore.loading = false
-    }
-
-    // 必须在 loading = false 之后分发刷新事件，否则 scheduleRender 会因 loading=true 而跳过
-    if (changed > 0) {
-      CanvasManager.forceCleanupAllCache()
-      window.dispatchEvent(new CustomEvent('force-character-list-refresh'))
-      projectStore.markFileUnsaved(file.uuid)
-      message.success(`已格式化 ${changed} 个字符中的字形组件。`)
-    } else {
-      message.info('当前工程中没有可格式化的字形组件。')
-    }
-  }
-
-  dialog.warning({
-    title: '格式化全部字符',
-    content:
-      '将对当前工程中的所有字符执行”格式化字形组件”，把脚本字形组件转换为普通轮廓组件。该操作不可撤销，建议先保存工程，是否继续？',
-    positiveText: '继续格式化',
-    negativeText: '取消',
-    // 不 await doFormat，让对话框立即关闭，然后异步执行格式化并显示进度条
-    onPositiveClick: () => { doFormat() },
-  })
-}
-
-function handleFormatCurrentCharacter() {
-  const file = projectStore.selectedFile
-  const characterStore = useCharacterStore()
-  const editing = characterStore.editingCharacter
-  if (!file || !editing) return
-
-  const doFormat = () => {
-    const container = {
-      components: editing.components as IComponent[],
-      orderedList: editing.orderedList as any,
-    }
-    const changed = formatContainerGlyphComponents(container)
-    if (!changed) {
-      message.info('当前字符中没有可格式化的字形组件。')
-      return
-    }
-
-    editing.components = container.components
-    editing.orderedList = container.orderedList
-    // 同步到字符列表并刷新预览（沿用 store 内 updateCharacterListFromEditFile 的逻辑）
-    ;(characterStore as any).updateCharacterListFromEditFile()
-
-    projectStore.markFileUnsaved(file.uuid)
-    message.success('当前字符已格式化（脚本字形组件已展开为普通轮廓组件）。')
-  }
-
-  dialog.warning({
-    title: '格式化当前字符',
-    content:
-      '将把当前编辑字符中的所有脚本字形组件转换为普通轮廓组件。该操作不可撤销，建议先保存工程，是否继续？',
-    positiveText: '继续格式化',
-    negativeText: '取消',
-    onPositiveClick: doFormat,
-  })
 }
 
 const handleProjectCreated = () => {

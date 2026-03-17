@@ -53,7 +53,7 @@
 import { ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { fileHandler } from '@/features/editor/services/FileHandler'
+import { fileHandler } from '@/features/editor/menus/FileHandler'
 import NewProjectDialog from '@/ui/dialogs/NewProjectDialog.vue'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 
