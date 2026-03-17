@@ -100,6 +100,7 @@ import FontSettingsMoreDialog from '@/ui/dialogs/FontSettingsMoreDialog.vue'
 import PreferenceSettingsDialog from '@/ui/dialogs/PreferenceSettingsDialog.vue'
 import LanguageSettingsDialog from '@/ui/dialogs/LanguageSettingsDialog.vue'
 import { getWebMenu, traverse_web_menu } from '@/features/editor/menus/web_menus'
+import { templateHandlers } from '@/features/editor/menus/templatesHandlers'
 import { doCut, doCopy, doPaste, doDelete } from '@/features/editor/actions/editActions'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 
@@ -399,6 +400,7 @@ onMounted(() => {
   window.addEventListener('editor-font-settings', handleFontSettings)
   window.addEventListener('editor-preference-settings', handlePreferenceSettings)
   window.addEventListener('editor-language-settings', handleLanguageSettings)
+  window.addEventListener('editor-template', handleEditorTemplate)
   // 监听 Tauri 菜单触发的保存事件
   window.addEventListener('save-file', async () => {
     try {
@@ -432,6 +434,7 @@ onUnmounted(() => {
   window.removeEventListener('editor-font-settings', handleFontSettings)
   window.removeEventListener('editor-preference-settings', handlePreferenceSettings)
   window.removeEventListener('editor-language-settings', handleLanguageSettings)
+  window.removeEventListener('editor-template', handleEditorTemplate)
   window.removeEventListener('save-file', () => {})
   window.removeEventListener('save-as', () => {})
 })
@@ -604,9 +607,29 @@ function handleLanguageSettings() {
   showLanguageSettingsDialog.value = true
 }
 
-// 模板操作
-function handleTemplate(templateKey: string) {
-  console.log('Import template:', templateKey)
+// 模板操作（Tauri 菜单通过 editor-template 事件触发）
+function handleEditorTemplate(event: Event) {
+  const key = (event as CustomEvent<{ templateKey: string }>).detail?.templateKey
+  if (key) handleTemplate(key)
+}
+
+async function handleTemplate(templateKey: string) {
+  const handler = templateHandlers[templateKey]
+  if (!handler) {
+    message.warning(t('panels.editorSidebar.templateNotFound') || `未知模板: ${templateKey}`)
+    return
+  }
+  if (!projectStore.selectedFile) {
+    message.warning(t('panels.editorSidebar.openProjectFirst') || '请先新建或打开工程')
+    return
+  }
+  try {
+    await handler()
+    message.success(t('panels.editorSidebar.templateImportSuccess') || '模板导入成功')
+  } catch (err) {
+    console.error('Template import failed:', err)
+    message.error((err as Error).message || '模板导入失败')
+  }
 }
 
 // 工具操作

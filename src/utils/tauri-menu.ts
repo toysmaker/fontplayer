@@ -146,6 +146,14 @@ export async function initTauriMenu() {
       console.log('Character -> Add Icon')
       window.dispatchEvent(new CustomEvent('editor-add-icon'))
     })
+
+    // 模板菜单事件：Rust 端 emit 的为 template-2, template-3 等，转发为 editor-template
+    const templateKeys = ['template-2', 'template-3', 'template-5', 'template-6', 'template-7', 'template-8', 'template-digits', 'template-letters', 'template-symbols', 'template-test']
+    for (const key of templateKeys) {
+      listen(key, () => {
+        window.dispatchEvent(new CustomEvent('editor-template', { detail: { templateKey: key } }))
+      })
+    }
     
     console.log('Tauri menu event listeners initialized')
   } catch (error) {

@@ -359,6 +359,7 @@ export interface ICustomGlyph {
     translateX?: number
     translateY?: number
   }
+  style?: string
   // ... 其他属性
 }
 

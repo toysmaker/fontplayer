@@ -497,21 +497,24 @@ watch(() => projectStore.fontPreviewStyle, () => {
 })
 
 // 监听字符列表更新信号（退出编辑时触发），强制刷新被编辑项的预览
-watch(() => characterStore.characterListVersion, () => {
+watch(() => characterStore.characterListVersion, async () => {
   const uuid = characterStore.lastUpdatedCharacterUUID
   if (!uuid) return
 
   // 清除本地渲染缓存，让 scheduleRender 重新渲染
   renderCache.delete(`${uuid}_rendered`)
 
-  // 如果该项当前可见，直接替换 visibleItems 中的引用，触发 CharacterItem watcher
-  const freshItem = characterList.value.find(c => c.uuid === uuid)
-  if (freshItem) {
+  // 如果该项当前可见，加载完整字符数据后替换 visibleItems 中的引用
+  const metadata = characterList.value.find(c => c.uuid === uuid)
+  if (metadata) {
     const idx = visibleItems.value.findIndex(item => item.uuid === uuid)
     if (idx >= 0) {
-      const newVisible = [...visibleItems.value]
-      newVisible[idx] = freshItem
-      visibleItems.value = newVisible
+      const full = await loadFullCharacter(metadata)
+      if (full) {
+        const newVisible = [...visibleItems.value]
+        newVisible[idx] = full
+        visibleItems.value = newVisible
+      }
     }
   }
 })
