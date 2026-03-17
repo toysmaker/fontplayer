@@ -4,7 +4,7 @@
     preset="dialog"
     :title="tm('dialogs.fontSettingsDialog.title')"
     class="font-settings-dialog"
-    :style="{ width: '320px' }"
+    :style="{ width: '480px' }"
     :mask-closable="false"
     @update:show="(v: boolean) => emit('update:show', v)"
   >
@@ -157,5 +157,8 @@ function handleConfirm() {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+}
+.n-input-number {
+  width: 100% !important;
 }
 </style>

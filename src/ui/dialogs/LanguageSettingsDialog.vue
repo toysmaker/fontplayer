@@ -82,3 +82,15 @@ async function handleConfirm() {
   justify-content: flex-end;
 }
 </style>
+
+<style>
+.language-settings-dialog .n-radio__label {
+  color: var(--light-2) !important;
+}
+.language-settings-dialog .n-radio.n-radio--checked .n-radio__dot {
+  background-color: var(--light-2) !important;
+}
+.language-settings-dialog .n-radio.n-radio--checked .n-radio__dot::before {
+  background-color: var(--dark-2) !important;
+}
+</style>

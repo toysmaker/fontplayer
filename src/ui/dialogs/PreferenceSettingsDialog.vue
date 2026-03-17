@@ -4,7 +4,7 @@
     preset="dialog"
     :title="tm('dialogs.preferenceDialog.title')"
     class="preference-settings-dialog"
-    :style="{ width: '360px' }"
+    :style="{ width: '480px' }"
     :mask-closable="false"
     @update:show="(v: boolean) => emit('update:show', v)"
   >
@@ -13,16 +13,19 @@
         <div class="section-title">{{ t('panels.settingsPanel.background.background') }}</div>
         <n-form label-placement="left" label-width="80">
           <n-form-item :label="t('panels.settingsPanel.background.style')">
-            <n-radio-group v-model:value="backgroundStyle">
-              <n-radio value="color">{{ t('panels.settingsPanel.background.color') }}</n-radio>
-              <n-color-picker
-                v-if="backgroundStyle === 'color'"
-                v-model:value="backgroundColor"
-                :show-alpha="false"
-                style="margin-left: 8px; vertical-align: middle"
-              />
-              <n-radio value="transparent" style="margin-left: 12px">{{ t('panels.settingsPanel.background.transparent') }}</n-radio>
-            </n-radio-group>
+            <div class="background-style-row">
+              <n-radio-group v-model:value="backgroundStyle" class="background-radio-group">
+                <n-radio value="color">{{ t('panels.settingsPanel.background.color') }}</n-radio>
+                <n-radio value="transparent">{{ t('panels.settingsPanel.background.transparent') }}</n-radio>
+              </n-radio-group>
+              <div v-if="backgroundStyle === 'color'" class="color-picker-wrap">
+                <n-color-picker
+                  v-model:value="backgroundColor"
+                  :show-alpha="false"
+                  size="small"
+                />
+              </div>
+            </div>
           </n-form-item>
         </n-form>
       </div>
@@ -140,9 +143,51 @@ function handleConfirm() {
   font-size: 13px;
   margin-bottom: 8px;
 }
+.background-style-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 16px;
+}
+.background-style-row .background-radio-group {
+  flex-shrink: 0;
+}
+.color-picker-wrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  width: 88px;
+  height: 28px;
+}
+.color-picker-wrap :deep(.n-color-picker) {
+  width: 88px;
+  height: 28px;
+}
+.color-picker-wrap :deep(.n-color-picker-trigger) {
+  width: 88px;
+  height: 28px;
+  min-width: 88px;
+  min-height: 28px;
+  display: block;
+}
+.color-picker-wrap :deep(.n-color-picker-trigger__fill) {
+  border-radius: 4px;
+}
 .dialog-footer {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+}
+</style>
+
+<style>
+.preference-settings-dialog .n-radio__label {
+  color: var(--light-2) !important;
+}
+.preference-settings-dialog .n-radio.n-radio--checked .n-radio__dot {
+  background-color: var(--light-2) !important;
+}
+.preference-settings-dialog .n-radio.n-radio--checked .n-radio__dot::before {
+  background-color: var(--dark-2) !important;
 }
 </style>
