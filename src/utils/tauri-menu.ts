@@ -109,23 +109,19 @@ export async function initTauriMenu() {
     })
     
     listen('cut', () => {
-      console.log('Edit -> Cut')
-      // TODO: 实现剪切逻辑
+      window.dispatchEvent(new CustomEvent('editor-cut'))
     })
     
     listen('copy', () => {
-      console.log('Edit -> Copy')
-      // TODO: 实现复制逻辑
+      window.dispatchEvent(new CustomEvent('editor-copy'))
     })
     
     listen('paste', () => {
-      console.log('Edit -> Paste')
-      // TODO: 实现粘贴逻辑
+      window.dispatchEvent(new CustomEvent('editor-paste'))
     })
     
     listen('delete', () => {
-      console.log('Edit -> Delete')
-      // TODO: 实现删除逻辑
+      window.dispatchEvent(new CustomEvent('editor-delete'))
     })
 
     // 监听字符菜单事件

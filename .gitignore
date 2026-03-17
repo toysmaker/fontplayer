@@ -26,3 +26,6 @@ dist-ssr
 # Tauri
 src-tauri/target
 playwright-report
+
+public/templates/custom_1/*
+public/data/*

@@ -89,6 +89,7 @@ import AddCharacterDialog from '@/ui/dialogs/AddCharacterDialog.vue'
 import AddIconDialog from '@/ui/dialogs/AddIconDialog.vue'
 import AddGlyphDialog from '@/ui/dialogs/AddGlyphDialog.vue'
 import { getWebMenu, traverse_web_menu } from '@/features/editor/menus/web_menus'
+import { doCut, doCopy, doPaste, doDelete } from '@/features/editor/actions/editActions'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t } = useI18n()
@@ -377,6 +378,9 @@ onMounted(() => {
   window.addEventListener('editor-add-glyph', handleShowAddGlyphDialog)
   window.addEventListener('show-warning-message', handleShowWarningMessage)
   window.addEventListener('editor-delete', handleEditorDelete)
+  window.addEventListener('editor-cut', handleCut)
+  window.addEventListener('editor-copy', handleCopy)
+  window.addEventListener('editor-paste', handlePaste)
   // 监听 Tauri 菜单触发的保存事件
   window.addEventListener('save-file', async () => {
     try {
@@ -404,6 +408,9 @@ onUnmounted(() => {
   window.removeEventListener('editor-add-glyph', handleShowAddGlyphDialog)
   window.removeEventListener('show-warning-message', handleShowWarningMessage)
   window.removeEventListener('editor-delete', handleEditorDelete)
+  window.removeEventListener('editor-cut', handleCut)
+  window.removeEventListener('editor-copy', handleCopy)
+  window.removeEventListener('editor-paste', handlePaste)
   window.removeEventListener('save-file', () => {})
   window.removeEventListener('save-as', () => {})
 })
@@ -480,19 +487,23 @@ function handleRedo() {
 }
 
 function handleCut() {
-  console.log('Cut')
+  if (!enableAtEdit()) return
+  doCut()
 }
 
 function handleCopy() {
-  console.log('Copy')
+  if (!enableAtEdit()) return
+  doCopy()
 }
 
 function handlePaste() {
-  console.log('Paste')
+  if (!enableAtEdit()) return
+  doPaste()
 }
 
 function handleDelete() {
-  console.log('Delete')
+  if (!enableAtEdit()) return
+  doDelete()
 }
 
 // 导入操作
