@@ -448,6 +448,14 @@ export class SelectTool extends BaseTool {
     this.mousedown = true
     this.mousemove = false
 
+    // 对于字形组件：拖拽（无论是骨架关键点还是整体移动）统一交给 glyphDragger 处理，
+    // SelectTool 只负责点击选择/切换，不参与 mousedown 拖拽逻辑，避免抢占事件。
+    if (selectedComponent && selectedComponent.type === 'glyph') {
+      this.mousedown = false
+      this.selectControl = 'null'
+      return
+    }
+
     if (!selectedComponent || !selectedComponent.visible) {
       // 没有选中组件，标记为需要处理点击选择，但不立即处理
       // 等到 onMouseUp 时再处理，避免重复调用
