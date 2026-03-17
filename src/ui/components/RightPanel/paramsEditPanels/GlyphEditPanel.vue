@@ -4,7 +4,7 @@
  * 支持字符和字形两种编辑模式
  */
 
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { NInputNumber, NForm, NFormItem, NInput, NEmpty, NSlider, NSelect, NSwitch, NIcon, NButton } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from '../composables/useComponentEditor'
@@ -185,19 +185,23 @@ const handleFormatGlyphComponent = () => {
       '格式化会把当前选中的脚本字形组件转换为一组普通轮廓组件，并删除原脚本及参数，无法自动还原。是否继续？',
     positiveText: '确定',
     negativeText: '取消',
-    onPositiveClick: () => {
+    onPositiveClick: async () => {
       if (editStatus.value === EditStatus.Edit) {
         characterStore.replaceGlyphComponentWithComponents(
           glyphComponent.uuid,
           components as any,
           orderedItems,
         )
+        await nextTick()
+        characterStore.updateCharacterListFromEditFile()
       } else if (editStatus.value === EditStatus.Glyph) {
         glyphStore.replaceGlyphComponentWithComponents(
           glyphComponent.uuid,
           components as any,
           orderedItems,
         )
+        await nextTick()
+        glyphStore.updateGlyphListFromEditFile()
       }
       projectStore.markFileUnsaved(projectStore.selectedFile!.uuid)
     },

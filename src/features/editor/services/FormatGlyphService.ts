@@ -112,7 +112,9 @@ const convertGeneratedComponent = (
     name: glyphComponent.name,
     lock: glyphComponent.lock,
     visible: glyphComponent.visible,
-    usedInCharacter: glyphComponent.usedInCharacter,
+    // 展开后的组件无论在字符还是字形中，都是实际参与渲染的轮廓组件
+    // 这里统一标记为 true，避免在预览渲染时被 ContourConverter 过滤掉
+    usedInCharacter: true,
     x: bounds.x,
     y: bounds.y,
     w: bounds.w,
@@ -204,6 +206,8 @@ const cloneNormalComponent = (
   if (typeof clone.y === 'number') clone.y += baseOy
   if (typeof clone.ox === 'number') clone.ox += baseOx
   if (typeof clone.oy === 'number') clone.oy += baseOy
+  // 克隆到外层后，这些组件也应该参与字符/字形渲染
+  clone.usedInCharacter = true
   return clone as IComponent
 }
 

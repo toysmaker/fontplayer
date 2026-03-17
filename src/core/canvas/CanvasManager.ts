@@ -712,6 +712,14 @@ export class CanvasManager {
   static clearCanvasMark(canvas: HTMLCanvasElement): void {
     this.canvasUUIDMap.delete(canvas)
   }
+
+  /**
+   * 使指定 UUID 的缓存失效，强制下次渲染时重新绘制
+   * 用于单个字符/字形被修改后刷新其预览
+   */
+  static invalidateCache(uuid: string): void {
+    this.renderCache.delete(uuid)
+  }
   
   /**
    * 检查是否有缓存（包括 IndexedDB）

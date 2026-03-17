@@ -427,21 +427,43 @@ const schedulePeriodicCleanup = () => {
   }
 }
 
+const handleForceCharacterListRefresh = async () => {
+  renderCache.clear()
+  CanvasManager.forceCleanupAllCache()
+
+  // 重新从 IndexedDB 加载当前可见项，确保使用格式化后的最新数据而非内存中的旧数据
+  const fileUUID = projectStore.selectedFile?.uuid
+  if (fileUUID && visibleItems.value.length > 0) {
+    const reloaded: ICharacterFileLite[] = []
+    for (const item of visibleItems.value) {
+      const fresh = await characterDataManager.loadCharacter(fileUUID, item.uuid)
+      reloaded.push(fresh || item)
+    }
+    visibleItems.value = reloaded
+  }
+
+  scheduleRender()
+}
+
 onMounted(() => {
   updateContainerSize()
-  
+
   if (containerRef.value && 'ResizeObserver' in window) {
     resizeObserver = new ResizeObserver(() => {
       updateContainerSize()
     })
     resizeObserver.observe(containerRef.value)
   }
-  
+
+  window.addEventListener('force-character-list-refresh', handleForceCharacterListRefresh)
+
   // 启动定期清理
   schedulePeriodicCleanup()
 })
 
 onUnmounted(() => {
+  window.removeEventListener('force-character-list-refresh', handleForceCharacterListRefresh)
+
   if (resizeObserver) {
     resizeObserver.disconnect()
     resizeObserver = null
@@ -503,6 +525,8 @@ watch(() => characterStore.characterListVersion, async () => {
 
   // 清除本地渲染缓存，让 scheduleRender 重新渲染
   renderCache.delete(`${uuid}_rendered`)
+  // 同时清除 CanvasManager 的缓存，确保 canSkipRender 不会跳过重新渲染
+  CanvasManager.invalidateCache(uuid)
 
   // 如果该项当前可见，加载完整字符数据后替换 visibleItems 中的引用
   const metadata = characterList.value.find(c => c.uuid === uuid)
@@ -515,6 +539,9 @@ watch(() => characterStore.characterListVersion, async () => {
         newVisible[idx] = full
         visibleItems.value = newVisible
       }
+    } else {
+      // 不可见时也触发一次调度，确保滚动回来时能看到最新预览
+      scheduleRender()
     }
   }
 })

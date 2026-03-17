@@ -690,43 +690,64 @@ function handleFormatAllCharacters() {
   const file = projectStore.selectedFile
   if (!file) return
 
-  const doFormat = () => {
-    const loadingMsg = message.loading('正在格式化全部字符...', { duration: 0 })
-    let changed = false
-    file.characterList.forEach((ch: any) => {
-      if (!ch.components || !ch.components.length) return
-      const container = {
-        components: ch.components as IComponent[],
-        orderedList: ch.orderedList as any,
-      }
-      if (formatContainerGlyphComponents(container)) {
-        changed = true
-        ch.components = container.components
-        ch.orderedList = container.orderedList
-        // 清除预览/轮廓缓存，强制列表预览重算
-        ch.previewRef = undefined
-        ch.contourRef = undefined
-      }
-    })
+  // 异步格式化：从 IndexedDB 逐个加载字符，格式化后保存回去
+  // 内存中的 characterList 只有元数据（uuid/type/character），完整组件在 IndexedDB
+  const doFormat = async () => {
+    const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
+    const { CanvasManager } = await import('@/core/canvas/CanvasManager')
+
+    projectStore.loadingMessage = '正在格式化字符...'
+    projectStore.loadingProgress = 0
+    projectStore.loadingTotal = file.characterList.length
+    projectStore.loading = true
+
+    let changed = 0
     try {
-      if (changed) {
-        projectStore.markFileUnsaved(file.uuid)
-        message.success('全部字符已格式化（脚本字形组件已展开为普通轮廓组件）。')
-      } else {
-        message.info('当前工程中没有可格式化的字形组件。')
+      for (let i = 0; i < file.characterList.length; i++) {
+        const metadata = file.characterList[i]
+        const ch = await characterDataManager.loadCharacter(file.uuid, metadata.uuid)
+
+        if (ch && ch.components && ch.components.length > 0) {
+          const container = {
+            components: ch.components as IComponent[],
+            orderedList: (ch as any).orderedList,
+          }
+          if (formatContainerGlyphComponents(container)) {
+            changed++
+            ch.components = container.components
+            ;(ch as any).orderedList = container.orderedList
+            ch.previewRef = undefined
+            ch.contourRef = undefined
+            await characterDataManager.updateCharacter(file.uuid, ch)
+          }
+        }
+
+        projectStore.loadingProgress = i + 1
       }
+
     } finally {
-      loadingMsg.destroy()
+      projectStore.loading = false
+    }
+
+    // 必须在 loading = false 之后分发刷新事件，否则 scheduleRender 会因 loading=true 而跳过
+    if (changed > 0) {
+      CanvasManager.forceCleanupAllCache()
+      window.dispatchEvent(new CustomEvent('force-character-list-refresh'))
+      projectStore.markFileUnsaved(file.uuid)
+      message.success(`已格式化 ${changed} 个字符中的字形组件。`)
+    } else {
+      message.info('当前工程中没有可格式化的字形组件。')
     }
   }
 
   dialog.warning({
     title: '格式化全部字符',
     content:
-      '将对当前工程中的所有字符执行“格式化字形组件”，把脚本字形组件转换为普通轮廓组件。该操作不可撤销，建议先保存工程，是否继续？',
+      '将对当前工程中的所有字符执行”格式化字形组件”，把脚本字形组件转换为普通轮廓组件。该操作不可撤销，建议先保存工程，是否继续？',
     positiveText: '继续格式化',
     negativeText: '取消',
-    onPositiveClick: doFormat,
+    // 不 await doFormat，让对话框立即关闭，然后异步执行格式化并显示进度条
+    onPositiveClick: () => { doFormat() },
   })
 }
 
@@ -749,11 +770,8 @@ function handleFormatCurrentCharacter() {
 
     editing.components = container.components
     editing.orderedList = container.orderedList
-    // 清除当前编辑字符的预览/轮廓缓存，并通知字符列表刷新预览
-    ;(editing as any).previewRef = undefined
-    ;(editing as any).contourRef = undefined
-    characterStore.lastUpdatedCharacterUUID = editing.uuid
-    characterStore.characterListVersion++
+    // 同步到字符列表并刷新预览（沿用 store 内 updateCharacterListFromEditFile 的逻辑）
+    ;(characterStore as any).updateCharacterListFromEditFile()
 
     projectStore.markFileUnsaved(file.uuid)
     message.success('当前字符已格式化（脚本字形组件已展开为普通轮廓组件）。')

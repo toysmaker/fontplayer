@@ -467,7 +467,7 @@ export class FileHandler {
    */
   private async writeProjectStream(file: any, filePath: string): Promise<void> {
     const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
-    const { invoke } = await import('@tauri-apps/api/core')
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs')
     const store = this.projectStore
 
     const characterList: any[] = file.characterList || []
@@ -480,15 +480,20 @@ export class FileHandler {
     store.loading = true
 
     // 缓冲区：积累到 64KB 再 flush，减少 IPC 往返次数
-    // 用 Rust write_file_chunk 写入，保证 write_all 不会部分写
+    // 第一次写入截断创建文件，后续 append: true 追加
+    // writeTextFile 内部使用 write_all，保证不会发生部分写入导致 JSON 损坏
     const FLUSH_SIZE = 64 * 1024
     let pending = ''
-    let isFirstChunk = true
+    let firstChunk = true
 
     const flush = async () => {
       if (pending.length === 0) return
-      await invoke('write_file_chunk', { path: filePath, chunk: pending, append: !isFirstChunk })
-      isFirstChunk = false
+      if (firstChunk) {
+        await writeTextFile(filePath, pending)
+        firstChunk = false
+      } else {
+        await writeTextFile(filePath, pending, { append: true })
+      }
       pending = ''
     }
 

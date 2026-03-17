@@ -84,7 +84,9 @@ export class ContourConverter {
         case 'pen': {
           const penValue = value as IPenComponent
           // 如果没有轮廓或强制更新，计算轮廓
-          if (!penValue.contour || forceUpdate) {
+          // 注意：脚本组件的 contour/preview 初始化为 []（空数组），空数组在 JS 中是 truthy，
+          // 需要额外检查 length 以确保未计算时也触发重新计算
+          if (!penValue.contour || !penValue.contour.length || forceUpdate) {
             let transformed_points = transformPoints(penValue.points, {
               x, y, w, h, rotation, flipX, flipY,
             })
@@ -127,7 +129,7 @@ export class ContourConverter {
 
         case 'polygon': {
           const polygonValue = value as IPolygonComponent
-          if (!polygonValue.contour || forceUpdate) {
+          if (!polygonValue.contour || !polygonValue.contour.length || forceUpdate) {
             let transformed_points = transformPoints(polygonValue.points, {
               x, y, w, h, rotation, flipX, flipY,
             })
@@ -168,7 +170,7 @@ export class ContourConverter {
 
         case 'rectangle': {
           const rectValue = value as IRectangleComponent
-          if (!rectValue.contour || forceUpdate) {
+          if (!rectValue.contour || !rectValue.contour.length || forceUpdate) {
             let transformed_points = transformPoints(
               getRectanglePoints(rectValue.width, rectValue.height, x, y),
               { x, y, w, h, rotation, flipX, flipY }
@@ -210,7 +212,7 @@ export class ContourConverter {
 
         case 'ellipse': {
           const ellipseValue = value as IEllipseComponent
-          if (!ellipseValue.contour || forceUpdate) {
+          if (!ellipseValue.contour || !ellipseValue.contour.length || forceUpdate) {
             let points = getEllipsePoints(
               ellipseValue.radiusX,
               ellipseValue.radiusY,
