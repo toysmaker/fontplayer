@@ -189,6 +189,9 @@ export class ScriptExecutor {
       try {
         const paramsBefore = glyphInstance._glyph.parameters?.map((p: any) => ({ name: p.name, value: p.value })) || []
         glyphInstance.onSkeletonDragEnd(event)
+
+        // 拖拽结束后清理 tempData，避免后续 executeGlyphScript 因 tempData 而跳过（导致参数修改不生效）。
+        glyphInstance.tempData = null
         
         if (import.meta.env.DEV) {
           const paramsAfter = glyphInstance._glyph.parameters?.map((p: any) => ({ name: p.name, value: p.value })) || []
@@ -220,6 +223,8 @@ export class ScriptExecutor {
       if (import.meta.env.DEV) {
         console.warn('[ScriptExecutor.executeDragEnd] No onSkeletonDragEnd callback for', componentUUID, '- parameters will be synced from onSkeletonDrag')
       }
+      // 没有回调也要清理 tempData（如果有）
+      glyphInstance.tempData = null
     }
   }
 }

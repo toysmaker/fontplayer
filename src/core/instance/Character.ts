@@ -18,8 +18,6 @@ export class Character implements IInstance {
   constructor(character: ICharacterFileLite) {
     this._character = character
     this.uuid = character.uuid
-    // 将实例关联到字符数据
-    ;(character as any)._o = this
   }
 
   /**
@@ -41,8 +39,8 @@ export class Character implements IInstance {
     for (let i = 0; i < this._character.components.length; i++) {
       const component = this._character.components[i]
       if (component.name === name && component.type === 'glyph') {
-        const glyph = component.value as ICustomGlyph
-        return (glyph as any)._o || null
+        // Do not attach instances to glyph data; use InstanceManager from call site if needed.
+        return null
       }
     }
     return null
@@ -108,10 +106,6 @@ export class Character implements IInstance {
    * 清理资源
    */
   cleanup() {
-    // 清理与字符数据的关联
-    if ((this._character as any)._o === this) {
-      delete (this._character as any)._o
-    }
   }
 
   /**

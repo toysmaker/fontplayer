@@ -636,7 +636,7 @@ export class FileHandler {
         }
         cleanComponent.value = value
       }
-      if ('_o' in cleanComponent) delete cleanComponent._o
+      // No `_o` instance field is persisted; InstanceManager owns instances.
       return cleanComponent
     })
   }
@@ -648,7 +648,7 @@ export class FileHandler {
       if (cleanGlyph.components) {
         cleanGlyph.components = this.cleanupGlyphComponents(cleanGlyph.components)
       }
-      if ('_o' in cleanGlyph) delete cleanGlyph._o
+      // No `_o` instance field is persisted; InstanceManager owns instances.
       return cleanGlyph
     })
   }

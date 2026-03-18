@@ -179,7 +179,7 @@ export class ProjectLoader {
 
       try {
         // 2. 执行脚本（生成组件）
-        await executeGlyphScript(glyph, instanceKey)
+        executeGlyphScript(glyph, instanceKey)
 
         // 3. 获取执行脚本后的组件（从实例中获取）
         const components = glyphInstance.components || glyph.components || []

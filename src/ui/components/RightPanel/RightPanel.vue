@@ -5,10 +5,12 @@
  */
 
 import { computed, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { NEmpty } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from './composables/useComponentEditor'
 import { EditStatus } from '@/core/types'
+import { useToolStore } from '@/stores/tool'
 // 导入各个参数编辑面板
 import PenEditPanel from './paramsEditPanels/PenEditPanel.vue'
 import EllipseEditPanel from './paramsEditPanels/EllipseEditPanel.vue'
@@ -16,10 +18,13 @@ import RectangleEditPanel from './paramsEditPanels/RectangleEditPanel.vue'
 import PolygonEditPanel from './paramsEditPanels/PolygonEditPanel.vue'
 import PictureEditPanel from './paramsEditPanels/PictureEditPanel.vue'
 import GlyphEditPanel from './paramsEditPanels/GlyphEditPanel.vue'
+import GlyphParamsPanel from './paramsEditPanels/GlyphParamsPanel.vue'
 
 const { t } = useI18n()
 
 const { selectedComponent, selectedComponentUUID, editStatus } = useComponentEditor()
+const toolStore = useToolStore()
+const { tool } = storeToRefs(toolStore)
 
 // 调试信息
 if (import.meta.env.DEV) {
@@ -35,9 +40,13 @@ if (import.meta.env.DEV) {
 
 <template>
   <div class="right-panel" data-testid="parameter-panel">
+    <!-- 字形编辑 params 工具：显示字形参数面板（骨架绑定等） -->
+    <glyph-params-panel
+      v-if="editStatus === EditStatus.Glyph && tool === 'params'"
+    />
     <!-- 基础组件面板（不区分字符/字形） -->
     <pen-edit-panel
-      v-if="selectedComponentUUID && selectedComponent?.type === 'pen'"
+      v-else-if="selectedComponentUUID && selectedComponent?.type === 'pen'"
     />
     <ellipse-edit-panel
       v-else-if="selectedComponentUUID && selectedComponent?.type === 'ellipse'"

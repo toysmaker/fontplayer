@@ -350,6 +350,8 @@ export interface ICustomGlyph {
   system_script?: Record<string, string>
   constants?: Array<any>
   parameters?: Array<any>
+  // skeleton binding (ported from original project)
+  skeleton?: any
   joints?: Array<IJoint>
   reflines?: Array<IRefLine>
   contourRef?: string // IndexedDB key for contour data

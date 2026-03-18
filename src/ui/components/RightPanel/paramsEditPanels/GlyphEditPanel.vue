@@ -26,6 +26,10 @@ const characterStore = useCharacterStore()
 const glyphStore = useGlyphStore()
 const projectStore = useProjectStore()
 
+const getConstantMeta = (uuid: string) => {
+  return projectStore.selectedFile?.constants?.find((c: any) => c.uuid === uuid) || null
+}
+
 // 获取字形组件的参数数组
 const glyphParameters = computed(() => {
   if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') {
@@ -83,7 +87,7 @@ const handleChangeParameter = async (parameter: IParameter, value: number | stri
     const constantsMap = projectStore.constantsMap
     
     if (constantsMap) {
-      // 对于 Constant 类型，value 应该是 number（因为 IConstant.value 是 number）
+      // Constant 的 value 存储为 number（Enum 常量也用 number 存储选项 value）
       const numericValue = typeof processedValue === 'number' ? processedValue : Number(processedValue)
       // 限制精度
       const precision = parameter.max && parameter.max <= 10 ? 2 : 0
@@ -123,7 +127,7 @@ const handleChangeParameter = async (parameter: IParameter, value: number | stri
   
   // 执行字形脚本（使用更新后的字形数据）
   try {
-    await executeGlyphScript(updatedGlyphValue, selectedComponent.value.uuid)
+    executeGlyphScript(updatedGlyphValue, selectedComponent.value.uuid)
     
     // 脚本执行完成后，再次更新组件以确保画布重新渲染
     // 由于 modifyComponent 已经更新了组件，CharacterEditor/GlyphEditor 中的 watch
@@ -306,26 +310,35 @@ const handleFormatGlyphComponent = () => {
               />
             </template>
             
-            <!-- Constant 类型参数（显示常量值，可编辑但不更新列表） -->
+            <!-- Constant 类型参数（显示常量值，可编辑但不更新列表；按常量自身 type 渲染） -->
             <template v-else-if="parameter.type === ParameterType.Constant">
               <div class="constant-param">
-                <n-input-number
-                  :value="getConstantValue(parameter) as number"
-                  :step="parameter.max && parameter.max <= 10 ? 0.01 : 1"
-                  :min="parameter.min"
-                  :max="parameter.max"
-                  :precision="parameter.max && parameter.max <= 10 ? 2 : 0"
-                  @update:value="(v) => handleChangeParameter(parameter, v ?? 0)"
-                />
-                <n-slider
-                  :value="getConstantValue(parameter) as number"
-                  :step="parameter.max && parameter.max <= 10 ? 0.01 : 1"
-                  :min="parameter.min ?? 0"
-                  :max="parameter.max ?? 100"
-                  :precision="parameter.max && parameter.max <= 10 ? 2 : 0"
-                  @update:value="(v) => handleChangeParameter(parameter, v)"
-                  style="width: 100%; margin-top: 8px;"
-                />
+                <template v-if="getConstantMeta(String(parameter.value))?.type === ParameterType.Enum">
+                  <n-select
+                    :value="getConstantValue(parameter) as any"
+                    :options="getConstantMeta(String(parameter.value))?.options?.map((opt: any) => ({ label: opt.label, value: opt.value })) || []"
+                    @update:value="(v) => handleChangeParameter(parameter, Number(v))"
+                  />
+                </template>
+                <template v-else>
+                  <n-input-number
+                    :value="getConstantValue(parameter) as number"
+                    :step="(getConstantMeta(String(parameter.value))?.max ?? parameter.max) && (getConstantMeta(String(parameter.value))?.max ?? parameter.max) <= 10 ? 0.01 : 1"
+                    :min="getConstantMeta(String(parameter.value))?.min ?? parameter.min"
+                    :max="getConstantMeta(String(parameter.value))?.max ?? parameter.max"
+                    :precision="(getConstantMeta(String(parameter.value))?.max ?? parameter.max) && (getConstantMeta(String(parameter.value))?.max ?? parameter.max) <= 10 ? 2 : 0"
+                    @update:value="(v) => handleChangeParameter(parameter, v ?? 0)"
+                  />
+                  <n-slider
+                    :value="getConstantValue(parameter) as number"
+                    :step="(getConstantMeta(String(parameter.value))?.max ?? parameter.max) && (getConstantMeta(String(parameter.value))?.max ?? parameter.max) <= 10 ? 0.01 : 1"
+                    :min="getConstantMeta(String(parameter.value))?.min ?? (parameter.min ?? 0)"
+                    :max="getConstantMeta(String(parameter.value))?.max ?? (parameter.max ?? 100)"
+                    :precision="(getConstantMeta(String(parameter.value))?.max ?? parameter.max) && (getConstantMeta(String(parameter.value))?.max ?? parameter.max) <= 10 ? 2 : 0"
+                    @update:value="(v) => handleChangeParameter(parameter, v)"
+                    style="width: 100%; margin-top: 8px;"
+                  />
+                </template>
                 <span class="constant-note">
                   <span class="constant-note-text">全局常量</span>
                   <span class="constant-note-icon">

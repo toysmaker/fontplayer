@@ -86,7 +86,10 @@ import { bottomBarToolManager } from '@/features/bottomBar/BottomBarToolManager'
 import { useBottomBarToolStore } from '@/stores/bottomBarTool'
 import { toolManager, SelectTool, PenTool, PolygonTool, EllipseTool, RectangleTool } from '@/features/tools'
 import { getCoord } from '@/features/tools/utils/coord'
+import { setGlyphEditCanvasContext, clearGlyphEditCanvasContext } from '@/features/editor/glyphEditCanvas'
 import { useToolStore } from '@/stores/tool'
+import { initSkeletonDragger, renderSkeletonSelector, renderBoneAndWeight } from '@/features/tools/skeletonBind'
+import { onSkeletonBind, onSkeletonDragging, onWeightSetting } from '@/stores/skeletonDragger'
 import type { ToolType } from '@/features/tools'
 
 const glyphStore = useGlyphStore()
@@ -121,7 +124,13 @@ const editorGrid = computed<IGrid>(() => editorPreference.grid)
 // 渲染画布
 const renderCanvas = async () => {
   if (!canvasRef.value || !editingGlyph.value) return
-  
+
+  // 每次渲染前先清空画布，避免参数修改后多次绘制叠加（确保与 render() 内 clearCanvas 一致）
+  const ctx = canvasRef.value.getContext('2d')
+  if (ctx) {
+    ctx.clearRect(0, 0, canvasRef.value.width, canvasRef.value.height)
+  }
+
   const components = (glyphStore as any).orderedListWithItemsForCurrentGlyph
   
   // 获取 Canvas 的显示尺寸（CSS style）
@@ -160,8 +169,8 @@ const renderCanvas = async () => {
   // 如果脚本在 onMounted 中已执行，render() 会检测到实例已有 _components，不会重复执行
   
   // 渲染关键点和辅助线（在主要渲染之后）
-  // 如果当前选中的组件被设置为不可见（visible === false），则不渲染其关键点和辅助线
-  if (editorStore.checkJoints || editorStore.checkRefLines) {
+  // 骨架绑定流程中也需要渲染 joints/reflines（对齐原工程逻辑）
+  if (editorStore.checkJoints || editorStore.checkRefLines || onSkeletonBind.value) {
     const selectedComponent = (glyphStore as any).selectedComponent
     if (
       selectedComponent &&
@@ -182,6 +191,14 @@ const renderCanvas = async () => {
     const toolRenderFn = toolManager.getCurrentToolRenderFunction()
     if (toolRenderFn) {
       toolRenderFn(canvasRef.value)
+    }
+  }
+
+  // 骨架拖拽与权重设置覆盖层（必须在主渲染之后）
+  if (canvasRef.value && (onSkeletonDragging.value || onWeightSetting.value)) {
+    renderSkeletonSelector(canvasRef.value)
+    if (onWeightSetting.value) {
+      renderBoneAndWeight(canvasRef.value)
     }
   }
 }
@@ -280,6 +297,13 @@ const initTools = async () => {
       renderCanvas()
     },
   }
+
+  // Expose glyph editor canvas + coord mapping for params panel/tools
+  setGlyphEditCanvasContext({
+    canvas: canvasRef.value,
+    getCoord: toolConfig.getCoord,
+    onRender: toolConfig.onRender,
+  })
   
   // 创建并注册所有工具
   const selectTool = SelectTool.getInstance(canvasRef.value, toolConfig)
@@ -436,6 +460,9 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  clearGlyphEditCanvasContext()
+  closeSkeletonDragger && closeSkeletonDragger()
+  closeSkeletonDragger = null
   // 清理selectControl检查定时器
   if (selectControlCheckInterval) {
     clearInterval(selectControlCheckInterval)
@@ -593,6 +620,39 @@ watch(() => fontRenderStyle.value, async () => {
 
 watch([() => editorPreference.background, () => editorPreference.grid], () => {
   renderCanvas()
+})
+
+let closeSkeletonDragger: null | (() => void) = null
+watch([onSkeletonDragging, () => toolStore.tool], async ([dragging, tool]) => {
+  if (!canvasRef.value) return
+
+  // only enable in params tool
+  if (tool !== 'params') {
+    if (closeSkeletonDragger) {
+      closeSkeletonDragger()
+      closeSkeletonDragger = null
+    }
+    return
+  }
+
+  if (dragging) {
+    // init skeleton dragger and force overlay render
+    closeSkeletonDragger && closeSkeletonDragger()
+    closeSkeletonDragger = initSkeletonDragger(canvasRef.value, {
+      getCoord: (coord: number) => {
+        const currentZoom = editingGlyph.value?.view?.zoom || 100
+        return getCoord(coord, 'glyph', currentZoom)
+      },
+      onRender: () => {
+        renderCanvas()
+      },
+    })
+    await renderCanvas()
+  } else {
+    closeSkeletonDragger && closeSkeletonDragger()
+    closeSkeletonDragger = null
+    await renderCanvas()
+  }
 })
 
 // 监听工具切换

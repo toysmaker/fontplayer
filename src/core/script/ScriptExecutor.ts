@@ -149,7 +149,15 @@ export function executeGlyphScript(
       () => new CustomGlyph(targetGlyph),
       'glyph'
     ) as CustomGlyph
-    
+
+    // 关键：每次执行脚本前必须清空上一次脚本生成的数据，否则 _components/_joints/_reflines 会累积，
+    // 表现为“改参数后画布叠加所有历史结果”（即使 canvas clearRect 也无效，因为每次 render 都会画更多组件）。
+    glyphInstance.clear()
+
+    // 实例池中的 instance 可能是用旧的 targetGlyph 创建的，getParam() 从 _glyph.parameters 读值。
+    // 若不同步为当前 targetGlyph，脚本开头读取的「水平延伸」等会一直是旧值，表现为改参数无反应。
+    glyphInstance._glyph = targetGlyph
+
     // 不再维护 targetGlyph._o，统一从 InstanceManager 获取实例
 
     // 在 try 块外部定义变量，确保 catch 块可以访问

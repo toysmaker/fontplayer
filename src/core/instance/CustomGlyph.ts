@@ -48,7 +48,7 @@ export class CustomGlyph implements IInstance {
       }
     }
     
-    // 不再维护 glyph._o，统一从 InstanceManager 获取实例
+    // Do not attach instance to glyph data (no `_o`); use InstanceManager only.
   }
 
   /**
@@ -309,7 +309,6 @@ export class CustomGlyph implements IInstance {
    * 清理资源
    */
   cleanup() {
-    // 不再维护 glyph._o，统一从 InstanceManager 管理
     // 清理临时数据
     this.clear()
     // 清理回调

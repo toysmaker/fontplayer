@@ -165,7 +165,7 @@ export class ContourConverter {
             const { CustomGlyph } = await import('../instance/CustomGlyph')
             let scriptExecuted = false
             try {
-              await executeGlyphScript(glyphValue, component.uuid)
+              executeGlyphScript(glyphValue, component.uuid)
               scriptExecuted = true
             } catch {
               scriptExecuted = false
@@ -557,7 +557,7 @@ export class ContourConverter {
             // 这样即使多个组件引用同一个 glyph 模板，它们也会有独立的参数
             let scriptExecuted = false
             try {
-            await executeGlyphScript(glyphValue, component.uuid)
+              executeGlyphScript(glyphValue, component.uuid)
               scriptExecuted = true
             } catch (scriptError) {
               console.error(`Error executing glyph script for ${component.uuid}:`, scriptError)

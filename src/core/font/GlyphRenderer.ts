@@ -100,7 +100,7 @@ export class GlyphRenderer {
             )
 
             try {
-              await executeGlyphScript(glyph, instanceKey)
+              executeGlyphScript(glyph, instanceKey)
               components = glyphInstance.components || []
             } finally {
               instanceManager.releaseTemporaryInstance(instanceKey)
