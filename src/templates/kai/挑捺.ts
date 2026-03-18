@@ -101,7 +101,13 @@ const quadraticBezierPoint = (p0: any, p1: any, p2: any, t: number) => {
 
 
 const instanceBasicGlyph_tiao_na = (plainGlyph: ICustomGlyph) => {
-  const glyph = new CustomGlyph(plainGlyph)
+  const glyph = instanceManager.getInstance(
+    plainGlyph.uuid,
+    () => new CustomGlyph(plainGlyph),
+    "glyph",
+  ) as unknown as CustomGlyph
+  glyph._glyph = plainGlyph
+  glyph.clear()
   const params = {
     tiao_horizontalSpan: glyph.getParam('挑-水平延伸'),
     tiao_verticalSpan: glyph.getParam('挑-竖直延伸'),

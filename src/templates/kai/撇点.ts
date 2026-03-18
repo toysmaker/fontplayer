@@ -93,7 +93,13 @@ const quadraticBezierPoint = (p0: any, p1: any, p2: any, t: number) => {
 
 const BENDING_DEGREE = 0
 const instanceBasicGlyph_pie_dian = (plainGlyph: ICustomGlyph) => {
-  const glyph = new CustomGlyph(plainGlyph)
+  const glyph = instanceManager.getInstance(
+    plainGlyph.uuid,
+    () => new CustomGlyph(plainGlyph),
+    "glyph",
+  ) as unknown as CustomGlyph
+  glyph._glyph = plainGlyph
+  glyph.clear()
   const params = {
     pie_horizontalSpan: glyph.getParam('撇-水平延伸'),
     pie_verticalSpan: glyph.getParam('撇-竖直延伸'),

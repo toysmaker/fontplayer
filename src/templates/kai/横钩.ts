@@ -95,7 +95,13 @@ const normalize = (vector: { x: number; y: number }) => {
 const createIdentityMatrix = () => [1, 0, 0, 1, 0, 0];
 
 const instanceBasicGlyph_heng_gou = (plainGlyph: ICustomGlyph) => {
-  const glyph = new CustomGlyph(plainGlyph)
+  const glyph = instanceManager.getInstance(
+    plainGlyph.uuid,
+    () => new CustomGlyph(plainGlyph),
+    "glyph",
+  ) as unknown as CustomGlyph
+  glyph._glyph = plainGlyph
+  glyph.clear()
   const params = {
     heng_horizontalSpan: glyph.getParam('横-水平延伸'),
     heng_verticalSpan: glyph.getParam('横-竖直延伸'),

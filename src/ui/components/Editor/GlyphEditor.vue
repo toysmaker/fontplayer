@@ -170,18 +170,34 @@ const renderCanvas = async () => {
   
   // 渲染关键点和辅助线（在主要渲染之后）
   // 骨架绑定流程中也需要渲染 joints/reflines（对齐原工程逻辑）
-  if (editorStore.checkJoints || editorStore.checkRefLines || onSkeletonBind.value) {
+  const hasSkeleton = !!editingGlyph.value?.skeleton
+  if (editorStore.checkJoints || editorStore.checkRefLines || hasSkeleton || onSkeletonBind.value || onSkeletonDragging.value || onWeightSetting.value) {
+    // 原工程：骨架绑定时渲染的是 editingGlyph 自身的骨架关键点（即使当前选中的是 pen 等普通组件）
+    // refactor 中 renderSkeletonSelector 只画 hover/drag 高亮，不负责画全部 joints，所以这里必须补上 joints 渲染
+    // 绑定完成后骨架也应继续显示（原工程行为）
+    const shouldRenderEditingGlyphJoints = hasSkeleton || onSkeletonBind.value || onSkeletonDragging.value || onWeightSetting.value
+    const rootForEditingGlyph = shouldRenderEditingGlyphJoints
+      ? ({
+          type: 'glyph',
+          uuid: editingGlyph.value.uuid,
+          ox: 0,
+          oy: 0,
+          visible: true,
+          value: editingGlyph.value,
+        } as any)
+      : null
+
     const selectedComponent = (glyphStore as any).selectedComponent
-    if (
-      selectedComponent &&
-      selectedComponent.type === 'glyph' &&
-      selectedComponent.visible !== false
-    ) {
-      if (editorStore.checkJoints) {
-        renderJoints(selectedComponent, canvasRef.value)
+    const root =
+      rootForEditingGlyph ||
+      (selectedComponent && selectedComponent.type === 'glyph' && selectedComponent.visible !== false ? selectedComponent : null)
+
+    if (root) {
+      if (editorStore.checkJoints || shouldRenderEditingGlyphJoints) {
+        renderJoints(root, canvasRef.value)
       }
       if (editorStore.checkRefLines) {
-        renderRefLines(selectedComponent, canvasRef.value)
+        renderRefLines(root, canvasRef.value)
       }
     }
   }

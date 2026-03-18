@@ -678,6 +678,8 @@ export function render(
         
         // 如果实例有 tempData（正在拖拽中），不应该执行脚本（避免重置拖拽修改）
         const hasTempData = !!existingInstance?.tempData
+        const isSkeletonBindingMode = !!options.glyph?.skeleton?.onSkeletonBind
+        const hasSkeleton = !!options.glyph?.skeleton
         
         // 检查是否需要执行脚本
         // 注意：如果实例存在但 _components 为空，需要执行脚本
@@ -696,6 +698,19 @@ export function render(
         
         // 如果有 tempData，不应该执行脚本
         if (hasTempData) {
+          needsScriptExecution = false
+        }
+
+        // 骨架绑定/拖拽模式：不要执行脚本。
+        // 原工程在该模式下只显示骨架关键点供绑定，不生成/重算内置组件；
+        // 同时 ScriptExecutor 每次执行脚本会 clear() 实例，导致刚生成的 joints 被清空。
+        if (isSkeletonBindingMode) {
+          needsScriptExecution = false
+        }
+
+        // 有 skeleton 的字形：关键点/辅助线由 strokeFnMap 生成（ScriptExecutor 内部处理），不依赖脚本生成内置组件。
+        // 同时避免因为 “no components” 导致每次 render 都重复执行脚本（clear -> 重建）的循环。
+        if (hasSkeleton) {
           needsScriptExecution = false
         }
         
@@ -742,6 +757,7 @@ export function render(
               instanceKey,
               hasExistingInstance: !!existingInstance,
               hasTempData,
+              isSkeletonBindingMode,
               hasComponents: !!existingInstance?._components?.length,
               componentsCount: existingInstance?._components?.length || 0,
               forceUpdate

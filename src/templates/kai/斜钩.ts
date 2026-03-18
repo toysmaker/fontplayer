@@ -99,7 +99,13 @@ const quadraticBezierPoint = (p0: any, p1: any, p2: any, t: number) => {
 };
 
 const instanceBasicGlyph_xie_gou = (plainGlyph: ICustomGlyph) => {
-  const glyph = new CustomGlyph(plainGlyph)
+  const glyph = instanceManager.getInstance(
+    plainGlyph.uuid,
+    () => new CustomGlyph(plainGlyph),
+    "glyph",
+  ) as unknown as CustomGlyph
+  glyph._glyph = plainGlyph
+  glyph.clear()
   const params = {
     xie_horizontalSpan: glyph.getParam('斜-水平延伸'),
     xie_verticalSpan: glyph.getParam('斜-竖直延伸'),

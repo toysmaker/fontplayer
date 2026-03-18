@@ -99,7 +99,13 @@ const quadraticBezierPoint = (p0: any, p1: any, p2: any, t: number) => {
 };
 
 const instanceBasicGlyph_wan_gou = (plainGlyph: ICustomGlyph) => {
-  const glyph = new CustomGlyph(plainGlyph)
+  const glyph = instanceManager.getInstance(
+    plainGlyph.uuid,
+    () => new CustomGlyph(plainGlyph),
+    "glyph",
+  ) as unknown as CustomGlyph
+  glyph._glyph = plainGlyph
+  glyph.clear()
   const params = {
     wan_length: glyph.getParam('弯-长度'),
     wan_bendDegree: Number(glyph.getParam('弯-弯曲度')) + 30 * Number(glyph.getParam('弯曲程度') || 1),

@@ -68,7 +68,14 @@ const quadraticBezierPoint = (p0: any, p1: any, p2: any, t: number) => {
 
 
 const instanceBasicGlyph_heng = (plainGlyph: ICustomGlyph) => {
-  const glyph = new CustomGlyph(plainGlyph)
+  // 必须操作 InstanceManager 管理的实例；否则 joints/reflines 会写入临时 new 出来的实例，渲染层拿不到
+  const glyph = instanceManager.getInstance(
+    plainGlyph.uuid,
+    () => new CustomGlyph(plainGlyph),
+    "glyph",
+  ) as unknown as CustomGlyph
+  glyph._glyph = plainGlyph
+  glyph.clear()
   const params = {
     horizontalSpan: glyph.getParam('水平延伸'),
     verticalSpan: glyph.getParam('竖直延伸'),

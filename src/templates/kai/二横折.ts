@@ -189,7 +189,13 @@ const quadraticBezierPoint = (p0: any, p1: any, p2: any, t: number) => {
 };
 
 const instanceBasicGlyph_er_heng_zhe = (plainGlyph: ICustomGlyph) => {
-  const glyph = new CustomGlyph(plainGlyph)
+  const glyph = instanceManager.getInstance(
+    plainGlyph.uuid,
+    () => new CustomGlyph(plainGlyph),
+    "glyph",
+  ) as unknown as CustomGlyph
+  glyph._glyph = plainGlyph
+  glyph.clear()
   const params = {
     heng1_horizontalSpan: glyph.getParam('横1-水平延伸'),
     heng1_verticalSpan: glyph.getParam('横1-竖直延伸'),

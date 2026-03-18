@@ -10,6 +10,7 @@ import { ConstantsMap } from './ConstantsMap'
 import { useProjectStore } from '@/stores/project'
 import { FP } from './FPUtils'
 import { selectedFile } from './globals'
+import { strokeFnMap, updateSkeletonTransformation } from '@/templates/strokeFnMap'
 
 /**
  * 获取脚本字符串
@@ -124,15 +125,6 @@ export function executeGlyphScript(
     
     console.log('[executeGlyphScript] ✅ Proceeding with script execution (no tempData)')
 
-    // TODO: 处理 skeleton 类型的字形
-    // if (targetGlyph.skeleton) {
-    //   const strokeFn = strokeFnMap[targetGlyph.skeleton.type]
-    //   if (strokeFn) {
-    //     strokeFn.instanceBasicGlyph(targetGlyph)
-    //     return
-    //   }
-    // }
-
     // 递归执行子字形组件的脚本
     if (targetGlyph.components) {
       for (let i = 0; i < targetGlyph.components.length; i++) {
@@ -157,6 +149,24 @@ export function executeGlyphScript(
     // 实例池中的 instance 可能是用旧的 targetGlyph 创建的，getParam() 从 _glyph.parameters 读值。
     // 若不同步为当前 targetGlyph，脚本开头读取的「水平延伸」等会一直是旧值，表现为改参数无反应。
     glyphInstance._glyph = targetGlyph
+
+    // 处理 skeleton 类型的字形（对齐原工程 glyph.ts 1511-1524）
+    // 关键点/辅助线不是通过 script 生成的，而是通过 strokeFnMap 的 instanceBasicGlyph 生成。
+    // 注意：必须放在 clear() 之后，否则会被脚本执行前的 clear 清掉。
+    if (targetGlyph.skeleton) {
+      const type = (targetGlyph.skeleton as any).type
+      const strokeFn: any = (strokeFnMap as any)[type]
+      if (strokeFn) {
+        strokeFn.instanceBasicGlyph(targetGlyph)
+        if ((targetGlyph.skeleton as any).onSkeletonBind) {
+          strokeFn.updateSkeletonListenerBeforeBind(glyphInstance)
+        } else {
+          strokeFn.updateSkeletonListenerAfterBind(glyphInstance)
+        }
+        updateSkeletonTransformation(glyphInstance)
+        return
+      }
+    }
 
     // 不再维护 targetGlyph._o，统一从 InstanceManager 获取实例
 

@@ -384,7 +384,7 @@ const handleChangeParameter = (parameter: IParameter, value: number | string | n
     <div v-if="skeletonVisible" class="section">
       <div class="section-title">{{ t('panels.paramsPanel.glyphParamsPanel.skeletonBinding') }}</div>
 
-      <div class="section-body">
+      <div class="section-body skeleton-wrap">
         <n-button
           v-if="!editGlyph?.skeleton && (!editGlyphInstance?.getSkeleton || !editGlyphInstance?.getSkeleton())"
           size="small"
@@ -415,7 +415,7 @@ const handleChangeParameter = (parameter: IParameter, value: number | string | n
           <n-button size="small" @click="bindSkeleton">{{ t('panels.paramsPanel.glyphParamsPanel.bindSkeleton') }}</n-button>
         </n-form>
 
-        <div v-if="editGlyph?.skeleton && !onSkeletonBind" class="row">
+        <div v-if="editGlyph?.skeleton && !onSkeletonBind" class="weight-setting-wrap">
           <n-button size="small" @click="initWeightSetting">{{ t('panels.paramsPanel.glyphParamsPanel.manualWeight') }}</n-button>
           <n-button v-if="!onWeightSetting" size="small" @click="modifySkeleton">{{ t('panels.paramsPanel.glyphParamsPanel.modifySkeleton') }}</n-button>
           <n-button v-if="!onWeightSetting" size="small" type="error" @click="removeSkeleton">{{ t('panels.paramsPanel.glyphParamsPanel.removeSkeleton') }}</n-button>
@@ -527,13 +527,25 @@ const handleChangeParameter = (parameter: IParameter, value: number | string | n
   font-weight: 600;
   margin-bottom: 8px;
 }
-.row {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-  flex-wrap: wrap;
+.weight-setting-wrap {
+  width: 100%;
 }
 .weight-setting {
   margin-top: 12px;
+}
+.skeleton-wrap .n-button {
+  width: 100% !important;
+  height: 32px !important;
+  margin-bottom: 10px !important;
+}
+
+.section-body {
+  margin-bottom: 20px;
+}
+</style>
+
+<style>
+.skeleton-wrap .n-base-selection .n-base-selection-placeholder{
+  color: var(--primary-0) !important;
 }
 </style>
