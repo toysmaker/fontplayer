@@ -90,6 +90,7 @@ import { fileHandler } from '@/features/editor/menus/FileHandler'
 import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
 import { useCharacterStore } from '@/stores/character'
+import { useGlyphStore } from '@/stores/glyph'
 import { EditStatus } from '@/core/types'
 import { ImportExportSvgService } from '@/features/editor/services/ImportExportSvgService'
 import { formatContainerGlyphComponents } from '@/features/editor/services/FormatGlyphService'
@@ -143,11 +144,13 @@ const web_menu_icons: Record<string, any> = {
 
 // 菜单处理器与禁用规则（由统一的 handlers 模块提供）
 const characterStore = useCharacterStore()
+const glyphStore = useGlyphStore()
 
 const handlerContext: MenuHandlerContext = {
   projectStore,
   editorStore,
   characterStore,
+  glyphStore,
   message,
   dialog,
   t,
@@ -256,6 +259,10 @@ const handleEditorDelete = () => {
   web_handlers['delete'] && web_handlers['delete']()
 }
 
+const handleEditorRemoveOverlap = () => {
+  web_handlers['remove_overlap']?.()
+}
+
 // 将 EditStatus 转换为 Rust 端能理解的字符串格式
 const editStatusToRustString = (status: EditStatus): string => {
   switch (status) {
@@ -308,6 +315,7 @@ onMounted(() => {
   window.addEventListener('editor-cut', () => web_handlers['cut'] && web_handlers['cut']())
   window.addEventListener('editor-copy', () => web_handlers['copy'] && web_handlers['copy']())
   window.addEventListener('editor-paste', () => web_handlers['paste'] && web_handlers['paste']())
+  window.addEventListener('editor-remove-overlap', handleEditorRemoveOverlap)
   window.addEventListener('editor-font-settings', () => { showFontSettingsDialog.value = true })
   window.addEventListener('editor-preference-settings', () => { showPreferenceSettingsDialog.value = true })
   window.addEventListener('editor-language-settings', () => { showLanguageSettingsDialog.value = true })
@@ -342,6 +350,7 @@ onUnmounted(() => {
   window.removeEventListener('editor-cut', () => {})
   window.removeEventListener('editor-copy', () => {})
   window.removeEventListener('editor-paste', () => {})
+  window.removeEventListener('editor-remove-overlap', handleEditorRemoveOverlap)
   window.removeEventListener('editor-font-settings', () => {})
   window.removeEventListener('editor-preference-settings', () => {})
   window.removeEventListener('editor-language-settings', () => {})

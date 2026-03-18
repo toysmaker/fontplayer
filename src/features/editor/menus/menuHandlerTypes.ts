@@ -7,6 +7,7 @@ import type { templateHandlers as templateHandlersMap } from '@/features/editor/
 import type { useProjectStore } from '@/stores/project'
 import type { useEditorStore } from '@/stores/editor'
 import type { useCharacterStore } from '@/stores/character'
+import type { useGlyphStore } from '@/stores/glyph'
 
 /**
  * 菜单处理器上下文
@@ -16,6 +17,7 @@ export interface MenuHandlerContext {
   projectStore: ReturnType<typeof useProjectStore>
   editorStore: ReturnType<typeof useEditorStore>
   characterStore: ReturnType<typeof useCharacterStore>
+  glyphStore: ReturnType<typeof useGlyphStore>
   message: MessageApi
   dialog: DialogApi
   /**

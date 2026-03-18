@@ -124,6 +124,10 @@ export async function initTauriMenu() {
       window.dispatchEvent(new CustomEvent('editor-delete'))
     })
 
+    listen('remove_overlap', () => {
+      window.dispatchEvent(new CustomEvent('editor-remove-overlap'))
+    })
+
     listen('font-settings', () => {
       window.dispatchEvent(new CustomEvent('editor-font-settings'))
     })

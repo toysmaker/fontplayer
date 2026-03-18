@@ -7,7 +7,7 @@
 import type { IContours, IContour } from './types'
 import { PathType } from './types'
 import type { IComponent, ICharacterFileLite, ContourSegment, IPenComponent, IPolygonComponent, IRectangleComponent, IEllipseComponent, ICustomGlyph, IGlyphComponent } from '../types'
-import { transformPoints, getRectanglePoints, getEllipsePoints, translate } from '../utils/math'
+import { transformPoints, getRectanglePoints, getEllipsePoints, translate, getBound } from '../utils/math'
 import { formatPoints, genPenContour, genPolygonContour, genRectangleContour, genEllipseContour } from '../utils/contour'
 import { computeCoords } from '../utils/grid'
 
@@ -53,6 +53,155 @@ export class ContourConverter {
     
     // 否则返回所有组件
     return characterFile.components
+  }
+
+  /**
+   * 将组件转换为编辑时轮廓（仅几何变换，不做 formatPoints / unitsPerEm 等字体坐标转换）。
+   * 用于菜单「去除重叠」等需要编辑空间轮廓的场景。等价于原工程 componentsToContours2(..., contour_type=1)。
+   */
+  static async componentsToContoursEditing(
+    components: (IComponent | IGlyphComponent)[],
+    offset: { x: number; y: number } = { x: 0, y: 0 }
+  ): Promise<IContours> {
+    const contours: IContours = []
+    const scriptTypes = ['glyph-pen', 'glyph-polygon', 'glyph-rectangle', 'glyph-ellipse']
+    for (const component of components) {
+      if (!component.usedInCharacter) continue
+      const { x, y, w, h, rotation, flipX, flipY } = component
+      const value = (component as any).value
+      const isScriptComponent = scriptTypes.includes(component.type)
+      if (!value && !isScriptComponent) continue
+
+      try {
+        switch (component.type) {
+          case 'pen': {
+            const penValue = value as IPenComponent
+            let pts = transformPoints(penValue.points, { x, y, w, h, rotation, flipX, flipY })
+            pts = pts.map((p) => translate(p, offset))
+            if (pts.length >= 4) contours.push(genPenContour(pts, true))
+            break
+          }
+          case 'polygon': {
+            const polygonValue = value as IPolygonComponent
+            let pts = transformPoints(polygonValue.points, { x, y, w, h, rotation, flipX, flipY })
+            pts = pts.map((p) => translate(p, offset))
+            if (pts.length >= 2) contours.push(genPolygonContour(pts, true))
+            break
+          }
+          case 'rectangle': {
+            const rectValue = value as IRectangleComponent
+            let pts = transformPoints(
+              getRectanglePoints(rectValue.width, rectValue.height, x, y),
+              { x, y, w, h, rotation, flipX, flipY }
+            )
+            pts = pts.map((p) => translate(p, offset))
+            if (pts.length >= 2) contours.push(genRectangleContour(pts, true))
+            break
+          }
+          case 'ellipse': {
+            const ellipseValue = value as IEllipseComponent
+            let pts = getEllipsePoints(
+              ellipseValue.radiusX,
+              ellipseValue.radiusY,
+              1000,
+              x + ellipseValue.radiusX,
+              y + ellipseValue.radiusY
+            )
+            pts = transformPoints(pts, { x, y, w, h, rotation, flipX, flipY })
+            pts = pts.map((p) => translate(p, offset))
+            if (pts.length >= 2) contours.push(genEllipseContour(pts, true))
+            break
+          }
+          case 'glyph-pen':
+          case 'glyph-polygon':
+          case 'glyph-rectangle':
+          case 'glyph-ellipse': {
+            const scriptComp = component as any
+            const ptsForBound = scriptComp.points && scriptComp.points.length > 0 ? scriptComp.points : null
+            const bound = ptsForBound ? getBound(ptsForBound) : null
+            const sx = scriptComp.x ?? bound?.x ?? x ?? 0
+            const sy = scriptComp.y ?? bound?.y ?? y ?? 0
+            const sw = scriptComp.w ?? scriptComp.width ?? bound?.w ?? w ?? 0
+            const sh = scriptComp.h ?? scriptComp.height ?? bound?.h ?? h ?? 0
+            const srot = scriptComp.rotation ?? rotation ?? 0
+            const sflipX = scriptComp.flipX ?? flipX ?? false
+            const sflipY = scriptComp.flipY ?? flipY ?? false
+            const t = { x: sx, y: sy, w: sw, h: sh, rotation: srot, flipX: sflipX, flipY: sflipY }
+            if (scriptComp.type === 'glyph-pen' && scriptComp.points?.length >= 4) {
+              let pts = transformPoints(scriptComp.points, t)
+              pts = pts.map((p) => translate(p, offset))
+              contours.push(genPenContour(pts, true))
+            } else if (scriptComp.type === 'glyph-polygon' && scriptComp.points?.length >= 2) {
+              let pts = transformPoints(scriptComp.points, t)
+              pts = pts.map((p) => translate(p, offset))
+              contours.push(genPolygonContour(pts, true))
+            } else if (scriptComp.type === 'glyph-rectangle' && (scriptComp.width != null || scriptComp.w != null) && (scriptComp.height != null || scriptComp.h != null)) {
+              const rw = scriptComp.width ?? scriptComp.w ?? 0
+              const rh = scriptComp.height ?? scriptComp.h ?? 0
+              let pts = transformPoints(
+                getRectanglePoints(rw, rh, sx, sy),
+                t
+              )
+              pts = pts.map((p) => translate(p, offset))
+              contours.push(genRectangleContour(pts, true))
+            } else if (scriptComp.type === 'glyph-ellipse' && (scriptComp.radiusX != null || scriptComp.radiusY != null)) {
+              const rx = scriptComp.radiusX ?? 0
+              const ry = scriptComp.radiusY ?? 0
+              let pts = getEllipsePoints(rx, ry, 1000, sx + rx, sy + ry)
+              pts = transformPoints(pts, t)
+              pts = pts.map((p) => translate(p, offset))
+              contours.push(genEllipseContour(pts, true))
+            }
+            break
+          }
+          case 'glyph': {
+            const glyphValue = value as ICustomGlyph
+            const glyphComponent = component as IGlyphComponent
+            const ox = glyphComponent.ox ?? 0
+            const oy = glyphComponent.oy ?? 0
+            const childOffset = { x: offset.x + ox, y: offset.y + oy }
+            const { executeGlyphScript } = await import('../script/ScriptExecutor')
+            const { instanceManager } = await import('../instance/InstanceManager')
+            const { CustomGlyph } = await import('../instance/CustomGlyph')
+            let scriptExecuted = false
+            try {
+              await executeGlyphScript(glyphValue, component.uuid)
+              scriptExecuted = true
+            } catch {
+              scriptExecuted = false
+            }
+            const instanceKey = component.uuid
+            let glyphInstance: any = null
+            if (scriptExecuted) {
+              glyphInstance = instanceManager.acquireTemporaryInstance(
+                instanceKey,
+                () => new CustomGlyph(glyphValue),
+                'glyph'
+              )
+            }
+            const glyphComponents = glyphInstance?.components ?? glyphValue.components ?? []
+            if (glyphComponents.length > 0) {
+              const childContours = await this.componentsToContoursEditing(
+                glyphComponents as (IComponent | IGlyphComponent)[],
+                childOffset
+              )
+              contours.push(...childContours)
+            }
+            if (glyphInstance && instanceManager.isTemporary(instanceKey)) {
+              instanceManager.releaseTemporaryInstance(instanceKey)
+            }
+            break
+          }
+          default:
+            break
+        }
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.warn('[ContourConverter] componentsToContoursEditing component error:', component.type, err)
+        }
+      }
+    }
+    return contours
   }
 
   /**

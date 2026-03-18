@@ -115,7 +115,7 @@ export function createDisabledRules(ctx: { editorStore: MenuHandlerContext['edit
     'template-test': templateEnable,
 
     // tools
-    'remove_overlap': enableAtCharacterEdit,
+    'remove_overlap': enableAtEdit,
     'format-all-characters': enableAtList,
     'format-current-character': enableAtCharacterEdit,
   }

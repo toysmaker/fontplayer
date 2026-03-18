@@ -1,11 +1,79 @@
 import type { MenuHandlerContext, MenuHandlersMap } from './menuHandlerTypes'
 import type { IComponent } from '@/core/types'
+import { EditStatus } from '@/core/types'
+import { ContourConverter } from '@/core/font/converter'
+import { removeOverlapFromContours, pathToEditingPenComponents } from '@/features/editor/services/RemoveOverlapService'
 
 export function createToolsHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
-  const { projectStore, dialog, formatContainerGlyphComponents, message, characterStore } = ctx
+  const { projectStore, dialog, formatContainerGlyphComponents, message, characterStore, editorStore, glyphStore } = ctx
 
-  const handleRemoveOverlap = () => {
-    console.log('Remove overlap')
+  const handleRemoveOverlap = async () => {
+    const file = projectStore.selectedFile
+    if (!file) return
+
+    const status = editorStore.editStatus
+    const isCharacter = status === EditStatus.Edit
+    const isGlyph = status === EditStatus.Glyph
+    if (!isCharacter && !isGlyph) return
+
+    const orderedComponents = isCharacter
+      ? characterStore.orderedListWithItemsForCurrentCharacterFile
+      : glyphStore.orderedListWithItemsForCurrentGlyph
+    const editingEntity = isCharacter ? characterStore.editingCharacter : glyphStore.editingGlyph
+
+    if (!editingEntity || !orderedComponents || orderedComponents.length === 0) {
+      message.info(isCharacter ? '当前字符没有组件，无需去除重叠。' : '当前字形没有组件，无需去除重叠。')
+      return
+    }
+
+    try {
+      const contours = await ContourConverter.componentsToContoursEditing(
+        orderedComponents as IComponent[],
+        { x: 0, y: 0 }
+      )
+      if (!contours || contours.length === 0) {
+        message.info('无法生成轮廓，请检查组件数据。')
+        return
+      }
+
+      const result = removeOverlapFromContours(contours)
+      if (!result) {
+        message.info('轮廓已优化或无需去除重叠。')
+        return
+      }
+      const { path: unitedPath, pathsToRemove } = result
+      const newComponents = pathToEditingPenComponents(unitedPath)
+      pathsToRemove.forEach((p) => p.remove())
+      unitedPath.remove()
+      if (!newComponents.length) {
+        message.warning('合并后未得到有效组件。')
+        return
+      }
+
+      const orderedList = newComponents.map((c) => ({ type: 'component', uuid: c.uuid }))
+
+      ;(editingEntity as any).components = newComponents
+      ;(editingEntity as any).orderedList = orderedList
+      if ('script' in editingEntity) (editingEntity as any).script = undefined
+      if ('glyph_script' in editingEntity) (editingEntity as any).glyph_script = undefined
+      ;(editingEntity as any).previewRef = undefined
+      ;(editingEntity as any).contourRef = undefined
+
+      if (isCharacter) {
+        ;(characterStore as any).updateCharacterListFromEditFile()
+      } else {
+        ;(glyphStore as any).updateGlyphListFromEditFile()
+      }
+      projectStore.markFileUnsaved(file.uuid)
+      message.success(isCharacter ? '已对当前字符去除重叠。' : '已对当前字形去除重叠。')
+
+      window.dispatchEvent(new CustomEvent('force-character-list-refresh'))
+      const { CanvasManager } = await import('@/core/canvas/CanvasManager')
+      CanvasManager.forceCleanupAllCache()
+    } catch (err) {
+      console.error('Remove overlap failed:', err)
+      message.error('去除重叠时发生错误，请重试。')
+    }
   }
 
   const handleFormatAllCharacters = () => {
