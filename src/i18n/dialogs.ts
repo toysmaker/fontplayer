@@ -81,6 +81,16 @@ const dialogs = {
 			cancel: '取消',
 			multiSelection: '多选',
 			singleSelection: '单选',
+			tabs: {
+				stroke: '笔画',
+				radical: '部首',
+				glyph: '字形',
+				comp: '组件',
+			},
+			selected: '已选',
+			close: '关闭',
+			notInEditMode: '请在“字符编辑/字形编辑”模式下使用',
+			added: '已添加 {count} 个组件',
 		},
 		addFileDialog: {
 			title: '创建字体',
@@ -242,6 +252,16 @@ const dialogs = {
 			cancel: 'Cancel',
 			multiSelection: 'Multiple-Select',
 			singleSelection: 'Single-Select',
+			tabs: {
+				stroke: 'Strokes',
+				radical: 'Radicals',
+				glyph: 'Glyphs',
+				comp: 'Components',
+			},
+			selected: 'Selected',
+			close: 'Close',
+			notInEditMode: 'Please use in Character/Glyph edit mode',
+			added: 'Added {count} components',
 		},
 		addFileDialog: {
 			title: 'New Font',

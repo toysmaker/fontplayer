@@ -414,8 +414,18 @@ export class SelectTool extends BaseTool {
       }
       
       if (isInBounds) {
-        const centerX = component.x + component.w / 2
-        const centerY = component.y + component.h / 2
+        let centerX: number
+        let centerY: number
+        if (component.type === 'glyph') {
+          const origin = { ox: (component as any).ox || 0, oy: (component as any).oy || 0 }
+          const bbox = computeGlyphComponentBoundingBox(component, origin)
+          if (!bbox) continue
+          centerX = bbox.x + bbox.w / 2
+          centerY = bbox.y + bbox.h / 2
+        } else {
+          centerX = (component.x ?? 0) + (component.w ?? 0) / 2
+          centerY = (component.y ?? 0) + (component.h ?? 0) / 2
+        }
         const dist = Math.sqrt(
           Math.pow(clickPoint.x - centerX, 2) + Math.pow(clickPoint.y - centerY, 2)
         )
@@ -806,31 +816,46 @@ export class SelectTool extends BaseTool {
       ? (glyphStore as any).orderedListWithItemsForCurrentGlyph 
       : (characterStore as any).orderedListWithItemsForCurrentCharacterFile
 
+    const currentSelectedUUID = isGlyph
+      ? (glyphStore as any).selectedComponentUUID
+      : (characterStore as any).selectedComponentUUID
+
     // 收集所有边界框包含点击点的组件
+    // 重要：当前选中的字形组件若没有精确 bbox（如从对话框添加的字形），只用精确检测加入候选，不用 component.x/y/w/h 的 fallback，否则 (0,0,1000,1000) 会覆盖整画布导致无法点击其他组件切换选择
     const candidateComponents: Array<{ component: IComponent; distance: number }> = []
 
     for (let i = orderedList.length - 1; i >= 0; i--) {
       const component = orderedList[i]
       if (!component || !component.type || component.type === 'group' || !component.visible) continue
 
-      // 先检查边界框
       let isInBounds = false
       if (component.type === 'glyph') {
-        // 对于字形组件，优先使用精确检测；如果失败则退回到边界框检测
-        isInBounds =
-          this.glyphComponentContainsPoint(clickPoint, component, 20) ||
-          inComponentBound(clickPoint, component, 20)
-
-          console.log('glyphComponentContainsPoint 2', isInBounds, component.uuid)
+        const isCurrentSelectedGlyph = component.uuid === currentSelectedUUID
+        if (isCurrentSelectedGlyph) {
+          // 当前选中的字形：仅当精确 bbox 包含点击时才算在范围内，不使用 inComponentBound 的 fallback
+          isInBounds = this.glyphComponentContainsPoint(clickPoint, component, 20)
+        } else {
+          isInBounds =
+            this.glyphComponentContainsPoint(clickPoint, component, 20) ||
+            inComponentBound(clickPoint, component, 20)
+        }
       } else {
-        // 对于其他组件，边界框检测已足够
         isInBounds = inComponentBound(clickPoint, component, 20)
       }
 
       if (isInBounds) {
-        // 简化距离计算：使用边界框中心到点击点的距离
-        const centerX = component.x + component.w / 2
-        const centerY = component.y + component.h / 2
+        let centerX: number
+        let centerY: number
+        if (component.type === 'glyph') {
+          const origin = { ox: (component as any).ox || 0, oy: (component as any).oy || 0 }
+          const bbox = computeGlyphComponentBoundingBox(component, origin)
+          if (!bbox) continue
+          centerX = bbox.x + bbox.w / 2
+          centerY = bbox.y + bbox.h / 2
+        } else {
+          centerX = (component.x ?? 0) + (component.w ?? 0) / 2
+          centerY = (component.y ?? 0) + (component.h ?? 0) / 2
+        }
         const dist = Math.sqrt(
           Math.pow(clickPoint.x - centerX, 2) + Math.pow(clickPoint.y - centerY, 2)
         )
@@ -841,28 +866,19 @@ export class SelectTool extends BaseTool {
     // 如果点击的是已选中的组件，需要特殊处理
     // 对于字形组件：优先保持选中（不切换），让 glyphDragger 响应关键点拖拽
     // 对于钢笔组件且处于编辑模式：让 penSelectTool 处理点编辑，不切换选择
-    // 对于其他组件：正常处理选择切换（虽然点击的是已选中的组件，但可能需要处理其他逻辑）
-    const currentSelectedUUID = isGlyph
-      ? (glyphStore as any).selectedComponentUUID
-      : (characterStore as any).selectedComponentUUID
-    if (currentSelectedUUID) {
-      const currentSelected = candidateComponents.find(c => c.component.uuid === currentSelectedUUID)
-      if (currentSelected) {
-        // 如果是字形组件，优先保持选中（不切换），让 glyphDragger 响应关键点拖拽
-        if (currentSelected.component.type === 'glyph') {
-          console.log('glyph component', currentSelected.component.uuid)
+    const currentSelected = currentSelectedUUID
+      ? candidateComponents.find(c => c.component.uuid === currentSelectedUUID)
+      : null
+    if (currentSelected) {
+      if (currentSelected.component.type === 'glyph') {
+        // 字形已在上面只按精确 bbox 加入候选，能进这里说明点击确实在精确 bbox 内，保持选中
+        return
+      }
+      if (currentSelected.component.type === 'pen') {
+        const penComponent = currentSelected.component.value as unknown as IPenComponent
+        if (penComponent.editMode && this.penSelectTool && this.penSelectTool.isToolActive()) {
           return
         }
-        // 如果是钢笔组件且处于编辑模式，让 penSelectTool 处理点编辑，不切换选择
-        if (currentSelected.component.type === 'pen') {
-          const penComponent = currentSelected.component.value as unknown as IPenComponent
-          if (penComponent.editMode && this.penSelectTool && this.penSelectTool.isToolActive()) {
-            // 点击在当前选中的钢笔组件上，让 penSelectTool 处理，不切换选择
-            return
-          }
-        }
-        // 对于其他组件，即使点击的是已选中的组件，也允许处理（比如可能需要重新触发某些逻辑）
-        // 但这里不返回，继续处理选择切换
       }
     }
 
@@ -1051,9 +1067,10 @@ export class SelectTool extends BaseTool {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    let { x, y, w, h, rotation } = selectedComponent
+    let x: number, y: number, w: number, h: number
+    const { rotation } = selectedComponent
 
-    // 字形组件不一定有准确的 x,y,w,h，这里使用实际轮廓计算出来的包围框
+    // 字形组件包围框仅由轮廓点决定，不使用 x,y,w,h
     if (selectedComponent.type === 'glyph') {
       const origin = {
         ox: (selectedComponent as any).ox || 0,
@@ -1065,7 +1082,17 @@ export class SelectTool extends BaseTool {
         y = bbox.y
         w = bbox.w
         h = bbox.h
+      } else {
+        x = (selectedComponent as any).x ?? 0
+        y = (selectedComponent as any).y ?? 0
+        w = (selectedComponent as any).w ?? 100
+        h = (selectedComponent as any).h ?? 100
       }
+    } else {
+      x = selectedComponent.x ?? 0
+      y = selectedComponent.y ?? 0
+      w = selectedComponent.w ?? 100
+      h = selectedComponent.h ?? 100
     }
 
     const _x = mapCanvasX(x)

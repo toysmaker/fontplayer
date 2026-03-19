@@ -97,10 +97,10 @@
         <n-icon
           class="tool-icon"
           :class="{
-            'selected': tool === 'glyph',
+            'selected': tool === 'glyph' || dialogsStore.glyphComponentsDialogVisible,
           }"
-          @click="switchTool('glyph')"
-          @pointerup="switchTool('glyph')"
+          @click="openGlyphComponentsDialog"
+          @pointerup="openGlyphComponentsDialog"
           size="40"
           v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
           <font-awesome-icon
@@ -185,6 +185,7 @@ import { useI18n } from 'vue-i18n'
 import { NIcon } from 'naive-ui'
 import { useEditorStore } from '@/stores/editor'
 import { useToolStore } from '@/stores/tool'
+import { useDialogsStore } from '@/stores/dialogs'
 import { EditStatus } from '@/core/types'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 
@@ -192,9 +193,18 @@ const { t } = useI18n()
 
 const editorStore = useEditorStore()
 const toolStore = useToolStore()
+const dialogsStore = useDialogsStore()
 
 const editStatus = computed(() => editorStore.editStatus)
 const tool = computed(() => toolStore.tool)
+
+const _openGlyphComponentsDialog = () => {
+  dialogsStore.openGlyphComponentsDialog()
+}
+const openGlyphComponentsDialog = createDebouncedHandler(
+  _openGlyphComponentsDialog,
+  'ToolBar.openGlyphComponentsDialog',
+)
 
 // 切换工具
 const _switchTool = (toolName: string) => {

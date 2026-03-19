@@ -45,6 +45,7 @@ import {
 import { getGlyphEditCanvasContext } from '@/features/editor/glyphEditCanvas'
 import { initWeightSelector, renderBoneAndWeight } from '@/features/tools/skeletonBind'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t } = useI18n()
 const glyphStore = useGlyphStore()
@@ -66,6 +67,7 @@ const enableStyleTagEdit = ref(false)
 const toggleStyleEdit = () => {
   enableStyleTagEdit.value = !enableStyleTagEdit.value
 }
+const handleToggleStyleEdit = createDebouncedHandler(toggleStyleEdit, 'GlyphParamsPanel.toggleStyleEdit')
 
 const onStyleChange = () => {
   // style 变化不一定需要执行脚本，但保持与参数区行为一致：触发一次重渲染
@@ -148,6 +150,7 @@ const onChangeSkeleton = (value: string) => {
   const ctx = getGlyphEditCanvasContext()
   ctx?.onRender()
 }
+const handleAddSkeleton = createDebouncedHandler(() => { onSkeletonSelect.value = true }, 'GlyphParamsPanel.addSkeleton')
 
 const bindSkeleton = () => {
   const g = editGlyph.value
@@ -178,6 +181,7 @@ const bindSkeleton = () => {
   const ctx = getGlyphEditCanvasContext()
   ctx?.onRender()
 }
+const handleBindSkeleton = createDebouncedHandler(bindSkeleton, 'GlyphParamsPanel.bindSkeleton')
 
 const removeSkeleton = () => {
   const g = editGlyph.value
@@ -216,6 +220,7 @@ const removeSkeleton = () => {
   const ctx = getGlyphEditCanvasContext()
   ctx?.onRender()
 }
+const handleRemoveSkeleton = createDebouncedHandler(removeSkeleton, 'GlyphParamsPanel.removeSkeleton')
 
 const modifySkeleton = () => {
   const g = editGlyph.value
@@ -233,6 +238,7 @@ const modifySkeleton = () => {
   const ctx = getGlyphEditCanvasContext()
   ctx?.onRender()
 }
+const handleModifySkeleton = createDebouncedHandler(modifySkeleton, 'GlyphParamsPanel.modifySkeleton')
 
 const handleChangeSkeletonOX = (value: number | null) => {
   const g = editGlyph.value
@@ -271,6 +277,8 @@ const closeWeightSetting = () => {
   const ctx = getGlyphEditCanvasContext()
   ctx?.onRender()
 }
+const handleInitWeightSetting = createDebouncedHandler(initWeightSetting, 'GlyphParamsPanel.initWeightSetting')
+const handleCloseWeightSetting = createDebouncedHandler(closeWeightSetting, 'GlyphParamsPanel.closeWeightSetting')
 
 const selectedBoneIndex = computed<number | null>({
   get: () => (selectedBone.value ? selectedBone.value.index : null),
@@ -373,7 +381,7 @@ const handleChangeParameter = (parameter: IParameter, value: number | string | n
             :placeholder="t('panels.paramsPanel.glyphParamsPanel.styleTagPlaceholder')"
             @update:value="onStyleChange"
           />
-          <n-button type="primary" ghost @click="toggleStyleEdit">
+          <n-button type="primary" ghost @click="handleToggleStyleEdit" @pointerup="handleToggleStyleEdit">
             {{ enableStyleTagEdit ? t('panels.paramsPanel.glyphParamsPanel.styleTagDone') : t('panels.paramsPanel.glyphParamsPanel.styleTagEdit') }}
           </n-button>
         </n-input-group>
@@ -388,7 +396,7 @@ const handleChangeParameter = (parameter: IParameter, value: number | string | n
         <n-button
           v-if="!editGlyph?.skeleton && (!editGlyphInstance?.getSkeleton || !editGlyphInstance?.getSkeleton())"
           size="small"
-          @click="onSkeletonSelect = true"
+          @click="handleAddSkeleton" @pointerup="handleAddSkeleton"
         >
           {{ t('panels.paramsPanel.glyphParamsPanel.addSkeleton') }}
         </n-button>
@@ -412,13 +420,13 @@ const handleChangeParameter = (parameter: IParameter, value: number | string | n
           <n-form-item :show-label="false">
             <n-checkbox v-model:checked="editGlyph.skeleton.dynamicWeight">{{ t('panels.paramsPanel.glyphParamsPanel.dynamicWeight') }}</n-checkbox>
           </n-form-item>
-          <n-button size="small" @click="bindSkeleton">{{ t('panels.paramsPanel.glyphParamsPanel.bindSkeleton') }}</n-button>
+          <n-button size="small" @click="handleBindSkeleton" @pointerup="handleBindSkeleton">{{ t('panels.paramsPanel.glyphParamsPanel.bindSkeleton') }}</n-button>
         </n-form>
 
         <div v-if="editGlyph?.skeleton && !onSkeletonBind" class="weight-setting-wrap">
-          <n-button size="small" @click="initWeightSetting">{{ t('panels.paramsPanel.glyphParamsPanel.manualWeight') }}</n-button>
-          <n-button v-if="!onWeightSetting" size="small" @click="modifySkeleton">{{ t('panels.paramsPanel.glyphParamsPanel.modifySkeleton') }}</n-button>
-          <n-button v-if="!onWeightSetting" size="small" type="error" @click="removeSkeleton">{{ t('panels.paramsPanel.glyphParamsPanel.removeSkeleton') }}</n-button>
+          <n-button size="small" @click="handleInitWeightSetting" @pointerup="handleInitWeightSetting">{{ t('panels.paramsPanel.glyphParamsPanel.manualWeight') }}</n-button>
+          <n-button v-if="!onWeightSetting" size="small" @click="handleModifySkeleton" @pointerup="handleModifySkeleton">{{ t('panels.paramsPanel.glyphParamsPanel.modifySkeleton') }}</n-button>
+          <n-button v-if="!onWeightSetting" size="small" type="error" @click="handleRemoveSkeleton" @pointerup="handleRemoveSkeleton">{{ t('panels.paramsPanel.glyphParamsPanel.removeSkeleton') }}</n-button>
         </div>
 
         <div v-if="onWeightSetting" class="weight-setting">
@@ -437,7 +445,7 @@ const handleChangeParameter = (parameter: IParameter, value: number | string | n
             <n-form-item :label="t('panels.paramsPanel.glyphParamsPanel.brushSize')">
               <n-input-number v-model:value="brushSize" :precision="2" :min="10" :max="100" />
             </n-form-item>
-            <n-button size="small" @click="closeWeightSetting">{{ t('panels.paramsPanel.glyphParamsPanel.finishWeightSetting') }}</n-button>
+            <n-button size="small" @click="handleCloseWeightSetting" @pointerup="handleCloseWeightSetting">{{ t('panels.paramsPanel.glyphParamsPanel.finishWeightSetting') }}</n-button>
           </n-form>
         </div>
       </div>

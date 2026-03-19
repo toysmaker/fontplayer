@@ -71,6 +71,7 @@
       v-model:show="showAddGlyphDialog"
       :category="addGlyphCategory"
     />
+    <GlyphComponentsDialog v-model:show="showGlyphComponentsDialog" />
     <FontSettingsDialog
       v-model:show="showFontSettingsDialog"
       @open-more="handleFontSettingsOpenMore"
@@ -100,6 +101,7 @@ import NewProjectDialog from '@/ui/dialogs/NewProjectDialog.vue'
 import AddCharacterDialog from '@/ui/dialogs/AddCharacterDialog.vue'
 import AddIconDialog from '@/ui/dialogs/AddIconDialog.vue'
 import AddGlyphDialog from '@/ui/dialogs/AddGlyphDialog.vue'
+import GlyphComponentsDialog from '@/ui/dialogs/GlyphComponentsDialog.vue'
 import FontSettingsDialog from '@/ui/dialogs/FontSettingsDialog.vue'
 import FontSettingsMoreDialog from '@/ui/dialogs/FontSettingsMoreDialog.vue'
 import PreferenceSettingsDialog from '@/ui/dialogs/PreferenceSettingsDialog.vue'
@@ -109,6 +111,7 @@ import { templateHandlers } from '@/features/editor/menus/templatesHandlers'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import { createMenuHandlers, createDisabledRules } from '@/features/editor/menus/menuHandlers'
 import type { MenuHandlerContext } from '@/features/editor/menus/menuHandlerTypes'
+import { useDialogsStore } from '@/stores/dialogs'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -121,6 +124,14 @@ const showAddCharacterDialog = ref(false)
 const showAddIconDialog = ref(false)
 const showAddGlyphDialog = ref(false)
 const addGlyphCategory = ref<'glyphs' | 'stroke_glyphs' | 'radical_glyphs' | 'comp_glyphs'>('glyphs')
+const dialogsStore = useDialogsStore()
+const showGlyphComponentsDialog = computed({
+  get: () => dialogsStore.glyphComponentsDialogVisible,
+  set: (v: boolean) => {
+    if (v) dialogsStore.openGlyphComponentsDialog()
+    else dialogsStore.closeGlyphComponentsDialog()
+  },
+})
 const showFontSettingsDialog = ref(false)
 const showFontSettingsMoreDialog = ref(false)
 const showPreferenceSettingsDialog = ref(false)

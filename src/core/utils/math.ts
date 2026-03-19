@@ -190,16 +190,22 @@ export function distance(x1: number, y1: number, x2: number, y2: number): number
 
 /**
  * 判断点是否在组件边界框内
+ * 若组件无 x/y/w/h（如字形组件不设 xywh），直接返回 false，由调用方用精确 bbox 判断
  */
 export function inComponentBound(
   point: { x: number; y: number },
-  component: { x: number; y: number; w: number; h: number; rotation: number },
+  component: { x?: number; y?: number; w?: number; h?: number; rotation?: number },
   d: number = 0
 ): boolean {
-  const { x, y, w, h, rotation } = component
+  const x = component.x ?? 0
+  const y = component.y ?? 0
+  const w = component.w ?? 0
+  const h = component.h ?? 0
+  const rotation = component.rotation ?? 0
+  if (w <= 0 || h <= 0) return false
   const { x: _x, y: _y } = rotatePoint(
     { x: point.x, y: point.y },
-    { x: component.x + component.w / 2, y: component.y + component.h / 2 },
+    { x: x + w / 2, y: y + h / 2 },
     -rotation
   )
   if (_x >= x - d && _x <= x + w + d && _y >= y - d && _y <= y + h + d) {
