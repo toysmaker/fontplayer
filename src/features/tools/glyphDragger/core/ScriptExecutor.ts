@@ -8,6 +8,7 @@ import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import type { ICustomGlyph } from '@/core/types'
 import type { IDragEvent, IJoint } from './types'
+import { updateSkeletonTransformation } from '@/templates/strokeFnMap'
 
 export class ScriptExecutor {
   /**
@@ -140,6 +141,14 @@ export class ScriptExecutor {
     if (glyphInstance.onSkeletonDrag) {
       try {
         glyphInstance.onSkeletonDrag(event)
+        // 将骨架变化应用到笔形轮廓，使拖拽骨架时形状随动（before_bind 模板内未调用 updateSkeletonTransformation）
+        try {
+          updateSkeletonTransformation(glyphInstance)
+        } catch (err) {
+          if (import.meta.env.DEV) {
+            console.warn('[ScriptExecutor.executeDrag] updateSkeletonTransformation failed:', err)
+          }
+        }
         
         if (import.meta.env.DEV) {
           const componentsAfter = glyphInstance._components?.length || 0
@@ -189,6 +198,14 @@ export class ScriptExecutor {
       try {
         const paramsBefore = glyphInstance._glyph.parameters?.map((p: any) => ({ name: p.name, value: p.value })) || []
         glyphInstance.onSkeletonDragEnd(event)
+        // 确保轮廓与骨架一致（before_bind 模板内 onSkeletonDragEnd 未调用 updateSkeletonTransformation）
+        try {
+          updateSkeletonTransformation(glyphInstance)
+        } catch (err) {
+          if (import.meta.env.DEV) {
+            console.warn('[ScriptExecutor.executeDragEnd] updateSkeletonTransformation failed:', err)
+          }
+        }
 
         // 拖拽结束后清理 tempData，避免后续 executeGlyphScript 因 tempData 而跳过（导致参数修改不生效）。
         glyphInstance.tempData = null

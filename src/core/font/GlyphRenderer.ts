@@ -85,8 +85,8 @@ export class GlyphRenderer {
       if (!nonzeroContours) {
         let components = glyph.components || []
 
-        // 字形有脚本时，必须执行脚本才能获得完整组件列表（包含脚本生成的内置组件）
-        if (glyph.script || glyph.script_reference) {
+        // 字形有脚本或骨架时，必须执行脚本/骨架分支才能获得完整组件列表（骨架绑定字形也走此处）
+        if (glyph.script || glyph.script_reference || glyph.skeleton) {
           try {
             const { executeGlyphScript } = await import('../script/ScriptExecutor')
             const { instanceManager } = await import('../instance/InstanceManager')

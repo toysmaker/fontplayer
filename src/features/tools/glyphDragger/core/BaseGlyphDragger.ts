@@ -206,6 +206,39 @@ export abstract class BaseGlyphDragger {
   }
   
   /**
+   * 由于 dragger 实例（context.component）在某些操作后可能指向“旧引用”的组件对象，
+   * 会导致 bbox/joints 计算基于过期的 component.value。
+   *
+   * 每次真正触发拖拽（mousedown）前，从 store 按 componentUUID 取最新 selected component，
+   * 以保证 bbox 计算完全一致。
+   */
+  private syncContextFromStore() {
+    const cfg: any = this.config
+    const { mode } = this.context
+
+    if (mode === 'character' && cfg.characterStore) {
+      const store = cfg.characterStore
+      const latest = store.selectedComponent
+      if (latest) {
+        this.context.componentUUID = latest.uuid
+        this.context.component = latest
+        // character 拖拽器：只有当 selected component 自身是 glyph 才需要 glyph 实例
+        this.context.glyph = latest.type === 'glyph' ? latest.value : undefined
+      }
+    }
+
+    if (mode === 'glyph' && cfg.glyphStore) {
+      const store = cfg.glyphStore
+      const latest = store.selectedComponent
+      if (latest) {
+        this.context.componentUUID = latest.uuid
+        this.context.component = latest
+        this.context.glyph = latest.type === 'glyph' ? latest.value : undefined
+      }
+    }
+  }
+
+  /**
    * 计算字形组件的包围框（基于实际轮廓点）
    * 遍历外部组件（不在实例中）和内部组件（实例中存储的脚本组件）的实际轮廓点数据
    */
@@ -250,6 +283,9 @@ export abstract class BaseGlyphDragger {
       console.log('[BaseGlyphDragger.onMouseDown] Cannot drag, returning')
       return
     }
+
+    // 切换到真正开始拖拽之前，先确保 context.component 是 store 的最新对象引用
+    this.syncContextFromStore()
     
     const rect = this.canvas.getBoundingClientRect()
     const mouseX = this.getCoord(e.clientX - rect.left)
@@ -357,7 +393,7 @@ export abstract class BaseGlyphDragger {
       console.log('[BaseGlyphDragger.onMouseDown] Not in bounding box or on joint, returning')
       return
     }
-    
+
     this._isDragging = true
     // 拖拽时清除悬停关键点，避免高亮显示在原位置
     this.hoverJoint = null
@@ -634,6 +670,9 @@ export abstract class BaseGlyphDragger {
     this.cancelThrottledFunctions()
   }
   
+  /** 使用 capture 阶段，确保在 SelectTool 之前收到 mousedown，避免导入后首点被抢占导致无法移动 */
+  private static readonly MOUSEDOWN_CAPTURE = true
+
   activate() {
     console.log('[BaseGlyphDragger.activate] Activating dragger:', {
       canvas: !!this.canvas,
@@ -641,7 +680,7 @@ export abstract class BaseGlyphDragger {
       componentType: this.context.component?.type
     })
     this._isActive = true
-    this.canvas.addEventListener('mousedown', this.onMouseDown)
+    this.canvas.addEventListener('mousedown', this.onMouseDown, BaseGlyphDragger.MOUSEDOWN_CAPTURE)
     this.canvas.addEventListener('mousemove', this.onMouseMove)
     console.log('[BaseGlyphDragger.activate] Event listeners added')
   }
@@ -649,8 +688,8 @@ export abstract class BaseGlyphDragger {
   deactivate() {
     this._isActive = false
     
-    // 1. 移除所有事件监听器
-    this.canvas.removeEventListener('mousedown', this.onMouseDown)
+    // 1. 移除所有事件监听器（capture 须与 add 时一致）
+    this.canvas.removeEventListener('mousedown', this.onMouseDown, BaseGlyphDragger.MOUSEDOWN_CAPTURE)
     this.canvas.removeEventListener('mousemove', this.onMouseMove)
     window.removeEventListener('mousemove', this.onMouseMove) // 移除 window 上的监听器
     window.removeEventListener('mouseup', this.onMouseUp)

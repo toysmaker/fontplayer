@@ -64,7 +64,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { NCard, NEmpty } from 'naive-ui'
 import { useGlyphStore } from '@/stores/glyph'
-import { getOrCreateDragger } from '@/features/tools/glyphDragger'
+import { DraggerManager, getOrCreateDragger } from '@/features/tools/glyphDragger'
 import type { BaseGlyphDragger } from '@/features/tools/glyphDragger'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
@@ -88,6 +88,7 @@ import { toolManager, SelectTool, PenTool, PolygonTool, EllipseTool, RectangleTo
 import { getCoord } from '@/features/tools/utils/coord'
 import { setGlyphEditCanvasContext, clearGlyphEditCanvasContext } from '@/features/editor/glyphEditCanvas'
 import { useToolStore } from '@/stores/tool'
+import { useDialogsStore } from '@/stores/dialogs'
 import { initSkeletonDragger, renderSkeletonSelector, renderBoneAndWeight } from '@/features/tools/skeletonBind'
 import { onSkeletonBind, onSkeletonDragging, onWeightSetting } from '@/stores/skeletonDragger'
 import type { ToolType } from '@/features/tools'
@@ -97,6 +98,7 @@ const editorStore = useEditorStore()
 const editorPreference = useEditorPreferenceStore()
 const bottomBarToolStore = useBottomBarToolStore()
 const toolStore = useToolStore()
+const dialogsStore = useDialogsStore()
 const canvasRef = ref<HTMLCanvasElement>()
 let dragger: BaseGlyphDragger | null = null
 let selectControlCheckInterval: number | null = null
@@ -247,6 +249,8 @@ const initDragger = () => {
     if (latestComponent && latestComponent.type === 'glyph' && latestComponent.value) {
       glyphValue = latestComponent.value
     }
+    // 导入后首次选中时预先执行脚本，保证实例存在，首次点击即可移动
+    executeGlyphScript(glyphValue, component.uuid)
   }
 
   try {
@@ -281,6 +285,10 @@ const cleanupDragger = () => {
   if (dragger) {
     dragger.deactivate()
     dragger = null
+  }
+  // 彻底移除 manager 中缓存实例，避免上下文复用造成“已选中但无法拖拽”
+  if (canvasRef.value) {
+    DraggerManager.remove(canvasRef.value)
   }
 }
 
@@ -602,6 +610,8 @@ watch(() => (glyphStore as any).selectedComponent, async () => {
       }
       
       cleanupDragger()
+      // 双 nextTick：导入字形后若存在弹窗关闭与选中更新同帧，延后一帧再挂 dragger 避免首点被模态层吃掉导致无法移动
+      await nextTick()
       await nextTick()
       initDragger()
       
@@ -619,6 +629,17 @@ watch(() => (glyphStore as any).selectedComponent, async () => {
     isRenderingFromWatch.value = false
   }
 }, { deep: true })
+
+// 字形组件对话框关闭后再次初始化 dragger，避免导入后首点无法移动
+watch(() => dialogsStore.glyphComponentsDialogVisible, (visible, wasVisible) => {
+  if (wasVisible && !visible && (glyphStore as any).selectedComponent && toolManager.getCurrentToolType() === 'select') {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        initDragger()
+      })
+    })
+  }
+})
 
 // 监听钢笔组件的 editMode 变化
 watch(() => {

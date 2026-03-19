@@ -1224,6 +1224,12 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
   const penComponent = penComponents[0];
 
   const { originalPoints } = (glyph as any)._glyph?.skeleton?.skeletonBindData || {}
+  if (!originalPoints || !Array.isArray(originalPoints) || originalPoints.length === 0) {
+    if (import.meta.env.DEV) {
+      console.warn('applySkeletonTransformation: no skeletonBindData.originalPoints, skip transformation')
+    }
+    return
+  }
   const weightedOriginalPoints = R.clone(originalPoints)
 
   // 更新字重

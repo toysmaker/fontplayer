@@ -215,39 +215,52 @@ export class SelectTool extends BaseTool {
     }
 
     const bbox = computeGlyphComponentBoundingBox(component, origin)
-    if (!bbox) {
-      console.log('[glyphComponentContainsPoint] bbox is null', {
-        componentUUID: component.uuid,
-        origin,
-        hasValue: !!component.value,
-      })
-      return false
-    }
-
-    const { x, y, w, h } = bbox
     const px = point.x
     const py = point.y
 
-    // 在包围框基础上增加容差
-    const isInBounds = (
-      px >= x - tolerance &&
-      px <= x + w + tolerance &&
-      py >= y - tolerance &&
-      py <= y + h + tolerance
+    if (bbox) {
+      const { x, y, w, h } = bbox
+      const isInBounds = (
+        px >= x - tolerance &&
+        px <= x + w + tolerance &&
+        py >= y - tolerance &&
+        py <= y + h + tolerance
+      )
+      if (import.meta.env.DEV) {
+        console.log('[glyphComponentContainsPoint]', {
+          componentUUID: component.uuid,
+          point: { x: px, y: py },
+          origin,
+          bbox: { x, y, w, h },
+          tolerance,
+          isInBounds,
+        })
+      }
+      return isInBounds
+    }
+
+    // 无轮廓 bbox 时（如纯骨架字形）：用与 BaseGlyphDragger 一致的 fallback，以原点为中心默认范围，保证单击画布仍能选中该字形
+    const unitsPerEm = 1000
+    const half = unitsPerEm / 4
+    const fallbackX = origin.ox - half
+    const fallbackY = origin.oy - half
+    const fallbackW = unitsPerEm / 2
+    const fallbackH = unitsPerEm / 2
+    const isInFallback = (
+      px >= fallbackX - tolerance &&
+      px <= fallbackX + fallbackW + tolerance &&
+      py >= fallbackY - tolerance &&
+      py <= fallbackY + fallbackH + tolerance
     )
-
-    console.log('[glyphComponentContainsPoint]', {
-      componentUUID: component.uuid,
-      point: { x: px, y: py },
-      origin,
-      bbox: { x, y, w, h },
-      tolerance,
-      isInBounds,
-      checkX: `${px} >= ${x - tolerance} && ${px} <= ${x + w + tolerance}`,
-      checkY: `${py} >= ${y - tolerance} && ${py} <= ${y + h + tolerance}`,
-    })
-
-    return isInBounds
+    if (import.meta.env.DEV) {
+      console.log('[glyphComponentContainsPoint] bbox null, using fallback', {
+        componentUUID: component.uuid,
+        point: { x: px, y: py },
+        origin,
+        isInFallback,
+      })
+    }
+    return isInFallback
   }
 
   /**
@@ -849,9 +862,13 @@ export class SelectTool extends BaseTool {
         if (component.type === 'glyph') {
           const origin = { ox: (component as any).ox || 0, oy: (component as any).oy || 0 }
           const bbox = computeGlyphComponentBoundingBox(component, origin)
-          if (!bbox) continue
-          centerX = bbox.x + bbox.w / 2
-          centerY = bbox.y + bbox.h / 2
+          if (bbox) {
+            centerX = bbox.x + bbox.w / 2
+            centerY = bbox.y + bbox.h / 2
+          } else {
+            centerX = origin.ox
+            centerY = origin.oy
+          }
         } else {
           centerX = (component.x ?? 0) + (component.w ?? 0) / 2
           centerY = (component.y ?? 0) + (component.h ?? 0) / 2
@@ -888,11 +905,11 @@ export class SelectTool extends BaseTool {
       candidateComponents.sort((a, b) => a.distance - b.distance)
       const closestComponent = candidateComponents[0].component
 
+      // 与左侧组件列表保持一致：统一走 setSelection，避免点击画布与点击列表的选择状态不一致
       if (isGlyph) {
-        (glyphStore as any).selectComponent(closestComponent.uuid)
+        (glyphStore as any).setSelection(closestComponent.uuid)
       } else {
-        (characterStore as any).selectComponent(closestComponent.uuid)
-        console.log('selectComponent', closestComponent.uuid)
+        (characterStore as any).setSelection(closestComponent.uuid)
       }
       // 选择变更后触发重新渲染（包括控件框和 dragger）
       this.triggerRender()

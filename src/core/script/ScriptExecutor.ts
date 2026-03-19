@@ -64,13 +64,24 @@ export function executeGlyphScript(
     let existingInstance: CustomGlyph | null = null
     
     // 尝试获取已存在的实例
+    // 重要：当传入 instanceKey（如 component.uuid）时，必须始终用该 key 占位，不能使用 getOrCreateGlyphInstance(glyph)，
+    // 否则会按 glyph.uuid 存实例，导致同一字形的多个组件共享一个实例，出现「选 A 动 B」、拖拽错位、只有第一个能拖等问题。
+    const isExplicitKey = instanceKey !== undefined && instanceKey !== null
     const isTemporary = instanceManager.isTemporary(key)
     console.log('[executeGlyphScript] Instance check:', {
       key,
-      isTemporary
+      isTemporary,
+      isExplicitKey
     })
     
-    if (isTemporary) {
+    if (isExplicitKey) {
+      // 字符/字形编辑中传入的 component.uuid：只用 acquireTemporaryInstance(key)，保证每个组件独占一个实例
+      existingInstance = instanceManager.acquireTemporaryInstance(
+        key,
+        () => new CustomGlyph(targetGlyph),
+        'glyph'
+      ) as CustomGlyph
+    } else if (isTemporary) {
       existingInstance = instanceManager.acquireTemporaryInstance(
         key,
         () => new CustomGlyph(targetGlyph),
@@ -78,9 +89,9 @@ export function executeGlyphScript(
       ) as CustomGlyph
     } else {
       existingInstance = instanceManager.getOrCreateGlyphInstance(
-      targetGlyph,
-      () => new CustomGlyph(targetGlyph)
-    ) as CustomGlyph
+        targetGlyph,
+        () => new CustomGlyph(targetGlyph)
+      ) as CustomGlyph
     }
     
     // 添加调试信息：检查实例的来源
@@ -163,6 +174,8 @@ export function executeGlyphScript(
         } else {
           strokeFn.updateSkeletonListenerAfterBind(glyphInstance)
         }
+        // 不在此处调用 glyphSkeletonBind：多组件共存时会对共享的 glyph 写入 skeletonBindData，导致实例混乱、无法移动。
+        // 骨架绑定字形的预览在 GlyphRenderer 中单独处理（有 bindData 时才 apply）。
         updateSkeletonTransformation(glyphInstance)
         return
       }

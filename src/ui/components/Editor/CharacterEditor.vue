@@ -68,8 +68,9 @@ import { NCard, NEmpty } from 'naive-ui'
 import { useCharacterStore } from '@/stores/character'
 import { useProjectStore } from '@/stores/project'
 import { instanceManager } from '@/core/instance/InstanceManager'
-import { getOrCreateDragger } from '@/features/tools/glyphDragger'
+import { DraggerManager, getOrCreateDragger } from '@/features/tools/glyphDragger'
 import type { BaseGlyphDragger } from '@/features/tools/glyphDragger'
+import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import ToolBar from '@/ui/components/ToolBar/ToolBar.vue'
 import CharacterComponentList from '@/ui/components/ComponentList/CharacterComponentList.vue'
 import RightPanel from '@/ui/components/RightPanel/RightPanel.vue'
@@ -91,9 +92,11 @@ import { useBottomBarToolStore } from '@/stores/bottomBarTool'
 import { toolManager, SelectTool, PenTool, PolygonTool, EllipseTool, RectangleTool } from '@/features/tools'
 import { getCoord } from '@/features/tools/utils/coord'
 import { useToolStore } from '@/stores/tool'
+import { useDialogsStore } from '@/stores/dialogs'
 import type { ToolType } from '@/features/tools'
 
 const characterStore = useCharacterStore()
+const dialogsStore = useDialogsStore()
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
 const editorPreference = useEditorPreferenceStore()
@@ -272,6 +275,9 @@ const initDragger = () => {
     if (latestComponent && latestComponent.type === 'glyph' && latestComponent.value) {
       glyphValue = latestComponent.value
     }
+    // 导入后首次选中时，画布可能尚未为该组件执行过脚本，实例不存在会导致 bbox 错误或无法拖拽。
+    // 在此预先执行一次，保证实例存在，首次点击即可移动。
+    executeGlyphScript(glyphValue, component.uuid)
   }
 
   try {
@@ -307,6 +313,10 @@ const cleanupDragger = () => {
   if (dragger) {
     dragger.deactivate()
     dragger = null
+  }
+  // 彻底移除 manager 中缓存实例，避免上下文复用造成“已选中但无法拖拽”
+  if (canvasRef.value) {
+    DraggerManager.remove(canvasRef.value)
   }
 }
 
@@ -561,6 +571,8 @@ watch(() => (characterStore as any).selectedComponent, async () => {
       }
       
       cleanupDragger()
+      // 双 nextTick：导入字形后对话框关闭与 selectedComponent 更新同帧，若只等一帧则 dragger 可能在模态层仍存在时挂上，首点会点到模态上导致无法移动
+      await nextTick()
       await nextTick()
       initDragger()
       
@@ -578,6 +590,17 @@ watch(() => (characterStore as any).selectedComponent, async () => {
     isRenderingFromWatch.value = false
   }
 }, { deep: true })
+
+// 字形组件对话框由打开变为关闭时，模态层已移除，此时再初始化 dragger 一次，避免导入后首点被模态层吃掉无法移动
+watch(() => dialogsStore.glyphComponentsDialogVisible, (visible, wasVisible) => {
+  if (wasVisible && !visible && (characterStore as any).selectedComponent && toolManager.getCurrentToolType() === 'select') {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        initDragger()
+      })
+    })
+  }
+})
 
 // 监听钢笔组件的 editMode 变化
 watch(() => {
