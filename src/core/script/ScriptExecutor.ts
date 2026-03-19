@@ -157,7 +157,7 @@ export function executeGlyphScript(
       const type = (targetGlyph.skeleton as any).type
       const strokeFn: any = (strokeFnMap as any)[type]
       if (strokeFn) {
-        strokeFn.instanceBasicGlyph(targetGlyph)
+        strokeFn.instanceBasicGlyph(targetGlyph, glyphInstance)
         if ((targetGlyph.skeleton as any).onSkeletonBind) {
           strokeFn.updateSkeletonListenerBeforeBind(glyphInstance)
         } else {

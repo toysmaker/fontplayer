@@ -129,11 +129,12 @@ export class GlyphRenderer {
         nonzeroContours = allContours.filter((_, i) => !solidFlagsOut[i])
         solidContours = allContours.filter((_, i) => solidFlagsOut[i])
 
-        // 异步存储新格式到 IndexedDB
+        // 异步存储新格式到 IndexedDB（必须为可结构化克隆的纯数据，避免 DataCloneError）
         if (allContours.length > 0 && !glyph.previewRef) {
           const { IndexedDBManager } = await import('../storage/IndexedDBManager')
           const previewKey = IndexedDBManager.generatePreviewKey(glyph.uuid)
-          indexedDBManager.set(previewKey, { nonzero: nonzeroContours, solid: solidContours }).then(() => {
+          const payload = JSON.parse(JSON.stringify({ nonzero: nonzeroContours, solid: solidContours }))
+          indexedDBManager.set(previewKey, payload).then(() => {
             glyph.previewRef = previewKey
             if (import.meta.env.DEV) {
               console.log(`[GlyphRenderer] Saved preview to IndexedDB for ${glyph.uuid}`)

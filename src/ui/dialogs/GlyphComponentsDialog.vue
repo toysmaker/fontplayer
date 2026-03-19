@@ -97,6 +97,7 @@ import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
 import { useCharacterStore } from '@/stores/character'
 import { useGlyphStore } from '@/stores/glyph'
+import { useToolStore } from '@/stores/tool'
 import { EditStatus, type ICustomGlyph } from '@/core/types'
 import VirtualGlyphSelectionList from '@/ui/components/VirtualList/GlyphSelection/VirtualGlyphSelectionList.vue'
 
@@ -107,6 +108,7 @@ const projectStore = useProjectStore()
 const editorStore = useEditorStore()
 const characterStore = useCharacterStore()
 const glyphStore = useGlyphStore()
+const toolStore = useToolStore()
 
 const props = defineProps<{ show: boolean }>()
 const emit = defineEmits<{ 'update:show': [value: boolean] }>()
@@ -168,6 +170,8 @@ function handleSelect(glyph: ICustomGlyph) {
       message.warning(t('dialogs.glyphComponentDialog.notInEditMode'))
       return
     }
+    // 导入字形后默认切换到选择工具，便于直接拖拽/调整
+    toolStore.setTool('select')
     dialogs.closeGlyphComponentsDialog()
     visible.value = false
     return
@@ -193,6 +197,8 @@ function handleConfirm() {
   })
   if (added > 0) {
     message.success(t('dialogs.glyphComponentDialog.added', { count: added }))
+    // 导入字形后默认切换到选择工具，便于直接拖拽/调整
+    toolStore.setTool('select')
   }
   dialogs.closeGlyphComponentsDialog()
   visible.value = false

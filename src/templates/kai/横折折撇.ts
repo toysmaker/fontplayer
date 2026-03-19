@@ -229,12 +229,13 @@ const quadraticBezierPoint = (p0: any, p1: any, p2: any, t: number) => {
   return { x, y };
 };
 
-const instanceBasicGlyph_heng_zhe_zhe_pie = (plainGlyph: ICustomGlyph) => {
-  const glyph = instanceManager.getInstance(
+const instanceBasicGlyph_heng_zhe_zhe_pie = (plainGlyph: ICustomGlyph, glyphInstance?: CustomGlyph) => {
+  const glyph = glyphInstance ?? instanceManager.getInstance(
     plainGlyph.uuid,
     () => new CustomGlyph(plainGlyph),
     "glyph",
   ) as unknown as CustomGlyph
+  if (!glyph) return
   glyph._glyph = plainGlyph
   glyph.clear()
   const params = {

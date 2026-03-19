@@ -60,12 +60,13 @@ const quadraticBezierPoint = (p0: any, p1: any, p2: any, t: number) => {
 
 
 
-const instanceBasicGlyph_dian = (plainGlyph: ICustomGlyph) => {
-  const glyph = instanceManager.getInstance(
+const instanceBasicGlyph_dian = (plainGlyph: ICustomGlyph, glyphInstance?: CustomGlyph) => {
+  const glyph = glyphInstance ?? instanceManager.getInstance(
     plainGlyph.uuid,
     () => new CustomGlyph(plainGlyph),
     "glyph",
   ) as unknown as CustomGlyph
+  if (!glyph) return
   glyph._glyph = plainGlyph
   glyph.clear()
   const params = {

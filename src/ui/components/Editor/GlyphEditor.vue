@@ -108,6 +108,9 @@ const editingGlyph = computed(() => (glyphStore as any).editingGlyph)
 const currentTool = ref<ToolType | ''>('')
 const selectControl = ref<string>('null')
 
+// 防止 watch 回调重入：渲染路径中可能写入被监听数据（如 previewRef），导致循环更新
+const isRenderingFromWatch = ref(false)
+
 // Canvas 尺寸（字形编辑界面使用默认尺寸）
 const defaultUnitsPerEm = 1000
 const canvasWidth = computed(() => mapCanvasWidth(defaultUnitsPerEm))
@@ -564,42 +567,56 @@ watch(() => bottomBarToolStore.currentTool, (newTool) => {
   }
 })
 
-// 监听组件列表变化，重新渲染
+// 监听组件列表变化，重新渲染（含 deep 以响应参数等深层变化；防重入避免渲染路径写入触发循环）
 watch(() => (glyphStore as any).orderedListWithItemsForCurrentGlyph, async () => {
-  await renderCanvas()
+  if (isRenderingFromWatch.value) return
+  isRenderingFromWatch.value = true
+  try {
+    await renderCanvas()
+  } finally {
+    await nextTick()
+    isRenderingFromWatch.value = false
+  }
 }, { deep: true })
 
-// 监听选中组件变化
+// 监听选中组件变化（含 deep 以响应属性变化；防重入避免循环）
 watch(() => (glyphStore as any).selectedComponent, async () => {
-  // 只有在选择工具激活时才初始化 dragger
-  const toolType = toolManager.getCurrentToolType()
-  if (toolType === 'select') {
-    // 如果 dragger 正在拖拽，不要清理和重新初始化，避免中断拖拽
-    if (dragger && dragger.isDragging()) {
-      if (import.meta.env.DEV) {
-        console.log('[GlyphEditor] Skipping dragger cleanup/reinit: dragger is dragging')
+  if (isRenderingFromWatch.value) return
+  isRenderingFromWatch.value = true
+  try {
+    // 只有在选择工具激活时才初始化 dragger
+    const toolType = toolManager.getCurrentToolType()
+    if (toolType === 'select') {
+      // 如果 dragger 正在拖拽，不要清理和重新初始化，避免中断拖拽
+      if (dragger && dragger.isDragging()) {
+        if (import.meta.env.DEV) {
+          console.log('[GlyphEditor] Skipping dragger cleanup/reinit: dragger is dragging')
+        }
+        // 只更新 penSelectTool 状态和重新渲染
+        const selectTool = toolManager.getTool('select')
+        if (selectTool && typeof (selectTool as any).updatePenSelectToolState === 'function') {
+          (selectTool as any).updatePenSelectToolState()
+        }
+        await renderCanvas()
+        return
       }
-      // 只更新 penSelectTool 状态和重新渲染
+      
+      cleanupDragger()
+      await nextTick()
+      initDragger()
+      
+      // 更新 penSelectTool 状态（如果选择工具激活）
       const selectTool = toolManager.getTool('select')
       if (selectTool && typeof (selectTool as any).updatePenSelectToolState === 'function') {
         (selectTool as any).updatePenSelectToolState()
       }
+      
+      // 选中组件变化后重新渲染画布，确保选择框/控件同步更新
       await renderCanvas()
-      return
     }
-    
-    cleanupDragger()
+  } finally {
     await nextTick()
-    initDragger()
-    
-    // 更新 penSelectTool 状态（如果选择工具激活）
-    const selectTool = toolManager.getTool('select')
-    if (selectTool && typeof (selectTool as any).updatePenSelectToolState === 'function') {
-      (selectTool as any).updatePenSelectToolState()
-    }
-    
-    // 选中组件变化后重新渲染画布，确保选择框/控件同步更新
-    await renderCanvas()
+    isRenderingFromWatch.value = false
   }
 }, { deep: true })
 

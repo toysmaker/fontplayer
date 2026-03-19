@@ -5,6 +5,7 @@
 
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
+import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import type { IJoint } from './types'
 import type { IComponent, IGlyphComponent } from '@/core/types'
 
@@ -61,7 +62,19 @@ export class JointManager {
       }
       
       // 从实例获取 joints（局部坐标）
-      const joints = glyphInstance.getJoints()
+      let joints = glyphInstance.getJoints()
+      // 原工程在 mousedown 时对每个 glyph 执行 executeScript，保证 _o 有 joints。
+      // 重构用 instanceKey 区分实例，若实例刚创建或被 LRU 回收后重建，则无 joints；
+      // 对骨架字形需先执行脚本（instanceBasicGlyph）再取 joints。
+      if ((!joints || joints.length === 0) && glyphValue.skeleton) {
+        executeGlyphScript(glyphValue, instanceKey)
+        glyphInstance = instanceManager.acquireTemporaryInstance(
+          instanceKey,
+          () => new CustomGlyph(glyphValue),
+          'glyph'
+        ) as CustomGlyph
+        joints = glyphInstance ? glyphInstance.getJoints() : []
+      }
       if (!joints || joints.length === 0) {
         return []
       }

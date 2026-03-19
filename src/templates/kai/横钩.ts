@@ -94,12 +94,13 @@ const normalize = (vector: { x: number; y: number }) => {
 
 const createIdentityMatrix = () => [1, 0, 0, 1, 0, 0];
 
-const instanceBasicGlyph_heng_gou = (plainGlyph: ICustomGlyph) => {
-  const glyph = instanceManager.getInstance(
+const instanceBasicGlyph_heng_gou = (plainGlyph: ICustomGlyph, glyphInstance?: CustomGlyph) => {
+  const glyph = glyphInstance ?? instanceManager.getInstance(
     plainGlyph.uuid,
     () => new CustomGlyph(plainGlyph),
     "glyph",
   ) as unknown as CustomGlyph
+  if (!glyph) return
   glyph._glyph = plainGlyph
   glyph.clear()
   const params = {
