@@ -185,7 +185,10 @@ export const renderBoneAndWeight = (
 
   // brush circle
   if (!currentBone.value && onWeightSetting.value) {
-    const { mouseX, mouseY } = options || { mouseX: 0, mouseY: 0 }
+    const { mouseX, mouseY } = options || {}
+    // 没有鼠标坐标时不绘制笔刷圆，否则会在 (0,0) 出现一个被裁剪的四分之一圆
+    if (mouseX === undefined || mouseY === undefined) return
+    if (!Number.isFinite(mouseX) || !Number.isFinite(mouseY)) return
     const _brushSize = mapCanvasX(brushSize.value)
     ctx.fillStyle = "rgba(255, 0, 0, 0.5)"
     ctx.beginPath()
