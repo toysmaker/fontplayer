@@ -4,7 +4,7 @@
     preset="dialog"
     :title="t('dialogs.glyphComponentDialog.title')"
     class="glyph-components-dialog"
-    :style="{ width: '920px', height: '720px' }"
+    :style="{ width: '805px', height: '560px' }"
     :mask-closable="true"
     @update:show="(v: boolean) => emit('update:show', v)"
   >
@@ -44,23 +44,6 @@
       <VirtualGlyphSelectionList v-show="activeTab === 'comp_glyphs'" :visible="visible" glyph-type="comp_glyphs" @select="handleSelect" />
     </div>
 
-    <!-- 多选时：已选列表在列表下方 -->
-    <div v-if="dialogs.glyphComponentsMultiSelect" class="selected-strip">
-      <div class="selected-strip-title">
-        {{ t('dialogs.glyphComponentDialog.selected') }} ({{ dialogs.glyphComponentsSelectedCount }})
-      </div>
-      <div class="selected-strip-items">
-        <n-tag
-          v-for="g in selectedGlyphs"
-          :key="g.uuid"
-          closable
-          @close="dialogs.unselectGlyphComponentUUID(g.uuid)"
-        >
-          {{ g.name }}
-        </n-tag>
-      </div>
-    </div>
-
     <!-- 底部：左下角单选/多选切换，右侧取消/确定 -->
     <template #action>
       <div class="dialog-footer">
@@ -74,6 +57,20 @@
           </n-switch>
         </div>
         <div class="footer-right">
+          <div
+            v-if="dialogs.glyphComponentsMultiSelect && selectedGlyphs.length"
+            class="selected-buttons"
+          >
+            <n-button
+              v-for="g in selectedGlyphs"
+              :key="g.uuid"
+              size="small"
+              class="selected-glyph-btn"
+              @click="dialogs.unselectGlyphComponentUUID(g.uuid)"
+            >
+              {{ g.name }}
+            </n-button>
+          </div>
           <n-button @click="handleCancel" @pointerup="handleCancel">{{ t('dialogs.glyphComponentDialog.cancel') }}</n-button>
           <n-button
             type="primary"
@@ -209,7 +206,7 @@ function handleConfirm() {
   flex-direction: row;
   justify-content: flex-end;
   gap: 5px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   cursor: pointer;
   line-height: 40px;
 }
@@ -235,22 +232,8 @@ function handleConfirm() {
   background: var(--primary-5);
 }
 .tab-body {
-  height: 480px;
-}
-.selected-strip {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid #e5e7eb;
-}
-.selected-strip-title {
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-.selected-strip-items {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 4px;
+  height: 360px;
+  margin-top: 8px;
 }
 .dialog-footer {
   display: flex;
@@ -266,6 +249,30 @@ function handleConfirm() {
 .footer-right {
   display: flex;
   gap: 10px;
+  align-items: center;
+}
+.selected-buttons {
+  display: flex;
+  flex-direction: row-reverse;
+  max-width: 500px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  gap: 6px;
+}
+.selected-glyph-btn {
+  min-width: 56px;
+  padding: 0 12px;
+  height: 30px;
+  line-height: 30px;
+  border-radius: 0;
+  border: 1px solid var(--primary-1);
+  background: var(--primary-0);
+  color: #ffffff;
 }
 </style>
 
+<style>
+.glyph-components-dialog .virtual-list-content {
+  padding: 8px 0;
+}
+</style>

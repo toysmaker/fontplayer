@@ -176,8 +176,9 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, 86px);
   justify-content: flex-start;
-  gap: 10px;
-  padding: 10px;
+  row-gap: 8px;
+  column-gap: 8px;
+  padding: 8px 12px 8px 12px;
   box-sizing: border-box;
 }
 .glyph-item {
