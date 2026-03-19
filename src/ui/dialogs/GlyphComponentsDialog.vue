@@ -58,17 +58,17 @@
         </div>
         <div class="footer-right">
           <div
-            v-if="dialogs.glyphComponentsMultiSelect && selectedGlyphs.length"
+            v-if="dialogs.glyphComponentsMultiSelect && selectedPickRows.length"
             class="selected-buttons"
           >
             <n-button
-              v-for="g in selectedGlyphs"
-              :key="g.uuid"
+              v-for="row in selectedPickRows"
+              :key="row.pickId"
               size="small"
               class="selected-glyph-btn"
-              @click="dialogs.unselectGlyphComponentUUID(g.uuid)"
+              @click="dialogs.unselectGlyphComponentPick(row.pickId)"
             >
-              {{ g.name }}
+              {{ row.glyph.name }}
             </n-button>
           </div>
           <n-button @click="handleCancel" @pointerup="handleCancel">{{ t('dialogs.glyphComponentDialog.cancel') }}</n-button>
@@ -88,7 +88,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NModal, NSwitch, NButton, NTag, useMessage } from 'naive-ui'
+import { NModal, NSwitch, NButton, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import * as R from 'ramda'
 import { genUUID } from '@/utils/uuid'
@@ -120,26 +120,39 @@ const visible = computed({
 
 const activeTab = computed(() => dialogs.glyphComponentsActiveTab)
 
-const selectedGlyphs = computed<ICustomGlyph[]>(() => {
+/** 多选队列顺序解析为模板字形（同一 uuid 可出现多行） */
+const selectedPickRows = computed(() => {
   const f: any = projectStore.selectedFile
-  if (!f) return []
+  if (!f) return [] as Array<{ pickId: string; glyph: ICustomGlyph }>
   const all: ICustomGlyph[] = [
     ...(f.stroke_glyphs || []),
     ...(f.radical_glyphs || []),
     ...(f.glyphs || []),
     ...(f.comp_glyphs || []),
   ]
-  const set = new Set(dialogs.glyphComponentsSelectedUUIDs)
-  return all.filter((g) => set.has(g.uuid))
+  const byUuid = new Map(all.map((g) => [g.uuid, g]))
+  return dialogs.glyphComponentsSelectedPicks
+    .map((p) => {
+      const glyph = byUuid.get(p.templateUuid)
+      if (!glyph) return null
+      return { pickId: p.pickId, glyph }
+    })
+    .filter((x): x is { pickId: string; glyph: ICustomGlyph } => x != null)
 })
 
+/** 与原工程一致：名称 = 字形名 + 时间戳末四位；同毫秒批量插入时用 nameNonce 保证互异 */
+function fourCharTimeSuffix(nameNonce = 0): string {
+  return String(Date.now() + nameNonce).slice(-4).padStart(4, '0')
+}
+
 // 字形组件的包围框由轮廓点决定，不依赖 x,y,w,h；不设置可避免误用 fallback 导致全画布命中
-function buildGlyphComponentFromGlyph(glyph: ICustomGlyph) {
+function buildGlyphComponentFromGlyph(glyph: ICustomGlyph, nameNonce = 0) {
   const cloned = R.clone(glyph) as any
+  const baseName = cloned.name || 'glyph'
   return {
     uuid: genUUID(),
     type: 'glyph',
-    name: cloned.name || 'glyph',
+    name: baseName + fourCharTimeSuffix(nameNonce),
     lock: false,
     visible: true,
     rotation: 0,
@@ -152,8 +165,8 @@ function buildGlyphComponentFromGlyph(glyph: ICustomGlyph) {
   } as any
 }
 
-function addGlyphToCurrentContainer(glyph: ICustomGlyph) {
-  const comp = buildGlyphComponentFromGlyph(glyph)
+function addGlyphToCurrentContainer(glyph: ICustomGlyph, nameNonce = 0) {
+  const comp = buildGlyphComponentFromGlyph(glyph, nameNonce)
   if (editorStore.editStatus === EditStatus.Edit) {
     return characterStore.addComponent(comp)
   }
@@ -189,11 +202,11 @@ function handleConfirm() {
     handleCancel()
     return
   }
-  const list = selectedGlyphs.value
+  const list = selectedPickRows.value
   if (!list.length) return
   let added = 0
-  list.forEach((g) => {
-    if (addGlyphToCurrentContainer(g)) added++
+  list.forEach((row, i) => {
+    if (addGlyphToCurrentContainer(row.glyph, i)) added++
   })
   if (added > 0) {
     message.success(t('dialogs.glyphComponentDialog.added', { count: added }))

@@ -1,16 +1,23 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { genUUID } from '@/utils/uuid'
 
 export type GlyphComponentsTab = 'stroke_glyphs' | 'radical_glyphs' | 'glyphs' | 'comp_glyphs'
+
+/** 多选队列中每一项：同一模板字形可多次入队，用 pickId 区分 */
+export type GlyphComponentDialogPick = {
+  pickId: string
+  templateUuid: string
+}
 
 export const useDialogsStore = defineStore('dialogs', () => {
   // Glyph components dialog
   const glyphComponentsDialogVisible = ref(false)
   const glyphComponentsActiveTab = ref<GlyphComponentsTab>('stroke_glyphs')
   const glyphComponentsMultiSelect = ref(false)
-  const glyphComponentsSelectedUUIDs = ref<string[]>([])
+  const glyphComponentsSelectedPicks = ref<GlyphComponentDialogPick[]>([])
 
-  const glyphComponentsSelectedCount = computed(() => glyphComponentsSelectedUUIDs.value.length)
+  const glyphComponentsSelectedCount = computed(() => glyphComponentsSelectedPicks.value.length)
 
   function openGlyphComponentsDialog() {
     glyphComponentsDialogVisible.value = true
@@ -20,7 +27,7 @@ export const useDialogsStore = defineStore('dialogs', () => {
     glyphComponentsDialogVisible.value = false
     // 保持与原工程一致：关闭后清空多选与已选
     glyphComponentsMultiSelect.value = false
-    glyphComponentsSelectedUUIDs.value = []
+    glyphComponentsSelectedPicks.value = []
   }
 
   function setGlyphComponentsActiveTab(tab: GlyphComponentsTab) {
@@ -30,36 +37,38 @@ export const useDialogsStore = defineStore('dialogs', () => {
   function toggleGlyphComponentsMultiSelect(v: boolean) {
     glyphComponentsMultiSelect.value = v
     if (!v) {
-      glyphComponentsSelectedUUIDs.value = []
+      glyphComponentsSelectedPicks.value = []
     }
   }
 
-  function selectGlyphComponentUUID(uuid: string) {
-    if (!glyphComponentsSelectedUUIDs.value.includes(uuid)) {
-      glyphComponentsSelectedUUIDs.value.push(uuid)
-    }
+  /** 多选：同一 templateUuid 可重复加入，每次生成独立 pickId */
+  function selectGlyphComponentUUID(templateUuid: string) {
+    glyphComponentsSelectedPicks.value.push({
+      pickId: genUUID(),
+      templateUuid,
+    })
   }
 
-  function unselectGlyphComponentUUID(uuid: string) {
-    glyphComponentsSelectedUUIDs.value = glyphComponentsSelectedUUIDs.value.filter((x) => x !== uuid)
+  function unselectGlyphComponentPick(pickId: string) {
+    glyphComponentsSelectedPicks.value = glyphComponentsSelectedPicks.value.filter((p) => p.pickId !== pickId)
   }
 
   function clearGlyphComponentsSelection() {
-    glyphComponentsSelectedUUIDs.value = []
+    glyphComponentsSelectedPicks.value = []
   }
 
   return {
     glyphComponentsDialogVisible,
     glyphComponentsActiveTab,
     glyphComponentsMultiSelect,
-    glyphComponentsSelectedUUIDs,
+    glyphComponentsSelectedPicks,
     glyphComponentsSelectedCount,
     openGlyphComponentsDialog,
     closeGlyphComponentsDialog,
     setGlyphComponentsActiveTab,
     toggleGlyphComponentsMultiSelect,
     selectGlyphComponentUUID,
-    unselectGlyphComponentUUID,
+    unselectGlyphComponentPick,
     clearGlyphComponentsSelection,
   }
 })
