@@ -19,6 +19,7 @@ import PolygonEditPanel from './paramsEditPanels/PolygonEditPanel.vue'
 import PictureEditPanel from './paramsEditPanels/PictureEditPanel.vue'
 import GlyphEditPanel from './paramsEditPanels/GlyphEditPanel.vue'
 import GlyphParamsPanel from './paramsEditPanels/GlyphParamsPanel.vue'
+import MetricsEditPanel from './paramsEditPanels/MetricsEditPanel.vue'
 
 const { t } = useI18n()
 
@@ -40,9 +41,13 @@ if (import.meta.env.DEV) {
 
 <template>
   <div class="right-panel" data-testid="parameter-panel">
+    <!-- 字符编辑 metrics 工具：度量参数 -->
+    <metrics-edit-panel
+      v-if="editStatus === EditStatus.Edit && tool === 'metrics'"
+    />
     <!-- 字形编辑 params 工具：显示字形参数面板（骨架绑定等） -->
     <glyph-params-panel
-      v-if="editStatus === EditStatus.Glyph && tool === 'params'"
+      v-else-if="editStatus === EditStatus.Glyph && tool === 'params'"
     />
     <!-- 基础组件面板（不区分字符/字形） -->
     <pen-edit-panel

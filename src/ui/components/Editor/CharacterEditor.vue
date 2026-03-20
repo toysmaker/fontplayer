@@ -22,6 +22,12 @@
         </header>
         <div class="canvas-panel-wrapper">
           <div class="edit-canvas-wrapper">
+            <div
+              v-show="toolStore.tool === 'metrics'"
+              class="metrics-overlay"
+            >
+              <MetricsController />
+            </div>
             <canvas
               ref="canvasRef"
               class="editor-canvas"
@@ -89,10 +95,12 @@ import { JointManager } from '@/features/tools/glyphDragger/core/JointManager'
 import { mapCanvasX, mapCanvasY } from '@/utils/canvas'
 import { bottomBarToolManager } from '@/features/bottomBar/BottomBarToolManager'
 import { useBottomBarToolStore } from '@/stores/bottomBarTool'
-import { toolManager, SelectTool, PenTool, PolygonTool, EllipseTool, RectangleTool } from '@/features/tools'
+import { toolManager, SelectTool, PenTool, PolygonTool, EllipseTool, RectangleTool, OverlayModeTool } from '@/features/tools'
 import { getCoord } from '@/features/tools/utils/coord'
 import { useToolStore } from '@/stores/tool'
 import { useDialogsStore } from '@/stores/dialogs'
+import { useCharacterMetricsDraftStore } from '@/stores/characterMetricsDraft'
+import MetricsController from '@/ui/components/Widgets/MetricsController.vue'
 import type { ToolType } from '@/features/tools'
 
 const characterStore = useCharacterStore()
@@ -102,6 +110,7 @@ const editorStore = useEditorStore()
 const editorPreference = useEditorPreferenceStore()
 const bottomBarToolStore = useBottomBarToolStore()
 const toolStore = useToolStore()
+const characterMetricsDraftStore = useCharacterMetricsDraftStore()
 const canvasRef = ref<HTMLCanvasElement>()
 let dragger: BaseGlyphDragger | null = null
 let selectControlCheckInterval: number | null = null
@@ -373,6 +382,14 @@ const initTools = async () => {
   const rectangleTool = RectangleTool.getInstance(canvasRef.value, toolConfig)
   await rectangleTool.init()
   toolManager.registerTool('rectangle', rectangleTool)
+
+  const metricsOverlay = new OverlayModeTool(canvasRef.value, toolConfig, 'metrics')
+  await metricsOverlay.init()
+  toolManager.registerTool('metrics', metricsOverlay)
+
+  const gridOverlay = new OverlayModeTool(canvasRef.value, toolConfig, 'grid')
+  await gridOverlay.init()
+  toolManager.registerTool('grid', gridOverlay)
   
   // 默认激活选择工具
   if (toolStore.tool === '' || toolStore.tool === 'select') {
@@ -445,6 +462,10 @@ onMounted(async () => {
   
   // 初始化工具系统（必须在 canvas 准备好之后）
   await initTools()
+
+  if (toolStore.tool === 'metrics') {
+    characterMetricsDraftStore.hydrateFromEditingCharacter()
+  }
   
   // 更新当前工具状态
   currentTool.value = (toolStore.tool as ToolType | '') || ''
@@ -462,6 +483,10 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  // 离开字符编辑时勿保留 metrics/grid，避免 GlyphEditor 等场景 tool 无效
+  if (toolStore.tool === 'metrics' || toolStore.tool === 'grid') {
+    toolStore.setTool('select')
+  }
   // 清理selectControl检查定时器
   if (selectControlCheckInterval) {
     clearInterval(selectControlCheckInterval)
@@ -652,6 +677,12 @@ watch(() => toolStore.tool, async (newTool) => {
   // 更新当前工具状态
   currentTool.value = (newTool as ToolType | '') || ''
 
+  if (newTool === 'metrics') {
+    // 与选择工具互斥：清空选中与 glyphDragger（switch 后 cleanupDragger 会再执行一次，此处先清选项）
+    characterStore.clearSelection()
+    characterMetricsDraftStore.hydrateFromEditingCharacter()
+  }
+
   if (newTool) {
     if (import.meta.env.DEV) {
       console.log('[CharacterEditor] watch toolStore.tool: calling toolManager.switchTool:', newTool)
@@ -699,12 +730,15 @@ watch(() => toolStore.tool, (newTool) => {
   }
 }, { immediate: true })
 
-onUnmounted(() => {
-  if (selectControlCheckInterval) {
-    clearInterval(selectControlCheckInterval)
-    selectControlCheckInterval = null
-  }
-})
+// 度量模式下切换编辑字符时刷新草稿 bbox
+watch(
+  () => (characterStore as any).editingCharacter?.uuid,
+  () => {
+    if (toolStore.tool === 'metrics') {
+      characterMetricsDraftStore.hydrateFromEditingCharacter()
+    }
+  },
+)
 
 // 注意：鼠标事件由 dragger 和工具系统的 activate() 方法自动处理
 // 不需要在模板中手动绑定 @mousedown, @mousemove, @mouseup
@@ -770,12 +804,23 @@ onUnmounted(() => {
 }
 
 .edit-canvas-wrapper {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   background-color: var(--dark-1);
+}
+
+.metrics-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 10;
 }
 
 .editor-canvas {

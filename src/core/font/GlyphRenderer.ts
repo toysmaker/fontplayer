@@ -8,11 +8,7 @@ import { ContourConverter } from './converter'
 import { RenderEngine } from './renderer'
 import { CanvasManager } from '../canvas/CanvasManager'
 import { PathType } from './types'
-import { indexedDBManager, IndexedDBManager } from '../storage/IndexedDBManager'
-import { executeGlyphScript } from '../script/ScriptExecutor'
-import { instanceManager } from '../instance/InstanceManager'
-import { CustomGlyph } from '../instance/CustomGlyph'
-import { useProjectStore } from '@/stores/project'
+import { indexedDBManager } from '../storage/IndexedDBManager'
 import type { IContours } from './types'
 
 /**
@@ -35,7 +31,6 @@ function getContentVersion(glyph: ICustomGlyph): number {
 export class GlyphRenderer {
   /**
    * 渲染字形预览
-   * 使用 async 的原因：与 IndexedDB 相关的读/写均显式 `await`，保证 `previewRef` 与持久化一致后再继续绘制/返回。
    * @param canvas Canvas元素
    * @param glyph 字形数据
    * @param fontSettings 字体设置
@@ -93,6 +88,10 @@ export class GlyphRenderer {
         // 字形有脚本或骨架时，必须执行脚本/骨架分支才能获得完整组件列表（骨架绑定字形也走此处）
         if (glyph.script || glyph.script_reference || glyph.skeleton) {
           try {
+            const { executeGlyphScript } = await import('../script/ScriptExecutor')
+            const { instanceManager } = await import('../instance/InstanceManager')
+            const { CustomGlyph } = await import('../instance/CustomGlyph')
+
             const instanceKey = glyph.uuid
             const glyphInstance = instanceManager.acquireTemporaryInstance(
               instanceKey,
@@ -120,7 +119,7 @@ export class GlyphRenderer {
         const descender = fontSettings?.descender || -200
 
         const solidFlagsOut: boolean[] = []
-        const allContours = ContourConverter.componentsToContours(
+        const allContours = await ContourConverter.componentsToContours(
           components as any,
           { unitsPerEm, descender, advanceWidth: unitsPerEm, preview: true },
           { x: 0, y: 0 },
@@ -130,19 +129,19 @@ export class GlyphRenderer {
         nonzeroContours = allContours.filter((_, i) => !solidFlagsOut[i])
         solidContours = allContours.filter((_, i) => solidFlagsOut[i])
 
-        // 持久化预览：必须 await，成功后才写入 previewRef（payload 需可结构化克隆）
+        // 异步存储新格式到 IndexedDB（必须为可结构化克隆的纯数据，避免 DataCloneError）
         if (allContours.length > 0 && !glyph.previewRef) {
+          const { IndexedDBManager } = await import('../storage/IndexedDBManager')
           const previewKey = IndexedDBManager.generatePreviewKey(glyph.uuid)
           const payload = JSON.parse(JSON.stringify({ nonzero: nonzeroContours, solid: solidContours }))
-          try {
-            await indexedDBManager.set(previewKey, payload)
+          indexedDBManager.set(previewKey, payload).then(() => {
             glyph.previewRef = previewKey
             if (import.meta.env.DEV) {
               console.log(`[GlyphRenderer] Saved preview to IndexedDB for ${glyph.uuid}`)
             }
-          } catch (error) {
+          }).catch(error => {
             console.error(`[GlyphRenderer] Failed to save preview to IndexedDB for ${glyph.uuid}:`, error)
-          }
+          })
         }
       }
 
@@ -153,6 +152,7 @@ export class GlyphRenderer {
       }
 
       // 获取预览样式（从全局 store）
+      const { useProjectStore } = await import('@/stores/project')
       const projectStore = useProjectStore()
       const previewStyle = projectStore.fontPreviewStyle
 
@@ -196,14 +196,11 @@ export class GlyphRenderer {
       // 标记 Canvas 已渲染
       CanvasManager.markCanvasRendered(canvas, glyph.uuid)
 
+      // 缓存渲染结果
       const ctx = canvas.getContext('2d')
       if (ctx) {
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        try {
-          await CanvasManager.setRenderCache(glyph.uuid, imageData)
-        } catch (error) {
-          console.error(`Failed to cache render result for ${glyph.uuid}:`, error)
-        }
+        await CanvasManager.setRenderCache(glyph.uuid, imageData)
       }
 
       return true
