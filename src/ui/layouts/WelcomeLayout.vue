@@ -16,7 +16,11 @@
           <div class="item-name">{{ t('welcome.open.name') }}</div>
           <div class="description">{{ t('welcome.open.description') }}</div>
         </div>
-        <div class="item import-font-item">
+        <div
+          class="item import-font-item"
+          @click="handleImportFont"
+          @pointerup="handleImportFont"
+        >
           <div class="item-icon">
             <font-awesome-icon :icon="['fas', 'archive']" />
           </div>
@@ -53,11 +57,21 @@
 import { ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useMessage, useDialog } from 'naive-ui'
 import { fileHandler } from '@/features/editor/menus/FileHandler'
 import NewProjectDialog from '@/ui/dialogs/NewProjectDialog.vue'
 import { createDebouncedHandler } from '@/utils/debounce-click'
+import { useProjectStore } from '@/stores/project'
+import { useEditorStore } from '@/stores/editor'
+import { useCharacterStore } from '@/stores/character'
+import { runFontLibraryImportPicker } from '@/features/editor/services/FontLibraryImportService'
 
 const { t } = useI18n()
+const message = useMessage()
+const dialog = useDialog()
+const projectStore = useProjectStore()
+const editorStore = useEditorStore()
+const characterStore = useCharacterStore()
 
 const router = useRouter()
 const showNewProjectDialog = ref(false)
@@ -93,6 +107,26 @@ const _handleOpenProject = async () => {
 // 使用防重复调用包装
 const handleNewProject = createDebouncedHandler(_handleNewProject, 'WelcomeLayout.newProject')
 const handleOpenProject = createDebouncedHandler(_handleOpenProject, 'WelcomeLayout.openProject')
+
+const _handleImportFont = async () => {
+  try {
+    router.push('/editor')
+    await nextTick()
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        setTimeout(() => resolve(), 100)
+      })
+    })
+    await runFontLibraryImportPicker(
+      { projectStore, editorStore, characterStore },
+      { t, message, dialog, router },
+    )
+  } catch (e) {
+    console.error('Welcome import font failed', e)
+  }
+}
+
+const handleImportFont = createDebouncedHandler(_handleImportFont, 'WelcomeLayout.importFont')
 
 const handleProjectCreated = () => {
   // 工程创建成功后跳转到编辑器

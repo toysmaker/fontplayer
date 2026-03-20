@@ -192,6 +192,19 @@ const dialogs = {
 			exportFailed: '导出字形失败',
 			needProject: '请先打开工程',
 		},
+		fontImport: {
+			singleProjectTitle: '提示',
+			singleProjectBody:
+				'目前字玩仅支持同时编辑一个工程，请关闭当前工程再导入字体。注意，关闭工程前请保存工程以避免数据丢失。',
+			singleProjectConfirm: '确定',
+			parseFailed: '无法解析所选字体文件',
+			emptyFont: '该字体不包含可导入的字符轮廓',
+			readFailed: '读取字体文件失败',
+			importingProgress: '正在导入字符…',
+			storingCharacters: '正在保存字符数据…',
+			storeFailed: '保存字符数据失败',
+			importSuccess: '导入字体库成功',
+		},
 	},
 	en: {
 		tipsDialog: {
@@ -389,6 +402,19 @@ const dialogs = {
 			importInvalid: 'Invalid glyphs JSON file',
 			exportFailed: 'Failed to export glyphs',
 			needProject: 'Please open a project first',
+		},
+		fontImport: {
+			singleProjectTitle: 'Note',
+			singleProjectBody:
+				'FontPlayer supports only one open project at a time. Please close the current project before importing a font. Save your project first to avoid data loss.',
+			singleProjectConfirm: 'OK',
+			parseFailed: 'Could not parse the selected font file',
+			emptyFont: 'This font has no importable character outlines',
+			readFailed: 'Failed to read the font file',
+			importingProgress: 'Importing glyphs…',
+			storingCharacters: 'Saving character data…',
+			storeFailed: 'Failed to save character data',
+			importSuccess: 'Font library imported successfully',
 		},
 	}
 }

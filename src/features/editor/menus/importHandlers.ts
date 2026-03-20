@@ -3,6 +3,7 @@ import type { IConstant, ICustomGlyph } from '@/core/types'
 import { EditStatus } from '@/core/types'
 import { isTauri } from '@/utils/env'
 import { GlyphImportExportService } from '@/features/editor/services/GlyphImportExportService'
+import { runFontLibraryImportPicker } from '@/features/editor/services/FontLibraryImportService'
 
 function readJsonFileWeb(): Promise<string | null> {
   return new Promise((resolve) => {
@@ -48,7 +49,7 @@ async function readGlyphJsonTauri(): Promise<string | null> {
 }
 
 export function createImportHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
-  const { projectStore, editorStore, glyphStore, message, dialog, t } = ctx
+  const { projectStore, editorStore, characterStore, glyphStore, message, dialog, t, router } = ctx
 
   const runImportFromText = async (text: string) => {
     const file = projectStore.selectedFile
@@ -158,8 +159,11 @@ export function createImportHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
     await runImportFromText(text)
   }
 
-  const handleImportFont = () => {
-    console.log('Import font')
+  const handleImportFont = async () => {
+    await runFontLibraryImportPicker(
+      { projectStore, editorStore, characterStore },
+      { t, message, dialog, router },
+    )
   }
 
   const handleImportPic = () => {

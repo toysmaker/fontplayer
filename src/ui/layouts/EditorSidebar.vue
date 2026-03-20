@@ -293,6 +293,10 @@ const handleExportFontNative = async () => {
   })
 }
 
+const handleImportFontNative = async () => {
+  await web_handlers['import-font-file']?.()
+}
+
 // 将 EditStatus 转换为 Rust 端能理解的字符串格式
 const editStatusToRustString = (status: EditStatus): string => {
   switch (status) {
@@ -348,6 +352,7 @@ onMounted(() => {
   window.addEventListener('editor-import-glyphs', () => web_handlers['import-glyphs']?.())
   window.addEventListener('editor-export-glyphs', () => web_handlers['export-glyphs']?.())
   window.addEventListener('editor-export-font-native', handleExportFontNative)
+  window.addEventListener('editor-import-font-native', handleImportFontNative)
   window.addEventListener('editor-remove-overlap', handleEditorRemoveOverlap)
   window.addEventListener('editor-font-settings', () => { showFontSettingsDialog.value = true })
   window.addEventListener('editor-preference-settings', () => { showPreferenceSettingsDialog.value = true })
@@ -386,6 +391,7 @@ onUnmounted(() => {
   window.removeEventListener('editor-import-glyphs', () => {})
   window.removeEventListener('editor-export-glyphs', () => {})
   window.removeEventListener('editor-export-font-native', handleExportFontNative)
+  window.removeEventListener('editor-import-font-native', handleImportFontNative)
   window.removeEventListener('editor-remove-overlap', handleEditorRemoveOverlap)
   window.removeEventListener('editor-font-settings', () => {})
   window.removeEventListener('editor-preference-settings', () => {})

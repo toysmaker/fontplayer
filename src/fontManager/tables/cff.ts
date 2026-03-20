@@ -323,6 +323,23 @@ const cffExpertEncoding = [
  */
 const parseIndex = (data: DataView, offset: number, parser?: Function) => {
 	let configRawData = []
+	const emptyResult = () => ({
+		data: {
+			configRawData: [] as number[],
+			index: {
+				count: 0,
+				offSize: 0,
+				offset: [] as number[],
+				data: [] as never[],
+			},
+			data: [] as never[],
+		},
+		offset: Math.min(Math.max(0, offset), data.byteLength),
+	})
+	if (!Number.isFinite(offset) || offset < 0 || offset + 2 > data.byteLength) {
+		return emptyResult()
+	}
+
 	let offset2 = offset
 	// 启动一个新的decoder
 	// start a new decoder
@@ -343,8 +360,8 @@ const parseIndex = (data: DataView, offset: number, parser?: Function) => {
 	if (count !== 0) {
 		// 检查offSize是否有效
 		if (offSize < 1 || offSize > 4) {
+			decode.end()
 			// console.warn(`CFF parseIndex: Invalid offSize ${offSize} at offset ${offset}, count: ${count}`)
-			// 返回空的结果
 			return {
 				data: {
 					configRawData,
@@ -356,8 +373,15 @@ const parseIndex = (data: DataView, offset: number, parser?: Function) => {
 					},
 					data: [],
 				},
-				offset: offset + 3, // 跳过头部
+				offset: Math.min(offset + 3, data.byteLength),
 			}
+		}
+
+		const indexBodyBytes = (count + 1) * offSize
+		const indexEnd = decode.getOffset() + indexBodyBytes
+		if (indexEnd > data.byteLength) {
+			decode.end()
+			return emptyResult()
 		}
 		
 		for (let i = 0; i < count + 1; i++) {
@@ -416,6 +440,8 @@ const parseIndex = (data: DataView, offset: number, parser?: Function) => {
 			rawDataArray.push(_data)
 			dataArray.push(parser ? parser(_data) : _data)
 		}
+	} else {
+		decode.end()
 	}
 
 	return {
@@ -1736,7 +1762,7 @@ const gatherTopDicts = (data: DataView, offset: number, cffIndex: any, strings: 
 
 			topDict._defaultWidthX = privateDict.defaultWidthX
 			topDict._nominalWidthX = privateDict.nominalWidthX
-			if (privateDict.Subrs !== 0) {
+			if (privateDict.Subrs != null && privateDict.Subrs !== 0) {
 				const subrOffset = privateOffset + privateDict.Subrs
 				const subrIndex = parseIndex(data, subrOffset + offset)
 
@@ -2025,7 +2051,7 @@ const parse = (data: DataView, offset: number, font: IFont) => {
 	font.settings.gsubrs = _globalSubrIndex.data.data
 	font.settings.gsubrsBias = calcSubroutineBias(_globalSubrIndex.data.data)
 
-	const topDictArray = gatherTopDicts(data, _globalSubrIndex.offset, _topDictIndex.data.data, _stringIndex.data.data)
+	const topDictArray = gatherTopDicts(data, offset, _topDictIndex.data.data, _stringIndex.data.data)
 	const topDict = topDictArray[0]
 	
 
@@ -2058,8 +2084,9 @@ const parse = (data: DataView, offset: number, font: IFont) => {
 	font.settings.defaultWidthX = privateDict.defaultWidthX
 	font.settings.nominalWidthX = privateDict.nominalWidthX
 
-	if (privateDict.subrs !== 0) {
-		const subrOffset = privateDictOffset + privateDict.subrs
+	const subrsRel = privateDict.Subrs
+	if (subrsRel != null && subrsRel !== 0) {
+		const subrOffset = privateDictOffset + subrsRel
 		const subrIndex = parseIndex(data, subrOffset)
 		font.settings.subrs = subrIndex.data.data
 		font.settings.subrsBias = calcSubroutineBias(font.settings.subrs)

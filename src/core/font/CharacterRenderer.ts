@@ -116,10 +116,15 @@ export class CharacterRenderer {
         solidContours = allContours.filter((_, i) => solidFlagsOut[i])
 
         // 持久化预览：必须 await，成功后才写入 previewRef，避免「未落库却持 ref」的竞态
+        // 与 GlyphRenderer 一致：先 JSON 深拷贝为纯数据。组件在 Vue 响应式树中时，
+        // contour 数组可能是 Proxy，IndexedDB structured clone 会报 DataCloneError。
         if (allContours.length > 0 && !characterFile.previewRef) {
           const previewKey = IndexedDBManager.generatePreviewKey(characterFile.uuid)
           try {
-            await indexedDBManager.set(previewKey, { nonzero: nonzeroContours, solid: solidContours })
+            const payload = JSON.parse(
+              JSON.stringify({ nonzero: nonzeroContours, solid: solidContours }),
+            ) as { nonzero: IContours; solid: IContours }
+            await indexedDBManager.set(previewKey, payload)
             characterFile.previewRef = previewKey
             if (import.meta.env.DEV) {
               console.log(`[CharacterRenderer] Saved preview to IndexedDB for ${characterFile.uuid}`)
