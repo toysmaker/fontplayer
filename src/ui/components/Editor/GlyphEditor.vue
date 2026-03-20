@@ -549,6 +549,14 @@ watch(() => (glyphStore as any).editingGlyph, async () => {
   }
 })
 
+watch(
+  () => glyphStore.programmingPreviewTick,
+  async () => {
+    if (!editingGlyph.value || !canvasRef.value) return
+    await renderCanvas()
+  },
+)
+
 // 监听 zoom 变化，更新 canvas 显示尺寸
 watch(() => editingGlyph.value?.view?.zoom, (newZoom) => {
   if (canvasRef.value && editingGlyph.value) {

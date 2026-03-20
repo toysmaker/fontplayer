@@ -407,6 +407,20 @@ export interface IConstant {
   options?: Array<{ label: string; value: any }>
 }
 
+/** 环形控件参数（字形/常量参数编辑） */
+export interface IRingAxisParam {
+  name: string
+  min: number
+  max: number
+  value: number
+}
+
+export interface IRingParameter {
+  radius: IRingAxisParam
+  degree: IRingAxisParam
+  params: Array<{ name: string; min: number; max: number; value: number }>
+}
+
 /**
  * 文件数据结构
  */

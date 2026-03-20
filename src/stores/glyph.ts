@@ -28,6 +28,9 @@ export const useGlyphStore = defineStore('glyph', () => {
   const glyphListVersion = ref(0)
   const lastUpdatedGlyphUUID = ref<string>('')
 
+  /** 自脚本窗口「运行」后递增，供主窗口画布监听刷新 */
+  const programmingPreviewTick = ref(0)
+
   // 剪贴板（复用字符的剪贴板，因为两者可以互相复制粘贴）
   // 注意：这里暂时使用独立的剪贴板，后续可以考虑统一管理
   const clipBoard = reactive<{ value: Array<IGlyphComponent> }>({
@@ -517,6 +520,10 @@ export const useGlyphStore = defineStore('glyph', () => {
   /**
    * 更新字形参数
    */
+  function bumpProgrammingPreview() {
+    programmingPreviewTick.value++
+  }
+
   function updateGlyphParameter(glyphUUID: string, paramName: string, value: any) {
     const glyph = editingGlyph.value
     if (!glyph || glyph.uuid !== glyphUUID) return false
@@ -551,6 +558,7 @@ export const useGlyphStore = defineStore('glyph', () => {
     enableMultiSelect,
     glyphListVersion,
     lastUpdatedGlyphUUID,
+    programmingPreviewTick,
     
     // Getters
     editingGlyph,
@@ -572,6 +580,7 @@ export const useGlyphStore = defineStore('glyph', () => {
     clearSelection,
     updateComponent,
     updateGlyphParameter,
+    bumpProgrammingPreview,
     modifyComponent,
     removeComponent,
     insertComponent,

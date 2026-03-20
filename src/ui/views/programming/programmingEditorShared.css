@@ -1,0 +1,448 @@
+/**
+ * 字形/字符脚本页 — 左侧参数区与顶栏按钮，对齐原工程 Element Plus 视觉（颜色、间距、label 宽度、枚举行与删除图标位置）
+ * 选择器均挂在 .glyph-programming-editor 下，避免污染全局
+ */
+
+/* 独立路由窗口：占满视口；左侧 tab+滚动区、右侧脚本区在内容少时仍拉满高度 */
+.glyph-programming-editor {
+  min-height: 100vh;
+  min-height: 100dvh;
+  align-items: stretch;
+}
+
+.glyph-programming-editor .left-panel {
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  align-self: stretch;
+  padding: 10px;
+  border-right: 1px solid var(--primary-0);
+  background-color: #fff;
+  box-sizing: border-box;
+}
+
+.glyph-programming-editor .right-panel {
+  align-self: stretch;
+  min-height: 0;
+}
+
+/* ---------- Tabs（对齐 el-tabs：灰字、激活深蓝+下划线） ---------- */
+.glyph-programming-editor .prog-tabs :deep(.n-tabs-nav) {
+  border-bottom: 1px solid #dcdfe6;
+}
+
+.glyph-programming-editor .prog-tabs :deep(.n-tabs-tab) {
+  color: #909399;
+  font-size: 14px;
+  padding: 0 16px;
+  height: 40px;
+  line-height: 40px;
+  border-radius: 0;
+  box-sizing: border-box;
+}
+
+.glyph-programming-editor .prog-tabs :deep(.n-tabs-tab:hover) {
+  color: var(--primary-0);
+}
+
+.glyph-programming-editor .prog-tabs :deep(.n-tabs-tab.n-tabs-tab--active) {
+  color: var(--primary-0);
+  font-weight: 700;
+}
+
+.glyph-programming-editor .prog-tabs :deep(.n-tabs-bar) {
+  height: 2px;
+  border-radius: 0;
+  background-color: var(--primary-0) !important;
+}
+
+.glyph-programming-editor .prog-tabs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.glyph-programming-editor .prog-tabs :deep(.n-tabs-pane-wrapper) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 让 pane 内容区参与纵向 flex，内部的 n-scrollbar 才能拉高 */
+.glyph-programming-editor .prog-tabs :deep(.n-tab-pane) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+/* 组件根节点同时带 .prog-scrollbar 与 .n-scrollbar */
+.glyph-programming-editor .prog-scrollbar {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+}
+
+.glyph-programming-editor .prog-scrollbar :deep(.n-scrollbar-container) {
+  height: 100%;
+  max-height: none;
+}
+
+/* ---------- 左侧 n-form：与 el-form horizontal 一致（label 与控件同一行、无校验预留高度） ---------- */
+.glyph-programming-editor .prog-left-form {
+  width: 100%;
+}
+
+.glyph-programming-editor .prog-left-form :deep(.n-form-item-feedback-wrapper) {
+  min-height: 0;
+}
+
+/* ---------- 新建常量/参数/枚举选项：浅蓝底+深蓝描边 ---------- */
+.glyph-programming-editor .left-panel .add-constant-button,
+.glyph-programming-editor .left-panel .add-parameter-button,
+.glyph-programming-editor .left-panel .add-option-button {
+  width: 100%;
+  margin-bottom: 10px;
+  border-radius: 0 !important;
+  min-height: 32px;
+  --n-border: 1px solid var(--primary-0) !important;
+  background-color: var(--primary-5) !important;
+  color: var(--primary-0) !important;
+}
+
+.glyph-programming-editor .left-panel .add-constant-button:not(:disabled):hover,
+.glyph-programming-editor .left-panel .add-parameter-button:not(:disabled):hover,
+.glyph-programming-editor .left-panel .add-option-button:not(:disabled):hover {
+  background-color: var(--primary-4) !important;
+  color: var(--primary-0) !important;
+  border-color: var(--primary-0) !important;
+}
+
+.glyph-programming-editor .left-panel .add-constant-button:focus,
+.glyph-programming-editor .left-panel .add-parameter-button:focus,
+.glyph-programming-editor .left-panel .add-option-button:focus {
+  background-color: var(--primary-5) !important;
+}
+
+/* ---------- 表单项 label 宽度 42 / 80，黑字 ---------- */
+.glyph-programming-editor .prog-form-item {
+  margin: 5px 0;
+}
+
+.glyph-programming-editor .prog-form-item :deep(.n-form-item-label) {
+  color: #000 !important;
+}
+
+.glyph-programming-editor .prog-form-item:not(.prog-form-item--label80) :deep(.n-form-item-label) {
+  width: 42px !important;
+  min-width: 42px !important;
+  padding-right: 8px !important;
+  justify-content: flex-end;
+}
+
+.glyph-programming-editor .prog-form-item.prog-form-item--label80 :deep(.n-form-item-label) {
+  width: 80px !important;
+  min-width: 80px !important;
+  padding-right: 8px !important;
+  justify-content: flex-end;
+}
+
+.glyph-programming-editor .prog-form-item :deep(.n-form-item-blank) {
+  flex: 1;
+  min-width: 0;
+}
+
+/* number 类型：主值一行；min/max 与 el 一致（无双重 margin、无大块留白） */
+.glyph-programming-editor .parameter-number-block > .parameter-value {
+  margin-bottom: 5px;
+}
+
+.glyph-programming-editor .parameter-number-block .prog-form-item {
+  margin-top: 0;
+  margin-bottom: 5px;
+}
+
+.glyph-programming-editor .parameter-number-block .prog-form-item:last-child {
+  margin-bottom: 0;
+}
+
+.glyph-programming-editor .parameter-number-block .prog-form-item .parameter-value {
+  margin-bottom: 0;
+}
+
+/* ---------- 输入、选择：方角、白底、主色文字（对齐原 el-input） ---------- */
+.glyph-programming-editor .left-panel :deep(.n-input .n-input-wrapper) {
+  border-radius: 0;
+  background-color: #fff;
+}
+
+.glyph-programming-editor .left-panel :deep(.n-input__input-el) {
+  color: var(--primary-0) !important;
+}
+
+.glyph-programming-editor .left-panel :deep(.n-base-selection) {
+  border-radius: 0;
+  --n-border: 1px solid #dcdfe6;
+}
+
+.glyph-programming-editor .left-panel :deep(.n-base-selection .n-base-selection-label) {
+  color: var(--primary-0);
+}
+
+.glyph-programming-editor .left-panel :deep(.n-base-selection:hover),
+.glyph-programming-editor .left-panel :deep(.n-input-wrapper:hover) {
+  border-color: var(--primary-0);
+}
+
+.glyph-programming-editor .left-panel :deep(.n-base-selection.n-base-selection--focus),
+.glyph-programming-editor .left-panel :deep(.n-input.n-input--focus .n-input-wrapper) {
+  border-color: var(--primary-0);
+  box-shadow: none;
+}
+
+/* InputNumber 占满一行（含枚举行 value） */
+.glyph-programming-editor .parameter-value,
+.glyph-programming-editor .option-value {
+  width: 100% !important;
+  max-width: 100%;
+  margin-bottom: 5px;
+}
+
+.glyph-programming-editor .parameter-value :deep(.n-input-number),
+.glyph-programming-editor .option-value :deep(.n-input-number) {
+  width: 100% !important;
+}
+
+/* Naive InputNumber 内加减：颜色对齐原 el-input-number（深蓝底、白图标），位置仍为 Naive 默认 */
+.glyph-programming-editor .left-panel :deep(.n-input-number .n-button) {
+  border-radius: 0 !important;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  align-self: center;
+  flex-shrink: 0;
+  color: #fff !important;
+  background-color: var(--primary-0) !important;
+  --n-text-color: #fff !important;
+  --n-text-color-hover: #fff !important;
+  --n-text-color-pressed: #fff !important;
+  --n-text-color-focus: #fff !important;
+}
+
+.glyph-programming-editor .left-panel :deep(.n-input-number .n-button:not(:disabled):hover) {
+  background-color: var(--primary-1) !important;
+}
+
+.glyph-programming-editor .left-panel :deep(.n-input-number .n-button:disabled) {
+  opacity: 0.45;
+}
+
+.glyph-programming-editor .left-panel :deep(.n-input-number .n-button .n-icon),
+.glyph-programming-editor .left-panel :deep(.n-input-number .n-base-icon) {
+  color: #fff !important;
+}
+
+.glyph-programming-editor .parameter-type-select,
+.glyph-programming-editor .parameter-const-select {
+  width: 100% !important;
+  margin-bottom: 5px;
+}
+
+.glyph-programming-editor .parameter-name-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.glyph-programming-editor .option-name {
+  width: 100% !important;
+}
+
+.glyph-programming-editor .parameter-name-label {
+  color: var(--primary-0);
+}
+
+/* ---------- 参数块 hover 排序/删除（深蓝底浅色图标） ---------- */
+.glyph-programming-editor .constant-item,
+.glyph-programming-editor .parameter-item {
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.glyph-programming-editor .parameter-name {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 32px;
+  line-height: 32px;
+  margin-bottom: 5px;
+}
+
+.glyph-programming-editor .edit-icon {
+  cursor: pointer;
+  margin-left: 6px;
+  color: var(--primary-0);
+}
+
+.glyph-programming-editor .remove-btn,
+.glyph-programming-editor .sort-up-btn,
+.glyph-programming-editor .sort-down-btn {
+  display: none;
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--primary-0);
+  color: var(--light-0);
+  cursor: pointer;
+  border-radius: 0;
+  font-size: 12px;
+}
+
+.glyph-programming-editor .sort-up-btn {
+  right: 30px;
+}
+
+.glyph-programming-editor .sort-down-btn {
+  right: 55px;
+}
+
+.glyph-programming-editor .constant-item:hover .remove-btn,
+.glyph-programming-editor .constant-item:hover .sort-up-btn,
+.glyph-programming-editor .constant-item:hover .sort-down-btn,
+.glyph-programming-editor .parameter-item:hover .remove-btn,
+.glyph-programming-editor .parameter-item:hover .sort-up-btn,
+.glyph-programming-editor .parameter-item:hover .sort-down-btn {
+  display: flex;
+}
+
+/* ---------- 枚举选项行：左侧垃圾桶 + 两列表单（对齐原 option-item） ---------- */
+.glyph-programming-editor .enum-wrap .parameter-const-select,
+.glyph-programming-editor .enum-wrap .add-option-button {
+  width: 100% !important;
+  margin-bottom: 5px;
+}
+
+.glyph-programming-editor .options-wrap {
+  width: 100%;
+}
+
+/* 枚举行：两列表单紧凑堆叠；左侧留足删除热区（对齐原工程可点范围） */
+.glyph-programming-editor .option-item > .prog-form-item {
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+.glyph-programming-editor .option-item > .prog-form-item:last-of-type {
+  margin-bottom: 0;
+}
+
+.glyph-programming-editor .option-item .option-name,
+.glyph-programming-editor .option-item .option-value {
+  margin-bottom: 0 !important;
+}
+
+.glyph-programming-editor .option-item {
+  position: relative;
+  padding-left: 40px;
+  margin-bottom: 6px;
+}
+
+.glyph-programming-editor .option-item .option-remove-btn {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 36px;
+  margin: auto 0;
+  height: auto;
+  box-sizing: border-box;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--light-5);
+  cursor: pointer;
+  background: transparent;
+  border-radius: 0;
+}
+
+.glyph-programming-editor .option-item .option-remove-btn:hover {
+  background-color: #f56c6c;
+  color: var(--primary-0);
+}
+
+/* ---------- ring 内层 tabs：近似 el border-card ---------- */
+.glyph-programming-editor .ring-inner-tabs {
+  margin-top: 6px;
+}
+
+.glyph-programming-editor .ring-inner-tabs :deep(.n-tabs-nav) {
+  background-color: #f5f7fa;
+  border: 1px solid #dcdfe6;
+  border-bottom: none;
+  border-radius: 0;
+}
+
+.glyph-programming-editor .ring-inner-tabs :deep(.n-tabs-pane-wrapper) {
+  border: 1px solid #dcdfe6;
+  padding: 10px;
+  background: #fff;
+  border-radius: 0;
+}
+
+.glyph-programming-editor .ring-inner-tabs :deep(.n-tabs-tab) {
+  border-radius: 0;
+}
+
+/* ---------- 脚本区顶栏：重置=白底蓝框，运行=主色填充 ---------- */
+.glyph-programming-editor .codes-header .reset-btn {
+  border-radius: 0 !important;
+  margin-left: 8px;
+  background-color: #fff !important;
+  border: 1px solid var(--primary-0) !important;
+  color: var(--primary-0) !important;
+}
+
+.glyph-programming-editor .codes-header .reset-btn:hover:not(:disabled) {
+  background-color: var(--primary-5) !important;
+  color: var(--primary-0) !important;
+}
+
+.glyph-programming-editor .codes-header .reset-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.glyph-programming-editor .codes-header .execute-btn {
+  border-radius: 0 !important;
+  margin-left: 8px;
+  background-color: var(--primary-0) !important;
+  border: 1px solid var(--primary-0) !important;
+  color: #fff !important;
+}
+
+.glyph-programming-editor .codes-header .execute-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.glyph-programming-editor .codes-header .execute-btn:disabled {
+  opacity: 0.55;
+}
+
+.glyph-programming-editor .n-tabs .n-tabs-tab {
+  color: var(--primary-0) !important;
+}
+
+.glyph-programming-editor .n-form-item-label  {
+  color: var(--primary-0) !important;
+}

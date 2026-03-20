@@ -52,6 +52,8 @@ import {
   faPenToSquare,
   faMagnifyingGlassMinus,
   faMagnifyingGlassPlus,
+	faArrowUp,
+	faArrowDown,
 } from '@fortawesome/free-solid-svg-icons'
 
 // 按需导入图标 - 从 @fortawesome/free-regular-svg-icons
@@ -190,6 +192,9 @@ library.add(
   faPenToSquare,
   faMagnifyingGlassMinus,
   faMagnifyingGlassPlus,
+	faArrowUp,
+	faArrowDown,
+	faTrash,
 )
 
 app.use(pinia)

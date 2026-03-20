@@ -180,7 +180,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NIcon } from 'naive-ui'
 import { useEditorStore } from '@/stores/editor'
@@ -188,6 +188,10 @@ import { useToolStore } from '@/stores/tool'
 import { useDialogsStore } from '@/stores/dialogs'
 import { EditStatus } from '@/core/types'
 import { createDebouncedHandler } from '@/utils/debounce-click'
+import {
+  openProgrammingWindow,
+  setupProgrammingWindowBridge,
+} from '@/features/programming/programmingWindowBridge'
 
 const { t } = useI18n()
 
@@ -211,10 +215,23 @@ const _switchTool = (toolName: string) => {
   if (import.meta.env.DEV) {
     console.log('[ToolBar] switchTool:', toolName)
   }
+  if (toolName === 'code') {
+    void openProgrammingWindow()
+    return
+  }
   toolStore.setTool(toolName)
   // 工具切换逻辑在 Editor 中通过 watch toolStore.tool 实现
 }
 const switchTool = createDebouncedHandler(_switchTool, 'ToolBar.switchTool', (args) => args[0])
+
+let cleanupProgrammingBridge: (() => void) | null = null
+onMounted(async () => {
+  cleanupProgrammingBridge = await setupProgrammingWindowBridge()
+})
+onUnmounted(() => {
+  cleanupProgrammingBridge?.()
+  cleanupProgrammingBridge = null
+})
 
 // 返回列表
 const _handleToList = () => {

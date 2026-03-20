@@ -30,6 +30,9 @@ const programming = {
 		radicalCounts: '部首数量',
 		compCounts: '字形数量',
 		glyphCompCounts: '组件数量',
+		resetScriptConfirm: '重置脚本会将脚本重置为初始状态，不可恢复，请谨慎操作。确定要重置脚本吗？',
+		resetScriptTitle: '提示',
+		characterScriptEditorDisabled: '字符脚本编辑尚未开放，仅可管理全局参数。',
 	},
 	en: {
 		'global-constants': 'Global Constants',
@@ -62,6 +65,9 @@ const programming = {
 		radicalCounts: 'Radical',
 		compCounts: 'Glyph',
 		glyphCompCounts: 'Components',
+		resetScriptConfirm: 'Resetting will restore the script to its initial state and cannot be undone. Continue?',
+		resetScriptTitle: 'Warning',
+		characterScriptEditorDisabled: 'Character script editing is not available yet. You can still manage global constants.',
 	}
 }
 
