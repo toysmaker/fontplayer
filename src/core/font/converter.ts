@@ -10,6 +10,10 @@ import type { IComponent, ICharacterFileLite, ContourSegment, IPenComponent, IPo
 import { transformPoints, getRectanglePoints, getEllipsePoints, translate, getBound } from '../utils/math'
 import { formatPoints, genPenContour, genPolygonContour, genRectangleContour, genEllipseContour } from '../utils/contour'
 import { computeCoords } from '../utils/grid'
+import { executeGlyphScript } from '../script/ScriptExecutor'
+import { instanceManager } from '../instance/InstanceManager'
+import { CustomGlyph } from '../instance/CustomGlyph'
+import { genUUID } from '@/utils/uuid'
 
 /**
  * 转换选项
@@ -59,10 +63,10 @@ export class ContourConverter {
    * 将组件转换为编辑时轮廓（仅几何变换，不做 formatPoints / unitsPerEm 等字体坐标转换）。
    * 用于菜单「去除重叠」等需要编辑空间轮廓的场景。等价于原工程 componentsToContours2(..., contour_type=1)。
    */
-  static async componentsToContoursEditing(
+  static componentsToContoursEditing(
     components: (IComponent | IGlyphComponent)[],
     offset: { x: number; y: number } = { x: 0, y: 0 }
-  ): Promise<IContours> {
+  ): IContours {
     const contours: IContours = []
     const scriptTypes = ['glyph-pen', 'glyph-polygon', 'glyph-rectangle', 'glyph-ellipse']
     for (const component of components) {
@@ -160,9 +164,6 @@ export class ContourConverter {
             const ox = glyphComponent.ox ?? 0
             const oy = glyphComponent.oy ?? 0
             const childOffset = { x: offset.x + ox, y: offset.y + oy }
-            const { executeGlyphScript } = await import('../script/ScriptExecutor')
-            const { instanceManager } = await import('../instance/InstanceManager')
-            const { CustomGlyph } = await import('../instance/CustomGlyph')
             let scriptExecuted = false
             try {
               executeGlyphScript(glyphValue, component.uuid)
@@ -181,7 +182,7 @@ export class ContourConverter {
             }
             const glyphComponents = glyphInstance?.components ?? glyphValue.components ?? []
             if (glyphComponents.length > 0) {
-              const childContours = await this.componentsToContoursEditing(
+              const childContours = this.componentsToContoursEditing(
                 glyphComponents as (IComponent | IGlyphComponent)[],
                 childOffset
               )
@@ -208,12 +209,12 @@ export class ContourConverter {
    * 将组件转换为轮廓（完整实现）
    * 如果组件已有轮廓数据，直接使用；否则计算轮廓
    */
-  static async componentsToContours(
+  static componentsToContours(
     components: IComponent[],
     options: IConvertOptions,
     offset: { x: number; y: number } = { x: 0, y: 0 },
     solidFlagsOut?: boolean[]
-  ): Promise<IContours> {
+  ): IContours {
     const contours: IContours = []
     const { preview = true, forceUpdate = false, grid, useSkeletonGrid = false } = options
     
@@ -547,11 +548,6 @@ export class ContourConverter {
           const instanceKeyForRelease = component.uuid
 
           try {
-            // 导入脚本执行器和实例管理器（动态导入避免循环依赖）
-            const { executeGlyphScript } = await import('../script/ScriptExecutor')
-            const { instanceManager } = await import('../instance/InstanceManager')
-            const { CustomGlyph } = await import('../instance/CustomGlyph')
-            
             // 执行脚本生成子组件（捕获错误，避免中断整个转换过程）
             // 使用 component.uuid 作为实例key，确保每个组件有独立的 glyph 实例
             // 这样即使多个组件引用同一个 glyph 模板，它们也会有独立的参数
@@ -729,7 +725,7 @@ export class ContourConverter {
                     if (scriptComp.type === 'glyph' && scriptComp.value) {
                       const subGlyphValue = scriptComp.value as ICustomGlyph
                       const subSolidFlags: boolean[] | undefined = solidFlagsOut ? [] : undefined
-                      const subContours = await this.componentsToContours(
+                      const subContours = this.componentsToContours(
                         subGlyphValue.components || [],
                         options,
                         { x: offset.x + ox + (scriptComp.ox || 0), y: offset.y + oy + (scriptComp.oy || 0) },
@@ -754,7 +750,7 @@ export class ContourConverter {
               if (glyphValue.components && glyphValue.components.length > 0) {
                 console.log(`Using fallback components for glyph ${component.uuid}, count: ${glyphValue.components.length}`)
                 const subSolidFlags1: boolean[] | undefined = solidFlagsOut ? [] : undefined
-                const subContours = await this.componentsToContours(
+                const subContours = this.componentsToContours(
                   glyphValue.components,
                   options,
                   { x: offset.x + ox, y: offset.y + oy },
@@ -820,7 +816,7 @@ export class ContourConverter {
                   }
                 } else if (scriptComp.type === 'glyph') {
                   // 如果是字形组件，递归处理
-                  const subContours = await this.componentsToContours(
+                  const subContours = this.componentsToContours(
                     [scriptComp],
                     options,
                     { x: offset.x + ox, y: offset.y + oy }
@@ -828,7 +824,7 @@ export class ContourConverter {
                   contours.push(...subContours)
                 } else {
                   // 其他类型的组件，尝试作为普通组件处理
-                  const subContours = await this.componentsToContours(
+                  const subContours = this.componentsToContours(
                     [scriptComp as IComponent],
                     options,
                     { x: offset.x + ox, y: offset.y + oy }
@@ -840,7 +836,7 @@ export class ContourConverter {
               // 没有脚本生成的组件，使用数据中的组件
               const dataComponents = glyphValue.components || []
               if (dataComponents.length > 0) {
-                const subContours = await this.componentsToContours(
+                const subContours = this.componentsToContours(
                   dataComponents,
                   options,
                   { x: offset.x + ox, y: offset.y + oy }
@@ -856,13 +852,14 @@ export class ContourConverter {
           } catch (error) {
             console.error(`Error processing glyph component ${component.uuid}:`, error)
             try {
-              const { instanceManager: im } = await import('../instance/InstanceManager')
-              if (im.isTemporary(instanceKeyForRelease)) im.releaseTemporaryInstance(instanceKeyForRelease)
+              if (instanceManager.isTemporary(instanceKeyForRelease)) {
+                instanceManager.releaseTemporaryInstance(instanceKeyForRelease)
+              }
             } catch (_) { /* ignore */ }
             // 如果脚本执行失败，尝试使用已有的组件数据
             if (glyphValue.components && glyphValue.components.length > 0) {
               const subSolidFlags2: boolean[] | undefined = solidFlagsOut ? [] : undefined
-              const subContours = await this.componentsToContours(
+              const subContours = this.componentsToContours(
                 glyphValue.components,
                 options,
                 { x: offset.x + ox, y: offset.y + oy },
@@ -920,18 +917,14 @@ export class ContourConverter {
    * 将轮廓转换为组件
    * 参考原工程实现，将轮廓数据转换为 pen 组件
    */
-  static async contoursToComponents(
+  static contoursToComponents(
     contours: IContours,
     options: {
       unitsPerEm: number
       descender: number
       advanceWidth: number
     }
-  ): Promise<IComponent[]> {
-    // 导入必要的工具函数
-    const { genUUID } = await import('@/utils/uuid')
-    const { formatPoints, genPenContour } = await import('../utils/contour')
-    
+  ): IComponent[] {
     // 轻量级 ID 生成器（简化版，使用计数器）
     let lightIdCounter = 0
     const genLightId = () => {

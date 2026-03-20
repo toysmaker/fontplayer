@@ -12,6 +12,7 @@ import { useProjectStore } from '@/stores/project'
 const { mockInstanceManager } = vi.hoisted(() => {
   const mockInstanceManager = {
     isTemporary: vi.fn(() => false),
+    isEditing: vi.fn(() => false),
     acquireTemporaryInstance: vi.fn((key, factory) => {
       const instance = factory()
       // Ensure tempData is null for tests that need script execution
@@ -46,6 +47,9 @@ vi.mock('@/core/instance/CustomGlyph', () => ({
       components: [],
       tempData: null,
       uuid: data.uuid,
+      clear: vi.fn(() => {
+        components.length = 0
+      }),
       getParam: vi.fn((name: string) => {
         const param = data.parameters?.find((p: any) => p.name === name)
         return param?.value
@@ -124,6 +128,8 @@ describe('ScriptExecutor', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    mockInstanceManager.isTemporary.mockReturnValue(false)
+    mockInstanceManager.isEditing.mockReturnValue(false)
     // Clear window globals
     ;(window as any).glyph = undefined
     ;(window as any).constantsMap = undefined
@@ -189,7 +195,7 @@ describe('ScriptExecutor', () => {
 
       executeGlyphScript(glyph)
 
-      expect(instanceManager.acquireTemporaryInstance).toHaveBeenCalled()
+      expect(mockInstanceManager.acquireTemporaryInstance).toHaveBeenCalled()
     })
 
     it('should execute glyph_script', () => {

@@ -31,7 +31,7 @@ vi.mock('@/core/script/ScriptExecutor', () => ({
 
 vi.mock('@/core/font/converter', () => ({
   ContourConverter: {
-    componentsToContours: vi.fn().mockResolvedValue([]),
+    componentsToContours: vi.fn().mockReturnValue([]),
   },
 }))
 

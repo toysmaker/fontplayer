@@ -194,7 +194,7 @@ export class ProjectLoader {
         const descender = fontSettings.descender || -200
 
         // 计算轮廓（非预览）
-        const contours = await ContourConverter.componentsToContours(
+        const contours = ContourConverter.componentsToContours(
           components as any,
           {
             unitsPerEm,
@@ -207,7 +207,7 @@ export class ProjectLoader {
         )
 
         // 计算预览
-        const previews = await ContourConverter.componentsToContours(
+        const previews = ContourConverter.componentsToContours(
           components as any,
           {
             unitsPerEm,

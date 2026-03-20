@@ -142,7 +142,7 @@
           size="40"
           @click="switchTool('grid')"
           @pointerup="switchTool('grid')"
-          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
+          v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
             :class="{
               'selected': tool === 'grid',
@@ -160,7 +160,7 @@
           size="40"
           @click="switchTool('metrics')"
           @pointerup="switchTool('metrics')"
-          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
+          v-show="editStatus === EditStatus.Edit">
           <font-awesome-icon
             :class="{
               'selected': tool === 'metrics',

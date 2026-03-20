@@ -8,7 +8,8 @@ import { ContourConverter } from './converter'
 import { RenderEngine } from './renderer'
 import { CanvasManager } from '../canvas/CanvasManager'
 import { PathType } from './types'
-import { indexedDBManager } from '../storage/IndexedDBManager'
+import { indexedDBManager, IndexedDBManager } from '../storage/IndexedDBManager'
+import { useProjectStore } from '@/stores/project'
 import type { IContours } from './types'
 
 /**
@@ -34,6 +35,7 @@ function getContentVersion(characterFile: ICharacterFileLite): number {
 export class CharacterRenderer {
   /**
    * 渲染字符预览
+   * 使用 async 的原因：与 IndexedDB 相关的读/写均显式 `await`，保证 `previewRef` 与持久化一致后再继续绘制/返回。
    * @param characterFile 字符文件
    * @param canvas Canvas元素（可选，如果不提供则从DOM获取）
    * @param fontSettings 字体设置
@@ -103,7 +105,7 @@ export class CharacterRenderer {
         const descender = fontSettings?.descender || -200
 
         const solidFlagsOut: boolean[] = []
-        const allContours = await ContourConverter.componentsToContours(
+        const allContours = ContourConverter.componentsToContours(
           components,
           { unitsPerEm, descender, advanceWidth: unitsPerEm, preview: true },
           { x: 0, y: 0 },
@@ -113,18 +115,18 @@ export class CharacterRenderer {
         nonzeroContours = allContours.filter((_, i) => !solidFlagsOut[i])
         solidContours = allContours.filter((_, i) => solidFlagsOut[i])
 
-        // 异步存储新格式到 IndexedDB
+        // 持久化预览：必须 await，成功后才写入 previewRef，避免「未落库却持 ref」的竞态
         if (allContours.length > 0 && !characterFile.previewRef) {
-          const { IndexedDBManager } = await import('../storage/IndexedDBManager')
           const previewKey = IndexedDBManager.generatePreviewKey(characterFile.uuid)
-          indexedDBManager.set(previewKey, { nonzero: nonzeroContours, solid: solidContours }).then(() => {
+          try {
+            await indexedDBManager.set(previewKey, { nonzero: nonzeroContours, solid: solidContours })
             characterFile.previewRef = previewKey
             if (import.meta.env.DEV) {
               console.log(`[CharacterRenderer] Saved preview to IndexedDB for ${characterFile.uuid}`)
             }
-          }).catch(error => {
+          } catch (error) {
             console.error(`[CharacterRenderer] Failed to save preview to IndexedDB for ${characterFile.uuid}:`, error)
-          })
+          }
         }
       }
 
@@ -139,7 +141,6 @@ export class CharacterRenderer {
       }
 
       // 获取预览样式（从全局 store）
-      const { useProjectStore } = await import('@/stores/project')
       const projectStore = useProjectStore()
       const previewStyle = projectStore.fontPreviewStyle
 
@@ -190,14 +191,14 @@ export class CharacterRenderer {
       // 标记 Canvas 已渲染（用于检测 Canvas 复用）
       CanvasManager.markCanvasRendered(canvas, characterFile.uuid)
       
-      // 缓存渲染结果（异步存储到 IndexedDB，不阻塞）
       const ctx = canvas.getContext('2d')
       if (ctx) {
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        // 异步存储，不阻塞主线程
-        CanvasManager.setRenderCache(characterFile.uuid, imageData).catch(error => {
+        try {
+          await CanvasManager.setRenderCache(characterFile.uuid, imageData)
+        } catch (error) {
           console.error(`Failed to cache render result for ${characterFile.uuid}:`, error)
-        })
+        }
       }
 
       return true

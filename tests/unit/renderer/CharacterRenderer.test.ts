@@ -11,7 +11,7 @@ import { createMockCanvas } from '../../helpers/test-utils'
 vi.mock('@/core/font/converter', () => ({
   ContourConverter: {
     getComponentsForCharacter: vi.fn(() => []),
-    componentsToContours: vi.fn().mockResolvedValue([]),
+    componentsToContours: vi.fn().mockReturnValue([]),
     getFillColors: vi.fn(() => []),
   },
 }))
@@ -42,6 +42,12 @@ vi.mock('@/core/storage/IndexedDBManager', () => ({
   },
 }))
 
+vi.mock('@/stores/project', () => ({
+  useProjectStore: vi.fn(() => ({
+    fontPreviewStyle: 'black',
+  })),
+}))
+
 describe('CharacterRenderer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -56,7 +62,7 @@ describe('CharacterRenderer', () => {
       const { ContourConverter } = await import('@/core/font/converter')
       const { CanvasManager } = await import('@/core/canvas/CanvasManager')
       ;(CanvasManager.getCanvasFromDOM as any).mockReturnValue(canvas)
-      ;(ContourConverter.componentsToContours as any).mockResolvedValue([
+      ;(ContourConverter.componentsToContours as any).mockReturnValue([
         [{ type: 0, start: { x: 0, y: 0 }, end: { x: 10, y: 10 } }],
       ])
 
@@ -119,7 +125,7 @@ describe('CharacterRenderer', () => {
       const { ContourConverter } = await import('@/core/font/converter')
       const { CanvasManager } = await import('@/core/canvas/CanvasManager')
       ;(CanvasManager.getCanvasFromDOM as any).mockReturnValue(canvas)
-      ;(ContourConverter.componentsToContours as any).mockResolvedValue([
+      ;(ContourConverter.componentsToContours as any).mockReturnValue([
         [{ type: 0, start: { x: 0, y: 0 }, end: { x: 10, y: 10 } }],
       ])
 

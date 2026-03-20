@@ -10,7 +10,7 @@ import { createMockCanvas } from '../../helpers/test-utils'
 // Mock dependencies
 vi.mock('@/core/font/converter', () => ({
   ContourConverter: {
-    componentsToContours: vi.fn().mockResolvedValue([]),
+    componentsToContours: vi.fn().mockReturnValue([]),
   },
 }))
 
@@ -48,7 +48,15 @@ vi.mock('@/core/instance/InstanceManager', () => ({
     acquireTemporaryInstance: vi.fn((key, factory) => factory()),
     releaseTemporaryInstance: vi.fn(),
     getOrCreateGlyphInstance: vi.fn((glyph, factory) => factory()),
+    isTemporary: vi.fn(() => false),
+    isEditing: vi.fn(() => false),
   },
+}))
+
+vi.mock('@/stores/project', () => ({
+  useProjectStore: vi.fn(() => ({
+    fontPreviewStyle: 'black',
+  })),
 }))
 
 vi.mock('@/core/instance/CustomGlyph', () => ({
@@ -69,7 +77,7 @@ describe('GlyphRenderer', () => {
       const fontSettings = createMockFontSettings()
 
       const { ContourConverter } = await import('@/core/font/converter')
-      ;(ContourConverter.componentsToContours as any).mockResolvedValue([
+      ;(ContourConverter.componentsToContours as any).mockReturnValue([
         [{ type: 0, start: { x: 0, y: 0 }, end: { x: 10, y: 10 } }],
       ])
 
@@ -121,7 +129,7 @@ describe('GlyphRenderer', () => {
 
       const { executeGlyphScript } = await import('@/core/script/ScriptExecutor')
       const { ContourConverter } = await import('@/core/font/converter')
-      ;(ContourConverter.componentsToContours as any).mockResolvedValue([])
+      ;(ContourConverter.componentsToContours as any).mockReturnValue([])
 
       await GlyphRenderer.renderPreview(canvas, glyph)
 
@@ -133,7 +141,7 @@ describe('GlyphRenderer', () => {
       const glyph = createMockGlyph({ uuid: 'glyph-1', components: [] })
 
       const { ContourConverter } = await import('@/core/font/converter')
-      ;(ContourConverter.componentsToContours as any).mockResolvedValue([])
+      ;(ContourConverter.componentsToContours as any).mockReturnValue([])
 
       const { RenderEngine } = await import('@/core/font/renderer')
       const result = await GlyphRenderer.renderPreview(canvas, glyph)

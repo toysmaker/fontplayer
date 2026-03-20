@@ -12,6 +12,7 @@ import { createMockGlyph } from '../helpers/mock-helpers'
 vi.mock('@/core/instance/InstanceManager', () => ({
   instanceManager: {
     isTemporary: vi.fn(() => false),
+    isEditing: vi.fn(() => false),
     acquireTemporaryInstance: vi.fn((key, factory) => factory()),
     releaseTemporaryInstance: vi.fn(),
     getOrCreateGlyphInstance: vi.fn((glyph, factory) => factory()),
@@ -24,6 +25,7 @@ vi.mock('@/core/instance/CustomGlyph', () => ({
     _components: [],
     components: [],
     tempData: null,
+    clear: vi.fn(),
     getParam: vi.fn(),
     addComponent: vi.fn(),
   })),
@@ -76,7 +78,7 @@ describe('Script Integration', () => {
       // Components should be generated and can be converted to contours
       const components = glyph.components || []
       if (components.length > 0) {
-        const contours = await ContourConverter.componentsToContours(components as any, {
+        const contours = ContourConverter.componentsToContours(components as any, {
           unitsPerEm: 1000,
           descender: -200,
           advanceWidth: 1000,

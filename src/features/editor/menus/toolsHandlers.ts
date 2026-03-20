@@ -27,7 +27,7 @@ export function createToolsHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
     }
 
     try {
-      const contours = await ContourConverter.componentsToContoursEditing(
+      const contours = ContourConverter.componentsToContoursEditing(
         orderedComponents as IComponent[],
         { x: 0, y: 0 }
       )

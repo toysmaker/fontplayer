@@ -23,6 +23,7 @@ vi.mock('@/core/instance/InstanceManager', () => ({
   instanceManager: {
     acquireTemporaryInstance: vi.fn((key, factory) => factory()),
     isTemporary: vi.fn(() => false),
+    isEditing: vi.fn(() => false),
     getOrCreateGlyphInstance: vi.fn((glyph, factory) => factory()),
   },
 }))

@@ -96,7 +96,7 @@ describe('ContourConverter', () => {
           usedInCharacter: true,
         })
 
-        const contours = await ContourConverter.componentsToContours(
+        const contours = ContourConverter.componentsToContours(
           [component],
           defaultOptions
         )
@@ -112,7 +112,7 @@ describe('ContourConverter', () => {
           usedInCharacter: false,
         })
 
-        const contours = await ContourConverter.componentsToContours(
+        const contours = ContourConverter.componentsToContours(
           [component],
           defaultOptions
         )
@@ -129,7 +129,7 @@ describe('ContourConverter', () => {
         component.value.contour = cachedContour as any
         component.value.preview = cachedContour as any
 
-        const contours = await ContourConverter.componentsToContours(
+        const contours = ContourConverter.componentsToContours(
           [component],
           { ...defaultOptions, forceUpdate: false }
         )
@@ -144,7 +144,7 @@ describe('ContourConverter', () => {
         })
         component.value.contour = [{ type: PathType.LINE, start: { x: 0, y: 0 }, end: { x: 10, y: 10 } }] as any
 
-        const contours = await ContourConverter.componentsToContours(
+        const contours = ContourConverter.componentsToContours(
           [component],
           { ...defaultOptions, forceUpdate: true }
         )
@@ -159,12 +159,12 @@ describe('ContourConverter', () => {
           usedInCharacter: true,
         })
 
-        const previewContours = await ContourConverter.componentsToContours(
+        const previewContours = ContourConverter.componentsToContours(
           [component],
           { ...defaultOptions, preview: true }
         )
 
-        const normalContours = await ContourConverter.componentsToContours(
+        const normalContours = ContourConverter.componentsToContours(
           [component],
           { ...defaultOptions, preview: false }
         )
@@ -181,7 +181,7 @@ describe('ContourConverter', () => {
           usedInCharacter: true,
         })
 
-        const contours = await ContourConverter.componentsToContours(
+        const contours = ContourConverter.componentsToContours(
           [component],
           defaultOptions
         )
@@ -198,7 +198,7 @@ describe('ContourConverter', () => {
           usedInCharacter: true,
         })
 
-        const contours = await ContourConverter.componentsToContours(
+        const contours = ContourConverter.componentsToContours(
           [component],
           defaultOptions
         )
@@ -215,7 +215,7 @@ describe('ContourConverter', () => {
           usedInCharacter: true,
         })
 
-        const contours = await ContourConverter.componentsToContours(
+        const contours = ContourConverter.componentsToContours(
           [component],
           defaultOptions
         )
@@ -254,7 +254,7 @@ describe('ContourConverter', () => {
           value: glyphValue,
         }
 
-        const contours = await ContourConverter.componentsToContours(
+        const contours = ContourConverter.componentsToContours(
           [component as any],
           defaultOptions
         )
@@ -291,7 +291,7 @@ describe('ContourConverter', () => {
           value: glyphValue,
         }
 
-        const contours = await ContourConverter.componentsToContours(
+        const contours = ContourConverter.componentsToContours(
           [component as any],
           defaultOptions
         )
@@ -307,7 +307,7 @@ describe('ContourConverter', () => {
           usedInCharacter: true,
         })
 
-        const contours = await ContourConverter.componentsToContours(
+        const contours = ContourConverter.componentsToContours(
           [component],
           { ...defaultOptions, preview: false },
           { x: 50, y: 50 }
@@ -328,7 +328,7 @@ describe('ContourConverter', () => {
           type: 'invalid-type' as any,
         }
 
-        const contours = await ContourConverter.componentsToContours(
+        const contours = ContourConverter.componentsToContours(
           [component1, component2 as any],
           defaultOptions
         )
@@ -356,7 +356,7 @@ describe('ContourConverter', () => {
         ],
       ]
 
-      const components = await ContourConverter.contoursToComponents(contours, {
+      const components = ContourConverter.contoursToComponents(contours, {
         unitsPerEm: 1000,
         descender: -200,
         advanceWidth: 1000,
@@ -379,7 +379,7 @@ describe('ContourConverter', () => {
         ],
       ]
 
-      const components = await ContourConverter.contoursToComponents(contours, {
+      const components = ContourConverter.contoursToComponents(contours, {
         unitsPerEm: 1000,
         descender: -200,
         advanceWidth: 1000,
@@ -400,7 +400,7 @@ describe('ContourConverter', () => {
         ],
       ]
 
-      const components = await ContourConverter.contoursToComponents(contours, {
+      const components = ContourConverter.contoursToComponents(contours, {
         unitsPerEm: 1000,
         descender: -200,
         advanceWidth: 1000,
