@@ -318,15 +318,12 @@ function genPenComponentEditing(
   const w = Math.max(0, maxX - minX)
   const h = Math.max(0, maxY - minY)
 
-  const flatPoints: Array<{ x: number; y: number }> = []
-  for (let i = 0; i + 3 < points.length; i += 4) {
-    flatPoints.push(
-      { x: points[i].x, y: points[i].y },
-      { x: points[i + 1].x, y: points[i + 1].y },
-      { x: points[i + 2].x, y: points[i + 2].y },
-      { x: points[i + 3].x, y: points[i + 3].y }
-    )
-  }
+  // pathToEditingPenComponents 与 transformPoints 钢笔数据一致：A0,C1,C2,A1,C1,C2,A2,…
+  // genPenContour 按 i+=3 取每段Bezier（相邻段共享锚点）。切勿按 i+=4 切块，否则会丢掉除第一段外的所有曲线。
+  const flatPoints: Array<{ x: number; y: number }> = points.map((p) => ({
+    x: p.x,
+    y: p.y,
+  }))
   const contour = flatPoints.length >= 4 ? genPenContour(flatPoints, false) : []
   const preview = flatPoints.length >= 4 ? genPenContour(flatPoints, true) : []
 

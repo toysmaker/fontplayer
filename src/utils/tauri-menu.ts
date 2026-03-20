@@ -88,8 +88,7 @@ export async function initTauriMenu() {
     })
     
     listen('export-font-file', () => {
-      console.log('File -> Export Font')
-      // TODO: 实现导出字体逻辑
+      window.dispatchEvent(new CustomEvent('editor-export-font-native'))
     })
     
     listen('export-svg', () => {

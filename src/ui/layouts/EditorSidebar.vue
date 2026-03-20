@@ -79,6 +79,7 @@
     <FontSettingsMoreDialog v-model:show="showFontSettingsMoreDialog" />
     <PreferenceSettingsDialog v-model:show="showPreferenceSettingsDialog" />
     <LanguageSettingsDialog v-model:show="showLanguageSettingsDialog" />
+    <ExportFontDialog />
   </div>
 </template>
 
@@ -106,6 +107,8 @@ import FontSettingsDialog from '@/ui/dialogs/FontSettingsDialog.vue'
 import FontSettingsMoreDialog from '@/ui/dialogs/FontSettingsMoreDialog.vue'
 import PreferenceSettingsDialog from '@/ui/dialogs/PreferenceSettingsDialog.vue'
 import LanguageSettingsDialog from '@/ui/dialogs/LanguageSettingsDialog.vue'
+import ExportFontDialog from '@/ui/dialogs/ExportFontDialog.vue'
+import { exportFontLibraryNativeDefaults } from '@/features/editor/services/ExportFontService'
 import { getWebMenu, traverse_web_menu } from '@/features/editor/menus/web_menus'
 import { templateHandlers } from '@/features/editor/menus/templatesHandlers'
 import { createDebouncedHandler } from '@/utils/debounce-click'
@@ -274,6 +277,22 @@ const handleEditorRemoveOverlap = () => {
   web_handlers['remove_overlap']?.()
 }
 
+const handleExportFontNative = async () => {
+  const file = projectStore.selectedFile
+  if (!file) {
+    message.warning(t('dialogs.exportFontDialog.needProject'))
+    return
+  }
+  await exportFontLibraryNativeDefaults({
+    file,
+    editingCharacterUUID: characterStore.editingCharacterUUID,
+    editingCharacter: characterStore.editingCharacter,
+    message,
+    t,
+    projectStore,
+  })
+}
+
 // 将 EditStatus 转换为 Rust 端能理解的字符串格式
 const editStatusToRustString = (status: EditStatus): string => {
   switch (status) {
@@ -328,6 +347,7 @@ onMounted(() => {
   window.addEventListener('editor-paste', () => web_handlers['paste'] && web_handlers['paste']())
   window.addEventListener('editor-import-glyphs', () => web_handlers['import-glyphs']?.())
   window.addEventListener('editor-export-glyphs', () => web_handlers['export-glyphs']?.())
+  window.addEventListener('editor-export-font-native', handleExportFontNative)
   window.addEventListener('editor-remove-overlap', handleEditorRemoveOverlap)
   window.addEventListener('editor-font-settings', () => { showFontSettingsDialog.value = true })
   window.addEventListener('editor-preference-settings', () => { showPreferenceSettingsDialog.value = true })
@@ -365,6 +385,7 @@ onUnmounted(() => {
   window.removeEventListener('editor-paste', () => {})
   window.removeEventListener('editor-import-glyphs', () => {})
   window.removeEventListener('editor-export-glyphs', () => {})
+  window.removeEventListener('editor-export-font-native', handleExportFontNative)
   window.removeEventListener('editor-remove-overlap', handleEditorRemoveOverlap)
   window.removeEventListener('editor-font-settings', () => {})
   window.removeEventListener('editor-preference-settings', () => {})

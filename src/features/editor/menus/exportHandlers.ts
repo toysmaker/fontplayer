@@ -2,6 +2,7 @@ import type { MenuHandlerContext, MenuHandlersMap } from './menuHandlerTypes'
 import { EditStatus } from '@/core/types'
 import { isTauri } from '@/utils/env'
 import { GlyphImportExportService } from '@/features/editor/services/GlyphImportExportService'
+import { useDialogsStore } from '@/stores/dialogs'
 
 export function createExportHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
   const { projectStore, editorStore, message, dialog, t, ImportExportSvgService } = ctx
@@ -63,7 +64,11 @@ export function createExportHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
   }
 
   const handleExportFont = () => {
-    console.log('Export font')
+    if (!projectStore.selectedFile) {
+      message.warning(t('dialogs.exportFontDialog.needProject'))
+      return
+    }
+    useDialogsStore().openExportFontDialog()
   }
 
   const handleExportVarFont = () => {

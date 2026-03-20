@@ -13,6 +13,7 @@ import { computeCoords } from '../utils/grid'
 import { executeGlyphScript } from '../script/ScriptExecutor'
 import { instanceManager } from '../instance/InstanceManager'
 import { CustomGlyph } from '../instance/CustomGlyph'
+import { orderedListWithItemsForGlyph } from '../utils/glyph'
 import { genUUID } from '@/utils/uuid'
 
 /**
@@ -26,6 +27,11 @@ export interface IConvertOptions {
   useSkeletonGrid?: boolean
   preview?: boolean
   forceUpdate?: boolean
+  /**
+   * 传给 glyph-* 脚本组件 `updateData` 的首参：true 时用固定 1000/-200（如高级编辑笔画预览），
+   * false/省略时用当前文件字体的 metrics。对齐原 `font.ts` 的 `isGlyph`。
+   */
+  isGlyph?: boolean
 }
 
 /**
@@ -217,7 +223,8 @@ export class ContourConverter {
   ): IContours {
     const contours: IContours = []
     const { preview = true, forceUpdate = false, grid, useSkeletonGrid = false } = options
-    
+    const scriptIsGlyph = options.isGlyph === true
+
     // 确保 advanceWidth 有默认值
     if (!options.advanceWidth) {
       options.advanceWidth = options.unitsPerEm
@@ -416,12 +423,12 @@ export class ContourConverter {
             if (!grid || useSkeletonGrid) {
               // 不使用布局调整或使用骨架布局调整的情况下，使用给定组件本身的数据
               if (typeof scriptComp.updateData === 'function') {
-                scriptComp.updateData(true, offset)
+                scriptComp.updateData(scriptIsGlyph, offset)
               }
             } else {
               // 使用布局调整
               if (typeof scriptComp.updateData === 'function') {
-                scriptComp.updateData(true, offset, grid)
+                scriptComp.updateData(scriptIsGlyph, offset, grid)
               }
             }
           }
@@ -446,11 +453,11 @@ export class ContourConverter {
           if (!scriptComp.contour || !scriptComp.contour.length || forceUpdate) {
             if (!grid || useSkeletonGrid) {
               if (typeof scriptComp.updateData === 'function') {
-                scriptComp.updateData(true, offset)
+                scriptComp.updateData(scriptIsGlyph, offset)
               }
             } else {
               if (typeof scriptComp.updateData === 'function') {
-                scriptComp.updateData(true, offset, grid)
+                scriptComp.updateData(scriptIsGlyph, offset, grid)
               }
             }
           }
@@ -474,11 +481,11 @@ export class ContourConverter {
           if (!scriptComp.contour || !scriptComp.contour.length || forceUpdate) {
             if (!grid || useSkeletonGrid) {
               if (typeof scriptComp.updateData === 'function') {
-                scriptComp.updateData(true, offset)
+                scriptComp.updateData(scriptIsGlyph, offset)
               }
             } else {
               if (typeof scriptComp.updateData === 'function') {
-                scriptComp.updateData(true, offset, grid)
+                scriptComp.updateData(scriptIsGlyph, offset, grid)
               }
             }
           }
@@ -502,11 +509,11 @@ export class ContourConverter {
           if (!scriptComp.contour || !scriptComp.contour.length || forceUpdate) {
             if (!grid || useSkeletonGrid) {
               if (typeof scriptComp.updateData === 'function') {
-                scriptComp.updateData(true, offset)
+                scriptComp.updateData(scriptIsGlyph, offset)
               }
             } else {
               if (typeof scriptComp.updateData === 'function') {
-                scriptComp.updateData(true, offset, grid)
+                scriptComp.updateData(scriptIsGlyph, offset, grid)
               }
             }
           }
@@ -525,367 +532,98 @@ export class ContourConverter {
         }
 
         case 'glyph': {
-          // 字形组件需要执行脚本生成子组件，然后递归处理
           const glyphValue = value as ICustomGlyph
           const glyphComponent = component as IGlyphComponent
-          
-          // 调试：检查字形组件的参数
-          if (import.meta.env.DEV) {
-            console.log(`[ContourConverter] Processing glyph component ${component.uuid}:`, {
-              glyphUUID: glyphValue.uuid,
-              glyphName: glyphValue.name,
-              hasParameters: !!glyphValue.parameters,
-              parametersCount: glyphValue.parameters?.length || 0,
-              parameters: glyphValue.parameters?.map((p: any) => ({ name: p.name, value: p.value })) || [],
-              scriptReference: glyphValue.script_reference,
-            })
+          const ox = glyphComponent.ox ?? 0
+          const oy = glyphComponent.oy ?? 0
+          const childOffset = { x: offset.x + ox, y: offset.y + oy }
+          const instanceKey = component.uuid
+
+          const releaseIfTemporary = () => {
+            try {
+              if (instanceManager.isTemporary(instanceKey)) {
+                instanceManager.releaseTemporaryInstance(instanceKey)
+              }
+            } catch {
+              /* ignore */
+            }
           }
-          
-          // 注意：如果 preview=true，轮廓坐标已经是缩放后的，所以 ox 和 oy 也需要缩放
-          const previewScale = preview ? 100 / options.unitsPerEm : 1
-          const ox = (glyphComponent.ox || 0) * previewScale
-          const oy = (glyphComponent.oy || 0) * previewScale
-          const instanceKeyForRelease = component.uuid
 
           try {
-            // 执行脚本生成子组件（捕获错误，避免中断整个转换过程）
-            // 使用 component.uuid 作为实例key，确保每个组件有独立的 glyph 实例
-            // 这样即使多个组件引用同一个 glyph 模板，它们也会有独立的参数
-            let scriptExecuted = false
             try {
-              executeGlyphScript(glyphValue, component.uuid)
-              scriptExecuted = true
+              executeGlyphScript(glyphValue, instanceKey)
             } catch (scriptError) {
               console.error(`Error executing glyph script for ${component.uuid}:`, scriptError)
-              // 脚本执行失败，继续尝试使用数据中的组件
-              scriptExecuted = false
             }
-            
-            // 获取字形实例（脚本执行后实例应该还在，因为 ScriptExecutor 不会立即释放）
-            // 使用 component.uuid 作为实例key，确保每个组件有独立的实例
-            const instanceKey = component.uuid
-            let glyphInstance: any = null
-            let wasInstanceCreatedHere = false
-            
-            // 从实例池获取（脚本执行后实例应该在池中）
-            if (scriptExecuted) {
-              // 检查实例池中是否已有实例（脚本执行时创建的）
-              const hadInstanceBefore = instanceManager.isTemporary(instanceKey)
-              // 尝试从实例池获取（acquireTemporaryInstance 会返回已存在的实例）
-              glyphInstance = instanceManager.acquireTemporaryInstance(
-                instanceKey,
-                () => new CustomGlyph(glyphValue),
-                'glyph'
-              )
-              // 如果实例池中原本没有实例，说明是新创建的
-              wasInstanceCreatedHere = !hadInstanceBefore
-            }
-            
-            // 检查实例是否有脚本生成的组件
-            const _componentsCount = (glyphInstance as any)?._components?.length || 0
-            const componentsCount = (glyphInstance as any)?.components?.length || 0
-            const hasScriptComponents = glyphInstance && scriptExecuted &&
-              (_componentsCount > 0 || componentsCount > 0)
-            
-            console.log(`Checking glyph ${component.uuid}: scriptExecuted=${scriptExecuted}, hasInstance=${!!glyphInstance}, _components=${_componentsCount}, components=${componentsCount}, hasScriptComponents=${hasScriptComponents}`)
-            
-            if (hasScriptComponents) {
-              // 有脚本生成的组件，使用脚本组件
-              // 获取脚本生成的组件（从字形实例中获取）
-              const glyphComponents = (glyphInstance as any).components || []
-              
-              console.log(`Processing ${glyphComponents.length} script components for glyph ${component.uuid}`)
-              
-              if (glyphComponents.length > 0) {
-                // 有脚本生成的组件，处理这些组件
-                for (let i = 0; i < glyphComponents.length; i++) {
-                  const scriptComp = glyphComponents[i]
-                  // 详细检查组件的数据结构
-                  console.log(`Component ${i}: type=${scriptComp.type}, hasContour=${!!scriptComp.contour}, hasPreview=${!!scriptComp.preview}`)
-                  console.log(`  Full component data:`, {
-                    type: scriptComp.type,
-                    points: scriptComp.points?.length || 0,
-                    preview: scriptComp.preview?.length || 0,
-                    contour: scriptComp.contour?.length || 0,
-                    hasPathBegan: scriptComp.hasPathBegan,
-                    // 检查其他可能的属性
-                    x: scriptComp.x,
-                    y: scriptComp.y,
-                    width: scriptComp.width,
-                    height: scriptComp.height,
-                    centerX: scriptComp.centerX,
-                    centerY: scriptComp.centerY,
-                    radiusX: scriptComp.radiusX,
-                    radiusY: scriptComp.radiusY,
-                  })
-                  
-                  // 检查是否是脚本生成的组件（PenComponent, PolygonComponent 等）
-                  if (scriptComp.type && scriptComp.type.startsWith('glyph-')) {
-                    // 检查组件是否有 points 数据
-                    const hasPoints = scriptComp.points && Array.isArray(scriptComp.points) && scriptComp.points.length >= 4
-                    const hasPreview = scriptComp.preview && Array.isArray(scriptComp.preview) && scriptComp.preview.length > 0
-                    const hasContour = scriptComp.contour && Array.isArray(scriptComp.contour) && scriptComp.contour.length > 0
-                    
-                    console.log(`  Component ${i}: points=${scriptComp.points?.length || 0}, preview=${scriptComp.preview?.length || 0}, contour=${scriptComp.contour?.length || 0}`)
-                    
-                    // 如果组件没有 preview 或 contour，但有点数据，尝试调用 updateData 生成
-                    if (hasPoints && !hasPreview && !hasContour) {
-                      if (typeof scriptComp.updateData === 'function') {
-                        console.log(`  Calling updateData for component ${i} with ${scriptComp.points.length} points`)
-                        try {
-                          scriptComp.updateData(true, { x: 0, y: 0 })
-                          console.log(`  After updateData: preview=${scriptComp.preview?.length || 0}, contour=${scriptComp.contour?.length || 0}`)
-                        } catch (error) {
-                          console.error(`  Error calling updateData for component ${i}:`, error)
-                        }
-                      } else {
-                        console.warn(`  Component ${i} has no updateData method`)
-                      }
-                    } else if (!hasPoints) {
-                      // 如果没有 points，检查组件是否有其他数据可以用来生成轮廓
-                      // 例如：RectangleComponent 有 x, y, width, height
-                      // EllipseComponent 有 centerX, centerY, radiusX, radiusY
-                      if (scriptComp.type === 'glyph-rectangle' && 
-                          scriptComp.x !== undefined && scriptComp.y !== undefined &&
-                          scriptComp.width !== undefined && scriptComp.height !== undefined) {
-                        // RectangleComponent 有数据，尝试调用 updateData
-                        if (typeof scriptComp.updateData === 'function') {
-                          console.log(`  Calling updateData for rectangle component ${i}`)
-                          try {
-                            scriptComp.updateData(true, { x: 0, y: 0 })
-                            console.log(`  After updateData: preview=${scriptComp.preview?.length || 0}, contour=${scriptComp.contour?.length || 0}`)
-                          } catch (error) {
-                            console.error(`  Error calling updateData for component ${i}:`, error)
-                          }
-                        }
-                      } else if (scriptComp.type === 'glyph-ellipse' &&
-                                 scriptComp.centerX !== undefined && scriptComp.centerY !== undefined &&
-                                 scriptComp.radiusX !== undefined && scriptComp.radiusY !== undefined) {
-                        // EllipseComponent 有数据，尝试调用 updateData
-                        if (typeof scriptComp.updateData === 'function') {
-                          console.log(`  Calling updateData for ellipse component ${i}`)
-                          try {
-                            scriptComp.updateData(true, { x: 0, y: 0 })
-                            console.log(`  After updateData: preview=${scriptComp.preview?.length || 0}, contour=${scriptComp.contour?.length || 0}`)
-                          } catch (error) {
-                            console.error(`  Error calling updateData for component ${i}:`, error)
-                          }
-                        }
-                      } else {
-                        console.warn(`  Component ${i} (type: ${scriptComp.type}) has insufficient data, cannot generate contour`)
-                      }
-                    }
-                    
-                    // 脚本组件已经有轮廓数据（在脚本执行时计算）
-                    if (scriptComp.contour || scriptComp.preview) {
-                      const scriptContour = preview ? scriptComp.preview : scriptComp.contour
-                      console.log(`  Using ${preview ? 'preview' : 'contour'}, segments: ${scriptContour?.length || 0}`)
-                      if (scriptContour && Array.isArray(scriptContour) && scriptContour.length > 0) {
-                        // 转换脚本组件的轮廓格式并应用偏移
-                        const convertedContour: IContour = scriptContour.map((seg: any) => {
-                          if (seg.type === PathType.LINE || seg.type === 'line' || seg.type === 'LINE') {
-                            return {
-                              type: PathType.LINE,
-                              start: { x: seg.start.x + ox, y: seg.start.y + oy },
-                              end: { x: seg.end.x + ox, y: seg.end.y + oy },
-                            }
-                          } else if (seg.type === PathType.QUADRATIC_BEZIER || seg.type === 'quadratic' || seg.type === 'QUADRATIC_BEZIER') {
-                            return {
-                              type: PathType.QUADRATIC_BEZIER,
-                              start: { x: seg.start.x + ox, y: seg.start.y + oy },
-                              end: { x: seg.end.x + ox, y: seg.end.y + oy },
-                              control: { x: seg.control.x + ox, y: seg.control.y + oy },
-                            }
-                          } else if (seg.type === PathType.CUBIC_BEZIER || seg.type === 'cubic' || seg.type === 'CUBIC_BEZIER') {
-                            return {
-                              type: PathType.CUBIC_BEZIER,
-                              start: { x: seg.start.x + ox, y: seg.start.y + oy },
-                              end: { x: seg.end.x + ox, y: seg.end.y + oy },
-                              control1: { x: seg.control1.x + ox, y: seg.control1.y + oy },
-                              control2: { x: seg.control2.x + ox, y: seg.control2.y + oy },
-                            }
-                          }
-                          return null
-                        }).filter((c): c is IContour[number] => c !== null)
-                        console.log(`  Converted ${convertedContour.length} segments`)
-                        if (convertedContour.length > 0) {
-                          contours.push(convertedContour)
-                          const isSolid = scriptComp.type === 'glyph-rectangle' || scriptComp.type === 'glyph-ellipse'
-                          solidFlagsOut?.push(isSolid)
-                        }
-                      } else {
-                        console.warn(`  Script contour is empty or invalid`)
-                      }
-                    } else {
-                      console.warn(`  Component has no contour or preview`)
-                    }
-                  } else {
-                    // 非 glyph-*：可能是骨架绑定后落在字形里的普通 pen/polygon 等（无脚本时不会像模板那样生成 glyph-pen）
-                    console.log(`  Not a script component (type: ${scriptComp.type}), checking if it's a glyph component`)
-                    if (scriptComp.type === 'glyph' && scriptComp.value) {
-                      const subGlyphValue = scriptComp.value as ICustomGlyph
-                      const subSolidFlags: boolean[] | undefined = solidFlagsOut ? [] : undefined
-                      const subContours = this.componentsToContours(
-                        subGlyphValue.components || [],
-                        options,
-                        { x: offset.x + ox + (scriptComp.ox || 0), y: offset.y + oy + (scriptComp.oy || 0) },
-                        subSolidFlags
-                      )
-                      contours.push(...subContours)
-                      if (subSolidFlags) solidFlagsOut!.push(...subSolidFlags)
-                    } else if (
-                      scriptComp.type === 'pen' ||
-                      scriptComp.type === 'polygon' ||
-                      scriptComp.type === 'rectangle' ||
-                      scriptComp.type === 'ellipse'
-                    ) {
-                      const subSolidFlags: boolean[] | undefined = solidFlagsOut ? [] : undefined
-                      const subContours = this.componentsToContours(
-                        [scriptComp as IComponent],
-                        options,
-                        { x: offset.x + ox, y: offset.y + oy },
-                        subSolidFlags
-                      )
-                      contours.push(...subContours)
-                      if (subSolidFlags) solidFlagsOut!.push(...subSolidFlags)
-                    }
-                  }
-                }
+
+            const glyphInstance = instanceManager.acquireTemporaryInstance(
+              instanceKey,
+              () => new CustomGlyph(glyphValue),
+              'glyph'
+            ) as CustomGlyph | null
+
+            const subSolidFlags: boolean[] | undefined = solidFlagsOut ? [] : undefined
+            const childOptions = { ...options, forceUpdate: true }
+
+            const useSkeleton =
+              useSkeletonGrid &&
+              grid &&
+              glyphInstance &&
+              typeof glyphInstance.getSkeleton === 'function' &&
+              typeof glyphInstance.getComponentsBySkeleton === 'function'
+
+            if (useSkeleton) {
+              const _skeleton = glyphInstance!.getSkeleton!()
+              const skeleton: Record<string, { x: number; y: number }> = {}
+              for (const sk of Object.keys(_skeleton)) {
+                const _joint = _skeleton[sk]
+                const j = { x: _joint.x + childOffset.x, y: _joint.y + childOffset.y }
+                skeleton[sk] = computeCoords(grid, j)
               }
-              
-              console.log(`Generated ${contours.length} contours from script components for glyph ${component.uuid}`)
-              
-              // 用完后立即释放，避免递归时实例数超过池容量导致 LRU 误删仍在用的父级实例
-              if (glyphInstance && instanceManager.isTemporary(instanceKey)) {
-                instanceManager.releaseTemporaryInstance(instanceKey)
-              }
-              break
-            } else {
-              // 没有脚本组件或脚本执行失败，使用数据中的组件
-              if (glyphValue.components && glyphValue.components.length > 0) {
-                console.log(`Using fallback components for glyph ${component.uuid}, count: ${glyphValue.components.length}`)
-                const subSolidFlags1: boolean[] | undefined = solidFlagsOut ? [] : undefined
-                const subContours = this.componentsToContours(
-                  glyphValue.components,
-                  options,
-                  { x: offset.x + ox, y: offset.y + oy },
-                  subSolidFlags1
-                )
-                contours.push(...subContours)
-                if (subSolidFlags1) solidFlagsOut!.push(...subSolidFlags1)
-              } else {
-                console.warn(`No components available for glyph ${component.uuid} (scriptExecuted: ${scriptExecuted}, hasInstance: ${!!glyphInstance})`)
-              }
-              if (glyphInstance && instanceManager.isTemporary(instanceKey)) {
-                instanceManager.releaseTemporaryInstance(instanceKey)
-              }
-              break
-            }
-            
-            // 获取脚本生成的组件（从字形实例中获取）
-            // 注意：字形实例的 _components 是脚本执行时通过 addComponent 添加的组件
-            // 而 glyphValue.components 是字形数据中存储的组件
-            // 脚本执行后，应该使用 glyphInstance.components（包含两者）
-            // CustomGlyph 的 components getter 会合并 orderedList 中的组件和 _components
-            const glyphComponents = (glyphInstance as any).components || []
-            
-            if (glyphComponents.length > 0) {
-              // 有脚本生成的组件，处理这些组件
-              for (const scriptComp of glyphComponents) {
-                // 检查是否是脚本生成的组件（PenComponent, PolygonComponent 等）
-                if (scriptComp.type && scriptComp.type.startsWith('glyph-')) {
-                  // 脚本组件已经有轮廓数据（在脚本执行时计算）
-                  if (scriptComp.contour || scriptComp.preview) {
-                    const scriptContour = preview ? scriptComp.preview : scriptComp.contour
-                    if (scriptContour && Array.isArray(scriptContour) && scriptContour.length > 0) {
-                      // 转换脚本组件的轮廓格式并应用偏移
-                      const convertedContour: IContour = scriptContour.map((seg: any) => {
-                        if (seg.type === PathType.LINE || seg.type === 'line' || seg.type === 'LINE') {
-                          return {
-                            type: PathType.LINE,
-                            start: { x: seg.start.x + ox, y: seg.start.y + oy },
-                            end: { x: seg.end.x + ox, y: seg.end.y + oy },
-                          }
-                        } else if (seg.type === PathType.QUADRATIC_BEZIER || seg.type === 'quadratic' || seg.type === 'QUADRATIC_BEZIER') {
-                          return {
-                            type: PathType.QUADRATIC_BEZIER,
-                            start: { x: seg.start.x + ox, y: seg.start.y + oy },
-                            end: { x: seg.end.x + ox, y: seg.end.y + oy },
-                            control: { x: seg.control.x + ox, y: seg.control.y + oy },
-                          }
-                        } else if (seg.type === PathType.CUBIC_BEZIER || seg.type === 'cubic' || seg.type === 'CUBIC_BEZIER') {
-                          return {
-                            type: PathType.CUBIC_BEZIER,
-                            start: { x: seg.start.x + ox, y: seg.start.y + oy },
-                            end: { x: seg.end.x + ox, y: seg.end.y + oy },
-                            control1: { x: seg.control1.x + ox, y: seg.control1.y + oy },
-                            control2: { x: seg.control2.x + ox, y: seg.control2.y + oy },
-                          }
-                        }
-                        return null
-                      }).filter((c): c is IContour[number] => c !== null)
-                      if (convertedContour.length > 0) {
-                        contours.push(convertedContour)
-                      }
-                    }
-                  }
-                } else if (scriptComp.type === 'glyph') {
-                  // 如果是字形组件，递归处理
-                  const subContours = this.componentsToContours(
-                    [scriptComp],
-                    options,
-                    { x: offset.x + ox, y: offset.y + oy }
-                  )
-                  contours.push(...subContours)
-                } else {
-                  // 其他类型的组件，尝试作为普通组件处理
-                  const subContours = this.componentsToContours(
-                    [scriptComp as IComponent],
-                    options,
-                    { x: offset.x + ox, y: offset.y + oy }
-                  )
-                  contours.push(...subContours)
-                }
-              }
-            } else {
-              // 没有脚本生成的组件，使用数据中的组件
-              const dataComponents = glyphValue.components || []
-              if (dataComponents.length > 0) {
-                const subContours = this.componentsToContours(
-                  dataComponents,
-                  options,
-                  { x: offset.x + ox, y: offset.y + oy }
-                )
-                contours.push(...subContours)
-              }
-            }
-            
-            // 用完后立即释放，避免递归深度大时实例数超过池容量导致 LRU 误删仍在用的实例
-            if (glyphInstance && instanceManager.isTemporary(instanceKey)) {
-              instanceManager.releaseTemporaryInstance(instanceKey)
-            }
-          } catch (error) {
-            console.error(`Error processing glyph component ${component.uuid}:`, error)
-            try {
-              if (instanceManager.isTemporary(instanceKeyForRelease)) {
-                instanceManager.releaseTemporaryInstance(instanceKeyForRelease)
-              }
-            } catch (_) { /* ignore */ }
-            // 如果脚本执行失败，尝试使用已有的组件数据
-            if (glyphValue.components && glyphValue.components.length > 0) {
-              const subSolidFlags2: boolean[] | undefined = solidFlagsOut ? [] : undefined
+              const components1 = glyphInstance!.getComponentsBySkeleton!(skeleton)
+              const components2 = orderedListWithItemsForGlyph(glyphValue)
+              const merged = components1.concat(components2 as IComponent[])
               const subContours = this.componentsToContours(
-                glyphValue.components,
-                options,
-                { x: offset.x + ox, y: offset.y + oy },
-                subSolidFlags2
+                merged,
+                childOptions,
+                { x: 0, y: 0 },
+                subSolidFlags
               )
               contours.push(...subContours)
-              if (subSolidFlags2) solidFlagsOut!.push(...subSolidFlags2)
+              if (subSolidFlags && solidFlagsOut) solidFlagsOut.push(...subSolidFlags)
+            } else {
+              const childList = (glyphInstance?.components ?? []) as IComponent[]
+              if (childList.length > 0) {
+                const subContours = this.componentsToContours(
+                  childList,
+                  childOptions,
+                  childOffset,
+                  subSolidFlags
+                )
+                contours.push(...subContours)
+                if (subSolidFlags && solidFlagsOut) solidFlagsOut.push(...subSolidFlags)
+              }
+            }
+
+            releaseIfTemporary()
+          } catch (error) {
+            console.error(`Error processing glyph component ${component.uuid}:`, error)
+            releaseIfTemporary()
+            if (glyphValue.components && glyphValue.components.length > 0) {
+              const fb: boolean[] | undefined = solidFlagsOut ? [] : undefined
+              const subContours = this.componentsToContours(
+                glyphValue.components,
+                { ...options, forceUpdate: true },
+                childOffset,
+                fb
+              )
+              contours.push(...subContours)
+              if (fb && solidFlagsOut) solidFlagsOut.push(...fb)
             }
           }
           break
         }
+
 
         default: {
           // 未知类型的组件，返回空轮廓
