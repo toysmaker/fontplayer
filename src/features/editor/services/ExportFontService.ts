@@ -63,7 +63,7 @@ function applyRemoveOverlap(contours: IContours): IContours {
   }
 }
 
-function contoursForCharacterFile(
+export function contoursForCharacterFile(
   char: ICharacterFileLite,
   file: IFile,
   fs: IFontSettings,
@@ -92,7 +92,8 @@ function contoursForCharacterFile(
   return contours
 }
 
-async function loadCharacterLiteForExport(
+/** 导出/可变字体：从 IDB 或当前编辑态加载字符 lite（供 ExportVarFontService 复用） */
+export async function loadCharacterLiteForExport(
   file: IFile,
   metaUuid: string,
   editingUUID: string,

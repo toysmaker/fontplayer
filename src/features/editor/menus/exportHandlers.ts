@@ -72,7 +72,16 @@ export function createExportHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
   }
 
   const handleExportVarFont = () => {
-    console.log('Export variable font')
+    const file = projectStore.selectedFile
+    if (!file) {
+      message.warning(t('dialogs.exportVarFontDialog.needProject'))
+      return
+    }
+    if (!file.constants?.length) {
+      message.warning(t('dialogs.exportVarFontDialog.needConstants'))
+      return
+    }
+    useDialogsStore().openExportVarFontDialog()
   }
 
   const handleExportColorFont = () => {

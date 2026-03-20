@@ -80,6 +80,7 @@
     <PreferenceSettingsDialog v-model:show="showPreferenceSettingsDialog" />
     <LanguageSettingsDialog v-model:show="showLanguageSettingsDialog" />
     <ExportFontDialog />
+    <ExportVarFontDialog />
   </div>
 </template>
 
@@ -108,6 +109,7 @@ import FontSettingsMoreDialog from '@/ui/dialogs/FontSettingsMoreDialog.vue'
 import PreferenceSettingsDialog from '@/ui/dialogs/PreferenceSettingsDialog.vue'
 import LanguageSettingsDialog from '@/ui/dialogs/LanguageSettingsDialog.vue'
 import ExportFontDialog from '@/ui/dialogs/ExportFontDialog.vue'
+import ExportVarFontDialog from '@/ui/dialogs/ExportVarFontDialog.vue'
 import { exportFontLibraryNativeDefaults } from '@/features/editor/services/ExportFontService'
 import { getWebMenu, traverse_web_menu } from '@/features/editor/menus/web_menus'
 import { templateHandlers } from '@/features/editor/menus/templatesHandlers'
@@ -176,7 +178,7 @@ const handlerContext: MenuHandlerContext = {
 }
 
 const web_handlers = createMenuHandlers(handlerContext)
-const web_disabled = createDisabledRules({ editorStore })
+const web_disabled = createDisabledRules({ editorStore, projectStore })
 
 // 获取菜单列表（带禁用状态）
 const menuList = computed(() => {
@@ -293,6 +295,19 @@ const handleExportFontNative = async () => {
   })
 }
 
+const handleExportVarFontNative = () => {
+  const file = projectStore.selectedFile
+  if (!file) {
+    message.warning(t('dialogs.exportVarFontDialog.needProject'))
+    return
+  }
+  if (!file.constants?.length) {
+    message.warning(t('dialogs.exportVarFontDialog.needConstants'))
+    return
+  }
+  dialogsStore.openExportVarFontDialog()
+}
+
 const handleImportFontNative = async () => {
   await web_handlers['import-font-file']?.()
 }
@@ -352,6 +367,7 @@ onMounted(() => {
   window.addEventListener('editor-import-glyphs', () => web_handlers['import-glyphs']?.())
   window.addEventListener('editor-export-glyphs', () => web_handlers['export-glyphs']?.())
   window.addEventListener('editor-export-font-native', handleExportFontNative)
+  window.addEventListener('editor-export-var-font-native', handleExportVarFontNative)
   window.addEventListener('editor-import-font-native', handleImportFontNative)
   window.addEventListener('editor-remove-overlap', handleEditorRemoveOverlap)
   window.addEventListener('editor-font-settings', () => { showFontSettingsDialog.value = true })
@@ -391,6 +407,7 @@ onUnmounted(() => {
   window.removeEventListener('editor-import-glyphs', () => {})
   window.removeEventListener('editor-export-glyphs', () => {})
   window.removeEventListener('editor-export-font-native', handleExportFontNative)
+  window.removeEventListener('editor-export-var-font-native', handleExportVarFontNative)
   window.removeEventListener('editor-import-font-native', handleImportFontNative)
   window.removeEventListener('editor-remove-overlap', handleEditorRemoveOverlap)
   window.removeEventListener('editor-font-settings', () => {})

@@ -94,6 +94,10 @@ export async function initTauriMenu() {
     listen('import-font-file', () => {
       window.dispatchEvent(new CustomEvent('editor-import-font-native'))
     })
+
+    listen('export-var-font-file', () => {
+      window.dispatchEvent(new CustomEvent('editor-export-var-font-native'))
+    })
     
     listen('export-svg', () => {
       console.log('File -> Export SVG')

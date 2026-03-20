@@ -937,8 +937,8 @@ const addAxisNamesToTable = (
 	for (const axis of axes) {
 		const axisTag = axis.tag || axis.axisTag || 'unkn'
 		
-		// 如果没有提供 name，使用轴标签作为默认名称
-		let axisName = axis.name
+		// 展示名：优先 name（导出 UI），兼容 axisName；写入 name 表 → fvar.axisNameID
+		let axisName = axis.name || axis.axisName
 		if (!axisName || axisName.trim() === '') {
 			// 根据常见轴标签提供默认英文名称
 			const defaultNames: { [key: string]: string } = {

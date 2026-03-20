@@ -30,10 +30,18 @@ export function createMenuHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
  * 统一的菜单启用/禁用规则。
  * 返回 true 表示菜单在当前状态下“可用”（不禁用）。
  */
-export function createDisabledRules(ctx: { editorStore: MenuHandlerContext['editorStore'] }): MenuDisabledRuleMap {
-  const { editorStore } = ctx
+export function createDisabledRules(ctx: {
+  editorStore: MenuHandlerContext['editorStore']
+  projectStore: MenuHandlerContext['projectStore']
+}): MenuDisabledRuleMap {
+  const { editorStore, projectStore } = ctx
 
   const enable = () => true
+
+  const enableWithConstants = () => {
+    const n = projectStore.selectedFile?.constants?.length ?? 0
+    return n > 0
+  }
 
   const enableAtEdit = () => {
     return editorStore.editStatus === EditStatus.Edit || editorStore.editStatus === EditStatus.Glyph
@@ -96,7 +104,7 @@ export function createDisabledRules(ctx: { editorStore: MenuHandlerContext['edit
 
     // export
     'export-font-file': enable,
-    'export-var-font-file': enable,
+    'export-var-font-file': enableWithConstants,
     'export-color-font': enable,
     'export-glyphs': enableAtGlyphListOnly,
     'export-jpeg': enableAtEdit,

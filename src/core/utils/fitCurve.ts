@@ -8,8 +8,23 @@
 import { bezierCurve } from "./bezierCurve"
 import paper from 'paper'
 
-// 简化的全局状态
+// 简化的全局状态（可变字体导出等场景需与 Pinia 解耦，用模块级开关）
 const useFixedCurves = { value: false }
+
+/** 供可变字体导出等流程切换固定曲线拟合（与原版 useFixedCurves 行为对齐） */
+export function setFixedCurvesExportMode(on: boolean): void {
+	useFixedCurves.value = on
+}
+
+export async function runWithFixedCurves<T>(fn: () => Promise<T>): Promise<T> {
+	const prev = useFixedCurves.value
+	useFixedCurves.value = true
+	try {
+		return await fn()
+	} finally {
+		useFixedCurves.value = prev
+	}
+}
 
 export interface IPoint {
 	x: number;
