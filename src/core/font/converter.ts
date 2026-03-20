@@ -720,7 +720,7 @@ export class ContourConverter {
                       console.warn(`  Component has no contour or preview`)
                     }
                   } else {
-                    // 不是脚本组件，可能是子字形组件，递归处理
+                    // 非 glyph-*：可能是骨架绑定后落在字形里的普通 pen/polygon 等（无脚本时不会像模板那样生成 glyph-pen）
                     console.log(`  Not a script component (type: ${scriptComp.type}), checking if it's a glyph component`)
                     if (scriptComp.type === 'glyph' && scriptComp.value) {
                       const subGlyphValue = scriptComp.value as ICustomGlyph
@@ -729,6 +729,21 @@ export class ContourConverter {
                         subGlyphValue.components || [],
                         options,
                         { x: offset.x + ox + (scriptComp.ox || 0), y: offset.y + oy + (scriptComp.oy || 0) },
+                        subSolidFlags
+                      )
+                      contours.push(...subContours)
+                      if (subSolidFlags) solidFlagsOut!.push(...subSolidFlags)
+                    } else if (
+                      scriptComp.type === 'pen' ||
+                      scriptComp.type === 'polygon' ||
+                      scriptComp.type === 'rectangle' ||
+                      scriptComp.type === 'ellipse'
+                    ) {
+                      const subSolidFlags: boolean[] | undefined = solidFlagsOut ? [] : undefined
+                      const subContours = this.componentsToContours(
+                        [scriptComp as IComponent],
+                        options,
+                        { x: offset.x + ox, y: offset.y + oy },
                         subSolidFlags
                       )
                       contours.push(...subContours)
