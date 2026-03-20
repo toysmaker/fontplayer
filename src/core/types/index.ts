@@ -439,6 +439,8 @@ export interface IFile {
   radical_glyphs?: Array<ICustomGlyph>
   comp_glyphs?: Array<ICustomGlyph>
   constants?: Array<IConstant>
+  /** 常量与字形 uuid 的映射（工程保存与字形交换 JSON 共用） */
+  constantGlyphMap?: Record<string, string>
   variants?: any
 }
 

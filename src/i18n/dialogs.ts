@@ -169,6 +169,22 @@ const dialogs = {
 			confirm: '确定',
 			paramName: '参数名称',
 		},
+		glyphImportExport: {
+			exportBlockedTitle: '提示',
+			exportBlockedBody: '字符列表不能导出字形，只有在笔画、部首、部件、字形列表可以导出相应类型的字形。',
+			exportBlockedConfirm: '确定',
+			importBlockedTitle: '提示',
+			importBlockedBody: '字符列表不能导入字形，只有在笔画、部首、部件、字形列表可以导入相应类型的字形。',
+			importBlockedConfirm: '确定',
+			duplicateTitle: '提示',
+			duplicateBody: '导入字形时发现有与当前字形相同uuid的重复字形，自动忽略重复字形。',
+			duplicateConfirm: '确定',
+			exportSuccess: '导出字形成功',
+			importSuccess: '导入字形成功',
+			importInvalid: '无效的字形 JSON 文件',
+			exportFailed: '导出字形失败',
+			needProject: '请先打开工程',
+		},
 	},
 	en: {
 		tipsDialog: {
@@ -339,6 +355,25 @@ const dialogs = {
 			cancel: 'Cancel',
 			confirm: 'Confirm',
 			paramName: 'Parameter Name',
+		},
+		glyphImportExport: {
+			exportBlockedTitle: 'Note',
+			exportBlockedBody:
+				'The character list cannot be exported. Only Stroke, Radical, Glyph, and Component lists support exporting their corresponding glyph types.',
+			exportBlockedConfirm: 'Confirm',
+			importBlockedTitle: 'Note',
+			importBlockedBody:
+				'The character list cannot import glyphs. Only Stroke, Radical, Glyph, and Component lists support importing glyphs into their corresponding lists.',
+			importBlockedConfirm: 'Confirm',
+			duplicateTitle: 'Note',
+			duplicateBody:
+				'Duplicate glyphs with the same UUID as existing ones were detected during import and have been automatically ignored.',
+			duplicateConfirm: 'Confirm',
+			exportSuccess: 'Glyphs exported successfully',
+			importSuccess: 'Glyphs imported successfully',
+			importInvalid: 'Invalid glyphs JSON file',
+			exportFailed: 'Failed to export glyphs',
+			needProject: 'Please open a project first',
 		},
 	}
 }

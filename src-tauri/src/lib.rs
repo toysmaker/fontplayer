@@ -465,6 +465,14 @@ fn enable_at_list(edit_status: &str) -> bool {
     !matches!(edit_status, "edit" | "glyph" | "pic")
 }
 
+/// 与前端 export-glyphs 一致：仅字形类列表，不含字符列表
+fn enable_at_glyph_list_only(edit_status: &str) -> bool {
+    matches!(
+        edit_status,
+        "glyphlist" | "strokeglyphlist" | "radicalglyphlist" | "compglyphlist"
+    )
+}
+
 fn template_enable(edit_status: &str) -> bool {
     !matches!(edit_status, "edit" | "glyph" | "pic")
 }
@@ -488,7 +496,7 @@ fn build_menu_enabled_map() -> HashMap<String, Box<dyn Fn(&str) -> bool>> {
     map.insert("import-pic".to_string(), Box::new(enable_at_edit));
     map.insert("import-svg".to_string(), Box::new(enable_at_edit));
     map.insert("export-font-file".to_string(), Box::new(enable));
-    map.insert("export-glyphs".to_string(), Box::new(enable_at_list));
+    map.insert("export-glyphs".to_string(), Box::new(enable_at_glyph_list_only));
     map.insert("export-jpeg".to_string(), Box::new(enable_at_edit));
     map.insert("export-png".to_string(), Box::new(enable_at_edit));
     map.insert("export-svg".to_string(), Box::new(enable_at_edit));

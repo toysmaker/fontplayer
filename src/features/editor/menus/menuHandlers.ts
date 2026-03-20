@@ -53,6 +53,16 @@ export function createDisabledRules(ctx: { editorStore: MenuHandlerContext['edit
     )
   }
 
+  /** 仅字形类列表（导出字形）；排除字符列表 */
+  const enableAtGlyphListOnly = () => {
+    return (
+      editorStore.editStatus === EditStatus.GlyphList ||
+      editorStore.editStatus === EditStatus.StrokeGlyphList ||
+      editorStore.editStatus === EditStatus.RadicalGlyphList ||
+      editorStore.editStatus === EditStatus.CompGlyphList
+    )
+  }
+
   const templateEnable = () => {
     return (
       editorStore.editStatus !== EditStatus.Edit &&
@@ -88,7 +98,7 @@ export function createDisabledRules(ctx: { editorStore: MenuHandlerContext['edit
     'export-font-file': enable,
     'export-var-font-file': enable,
     'export-color-font': enable,
-    'export-glyphs': enableAtList,
+    'export-glyphs': enableAtGlyphListOnly,
     'export-jpeg': enableAtEdit,
     'export-png': enableAtEdit,
     'export-svg': enableAtEdit,

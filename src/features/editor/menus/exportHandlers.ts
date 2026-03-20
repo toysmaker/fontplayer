@@ -1,7 +1,66 @@
 import type { MenuHandlerContext, MenuHandlersMap } from './menuHandlerTypes'
+import { EditStatus } from '@/core/types'
+import { isTauri } from '@/utils/env'
+import { GlyphImportExportService } from '@/features/editor/services/GlyphImportExportService'
 
 export function createExportHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
-  const { projectStore, ImportExportSvgService, message } = ctx
+  const { projectStore, editorStore, message, dialog, t, ImportExportSvgService } = ctx
+
+  const handleExportGlyphs = async () => {
+    if (editorStore.editStatus === EditStatus.CharacterList) {
+      dialog.warning({
+        title: t('dialogs.glyphImportExport.exportBlockedTitle'),
+        content: t('dialogs.glyphImportExport.exportBlockedBody'),
+        positiveText: t('dialogs.glyphImportExport.exportBlockedConfirm'),
+      })
+      return
+    }
+
+    const file = projectStore.selectedFile
+    if (!file) {
+      message.warning(t('dialogs.glyphImportExport.needProject'))
+      return
+    }
+
+    const payload = GlyphImportExportService.buildExportPayload(file, editorStore.editStatus)
+    if (!payload) {
+      message.warning(t('dialogs.glyphImportExport.needProject'))
+      return
+    }
+
+    const info = GlyphImportExportService.getGlyphExportInfo(file, editorStore.editStatus)
+    const defaultFileName = info?.defaultFileName ?? 'glyphs.json'
+    const json = JSON.stringify(payload, null, 2)
+
+    try {
+      if (isTauri()) {
+        const { save } = await import('@tauri-apps/plugin-dialog')
+        const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+        const path = await save({
+          defaultPath: defaultFileName,
+          filters: [{ name: 'JSON', extensions: ['json'] }],
+        })
+        if (path == null) return
+        const filePath = typeof path === 'string' ? path : (path as { path: string }).path
+        if (!filePath) return
+        await writeTextFile(filePath, json)
+      } else {
+        const blob = new Blob([json], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = defaultFileName
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }
+      message.success(t('dialogs.glyphImportExport.exportSuccess'))
+    } catch (e) {
+      console.error('export glyphs failed', e)
+      message.error(t('dialogs.glyphImportExport.exportFailed'))
+    }
+  }
 
   const handleExportFont = () => {
     console.log('Export font')
@@ -15,17 +74,13 @@ export function createExportHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
     console.log('Export color font')
   }
 
-  const handleExportGlyphs = () => {
-    console.log('Export glyphs')
-  }
-
   const requireFile = () => {
-    const file = projectStore.selectedFile
-    if (!file) {
+    const f = projectStore.selectedFile
+    if (!f) {
       message.warning('请先打开工程')
       return null
     }
-    return file
+    return f
   }
 
   const handleExportJpeg = () => {
@@ -74,4 +129,3 @@ export function createExportHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
     'export-svg': handleExportSvg,
   }
 }
-

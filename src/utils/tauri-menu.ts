@@ -151,6 +151,14 @@ export async function initTauriMenu() {
       window.dispatchEvent(new CustomEvent('editor-add-icon'))
     })
 
+    listen('import-glyphs', () => {
+      window.dispatchEvent(new CustomEvent('editor-import-glyphs'))
+    })
+
+    listen('export-glyphs', () => {
+      window.dispatchEvent(new CustomEvent('editor-export-glyphs'))
+    })
+
     // 模板菜单事件：Rust 端 emit 的为 template-2, template-3 等，转发为 editor-template
     const templateKeys = ['template-2', 'template-3', 'template-5', 'template-6', 'template-7', 'template-8', 'template-digits', 'template-letters', 'template-symbols', 'template-test']
     for (const key of templateKeys) {
