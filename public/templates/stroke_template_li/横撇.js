@@ -104,7 +104,7 @@ const getJointsMap = (data) => {
 
 const getBend = (start, end) => {
   // 改变撇end的情况下，不会改变弯曲游标，所以依据现有参数计算新的bend
-  const { pie_bendCursor } = params
+  const pie_bendCursor = glyph.getParam('撇-弯曲游标')
   const verticalSpan = Math.abs(end.y - start.y)
 
   const bend = {

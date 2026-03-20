@@ -119,7 +119,8 @@ const getJointsMap = (data) => {
 const getBend = (start, end, name) => {
   // 改变撇end的情况下，不会改变弯曲度和弯曲游标，所以依据现有参数计算新的bend
   if (name === 'pie') {
-    let { pie_bendCursor: bendCursor, pie_bendDegree: bendDegree } = params
+    const bendCursor = glyph.getParam('撇-弯曲游标')
+    const bendDegree = glyph.getParam('撇-弯曲度') + 10 * glyph.getParam('弯曲程度')
     const horizontalSpan = Math.abs(end.x - start.x)
     const verticalSpan = Math.abs(end.y - start.y)
     const cursor_x = start.x - bendCursor * horizontalSpan
@@ -132,7 +133,8 @@ const getBend = (start, end, name) => {
     }
     return bend
   } else if (name === 'tiao') {
-    let { tiao_bendCursor: bendCursor, tiao_bendDegree: bendDegree } = params
+    const bendCursor = glyph.getParam('挑-弯曲游标')
+    const bendDegree = glyph.getParam('挑-弯曲度') + 10 * glyph.getParam('弯曲程度')
     const horizontalSpan = Math.abs(end.x - start.x)
     const verticalSpan = Math.abs(end.y - start.y)
     const cursor_x = start.x + bendCursor * horizontalSpan

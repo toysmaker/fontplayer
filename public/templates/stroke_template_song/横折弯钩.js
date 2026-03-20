@@ -224,7 +224,8 @@ const getJointsMap = (data) => {
 
 const getBend = (start, end) => {
   // 改变end的情况下，不会改变弯曲度和弯曲游标，所以依据现有参数计算新的bend
-  const { zhe_bendCursor: bendCursor, zhe_bendDegree: bendDegree } = params
+  const bendCursor = glyph.getParam('折-弯曲游标')
+  const bendDegree = glyph.getParam('折-弯曲度') + 30 * glyph.getParam('弯曲程度')
   const horizontalSpan = Math.abs(end.x - start.x)
   const verticalSpan = Math.abs(end.y - start.y)
   const cursor_x = start.x - bendCursor * horizontalSpan

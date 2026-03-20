@@ -162,8 +162,8 @@ const getJointsMap = (data) => {
 }
 
 const getBend = (start, end) => {
-  // 改变end的情况下，不会改变弯曲度和弯曲游标，所以依据现有参数计算新的bend
-  const { wangou_bendCursor: bendCursor, wangou_bendDegree: bendDegree } = params
+  const bendCursor = glyph.getParam('弯钩-弯曲游标')
+  const bendDegree = glyph.getParam('弯钩-弯曲度') + 30 * glyph.getParam('弯曲程度')
   const verticalSpan = end.y - start.y
   const wangou_cursor_x = start.x
   const wangou_cursor_y = start.y + bendCursor * verticalSpan

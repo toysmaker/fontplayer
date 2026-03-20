@@ -94,7 +94,7 @@ const getJointsMap = (data) => {
 
 const getBend = (start, end) => {
   // 改变end的情况下，不会改变弯曲度和弯曲游标，所以依据现有参数计算新的bend
-  const { wan_bendDegree: bendDegree } = params
+  const bendDegree = glyph.getParam('弯-弯曲度') + 30 * glyph.getParam('弯曲程度')
   const verticalSpan = Math.abs(end.y - start.y)
   const bend = {
     x: start.x + bendDegree,
