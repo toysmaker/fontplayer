@@ -9,6 +9,34 @@ import { instanceManager } from '../instance/InstanceManager'
 import { CustomGlyph } from '../instance/CustomGlyph'
 import { executeGlyphScript } from '../script/ScriptExecutor'
 
+/** 字形数据里已有 pen/polygon 等可算包围盒的组件时，不必为填 _components 而执行脚本 */
+function externalGlyphComponentsProvideDrawPoints(gv: ICustomGlyph): boolean {
+  const comps = gv.components
+  if (!comps || !Array.isArray(comps)) return false
+  for (const c of comps as any[]) {
+    if (!c || c.usedInCharacter === false) continue
+    if (c.type === 'pen') {
+      const pts = (c.value as any)?.points
+      if (pts && Array.isArray(pts) && pts.length > 0) return true
+    }
+    if (c.type === 'polygon') {
+      const pts = (c.value as any)?.points
+      if (pts && Array.isArray(pts) && pts.length > 0) return true
+    }
+    if (c.type === 'rectangle') {
+      const rv = c.value as any
+      const rw = rv?.width ?? c.w
+      const rh = rv?.height ?? c.h
+      if (rw && rh) return true
+    }
+    if (c.type === 'ellipse') {
+      const ev = c.value as any
+      if (ev?.radiusX && ev?.radiusY) return true
+    }
+  }
+  return false
+}
+
 /**
  * 计算字形组件的包围框（基于实际轮廓点）
  * 遍历外部组件（glyph.components）和内部组件（实例中的脚本组件）
@@ -43,16 +71,22 @@ export function computeGlyphComponentBoundingBox(
       return null
     }
 
-    // 如果内部组件为空，但字形有脚本，需要先执行脚本
-    // 这样可以确保 _components 被填充（脚本生成的组件）
-    if ((!glyphInstance._components || glyphInstance._components.length === 0) && 
-        (glyphValue.script || glyphValue.script_reference)) {
+    // 若 _components 为空但有 script：仅在为算包围盒「还缺几何」时才执行脚本。
+    // 骨架绑定 / 带外部 pen 的字形：executeGlyphScript 走 strokeFn 后 _components 仍常为空，
+    // 但 glyph.components 里已有笔迹点；若仍每次 bbox（SelectTool/Dragger 高频）都跑脚本，会打爆日志并可能触发响应式循环。
+    const scriptHint = !!(glyphValue.script || glyphValue.script_reference)
+    const needsScriptToPopulateInternal =
+      (!glyphInstance._components || glyphInstance._components.length === 0) &&
+      scriptHint &&
+      !glyphValue.skeleton &&
+      !externalGlyphComponentsProvideDrawPoints(glyphValue)
+
+    if (needsScriptToPopulateInternal) {
       if (import.meta.env.DEV) {
         console.log('[computeGlyphComponentBoundingBox] Executing script to populate _components', instanceKey)
       }
       try {
         executeGlyphScript(glyphValue, instanceKey)
-        // 重新获取实例（脚本执行后实例可能已更新）
         glyphInstance = instanceManager.acquireTemporaryInstance(
           instanceKey,
           () => new CustomGlyph(glyphValue),
@@ -62,7 +96,6 @@ export function computeGlyphComponentBoundingBox(
         if (import.meta.env.DEV) {
           console.warn('[computeGlyphComponentBoundingBox] Failed to execute script:', error)
         }
-        // 脚本执行失败不影响继续处理外部组件
       }
     }
 

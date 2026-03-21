@@ -56,6 +56,16 @@ export const usePictureImportStore = defineStore('pictureImport', () => {
   const importEmWidth = ref(1000)
   const importEmHeight = ref(1000)
 
+  /**
+   * 进入 Pic 前保存：切换到 Pic 会卸载 Character/Glyph 编辑器并 reset store，
+   * 确认/删除返回时需用此恢复编辑上下文。
+   */
+  const resumeCharacterUUID = ref('')
+  const resumeGlyphUUID = ref('')
+  const resumeGlyphCategory = ref<
+    'glyphs' | 'stroke_glyphs' | 'radical_glyphs' | 'comp_glyphs'
+  >('glyphs')
+
   function setPrevEditStatus(s: EditStatus | null) {
     prevEditStatus.value = s
   }
@@ -95,6 +105,9 @@ export const usePictureImportStore = defineStore('pictureImport', () => {
     enableLocalBrush.value = false
     importEmWidth.value = 1000
     importEmHeight.value = 1000
+    resumeCharacterUUID.value = ''
+    resumeGlyphUUID.value = ''
+    resumeGlyphCategory.value = 'glyphs'
   }
 
   return {
@@ -120,6 +133,9 @@ export const usePictureImportStore = defineStore('pictureImport', () => {
     dropThreshold,
     importEmWidth,
     importEmHeight,
+    resumeCharacterUUID,
+    resumeGlyphUUID,
+    resumeGlyphCategory,
     setPrevEditStatus,
     setEditCharacterPic,
     setBitMap,

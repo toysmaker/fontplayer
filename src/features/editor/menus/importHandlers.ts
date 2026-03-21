@@ -266,6 +266,14 @@ export function createImportHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
       const pictureStore = usePictureImportStore()
       pictureStore.resetEditPic()
       pictureStore.setPrevEditStatus(es)
+      if (es === EditStatus.Edit) {
+        pictureStore.resumeCharacterUUID = characterStore.editingCharacterUUID || ''
+        pictureStore.resumeGlyphUUID = ''
+      } else {
+        pictureStore.resumeCharacterUUID = ''
+        pictureStore.resumeGlyphUUID = glyphStore.editingGlyphUUID || ''
+        pictureStore.resumeGlyphCategory = glyphStore.glyphCategory
+      }
       const fw = projectStore.selectedFile?.width ?? 1000
       const fh = projectStore.selectedFile?.height ?? 1000
       pictureStore.importEmWidth = fw

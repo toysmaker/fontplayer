@@ -12,7 +12,13 @@ import { useEditorStore } from '@/stores/editor'
 import { useProjectStore } from '@/stores/project'
 import { useCharacterStore } from '@/stores/character'
 import { useGlyphStore } from '@/stores/glyph'
-import { EditStatus, type IComponent, type IPenComponent, type IPolygonComponent } from '@/core/types'
+import {
+  EditStatus,
+  type IComponent,
+  type IGlyphComponent,
+  type IPenComponent,
+  type IPolygonComponent,
+} from '@/core/types'
 import { PictureImportPipelineService } from '@/features/editor/services/PictureImportPipelineService'
 import { renderCanvas } from '@/core/canvas/EditorCanvasRenderer'
 import { mapCanvasX, mapCanvasY, mapCanvasWidth, mapCanvasHeight } from '@/utils/canvas'
@@ -186,10 +192,28 @@ function moveRight() {
     previewStatus.value >= PIC_PREVIEW_SLIDE_COUNT - 1 ? 0 : previewStatus.value + 1
 }
 
-function removePic() {
+async function restoreEditContextAfterPic(
+  prev: EditStatus,
+  resumeChar: string,
+  resumeGlyph: string,
+  resumeCat: 'glyphs' | 'stroke_glyphs' | 'radical_glyphs' | 'comp_glyphs',
+) {
+  await nextTick()
+  if (prev === EditStatus.Edit && resumeChar) {
+    await characterStore.setEditCharacterFileByUUID(resumeChar)
+  } else if (prev === EditStatus.Glyph && resumeGlyph) {
+    glyphStore.setEditGlyphByUUID(resumeGlyph, resumeCat)
+  }
+}
+
+async function removePic() {
   const prev = pictureStore.prevEditStatus
+  const resumeChar = pictureStore.resumeCharacterUUID
+  const resumeGlyph = pictureStore.resumeGlyphUUID
+  const resumeCat = pictureStore.resumeGlyphCategory
   pictureStore.resetEditPic()
   editorStore.setEditStatus(prev ?? EditStatus.Edit, { allowLeavePic: true })
+  await restoreEditContextAfterPic(prev ?? EditStatus.Edit, resumeChar, resumeGlyph, resumeCat)
 }
 
 function resetPic() {
@@ -198,22 +222,28 @@ function resetPic() {
 
 async function confirmPic() {
   const prev = pictureStore.prevEditStatus
-  const components = curvesComponents.value
+  const resumeChar = pictureStore.resumeCharacterUUID
+  const resumeGlyph = pictureStore.resumeGlyphUUID
+  const resumeCat = pictureStore.resumeGlyphCategory
+  const components = curvesComponents.value.map((c) => R.clone(c) as IComponent)
+
+  editorStore.setEditStatus(prev ?? EditStatus.Edit, { allowLeavePic: true })
+  await restoreEditContextAfterPic(prev ?? EditStatus.Edit, resumeChar, resumeGlyph, resumeCat)
+
   if (prev === EditStatus.Edit) {
     for (const c of components) {
-      characterStore.addComponent(R.clone(c) as IComponent)
+      characterStore.addComponent(c)
     }
     if (projectStore.selectedFile) projectStore.markFileUnsaved(projectStore.selectedFile.uuid)
     characterStore.characterListVersion++
   } else if (prev === EditStatus.Glyph) {
     for (const c of components) {
-      glyphStore.addComponent(R.clone(c) as IComponent)
+      glyphStore.addComponent(c as IGlyphComponent)
     }
     if (projectStore.selectedFile) projectStore.markFileUnsaved(projectStore.selectedFile.uuid)
     glyphStore.glyphListVersion++
   }
-  editorStore.setEditStatus(prev ?? EditStatus.Edit, { allowLeavePic: true })
-  await nextTick()
+
   pictureStore.resetEditPic()
 }
 

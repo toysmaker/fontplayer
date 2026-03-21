@@ -284,9 +284,11 @@ const initDragger = () => {
     if (latestComponent && latestComponent.type === 'glyph' && latestComponent.value) {
       glyphValue = latestComponent.value
     }
-    // 导入后首次选中时，画布可能尚未为该组件执行过脚本，实例不存在会导致 bbox 错误或无法拖拽。
-    // 在此预先执行一次，保证实例存在，首次点击即可移动。
-    executeGlyphScript(glyphValue, component.uuid)
+    // 导入后首次选中时预先跑脚本，保证实例存在；已入临时实例池则勿每次挂 dragger 都重跑（会与 bbox/重绘形成闭环）
+    const gKey = component.uuid
+    if (!instanceManager.isTemporary(gKey)) {
+      executeGlyphScript(glyphValue, gKey)
+    }
   }
 
   try {
@@ -327,6 +329,33 @@ const cleanupDragger = () => {
   if (canvasRef.value) {
     DraggerManager.remove(canvasRef.value)
   }
+}
+
+/** 选择工具下按当前选中重挂 dragger；与 selectedComponent 监听逻辑一致。orderedList 先执行且占用 isRenderingFromWatch 时会跳过 selected，需在列表 watcher 收尾处补偿。 */
+const reinitSelectDraggerIfNeeded = async () => {
+  const toolType = toolManager.getCurrentToolType()
+  if (toolType !== 'select') return
+  if (!(characterStore as any).selectedComponent) return
+  if (dragger && dragger.isDragging()) {
+    if (import.meta.env.DEV) {
+      console.log('[CharacterEditor] Skipping dragger cleanup/reinit: dragger is dragging')
+    }
+    const selectTool = toolManager.getTool('select')
+    if (selectTool && typeof (selectTool as any).updatePenSelectToolState === 'function') {
+      (selectTool as any).updatePenSelectToolState()
+    }
+    renderCanvas()
+    return
+  }
+  cleanupDragger()
+  await nextTick()
+  await nextTick()
+  initDragger()
+  const selectTool = toolManager.getTool('select')
+  if (selectTool && typeof (selectTool as any).updatePenSelectToolState === 'function') {
+    (selectTool as any).updatePenSelectToolState()
+  }
+  renderCanvas()
 }
 
 // 初始化工具系统
@@ -462,6 +491,8 @@ onMounted(async () => {
   
   // 初始化工具系统（必须在 canvas 准备好之后）
   await initTools()
+  // SelectTool.activate 才挂上 renderSelectEditor；此前 renderCanvas 不会绘制选择框（Pic 确认后重建编辑器时常见）
+  renderCanvas()
 
   if (toolStore.tool === 'metrics') {
     characterMetricsDraftStore.hydrateFromEditingCharacter()
@@ -570,6 +601,7 @@ watch(() => (characterStore as any).orderedListWithItemsForCurrentCharacterFile,
   } finally {
     await nextTick()
     isRenderingFromWatch.value = false
+    await reinitSelectDraggerIfNeeded()
   }
 }, { deep: true })
 
@@ -578,38 +610,7 @@ watch(() => (characterStore as any).selectedComponent, async () => {
   if (isRenderingFromWatch.value) return
   isRenderingFromWatch.value = true
   try {
-    // 只有在选择工具激活时才初始化 dragger
-    const toolType = toolManager.getCurrentToolType()
-    if (toolType === 'select') {
-      // 如果 dragger 正在拖拽，不要清理和重新初始化，避免中断拖拽
-      if (dragger && dragger.isDragging()) {
-        if (import.meta.env.DEV) {
-          console.log('[CharacterEditor] Skipping dragger cleanup/reinit: dragger is dragging')
-        }
-        // 只更新 penSelectTool 状态和重新渲染
-        const selectTool = toolManager.getTool('select')
-        if (selectTool && typeof (selectTool as any).updatePenSelectToolState === 'function') {
-          (selectTool as any).updatePenSelectToolState()
-        }
-        renderCanvas()
-        return
-      }
-      
-      cleanupDragger()
-      // 双 nextTick：导入字形后对话框关闭与 selectedComponent 更新同帧，若只等一帧则 dragger 可能在模态层仍存在时挂上，首点会点到模态上导致无法移动
-      await nextTick()
-      await nextTick()
-      initDragger()
-      
-      // 更新 penSelectTool 状态（如果选择工具激活）
-      const selectTool = toolManager.getTool('select')
-      if (selectTool && typeof (selectTool as any).updatePenSelectToolState === 'function') {
-        (selectTool as any).updatePenSelectToolState()
-      }
-      
-      // 选中组件变化后重新渲染画布，确保选择框/控件同步更新
-      renderCanvas()
-    }
+    await reinitSelectDraggerIfNeeded()
   } finally {
     await nextTick()
     isRenderingFromWatch.value = false

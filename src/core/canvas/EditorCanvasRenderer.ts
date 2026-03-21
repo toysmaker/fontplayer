@@ -273,16 +273,25 @@ export function renderCanvas(
       // 如果实例没有脚本生成的组件，执行脚本
       // 但是，如果实例有 tempData（正在拖拽中），不应该执行脚本（避免重置拖拽修改）
       const hasTempData = !!glyphInstance.tempData
-      const needsScriptExecution = (!glyphInstance._components ||
+      const hasSkeleton = !!(glyphValue as ICustomGlyph).skeleton
+      let needsScriptExecution = (!glyphInstance._components ||
         !glyphInstance._components.length ||
         options.forceUpdate) && !hasTempData
-      
+
+      // 与 render() 中 mode === 'glyph' 分支一致：骨架字形由 ScriptExecutor/strokeFn 生成关键点与辅助线，
+      // _components 往往一直为空；若仅凭「无 _components」判断，会每帧 executeGlyphScript → clear →
+      // 可能触发 store/视图更新 → 死循环卡死。
+      if (hasSkeleton && !options.forceUpdate) {
+        needsScriptExecution = false
+      }
+
       if (import.meta.env.DEV) {
         console.log('[EditorCanvasRenderer] Checking script execution:', {
           instanceKey,
           hasComponents: !!glyphInstance._components?.length,
           componentsCount: glyphInstance._components?.length || 0,
           hasTempData,
+          hasSkeleton,
           needsScriptExecution,
           forceUpdate: options.forceUpdate,
           willSkipDueToTempData: hasTempData && (!glyphInstance._components || !glyphInstance._components.length || options.forceUpdate)

@@ -1213,6 +1213,13 @@ function transformPointToWorld(point: { x: number; y: number }, matrix: number[]
   return result;
 }
 
+/** 与 em 坐标量级匹配；避免「变换结果与当前值在浮点误差内相等」仍写回响应式数据，触发 deep watch → render 死循环 */
+const SKELETON_TRANSFORM_EPS = 1e-4
+
+function skeletonCoordChanged(a: number, b: number): boolean {
+  return Math.abs(a - b) > SKELETON_TRANSFORM_EPS
+}
+
 // 应用变形到组件
 export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any) {
   const penComponents = glyph.components.filter(comp => comp.type === 'pen') as IGlyphComponent[];
@@ -1262,18 +1269,36 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
   let transformedPoints = calculateTransformedPoints(glyph, newSkeleton, weightedOriginalPoints);
   
   if (transformedPoints.length === (penComponent.value as unknown as IPenComponent).points.length) {
-    // 更新控制点位置
-    (penComponent.value as unknown as IPenComponent).points.forEach((point, index) => {
-      const newPoint = transformedPoints[index];
-      point.x = newPoint.x;
-      point.y = newPoint.y;
-    });
+    const pts = (penComponent.value as unknown as IPenComponent).points
+    let anyPointChanged = false
+    for (let index = 0; index < pts.length; index++) {
+      const point = pts[index]
+      const newPoint = transformedPoints[index]
+      if (skeletonCoordChanged(point.x, newPoint.x) || skeletonCoordChanged(point.y, newPoint.y)) {
+        point.x = newPoint.x
+        point.y = newPoint.y
+        anyPointChanged = true
+      }
+    }
 
-    const bound = getBound((penComponent.value as unknown as IPenComponent).points);
-    ;(penComponent as any).x = bound.x;
-    ;(penComponent as any).y = bound.y;
-    ;(penComponent as any).w = bound.w;
-    ;(penComponent as any).h = bound.h;
+    // 无实质变化则不要写回 Pinia（否则会触发 orderedList deep watch → 画布重绘 → 再次 apply → 死循环）
+    if (!anyPointChanged) {
+      return
+    }
+
+    const bound = getBound(pts)
+    const pc = penComponent as any
+    if (
+      skeletonCoordChanged(pc.x ?? 0, bound.x) ||
+      skeletonCoordChanged(pc.y ?? 0, bound.y) ||
+      skeletonCoordChanged(pc.w ?? 0, bound.w) ||
+      skeletonCoordChanged(pc.h ?? 0, bound.h)
+    ) {
+      pc.x = bound.x
+      pc.y = bound.y
+      pc.w = bound.w
+      pc.h = bound.h
+    }
   } else {
     console.warn('Transformed points length mismatch:', 
       transformedPoints.length, 
