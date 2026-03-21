@@ -137,7 +137,7 @@ function onDropThresholdChange() {
 <template>
   <div class="picture-import-params">
     <div class="effect-wrapper step-1-wrapper">
-      <div class="title">{{ t('panels.picEditPanel.step1.title') }}</div>
+      <div class="section-title">{{ t('panels.picEditPanel.step1.title') }}</div>
       <n-form class="form bitmap-form" label-placement="left" :label-width="40">
         <div v-if="!enableLocalBrush" class="global-effect">
           <n-form-item label="r">
@@ -319,12 +319,12 @@ function onDropThresholdChange() {
     </div>
 
     <div class="effect-wrapper">
-      <div class="title">{{ t('panels.picEditPanel.step2.title') }}</div>
+      <div class="section-title">{{ t('panels.picEditPanel.step2.title') }}</div>
       <div class="content">{{ t('panels.picEditPanel.step2.content') }}</div>
     </div>
 
     <div class="effect-wrapper step-3-wrapper">
-      <div class="title">{{ t('panels.picEditPanel.step3.title') }}</div>
+      <div class="section-title">{{ t('panels.picEditPanel.step3.title') }}</div>
       <n-form class="form fit-curve-form" label-placement="left" :label-width="52">
         <n-form-item :label="t('panels.picEditPanel.step3.maxError')">
           <n-input-number
@@ -357,7 +357,7 @@ function onDropThresholdChange() {
     </div>
 
     <div class="effect-wrapper">
-      <div class="title">{{ t('panels.picEditPanel.step4.title') }}</div>
+      <div class="section-title">{{ t('panels.picEditPanel.step4.title') }}</div>
       <div class="content">{{ t('panels.picEditPanel.step4.content') }}</div>
     </div>
   </div>
@@ -367,22 +367,19 @@ function onDropThresholdChange() {
 .picture-import-params {
   width: 100%;
   min-height: 100%;
-  padding: 0 0 24px;
+  padding: 10px 10px 24px;
   text-align: left;
   box-sizing: border-box;
 }
 
-.title {
-  height: 36px;
-  line-height: 36px;
-  padding: 0 10px;
-  border-bottom: 1px solid #dcdfe6;
-  font-size: 13px;
-  font-weight: 600;
-}
+/* 步骤标题样式由全局 main.css `.right-panel .section-title` 提供（primary-0 底、圆角 20px 5px 等），与其它参数面板一致 */
 
 .form {
-  padding: 12px 5px 5px;
+  padding: 5px;
+}
+
+.picture-import-params :deep(.n-form.form) {
+  padding-top: 20px;
 }
 
 .effect-wrapper {
@@ -423,21 +420,32 @@ function onDropThresholdChange() {
 }
 
 .content {
-  padding: 20px 10px;
-  color: var(--n-text-color-3);
-  font-size: 13px;
-  line-height: 1.5;
+  padding: 20px;
+  color: var(--light-4);
 }
 
 .tip {
-  margin-left: 40px;
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--n-text-color-3);
+  margin-left: 50px;
+  color: var(--light-4);
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.tip :deep(.n-button) {
+  color: var(--primary-4) !important;
+  background-color: var(--dark-2) !important;
+  height: 22px !important;
+  border-radius: 5px !important;
+  margin-left: 5px;
+  padding: 0 8px !important;
+  border: none !important;
+}
+
+.tip :deep(.n-button):hover {
+  color: var(--primary-5) !important;
+  background-color: var(--dark-3) !important;
 }
 </style>
 

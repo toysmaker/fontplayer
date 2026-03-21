@@ -84,6 +84,31 @@ describe('Editor Store', () => {
       store.setEditStatus(EditStatus.Glyph)
       expect(store.prevStatus).toBe(EditStatus.GlyphList)
     })
+
+    it('should block leaving Pic mode without allowLeavePic', () => {
+      const store = useEditorStore()
+      store.setEditStatus(EditStatus.Edit)
+      store.setEditStatus(EditStatus.Pic)
+      store.setEditStatus(EditStatus.CharacterList)
+      expect(store.editStatus).toBe(EditStatus.Pic)
+    })
+
+    it('should allow leaving Pic mode with allowLeavePic', () => {
+      const store = useEditorStore()
+      store.setEditStatus(EditStatus.Edit)
+      store.setEditStatus(EditStatus.Pic)
+      store.setEditStatus(EditStatus.CharacterList, { allowLeavePic: true })
+      expect(store.editStatus).toBe(EditStatus.CharacterList)
+    })
+
+    it('should not show toolbar/bottom bar in Pic mode', () => {
+      const store = useEditorStore()
+      store.setEditStatus(EditStatus.Pic)
+      expect(store.showToolbar).toBe(false)
+      expect(store.showBottomBar).toBe(false)
+      expect(store.showLeftPanel).toBe(true)
+      expect(store.showRightPanel).toBe(true)
+    })
   })
 
   describe('toggleLeftPanel', () => {

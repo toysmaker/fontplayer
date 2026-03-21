@@ -258,21 +258,21 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   overflow-x: hidden;
   box-sizing: border-box;
-  background: var(--n-color);
+  background: transparent;
 }
 .view-item-wrapper {
   height: 80px;
   display: flex;
   flex-direction: row;
-  border-bottom: 1px solid var(--n-divider-color);
+  border-bottom: 1px solid var(--dark-4);
   cursor: pointer;
-  color: var(--n-text-color);
+  color: var(--primary-5);
 }
 .view-item-wrapper:hover {
-  background-color: var(--n-color-hover);
+  background-color: var(--primary-0);
 }
 .view-item-wrapper.is-active {
-  background-color: var(--n-color-pressed);
+  background-color: var(--primary-0);
 }
 .view-thumbnail {
   display: flex;
@@ -297,11 +297,11 @@ onBeforeUnmount(() => {
 }
 .view-description {
   font-size: 11px;
-  color: var(--n-text-color-3);
+  color: var(--light-4);
   line-height: 1.25;
 }
 .view-title {
-  font-weight: 600;
+  font-weight: bold;
   font-size: 12px;
 }
 .view-canvas {

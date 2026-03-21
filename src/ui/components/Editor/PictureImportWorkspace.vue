@@ -1,38 +1,32 @@
 <script setup lang="ts">
 /**
- * 识别图片完整工作区：与 CharacterEditor / GlyphEditor 同构（工具栏 + 左五阶段 + 主区 + 右参数 + 底栏）
+ * 识别图片工作区：左五阶段 + 主画布 + 右参数（无顶栏 ToolBar / FilesBar / BottomBar，避免误切列表）
  */
-import ToolBar from '@/ui/components/ToolBar/ToolBar.vue'
-import EditFilesBar from '@/ui/components/FilesBar/EditFilesBar.vue'
-import BottomBar from '@/ui/components/BottomBar/BottomBar.vue'
 import RightPanel from '@/ui/components/RightPanel/RightPanel.vue'
+import { useI18n } from 'vue-i18n'
 import PictureImportViewList from '@/ui/components/Editor/PictureImportViewList.vue'
 import PictureImportEditor from '@/ui/components/Editor/PictureImportEditor.vue'
+
+const { t } = useI18n()
 </script>
 
 <template>
   <div class="picture-import-workspace">
-    <header class="toolbar-wrapper">
-      <ToolBar />
-    </header>
     <main class="editor-content-wrapper">
       <aside class="left-panel-wrapper">
+        <div class="left-panel-header">
+          {{ t('panels.view') }}
+        </div>
         <div class="left-panel-content">
           <PictureImportViewList />
         </div>
       </aside>
       <main class="main-wrapper">
-        <header class="files-bar-wrapper">
-          <EditFilesBar />
-        </header>
         <div class="canvas-panel-wrapper">
           <div class="pic-import-canvas-host">
             <PictureImportEditor />
           </div>
         </div>
-        <footer class="bottom-bar-wrapper">
-          <BottomBar />
-        </footer>
       </main>
       <aside class="right-panel-wrapper">
         <RightPanel />
@@ -50,16 +44,11 @@ import PictureImportEditor from '@/ui/components/Editor/PictureImportEditor.vue'
   overflow: hidden;
 }
 
-.toolbar-wrapper {
-  flex: 0 0 50px;
-  box-sizing: border-box;
-}
-
 .editor-content-wrapper {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: row;
-  height: 0;
   overflow: hidden;
 }
 
@@ -71,6 +60,16 @@ import PictureImportEditor from '@/ui/components/Editor/PictureImportEditor.vue'
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.left-panel-header {
+  flex: 0 0 auto;
+  width: 100%;
+  border-bottom: 1px solid var(--dark-4);
+  line-height: 36px;
+  padding: 5px 15px 8px 15px;
+  box-sizing: border-box;
+  color: var(--primary-5);
 }
 
 .left-panel-content {
@@ -97,17 +96,11 @@ import PictureImportEditor from '@/ui/components/Editor/PictureImportEditor.vue'
   min-width: 0;
 }
 
-.files-bar-wrapper {
-  flex: 0 0 36px;
-  border-bottom: 1px solid var(--dark-4);
-  background-color: white;
-}
-
 .canvas-panel-wrapper {
   flex: 1;
   overflow: hidden;
   min-height: 0;
-  background-color: var(--dark-1);
+  background-color: #fff;
 }
 
 .pic-import-canvas-host {
@@ -123,17 +116,10 @@ import PictureImportEditor from '@/ui/components/Editor/PictureImportEditor.vue'
   min-height: 0;
 }
 
-.bottom-bar-wrapper {
-  flex: 0 0 36px;
-  border-top: 1px solid var(--dark-4);
-  background-color: white;
-}
-
 .right-panel-wrapper {
   height: 100%;
   flex: 0 0 300px;
-  border-left: 1px solid var(--dark-4);
-  background-color: white;
+  background-color: var(--dark-0);
   overflow: hidden;
   display: flex;
   flex-direction: column;

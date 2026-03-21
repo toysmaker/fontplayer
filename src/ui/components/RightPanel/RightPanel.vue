@@ -41,11 +41,7 @@ if (import.meta.env.DEV) {
 </script>
 
 <template>
-  <div
-    class="right-panel"
-    :class="{ 'right-panel--pic': editStatus === EditStatus.Pic }"
-    data-testid="parameter-panel"
-  >
+  <div class="right-panel" data-testid="parameter-panel">
     <picture-import-params-panel v-if="editStatus === EditStatus.Pic" />
     <!-- 字符编辑 metrics 工具：度量参数 -->
     <metrics-edit-panel
@@ -91,11 +87,8 @@ if (import.meta.env.DEV) {
   text-align: left;
   overflow-y: auto;
   z-index: 99;
-  background-color: var(--dark-1);
-}
-
-.right-panel--pic {
-  background-color: #fff;
+  background-color: var(--dark-0);
+  border-left: 1px solid var(--dark-4);
 }
 
 .empty-panel {

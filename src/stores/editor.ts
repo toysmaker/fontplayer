@@ -7,6 +7,15 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { EditStatus } from '@/core/types'
 
+/** setEditStatus 可选参数 */
+export type SetEditStatusOptions = {
+  /**
+   * 允许离开「识别图片」模式。
+   * 须由 PictureImportEditor 的确认/删除等显式操作传入，防止工具栏等误切回列表。
+   */
+  allowLeavePic?: boolean
+}
+
 export const useEditorStore = defineStore('editor', () => {
   // 状态
   const editStatus = ref<EditStatus>(EditStatus.CharacterList)
@@ -32,7 +41,15 @@ export const useEditorStore = defineStore('editor', () => {
   /**
    * 设置编辑状态
    */
-  function setEditStatus(status: EditStatus) {
+  function setEditStatus(status: EditStatus, options?: SetEditStatusOptions) {
+    if (
+      editStatus.value === EditStatus.Pic &&
+      status !== EditStatus.Pic &&
+      !options?.allowLeavePic
+    ) {
+      return
+    }
+
     // 如果从列表模式进入编辑模式，保存当前的列表状态到 prevStatus
     const isListStatus = editStatus.value === EditStatus.CharacterList || 
                          editStatus.value === EditStatus.StrokeGlyphList || 
@@ -59,11 +76,16 @@ export const useEditorStore = defineStore('editor', () => {
     switch (status) {
       case EditStatus.Edit:
       case EditStatus.Glyph:
-      case EditStatus.Pic:
         showLeftPanel.value = true
         showRightPanel.value = true
         showToolbar.value = true
         showBottomBar.value = true
+        break
+      case EditStatus.Pic:
+        showLeftPanel.value = true
+        showRightPanel.value = true
+        showToolbar.value = false
+        showBottomBar.value = false
         break
       default:
         showLeftPanel.value = false

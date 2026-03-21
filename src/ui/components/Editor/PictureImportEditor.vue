@@ -189,7 +189,7 @@ function moveRight() {
 function removePic() {
   const prev = pictureStore.prevEditStatus
   pictureStore.resetEditPic()
-  editorStore.setEditStatus(prev ?? EditStatus.Edit)
+  editorStore.setEditStatus(prev ?? EditStatus.Edit, { allowLeavePic: true })
 }
 
 function resetPic() {
@@ -212,7 +212,7 @@ async function confirmPic() {
     if (projectStore.selectedFile) projectStore.markFileUnsaved(projectStore.selectedFile.uuid)
     glyphStore.glyphListVersion++
   }
-  editorStore.setEditStatus(prev ?? EditStatus.Edit)
+  editorStore.setEditStatus(prev ?? EditStatus.Edit, { allowLeavePic: true })
   await nextTick()
   pictureStore.resetEditPic()
 }
@@ -488,13 +488,13 @@ watch(
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--n-color);
+  background-color: #fff;
 }
 .top-bar {
   flex: 0 0 32px;
   position: relative;
-  border-bottom: 1px solid var(--n-divider-color);
-  background: var(--n-color);
+  border-bottom: 1px solid #dcdfe6;
+  background-color: #fff;
   box-sizing: border-box;
 }
 .top-actions {
@@ -519,25 +519,20 @@ watch(
   cursor: pointer;
   user-select: none;
   font-size: 14px;
-  color: var(--n-text-color);
-  background: #fff;
-  border-right: 1px solid var(--n-divider-color);
+  color: var(--light-5);
+  background-color: #fff;
 }
 .left-mover:hover,
 .right-mover:hover {
-  background: var(--n-color-hover);
-}
-.right-mover {
-  border-right: none;
-  border-left: 1px solid var(--n-divider-color);
+  background-color: var(--light-0);
 }
 .canvas-list-outer-wrapper {
   flex: 1;
   min-width: 0;
   position: relative;
   overflow: hidden;
-  border-left: 1px solid var(--n-divider-color);
-  border-right: 1px solid var(--n-divider-color);
+  border-left: 1px solid #dcdfe6;
+  border-right: 1px solid #dcdfe6;
   box-sizing: border-box;
 }
 .canvas-list-wrapper {
@@ -557,7 +552,7 @@ watch(
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  border-left: 1px solid var(--n-divider-color);
+  border-left: 1px solid #dcdfe6;
 }
 .canvas-wrapper:first-child {
   border-left: none;
