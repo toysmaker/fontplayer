@@ -238,6 +238,11 @@ const dialogs = {
 			exportFailed: '导出字形失败',
 			needProject: '请先打开工程',
 		},
+		pictureImport: {
+			needProject: '请先打开工程',
+			needEditMode: '请在字符编辑或字形编辑模式下使用识别图片',
+			loadFailed: '无法加载所选图片',
+		},
 		fontImport: {
 			singleProjectTitle: '提示',
 			singleProjectBody:
@@ -495,6 +500,11 @@ const dialogs = {
 			importInvalid: 'Invalid glyphs JSON file',
 			exportFailed: 'Failed to export glyphs',
 			needProject: 'Please open a project first',
+		},
+		pictureImport: {
+			needProject: 'Please open a project first',
+			needEditMode: 'Use picture recognition in character or glyph edit mode',
+			loadFailed: 'Could not load the selected image',
 		},
 		fontImport: {
 			singleProjectTitle: 'Note',

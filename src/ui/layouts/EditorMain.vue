@@ -29,6 +29,7 @@
       <!-- 编辑模式 -->
       <CharacterEditor v-if="editStatus === EditStatus.Edit" />
       <GlyphEditor v-else-if="editStatus === EditStatus.Glyph" />
+      <PictureImportWorkspace v-else-if="editStatus === EditStatus.Pic" />
       <n-empty v-else-if="!isListMode" :description="t('panels.editorMain.featureInDevelopment')" />
     </div>
     
@@ -73,6 +74,7 @@ import VirtualCharacterList from '@/ui/components/VirtualList/CharacterList/Virt
 import VirtualGlyphList from '@/ui/components/VirtualList/GlyphList/VirtualGlyphList.vue'
 import CharacterEditor from '@/ui/components/Editor/CharacterEditor.vue'
 import GlyphEditor from '@/ui/components/Editor/GlyphEditor.vue'
+import PictureImportWorkspace from '@/ui/components/Editor/PictureImportWorkspace.vue'
 import FilesBar from '@/ui/components/FilesBar/FilesBar.vue'
 
 const { t } = useI18n()
@@ -169,4 +171,5 @@ const handleTabChange = (status: EditStatus) => {
   line-height: 40px;
   background: var(--primary-5);
 }
+
 </style>

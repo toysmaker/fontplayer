@@ -4,7 +4,7 @@
  * 根据编辑状态和选中的组件类型显示相应的参数编辑面板
  */
 
-import { computed, watch } from 'vue'
+import { watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { NEmpty } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -20,6 +20,7 @@ import PictureEditPanel from './paramsEditPanels/PictureEditPanel.vue'
 import GlyphEditPanel from './paramsEditPanels/GlyphEditPanel.vue'
 import GlyphParamsPanel from './paramsEditPanels/GlyphParamsPanel.vue'
 import MetricsEditPanel from './paramsEditPanels/MetricsEditPanel.vue'
+import PictureImportParamsPanel from './paramsEditPanels/PictureImportParamsPanel.vue'
 
 const { t } = useI18n()
 
@@ -40,10 +41,15 @@ if (import.meta.env.DEV) {
 </script>
 
 <template>
-  <div class="right-panel" data-testid="parameter-panel">
+  <div
+    class="right-panel"
+    :class="{ 'right-panel--pic': editStatus === EditStatus.Pic }"
+    data-testid="parameter-panel"
+  >
+    <picture-import-params-panel v-if="editStatus === EditStatus.Pic" />
     <!-- 字符编辑 metrics 工具：度量参数 -->
     <metrics-edit-panel
-      v-if="editStatus === EditStatus.Edit && tool === 'metrics'"
+      v-else-if="editStatus === EditStatus.Edit && tool === 'metrics'"
     />
     <!-- 字形编辑 params 工具：显示字形参数面板（骨架绑定等） -->
     <glyph-params-panel
@@ -86,6 +92,10 @@ if (import.meta.env.DEV) {
   overflow-y: auto;
   z-index: 99;
   background-color: var(--dark-1);
+}
+
+.right-panel--pic {
+  background-color: #fff;
 }
 
 .empty-panel {

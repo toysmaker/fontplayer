@@ -166,6 +166,7 @@ const panels = {
 			remove: '删除',
 			reset: '重置',
 			edit: '编辑',
+			fontPicUnsupported: '当前版本仅支持从文件导入图片识别；从字符「字图」进入尚未接入。',
 			step1: {
 				title: '步骤一：黑白二分化',
 				tip: '效果不佳？试试',
@@ -184,7 +185,14 @@ const panels = {
 			step4: {
 				title: '步骤四：填充轮廓',
 				content: '已自动填充为黑色',
-			}
+			},
+			carouselTitle: '主区预览位置',
+			carouselHint: '与左侧双栏滑动一致，可快速跳到对应阶段。',
+			carouselPair0: '曲线预览 / 缩略图',
+			carouselPair1: '缩略图 / 二值图',
+			carouselPair2: '二值图 / 轮廓',
+			carouselPair3: '轮廓 / 曲线',
+			carouselPair4: '曲线 / 填色预览',
 		},
 		settingsPanel: {
 			background: {
@@ -412,6 +420,7 @@ const panels = {
 			remove: 'Delete',
 			reset: 'Reset',
 			edit: 'Edit',
+			fontPicUnsupported: 'This build only supports picture import from files; opening from a character\'s font-picture canvas is not wired yet.',
 			step1: {
 				title: 'Step 1: Bitmap Thresholding',
 				tip: 'The effect is poor? Try',
@@ -430,7 +439,14 @@ const panels = {
 			step4: {
 				title: 'Step 4: Fill Color',
 				content: 'Auto-fill with black color',
-			}
+			},
+			carouselTitle: 'Preview position',
+			carouselHint: 'Matches the two-pane carousel on the left.',
+			carouselPair0: 'Curve preview / Thumbnail',
+			carouselPair1: 'Thumbnail / Bitmap',
+			carouselPair2: 'Bitmap / Contours',
+			carouselPair3: 'Contours / Curves',
+			carouselPair4: 'Curves / Filled preview',
 		},
 		settingsPanel: {
 			background: {

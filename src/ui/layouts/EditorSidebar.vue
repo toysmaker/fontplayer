@@ -322,6 +322,10 @@ const handleImportFontNative = async () => {
   await web_handlers['import-font-file']?.()
 }
 
+const handleImportPicNative = () => {
+  web_handlers['import-pic']?.()
+}
+
 // 将 EditStatus 转换为 Rust 端能理解的字符串格式
 const editStatusToRustString = (status: EditStatus): string => {
   switch (status) {
@@ -375,6 +379,7 @@ onMounted(() => {
   window.addEventListener('editor-copy', () => web_handlers['copy'] && web_handlers['copy']())
   window.addEventListener('editor-paste', () => web_handlers['paste'] && web_handlers['paste']())
   window.addEventListener('editor-import-glyphs', () => web_handlers['import-glyphs']?.())
+  window.addEventListener('editor-import-pic', handleImportPicNative)
   window.addEventListener('editor-export-glyphs', () => web_handlers['export-glyphs']?.())
   window.addEventListener('editor-export-font-native', handleExportFontNative)
   window.addEventListener('editor-export-var-font-native', handleExportVarFontNative)
@@ -416,6 +421,7 @@ onUnmounted(() => {
   window.removeEventListener('editor-copy', () => {})
   window.removeEventListener('editor-paste', () => {})
   window.removeEventListener('editor-import-glyphs', () => {})
+  window.removeEventListener('editor-import-pic', handleImportPicNative)
   window.removeEventListener('editor-export-glyphs', () => {})
   window.removeEventListener('editor-export-font-native', handleExportFontNative)
   window.removeEventListener('editor-export-var-font-native', handleExportVarFontNative)

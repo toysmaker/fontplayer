@@ -54,6 +54,8 @@ import {
   faMagnifyingGlassPlus,
 	faArrowUp,
 	faArrowDown,
+	faChevronLeft,
+	faChevronRight,
 } from '@fortawesome/free-solid-svg-icons'
 
 // 按需导入图标 - 从 @fortawesome/free-regular-svg-icons
@@ -194,6 +196,8 @@ library.add(
   faMagnifyingGlassPlus,
 	faArrowUp,
 	faArrowDown,
+	faChevronLeft,
+	faChevronRight,
 	faTrash,
 )
 
