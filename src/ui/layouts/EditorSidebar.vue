@@ -353,11 +353,13 @@ const editStatusToRustString = (status: EditStatus): string => {
 // 更新 Tauri 菜单的启用/禁用状态
 const updateTauriMenuDisabled = async () => {
   if (!isTauri()) return
-  
+
   try {
     const { invoke } = await import('@tauri-apps/api/core')
     const statusString = editStatusToRustString(editorStore.editStatus)
     await invoke('toggle_menu_disabled', { editStatus: statusString })
+    // 在 edit_status 规则之后，叠加工程打开状态的覆盖：有工程时禁用 open-file
+    await invoke('update_menu_project_status', { hasProject: projectStore.hasFiles })
   } catch (error) {
     console.error('Failed to update Tauri menu disabled state:', error)
   }
@@ -367,6 +369,11 @@ const updateTauriMenuDisabled = async () => {
 watch(() => editorStore.editStatus, () => {
   updateTauriMenuDisabled()
 }, { immediate: true })
+
+// 监听工程打开状态变化，更新 Tauri 原生菜单的 open-file 禁用状态
+watch(() => projectStore.hasFiles, () => {
+  updateTauriMenuDisabled()
+})
 
 onMounted(() => {
   window.addEventListener('editor-show-new-project-dialog', handleShowNewProjectDialog)

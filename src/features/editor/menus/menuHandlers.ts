@@ -79,13 +79,15 @@ export function createDisabledRules(ctx: {
     )
   }
 
+  const enableAtListNoProject = () => enableAtList() && !projectStore.hasFiles
+
   return {
     // file
     'create-file': enableAtList,
-    'open-file': enableAtList,
+    'open-file': enableAtListNoProject,
     'save-file': enable,
     'clear-cache': enable,
-    'sync-data': enableAtList,
+    'sync-data': enableAtListNoProject,
     'save-as-json': enable,
 
     // edit

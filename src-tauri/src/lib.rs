@@ -585,6 +585,33 @@ fn toggle_menu_disabled(app: AppHandle, edit_status: String) {
     }
 }
 
+// 根据是否有工程打开，覆盖 open-file 菜单项的启用状态
+// 在 toggle_menu_disabled 之后调用，确保工程状态优先级最高
+#[tauri::command]
+fn update_menu_project_status(app: AppHandle, has_project: bool) {
+    let window = match app.get_webview_window("main") {
+        Some(w) => w,
+        None => return,
+    };
+    if let Some(menu) = window.menu() {
+        for submenu in menu.items().unwrap_or_default() {
+            if let MenuItemKind::Submenu(submenu) = submenu {
+                for item in submenu.items().unwrap_or_default() {
+                    if let MenuItemKind::MenuItem(item) = item {
+                        let id: String = item.id().0.clone();
+                        if id == "open-file" {
+                            // 有工程打开时禁用，否则不干预（由 toggle_menu_disabled 决定）
+                            if has_project {
+                                item.set_enabled(false).unwrap_or_default();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // 菜单项 ID 到文本的映射函数
 fn get_menu_item_text<'a>(id: &str, texts: &'a MenuTexts) -> Option<&'a str> {
     match id {
@@ -1002,6 +1029,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             toggle_menu_disabled,
+            update_menu_project_status,
             update_menu_language,
             save_project,
             write_file_chunk

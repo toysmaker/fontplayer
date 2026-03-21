@@ -60,6 +60,16 @@ export async function initTauriMenu() {
     listen('open-file', async () => {
       console.log('File -> Open')
       try {
+        const { useProjectStore } = await import('@/stores/project')
+        const projectStore = useProjectStore()
+        if (projectStore.hasFiles) {
+          const { i18n } = await import('@/i18n')
+          const t = i18n.global.t
+          window.dispatchEvent(new CustomEvent('show-warning-message', {
+            detail: { message: t('panels.editorSidebar.openProjectDisabled') }
+          }))
+          return
+        }
         const { fileHandler } = await import('@/features/editor/menus/FileHandler')
         await fileHandler.openFile()
       } catch (error) {

@@ -30,6 +30,10 @@ export function createFileHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
 
   const handleOpenFile = async () => {
     try {
+      if (projectStore.hasFiles) {
+        ctx.message.warning(ctx.t('panels.editorSidebar.openProjectDisabled'))
+        return
+      }
       await ctx.fileHandler.openFile()
     } catch (error) {
       console.error('Failed to open file:', error)
@@ -59,6 +63,10 @@ export function createFileHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
 
   const handleSyncData = async () => {
     try {
+      if (projectStore.hasFiles) {
+        ctx.message.warning(ctx.t('panels.editorSidebar.syncCacheDisabled'))
+        return
+      }
       await ctx.fileHandler.syncProjectFromCache()
       ctx.message.success(ctx.t('panels.editorSidebar.syncCacheSuccess'))
     } catch (error) {

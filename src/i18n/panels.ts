@@ -251,6 +251,11 @@ const panels = {
 		},
 		editorSidebar: {
 			onlyOneProjectWarning: '目前字玩仅支持同时编辑一个工程，请关闭当前工程再新建。注意，关闭工程前请保存工程以避免数据丢失。',
+			openProjectDisabled: '已有工程打开，请先关闭当前工程再打开新工程。',
+			syncCacheDisabled: '已有工程打开，请先关闭当前工程再同步缓存。',
+			cacheSuccess: '缓存工程成功',
+			clearCacheSuccess: '已清空缓存',
+			syncCacheSuccess: '同步缓存成功',
 		},
 	},
 	en: {
@@ -505,6 +510,11 @@ const panels = {
 		},
 		editorSidebar: {
 			onlyOneProjectWarning: 'FontPlayer currently only supports editing one project at a time. Please close the current project before creating a new one. Note: Please save the project before closing to avoid data loss.',
+			openProjectDisabled: 'A project is already open. Please close it before opening another one.',
+			syncCacheDisabled: 'A project is already open. Please close it before syncing cache.',
+			cacheSuccess: 'Project cached successfully',
+			clearCacheSuccess: 'Cache cleared',
+			syncCacheSuccess: 'Cache synced successfully',
 		},
 	}
 }
