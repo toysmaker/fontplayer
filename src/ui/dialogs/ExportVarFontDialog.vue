@@ -296,3 +296,9 @@ const handleRemoveAxis = createDebouncedHandler(_removeAxis, 'ExportVarFontDialo
   gap: 8px;
 }
 </style>
+
+<style>
+.export-var-font-dialog .n-base-selection .n-base-selection-placeholder {
+  color: var(--primary-0) !important;
+}
+</style>
