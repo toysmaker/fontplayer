@@ -62,6 +62,21 @@ const dialogs = {
 			tagItal: '意大利体',
 			tagOpsz: '视觉字号',
 		},
+		exportColorFontDialog: {
+			title: '导出彩色字体',
+			volumeHint:
+				'彩色字体会生成 COLR/CPAL 等表，文件体积通常明显大于普通轮廓字体。',
+			removeOverlap: '去除重叠',
+			removeOverlapHint: '仅对未使用分色（无填充色图层）的字符合并轮廓时生效；分色字符保留分层轮廓。',
+			confirm: '确认',
+			cancel: '取消',
+			needProject: '请先打开工程',
+			exportingProgress: '正在导出字符轮廓…',
+			generating: '正在生成彩色字库，请稍候…',
+			exportSuccess: '导出彩色字体成功',
+			exportFailed: '导出彩色字体失败',
+			cancelled: '已取消保存',
+		},
 		saveDialog: {
 			title: '保存工程',
 			confirm: '确认',
@@ -300,6 +315,22 @@ const dialogs = {
 			tagSlnt: 'Slant',
 			tagItal: 'Italic',
 			tagOpsz: 'Optical size',
+		},
+		exportColorFontDialog: {
+			title: 'Export color font',
+			volumeHint:
+				'Color fonts include COLR/CPAL and related tables; file size is usually much larger than plain outline fonts.',
+			removeOverlap: 'Remove overlap',
+			removeOverlapHint:
+				'Applies only to characters without layered fill colors; layered glyphs keep separate outlines.',
+			confirm: 'OK',
+			cancel: 'Cancel',
+			needProject: 'Open a project first',
+			exportingProgress: 'Exporting glyph outlines…',
+			generating: 'Building color font, please wait…',
+			exportSuccess: 'Color font exported',
+			exportFailed: 'Color font export failed',
+			cancelled: 'Save cancelled',
 		},
 		saveDialog: {
 			title: 'Cache Project',

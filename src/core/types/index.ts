@@ -122,7 +122,8 @@ export interface IComponentBase {
 export interface IPenComponent {
   points: any
   strokeColor: string
-  fillColor: string
+  /** 分色填充；缺省表示无分色（非彩色字体图层） */
+  fillColor?: string
   closePath: boolean
   editMode: boolean
   contour?: Array<any>
@@ -148,7 +149,7 @@ export interface IRectangleComponent {
   width: number
   height: number
   strokeColor: string
-  fillColor: string
+  fillColor?: string
   closePath: boolean
   contour?: Array<any>
   preview?: Array<any>
@@ -161,7 +162,7 @@ export interface IEllipseComponent {
   radiusX: number
   radiusY: number
   strokeColor: string
-  fillColor: string
+  fillColor?: string
   closePath: boolean
   contour?: Array<any>
   preview?: Array<any>

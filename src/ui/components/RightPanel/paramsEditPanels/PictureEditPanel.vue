@@ -4,14 +4,31 @@
  * 支持字符和字形两种编辑模式
  */
 
-import { ref } from 'vue'
-import { NInputNumber, NForm, NFormItem, NInput, NSlider } from 'naive-ui'
+import { computed } from 'vue'
+import { NInputNumber, NForm, NFormItem, NInput, NSlider, NColorPicker, NButton } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from '../composables/useComponentEditor'
+import { EditStatus } from '@/core/types'
 
 const { t } = useI18n()
 
-const { selectedComponent, selectedComponentUUID, modifyComponent } = useComponentEditor()
+const { selectedComponent, selectedComponentUUID, modifyComponent, editStatus } = useComponentEditor()
+
+const pictureFillColorDisplay = computed(() => {
+  const v = selectedComponent.value?.fillColor
+  return v && String(v).trim() ? v : null
+})
+
+const handleChangePictureFillColor = (color: string | null) => {
+  const trimmed = color?.trim()
+  if (trimmed) {
+    modifyComponent({ fillColor: trimmed })
+  } else {
+    modifyComponent({ fillColor: undefined })
+  }
+}
+
+const clearPictureFillColor = () => handleChangePictureFillColor(null)
 
 const handleChangeX = (x: number | null) => {
   if (x === null) return
@@ -125,6 +142,28 @@ const handleChangeOpacity = (opacity: number | null) => {
           </n-form-item>
         </n-form>
       </div>
+
+      <div class="fill-color-wrap" v-if="editStatus === EditStatus.Edit">
+        <div class="section-title">{{ t('panels.paramsPanel.fillColor.title') }}</div>
+        <p class="fill-color-hint">{{ t('panels.paramsPanel.fillColor.hint') }}</p>
+        <n-form label-placement="left" label-width="80px">
+          <n-form-item :label="t('panels.paramsPanel.fillColor.label')" :show-feedback="false">
+            <div class="fill-color-row">
+              <div class="params-fill-color-wrap">
+                <n-color-picker
+                  size="small"
+                  :value="pictureFillColorDisplay"
+                  :show-alpha="true"
+                  @update:value="handleChangePictureFillColor"
+                />
+              </div>
+              <n-button size="small" quaternary @click="clearPictureFillColor">
+                {{ t('panels.paramsPanel.fillColor.clear') }}
+              </n-button>
+            </div>
+          </n-form-item>
+        </n-form>
+      </div>
       
       <!-- 透明度（字符和字形都显示） -->
       <div class="opacity-wrap">
@@ -170,5 +209,61 @@ const handleChangeOpacity = (opacity: number | null) => {
     border-bottom: 1px solid var(--dark-4);
     color: var(--text-color-1);
   }
+}
+
+.fill-color-hint {
+  margin: -12px 0 6px 0;
+  font-size: 12px;
+  color: var(--n-text-color-3);
+  line-height: 1.4;
+}
+
+.fill-color-wrap {
+  margin-bottom: 0;
+}
+
+.fill-color-wrap :deep(.n-form) {
+  margin-bottom: 0;
+}
+
+.fill-color-wrap :deep(.n-form-item) {
+  margin-bottom: 0 !important;
+}
+
+.fill-color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.fill-color-row :deep(.params-fill-color-wrap) {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.fill-color-row :deep(.params-fill-color-wrap .n-color-picker) {
+  width: 28px !important;
+  height: 28px !important;
+  max-height: 28px;
+}
+
+.fill-color-row :deep(.params-fill-color-wrap .n-color-picker-trigger) {
+  height: 100% !important;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.fill-color-row :deep(.params-fill-color-wrap .n-color-picker-trigger__value) {
+  display: none !important;
+}
+
+.fill-color-row :deep(.n-button.n-button--small-type) {
+  flex-shrink: 0;
 }
 </style>

@@ -96,6 +96,7 @@ class CustomGlyph {
 			scale: scale,
 			fill: false,
 			forceUpdate: false,
+			layerTint: fillColor,
 		})
 		// 确保清除renderCanvas可能留下的路径状态
 		ctx.beginPath()
@@ -130,6 +131,7 @@ class CustomGlyph {
 			scale: scale,
 			fill: false,
 			forceUpdate: true,
+			layerTint: fillColor,
 		})
 		// 确保清除renderCanvas可能留下的路径状态
 		ctx.beginPath()

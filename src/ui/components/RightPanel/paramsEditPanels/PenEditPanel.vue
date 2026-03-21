@@ -4,7 +4,8 @@
  * 支持字符和字形两种编辑模式
  */
 
-import { NInputNumber, NForm, NFormItem, NSwitch, NInput, NColorPicker } from 'naive-ui'
+import { computed } from 'vue'
+import { NInputNumber, NForm, NFormItem, NSwitch, NInput, NColorPicker, NButton } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from '../composables/useComponentEditor'
 import { EditStatus, IPenComponent } from '@/core/types'
@@ -111,16 +112,24 @@ const handleChangeEditMode = (editMode: boolean) => {
   modifyComponent(updates)
 }
 
-const handleChangeFillColor = (color: string) => {
+const penFillColorDisplay = computed(() => {
+  const v = (selectedComponent.value?.value as IPenComponent | undefined)?.fillColor
+  return v && String(v).trim() ? v : null
+})
+
+const handleChangeFillColor = (color: string | null) => {
   if (!selectedComponent.value?.value) return
   const currentValue = selectedComponent.value.value as IPenComponent
+  const trimmed = color?.trim()
   modifyComponent({
     value: {
       ...currentValue,
-      fillColor: color,
+      fillColor: trimmed ? trimmed : undefined,
     },
   })
 }
+
+const clearPenFillColor = () => handleChangeFillColor(null)
 </script>
 
 <template>
@@ -208,16 +217,25 @@ const handleChangeFillColor = (color: string) => {
         </n-form>
       </div>
       
-      <!-- 填充颜色（仅字符模式显示） -->
+      <!-- 分色填充（默认无颜色；仅字符模式） -->
       <div class="fill-color-wrap" v-if="editStatus === EditStatus.Edit">
         <div class="section-title">{{ t('panels.paramsPanel.fillColor.title') }}</div>
+        <p class="fill-color-hint">{{ t('panels.paramsPanel.fillColor.hint') }}</p>
         <n-form label-placement="left" label-width="80px">
-          <n-form-item :label="t('panels.paramsPanel.fillColor.label')">
-            <n-color-picker
-              :value="(selectedComponent.value as IPenComponent)?.fillColor || '#000000'"
-              :show-alpha="true"
-              @update:value="handleChangeFillColor"
-            />
+          <n-form-item :label="t('panels.paramsPanel.fillColor.label')" :show-feedback="false">
+            <div class="fill-color-row">
+              <div class="params-fill-color-wrap">
+                <n-color-picker
+                  size="small"
+                  :value="penFillColorDisplay"
+                  :show-alpha="true"
+                  @update:value="handleChangeFillColor"
+                />
+              </div>
+              <n-button size="small" quaternary @click="clearPenFillColor">
+                {{ t('panels.paramsPanel.fillColor.clear') }}
+              </n-button>
+            </div>
           </n-form-item>
         </n-form>
       </div>
@@ -239,5 +257,61 @@ const handleChangeFillColor = (color: string) => {
     border-bottom: 1px solid var(--dark-4);
     color: var(--text-color-1);
   }
+}
+
+.fill-color-hint {
+  margin: -12px 0 6px 0;
+  font-size: 12px;
+  color: var(--n-text-color-3);
+  line-height: 1.4;
+}
+
+.fill-color-wrap {
+  margin-bottom: 0;
+}
+
+.fill-color-wrap :deep(.n-form) {
+  margin-bottom: 0;
+}
+
+.fill-color-wrap :deep(.n-form-item) {
+  margin-bottom: 0 !important;
+}
+
+.fill-color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.fill-color-row :deep(.params-fill-color-wrap) {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.fill-color-row :deep(.params-fill-color-wrap .n-color-picker) {
+  width: 28px !important;
+  height: 28px !important;
+  max-height: 28px;
+}
+
+.fill-color-row :deep(.params-fill-color-wrap .n-color-picker-trigger) {
+  height: 100% !important;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.fill-color-row :deep(.params-fill-color-wrap .n-color-picker-trigger__value) {
+  display: none !important;
+}
+
+.fill-color-row :deep(.n-button.n-button--small-type) {
+  flex-shrink: 0;
 }
 </style>

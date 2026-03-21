@@ -105,6 +105,8 @@ const panels = {
 			fillColor: {
 				title: '填充颜色',
 				label: '颜色',
+				clear: '清除',
+				hint: '不设颜色时为默认单色；设置后参与彩色字体（COLR）分层导出。',
 			},
 			width: '宽度',
 			height: '高度',
@@ -349,6 +351,8 @@ const panels = {
 			fillColor: {
 				title: 'Fill Color',
 				label: 'Color',
+				clear: 'Clear',
+				hint: 'Leave unset for default single-color rendering; set to export as a COLR layer.',
 			},
 			width: 'Width',
 			height: 'Height',

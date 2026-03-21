@@ -160,6 +160,7 @@ export class CustomGlyph implements IInstance {
         scale: scale,
         fill: false,
         forceUpdate: false,
+        layerTint: fillColor,
       })
     }
     
@@ -251,6 +252,7 @@ export class CustomGlyph implements IInstance {
       scale: scale,
       fill: false,
       forceUpdate: true,
+      layerTint: fillColor,
     })
     
     // 确保清除renderCanvas可能留下的路径状态

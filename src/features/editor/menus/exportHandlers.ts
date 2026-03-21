@@ -85,7 +85,11 @@ export function createExportHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
   }
 
   const handleExportColorFont = () => {
-    console.log('Export color font')
+    if (!projectStore.selectedFile) {
+      message.warning(t('dialogs.exportColorFontDialog.needProject'))
+      return
+    }
+    useDialogsStore().openExportColorFontDialog()
   }
 
   const requireFile = () => {

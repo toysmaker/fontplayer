@@ -81,6 +81,7 @@
     <LanguageSettingsDialog v-model:show="showLanguageSettingsDialog" />
     <ExportFontDialog />
     <ExportVarFontDialog />
+    <ExportColorFontDialog />
   </div>
 </template>
 
@@ -110,6 +111,7 @@ import PreferenceSettingsDialog from '@/ui/dialogs/PreferenceSettingsDialog.vue'
 import LanguageSettingsDialog from '@/ui/dialogs/LanguageSettingsDialog.vue'
 import ExportFontDialog from '@/ui/dialogs/ExportFontDialog.vue'
 import ExportVarFontDialog from '@/ui/dialogs/ExportVarFontDialog.vue'
+import ExportColorFontDialog from '@/ui/dialogs/ExportColorFontDialog.vue'
 import { exportFontLibraryNativeDefaults } from '@/features/editor/services/ExportFontService'
 import { getWebMenu, traverse_web_menu } from '@/features/editor/menus/web_menus'
 import { templateHandlers } from '@/features/editor/menus/templatesHandlers'
@@ -308,6 +310,14 @@ const handleExportVarFontNative = () => {
   dialogsStore.openExportVarFontDialog()
 }
 
+const handleExportColorFontNative = () => {
+  if (!projectStore.selectedFile) {
+    message.warning(t('dialogs.exportColorFontDialog.needProject'))
+    return
+  }
+  dialogsStore.openExportColorFontDialog()
+}
+
 const handleImportFontNative = async () => {
   await web_handlers['import-font-file']?.()
 }
@@ -368,6 +378,7 @@ onMounted(() => {
   window.addEventListener('editor-export-glyphs', () => web_handlers['export-glyphs']?.())
   window.addEventListener('editor-export-font-native', handleExportFontNative)
   window.addEventListener('editor-export-var-font-native', handleExportVarFontNative)
+  window.addEventListener('editor-export-color-font-native', handleExportColorFontNative)
   window.addEventListener('editor-import-font-native', handleImportFontNative)
   window.addEventListener('editor-remove-overlap', handleEditorRemoveOverlap)
   window.addEventListener('editor-font-settings', () => { showFontSettingsDialog.value = true })
@@ -408,6 +419,7 @@ onUnmounted(() => {
   window.removeEventListener('editor-export-glyphs', () => {})
   window.removeEventListener('editor-export-font-native', handleExportFontNative)
   window.removeEventListener('editor-export-var-font-native', handleExportVarFontNative)
+  window.removeEventListener('editor-export-color-font-native', handleExportColorFontNative)
   window.removeEventListener('editor-import-font-native', handleImportFontNative)
   window.removeEventListener('editor-remove-overlap', handleEditorRemoveOverlap)
   window.removeEventListener('editor-font-settings', () => {})

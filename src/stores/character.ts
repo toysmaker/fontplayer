@@ -381,11 +381,20 @@ export const useCharacterStore = defineStore('character', () => {
     
     Object.keys(options).forEach((key: string) => {
       const optionValue = (options as any)[key]
-      if (key === 'value' && typeof optionValue === 'object') {
-        // 合并 value 对象，保留现有属性（如 editMode）
+      if (key === 'value' && typeof optionValue === 'object' && optionValue !== null) {
+        // 合并 value；patch 中显式为 undefined 的键表示删除（用于清除分色 fillColor 等）
         const compAny = component as any
         const currentValue = compAny.value || {}
-        compAny.value = { ...currentValue, ...R.clone(optionValue) }
+        const cloned = R.clone(optionValue) as Record<string, unknown>
+        const merged = { ...currentValue, ...cloned }
+        for (const k of Object.keys(cloned)) {
+          if (cloned[k] === undefined) {
+            delete merged[k]
+          }
+        }
+        compAny.value = merged
+      } else if (key === 'fillColor' && optionValue === undefined) {
+        delete (component as any).fillColor
       } else {
         (component as any)[key] = optionValue
       }

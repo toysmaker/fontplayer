@@ -77,6 +77,16 @@ export const useDialogsStore = defineStore('dialogs', () => {
     exportVarFontDialogVisible.value = false
   }
 
+  const exportColorFontDialogVisible = ref(false)
+
+  function openExportColorFontDialog() {
+    exportColorFontDialogVisible.value = true
+  }
+
+  function closeExportColorFontDialog() {
+    exportColorFontDialogVisible.value = false
+  }
+
   return {
     glyphComponentsDialogVisible,
     glyphComponentsActiveTab,
@@ -98,6 +108,10 @@ export const useDialogsStore = defineStore('dialogs', () => {
     exportVarFontDialogVisible,
     openExportVarFontDialog,
     closeExportVarFontDialog,
+
+    exportColorFontDialogVisible,
+    openExportColorFontDialog,
+    closeExportColorFontDialog,
   }
 })
 

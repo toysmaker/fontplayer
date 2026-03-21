@@ -11,7 +11,13 @@
     <p class="export-var-font-hint">{{ t('dialogs.exportVarFontDialog.hint') }}</p>
     <n-scrollbar style="max-height: 320px">
       <div class="export-var-font-body">
-        <n-button v-if="!pickingConstant" block class="mb-2" @click="startPickConstant">
+        <n-button
+          v-if="!pickingConstant"
+          block
+          class="mb-2"
+          @click="handleStartPickConstant"
+          @pointerup="handleStartPickConstant"
+        >
           {{ t('dialogs.exportVarFontDialog.addAxis') }}
         </n-button>
         <n-select
@@ -43,7 +49,14 @@
               <n-input-number v-model:value="axis.maxValue" class="w-full" />
             </n-form-item>
           </n-form>
-          <n-button block secondary type="error" class="mb-3" @click="removeAxis(axis)">
+          <n-button
+            block
+            secondary
+            type="error"
+            class="mb-3"
+            @click="() => handleRemoveAxis(axis)"
+            @pointerup="() => handleRemoveAxis(axis)"
+          >
             {{ t('dialogs.exportVarFontDialog.removeAxis') }}
           </n-button>
         </div>
@@ -132,7 +145,7 @@ function onUpdateShow(v: boolean) {
   if (!v) dialogsStore.closeExportVarFontDialog()
 }
 
-function startPickConstant() {
+function _startPickConstant() {
   const file = projectStore.selectedFile
   if (!(file?.constants?.length)) {
     message.warning(t('dialogs.exportVarFontDialog.needConstants'))
@@ -191,7 +204,7 @@ function onAxisTagBlur(axis: VarFontAxis) {
   }
 }
 
-function removeAxis(axis: VarFontAxis) {
+const _removeAxis = (axis: VarFontAxis) => {
   axes.value = axes.value.filter((a) => a.uuid !== axis.uuid)
   const rest = { ...initialAxisNames.value }
   delete rest[axis.uuid]
@@ -249,6 +262,8 @@ const _handleConfirm = async () => {
 
 const handleCancel = createDebouncedHandler(_handleCancel, 'ExportVarFontDialog.cancel')
 const handleConfirm = createDebouncedHandler(_handleConfirm, 'ExportVarFontDialog.confirm')
+const handleStartPickConstant = createDebouncedHandler(_startPickConstant, 'ExportVarFontDialog.addAxis')
+const handleRemoveAxis = createDebouncedHandler(_removeAxis, 'ExportVarFontDialog.removeAxis', (args) => args[0]?.uuid)
 </script>
 
 <style scoped>

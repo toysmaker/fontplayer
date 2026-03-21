@@ -3,7 +3,7 @@
  * 用于字符编辑界面和字形编辑界面的画布渲染
  */
 
-import type { IComponent, ICharacterFileLite, ICustomGlyph, IPenComponent, IPolygonComponent, IRectangleComponent, IEllipseComponent, IPictureComponent, IGlyphComponent } from '../types'
+import type { IComponent, ICharacterFileLite, ICustomGlyph, IPenComponent, IPolygonComponent, IPictureComponent, IGlyphComponent } from '../types'
 import type { IBackground, IGrid, IRenderOptions } from './types'
 import { BackgroundType, GridType } from './types'
 import { mapCanvasX, mapCanvasY, mapCanvasWidth, mapCanvasHeight, mapCanvasCoords } from '@/utils/canvas'
@@ -18,6 +18,51 @@ import { fontRenderStyle } from '../script/globals'
 import { orderedListWithItemsForGlyph } from '../utils/glyph'
 import { instanceManager } from '../instance/InstanceManager'
 import { editModeFixedBounds } from '@/features/tools/select/PenSelectTool'
+
+/** 轮廓/彩色绘制用色：面板写在 IComponent.fillColor；否则 value.fillColor；字形嵌套时用 layerTint */
+function effectivePrimitiveFillColor(component: IComponent, options: IRenderOptions): string {
+  const w = component.fillColor?.trim()
+  if (w) return w
+  const v = component.value as { fillColor?: string } | undefined
+  const fromValue = v?.fillColor?.trim()
+  if (fromValue) return fromValue
+  const tint = options.layerTint?.trim()
+  if (tint) return tint
+  return '#000'
+}
+
+/** 字符上的字形组件：实例颜色在包装 IComponent.fillColor，不在 ICustomGlyph 上 */
+function glyphInstanceDisplayFill(component: IComponent, glyphValue: ICustomGlyph): string {
+  const w = component.fillColor?.trim()
+  if (w) return w
+  const g = (glyphValue as { fillColor?: string }).fillColor?.trim()
+  if (g) return g
+  return '#000'
+}
+
+function flushAccumulatedPathBeforeDirectDraw(
+  ctx: CanvasRenderingContext2D,
+  options: IRenderOptions,
+  interruptingComponent: IComponent
+): void {
+  const bridge =
+    interruptingComponent.fillColor?.trim() ||
+    options.layerTint?.trim() ||
+    '#000'
+  ctx.closePath()
+  if (fontRenderStyle.value === 'color') {
+    ctx.fillStyle = bridge
+    ctx.strokeStyle = bridge
+    ctx.fill('nonzero')
+  } else if (fontRenderStyle.value === 'black' || options.fill) {
+    ctx.fillStyle = '#000'
+    ctx.strokeStyle = '#000'
+    ctx.fill('nonzero')
+  } else {
+    ctx.strokeStyle = '#000'
+  }
+  ctx.stroke()
+}
 
 /**
  * 清空画布
@@ -106,19 +151,7 @@ export function renderCanvas(
     if (component.type === 'picture') {
       // 如果有未完成的路径，先绘制它
       if (currentPathStarted) {
-        ctx.closePath()
-        if (fontRenderStyle.value === 'color') {
-          ctx.fillStyle = (component.value as unknown as IGlyphComponent).fillColor || '#000'
-          ctx.strokeStyle = (component.value as unknown as IGlyphComponent).fillColor || '#000'
-          ctx.fill("nonzero")
-        } else if (fontRenderStyle.value === 'black' || options.fill) {
-          ctx.fillStyle = '#000'
-          ctx.strokeStyle = '#000'
-          ctx.fill("nonzero")
-        } else {
-          ctx.strokeStyle = '#000'
-        }
-        ctx.stroke()
+        flushAccumulatedPathBeforeDirectDraw(ctx, options, component)
         currentPathStarted = false
       }
       
@@ -177,19 +210,7 @@ export function renderCanvas(
     if (component.type === 'glyph') {
       // 如果有未完成的路径，先绘制它
       if (currentPathStarted) {
-        ctx.closePath()
-        if (fontRenderStyle.value === 'color') {
-          ctx.fillStyle = (component.value as unknown as IGlyphComponent).fillColor || '#000'
-          ctx.strokeStyle = (component.value as unknown as IGlyphComponent).fillColor || '#000'
-          ctx.fill("nonzero")
-        } else if (fontRenderStyle.value === 'black' || options.fill) {
-          ctx.fillStyle = '#000'
-          ctx.strokeStyle = '#000'
-          ctx.fill("nonzero")
-        } else {
-          ctx.strokeStyle = '#000'
-        }
-        ctx.stroke()
+        flushAccumulatedPathBeforeDirectDraw(ctx, options, component)
         currentPathStarted = false
       }
       
@@ -300,16 +321,17 @@ export function renderCanvas(
       }
       
       // 直接调用字形实例的 render 方法（与原工程一致）
+      const glyphTint = glyphInstanceDisplayFill(component as IComponent, glyphValue)
       if (options.forceUpdate) {
         glyphInstance.render_forceUpdate(canvas, true, {
           x: (options.offset?.x || 0) + (component as IGlyphComponent).ox,
           y: (options.offset?.y || 0) + (component as IGlyphComponent).oy,
-        }, false, scale, (glyphValue as any).fillColor || '#000')
+        }, false, scale, glyphTint)
       } else {
         glyphInstance.render(canvas, true, {
           x: (options.offset?.x || 0) + (component as IGlyphComponent).ox,
           y: (options.offset?.y || 0) + (component as IGlyphComponent).oy,
-        }, false, scale, (glyphValue as any).fillColor || '#000')
+        }, false, scale, glyphTint)
       }
       continue
     }
@@ -331,7 +353,6 @@ export function renderCanvas(
       const _w = mapCanvasWidth(w) * scale
       const _h = mapCanvasHeight(h) * scale
       const {
-        fillColor,
         points,
         closePath,
         editMode,
@@ -370,14 +391,20 @@ export function renderCanvas(
         }
       }
 
+      const eff = effectivePrimitiveFillColor(component, options)
       if (fontRenderStyle.value === 'color') {
-        ctx.fillStyle = fillColor || '#000'
-        ctx.strokeStyle = fillColor || '#000'
+        ctx.fillStyle = eff
+        ctx.strokeStyle = eff
         ctx.fill()
         ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
+      } else if (fontRenderStyle.value !== 'black') {
+        ctx.strokeStyle = eff
+        ctx.stroke()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
       } else {
-        // 非 color 模式下，不立即绘制，累积到路径中
+        ctx.strokeStyle = '#000'
+        ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
       }
     }
@@ -390,7 +417,6 @@ export function renderCanvas(
       const _w = mapCanvasWidth(w) * scale
       const _h = mapCanvasHeight(h) * scale
       const {
-        fillColor,
         points,
       } = component.value as IPolygonComponent
       ctx.lineWidth = getStrokeWidth()
@@ -419,15 +445,21 @@ export function renderCanvas(
         }
         ctx.closePath()
       }
-      
+
+      const effPoly = effectivePrimitiveFillColor(component, options)
       if (fontRenderStyle.value === 'color') {
-        ctx.fillStyle = fillColor || '#000'
-        ctx.strokeStyle = fillColor || '#000'
+        ctx.fillStyle = effPoly
+        ctx.strokeStyle = effPoly
         ctx.fill()
         ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
+      } else if (fontRenderStyle.value !== 'black') {
+        ctx.strokeStyle = effPoly
+        ctx.stroke()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
       } else {
-        // 非 color 模式下，不立即绘制，累积到路径中
+        ctx.strokeStyle = '#000'
+        ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
       }
     }
@@ -439,9 +471,6 @@ export function renderCanvas(
       const _y = mapCanvasY(y) * scale
       const _w = mapCanvasWidth(w) * scale
       const _h = mapCanvasHeight(h) * scale
-      const {
-        fillColor,
-      } = component.value as IEllipseComponent
       const radiusX = _w / 2
       const radiusY = _h / 2
       const centerX = _x + radiusX
@@ -459,15 +488,21 @@ export function renderCanvas(
       ctx.moveTo(centerX + radiusX, centerY)
       ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
       ctx.closePath()
-      
+
+      const effEll = effectivePrimitiveFillColor(component, options)
       if (fontRenderStyle.value === 'color') {
-        ctx.fillStyle = fillColor || '#000'
-        ctx.strokeStyle = fillColor || '#000'
+        ctx.fillStyle = effEll
+        ctx.strokeStyle = effEll
         ctx.fill()
         ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
+      } else if (fontRenderStyle.value !== 'black') {
+        ctx.strokeStyle = effEll
+        ctx.stroke()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
       } else {
-        // 非 color 模式下，不立即绘制，累积到路径中
+        ctx.strokeStyle = '#000'
+        ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
       }
     }
@@ -479,9 +514,6 @@ export function renderCanvas(
       const _y = mapCanvasY(y) * scale
       const _w = mapCanvasWidth(w) * scale
       const _h = mapCanvasHeight(h) * scale
-      const {
-        fillColor,
-      } = component.value as IRectangleComponent
       const rectWidth = _w
       const rectHeight = _h
       const rectX = _x
@@ -499,29 +531,32 @@ export function renderCanvas(
       ctx.rect(rectX, rectY, rectWidth, rectHeight)
       ctx.closePath()
 
+      const effRect = effectivePrimitiveFillColor(component, options)
       if (fontRenderStyle.value === 'color') {
-        ctx.fillStyle = fillColor || '#000'
-        ctx.strokeStyle = fillColor || '#000'
+        ctx.fillStyle = effRect
+        ctx.strokeStyle = effRect
         ctx.fill()
         ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
+      } else if (fontRenderStyle.value !== 'black') {
+        ctx.strokeStyle = effRect
+        ctx.stroke()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
       } else {
-        // 非 color 模式下，不立即绘制，累积到路径中
+        ctx.strokeStyle = '#000'
+        ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
       }
     }
   }
   
-  // 绘制最后的路径
+  // 绘制最后的路径（与原工程 canvas.ts 一致：仅 black / fill 时 compound fill；轮廓由各组件已描边完成）
   if (currentPathStarted && fontRenderStyle.value !== 'color') {
     ctx.closePath()
     ctx.strokeStyle = '#000'
     if (fontRenderStyle.value === 'black' || options.fill) {
       ctx.fillStyle = '#000'
-      ctx.fill("nonzero")
-    } else if (fontRenderStyle.value === 'contour') {
-      // contour 模式下只绘制轮廓，不填充
-      ctx.stroke()
+      ctx.fill('nonzero')
     }
   }
 }
@@ -826,6 +861,8 @@ export function render(
           
           const ctx = canvas.getContext('2d', { willReadFrequently: true })
           if (ctx) {
+            const scriptTint =
+              (options.glyph as { fillColor?: string } | undefined)?.fillColor?.trim() || '#000'
             // 确保清除之前可能留下的路径状态
             ctx.beginPath()
             
@@ -841,7 +878,7 @@ export function render(
                 component.render(canvas, {
                   offset: { x: 0, y: 0 },
                   scale: 1,
-                  fillColor: '#000',
+                  fillColor: fontRenderStyle.value === 'black' ? '#000' : scriptTint,
                 })
               } else {
                 if (import.meta.env.DEV) {
@@ -853,17 +890,16 @@ export function render(
               }
             })
             
-            // 根据渲染样式填充
+            // 根据渲染样式填充（与 CustomGlyph.render 一致）
             if (fontRenderStyle.value === 'black' || forceUpdate) {
               ctx.fillStyle = '#000'
-              ctx.fill("nonzero")
+              ctx.fill('nonzero')
               ctx.closePath()
             } else if (fontRenderStyle.value === 'color') {
-              ctx.fillStyle = '#000'
-              ctx.fill("nonzero")
+              ctx.fillStyle = scriptTint
+              ctx.fill('nonzero')
               ctx.closePath()
             } else {
-              // 线框模式下，确保路径被清除，避免残留
               ctx.closePath()
             }
           }

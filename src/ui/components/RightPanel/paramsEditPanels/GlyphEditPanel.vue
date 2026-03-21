@@ -5,7 +5,7 @@
  */
 
 import { ref, computed, watch, nextTick } from 'vue'
-import { NInputNumber, NForm, NFormItem, NInput, NEmpty, NSlider, NSelect, NSwitch, NIcon, NButton } from 'naive-ui'
+import { NInputNumber, NForm, NFormItem, NInput, NEmpty, NSlider, NSelect, NSwitch, NIcon, NButton, NColorPicker } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from '../composables/useComponentEditor'
 import { useEditorStore } from '@/stores/editor'
@@ -21,6 +21,25 @@ import { roundToPrecision } from '@/utils/number'
 const { t } = useI18n()
 
 const { selectedComponent, selectedComponentUUID, modifyComponent, editStatus } = useComponentEditor()
+
+const glyphInstanceFillColor = computed(() => {
+  const c = selectedComponent.value
+  if (!c || c.type !== 'glyph') return null
+  const v = c.fillColor
+  return v && String(v).trim() ? v : null
+})
+
+const handleGlyphInstanceFillColor = (color: string | null) => {
+  if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return
+  const trimmed = color?.trim()
+  if (trimmed) {
+    modifyComponent({ fillColor: trimmed })
+  } else {
+    modifyComponent({ fillColor: undefined })
+  }
+}
+
+const clearGlyphInstanceFillColor = () => handleGlyphInstanceFillColor(null)
 const editorStore = useEditorStore()
 const characterStore = useCharacterStore()
 const glyphStore = useGlyphStore()
@@ -353,6 +372,35 @@ const handleFormatGlyphComponent = () => {
         </n-form>
       </div>
 
+      <div
+        class="fill-color-wrap"
+        v-if="
+          editStatus === EditStatus.Edit &&
+          selectedComponent &&
+          selectedComponent.type === 'glyph'
+        "
+      >
+        <div class="section-title">{{ t('panels.paramsPanel.fillColor.title') }}</div>
+        <p class="fill-color-hint">{{ t('panels.paramsPanel.fillColor.hint') }}</p>
+        <n-form label-placement="left" label-width="80px">
+          <n-form-item :label="t('panels.paramsPanel.fillColor.label')" :show-feedback="false">
+            <div class="fill-color-row">
+              <div class="params-fill-color-wrap">
+                <n-color-picker
+                  size="small"
+                  :value="glyphInstanceFillColor"
+                  :show-alpha="true"
+                  @update:value="handleGlyphInstanceFillColor"
+                />
+              </div>
+              <n-button size="small" quaternary @click="clearGlyphInstanceFillColor">
+                {{ t('panels.paramsPanel.fillColor.clear') }}
+              </n-button>
+            </div>
+          </n-form-item>
+        </n-form>
+      </div>
+
       <!-- 格式化字形组件 -->
       <div
         class="format-component-wrap"
@@ -444,6 +492,62 @@ const handleFormatGlyphComponent = () => {
 
 .format-button {
   margin-top: 8px;
+}
+
+.fill-color-hint {
+  margin: -12px 0 6px 0;
+  font-size: 12px;
+  color: var(--n-text-color-3);
+  line-height: 1.4;
+}
+
+.fill-color-wrap {
+  margin-bottom: 0;
+}
+
+.fill-color-wrap :deep(.n-form) {
+  margin-bottom: 0;
+}
+
+.fill-color-wrap :deep(.n-form-item) {
+  margin-bottom: 0 !important;
+}
+
+.fill-color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.fill-color-row :deep(.params-fill-color-wrap) {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.fill-color-row :deep(.params-fill-color-wrap .n-color-picker) {
+  width: 28px !important;
+  height: 28px !important;
+  max-height: 28px;
+}
+
+.fill-color-row :deep(.params-fill-color-wrap .n-color-picker-trigger) {
+  height: 100% !important;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.fill-color-row :deep(.params-fill-color-wrap .n-color-picker-trigger__value) {
+  display: none !important;
+}
+
+.fill-color-row :deep(.n-button.n-button--small-type) {
+  flex-shrink: 0;
 }
 
 .empty-state {

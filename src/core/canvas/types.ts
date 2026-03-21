@@ -32,6 +32,8 @@ export interface IRenderOptions {
   }
   scale?: number
   forceUpdate?: boolean
+  /** 字形实例等场景：当子组件 value 未设 fillColor 时，用此作为显示色（与组件面板 layer 颜色一致） */
+  layerTint?: string
   grid?: any
   useSkeletonGrid?: boolean
 }
