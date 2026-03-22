@@ -168,6 +168,7 @@ class CustomGlyph {
 			forceUpdate: false,
 			grid,
 			useSkeletonGrid,
+			skipPrimitivesForSkeletonPreview: useSkeletonGrid,
 		})
 		if (!useSkeletonGrid) {
 			// 不使用骨架布局的情况下，默认用组件数据计算布局调整
@@ -186,9 +187,11 @@ class CustomGlyph {
 			for (let i = 0; i < keys.length; i++) {
 				const key = keys[i]
 				const _joint = _skeleton[key]
+				const jx = typeof _joint.x === 'function' ? _joint.x() : _joint.x
+				const jy = typeof _joint.y === 'function' ? _joint.y() : _joint.y
 				const joint = {
-					x: _joint.x + offset.x,
-					y: _joint.y + offset.y,
+					x: jx + offset.x,
+					y: jy + offset.y,
 				}
 				skeleton[key] = computeCoords(grid, joint)
 			}
@@ -197,7 +200,7 @@ class CustomGlyph {
 				const component = components[i]
 				component.render(canvas, {
 					offset: { x: 0, y: 0 },
-					scale: 0.5,
+					scale,
 				})
 			}
 		}
@@ -219,14 +222,33 @@ class CustomGlyph {
 			forceUpdate: true,
 			grid,
 			useSkeletonGrid,
+			skipPrimitivesForSkeletonPreview: useSkeletonGrid,
 		})
-		this._components.forEach((component) => {
-			component.render_grid(canvas, {
-				offset,
-				scale: scale,
-				grid,
+		if (!useSkeletonGrid) {
+			this._components.forEach((component) => {
+				component.render_grid(canvas, {
+					offset,
+					scale: scale,
+					grid,
+				})
 			})
-		})
+		} else if (this.getSkeleton && this.getComponentsBySkeleton) {
+			const _skeleton = this.getSkeleton()
+			const skeleton: Record<string, { x: number; y: number }> = {}
+			const keys = Object.keys(_skeleton)
+			for (let i = 0; i < keys.length; i++) {
+				const key = keys[i]
+				const _joint = _skeleton[key]
+				const jx = typeof _joint.x === 'function' ? _joint.x() : _joint.x
+				const jy = typeof _joint.y === 'function' ? _joint.y() : _joint.y
+				const joint = { x: jx + offset.x, y: jy + offset.y }
+				skeleton[key] = computeCoords(grid, joint)
+			}
+			const components = this.getComponentsBySkeleton(skeleton)
+			for (let i = 0; i < components.length; i++) {
+				components[i].render(canvas, { offset: { x: 0, y: 0 }, scale })
+			}
+		}
 		if (fontRenderStyle.value === 'color' || fill) {
 			ctx.fillStyle = '#000'
 			ctx.fill()

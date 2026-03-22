@@ -12,6 +12,7 @@ import { orderedListWithItemsForGlyph } from '../utils/glyph'
 import { useProjectStore } from '@/stores/project'
 import { renderCanvas } from '../canvas/EditorCanvasRenderer'
 import { fontRenderStyle } from '../script/globals'
+import { computeCoords, type ILayoutTransformGrid } from '../utils/grid'
 
 // TODO: 需要从原代码迁移 Component 类型
 // type Component = PenComponent | PolygonComponent | EllipseComponent | RectangleComponent
@@ -280,6 +281,128 @@ export class CustomGlyph implements IInstance {
       ctx.closePath()
     } else {
       // 线框模式下，确保路径被清除，避免残留
+      ctx.closePath()
+    }
+  }
+
+  render_grid(
+    canvas: HTMLCanvasElement,
+    renderBackground: boolean = true,
+    offset: { x: number; y: number } = { x: 0, y: 0 },
+    fill: boolean = false,
+    scale: number = 1,
+    grid: ILayoutTransformGrid,
+    useSkeletonGrid: boolean = false,
+    fillColor: string = '#000',
+  ): void {
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    renderCanvas(orderedListWithItemsForGlyph(this._glyph), canvas, {
+      offset,
+      scale,
+      fill: false,
+      forceUpdate: false,
+      grid,
+      useSkeletonGrid,
+      skipPrimitivesForSkeletonPreview: useSkeletonGrid,
+    })
+
+    if (!useSkeletonGrid) {
+      this._components.forEach((component: any) => {
+        if (component.render_grid) {
+          component.render_grid(canvas, { offset, scale, grid })
+        }
+      })
+    } else if (this.getSkeleton && this.getComponentsBySkeleton) {
+      ctx.beginPath()
+      const _skeleton = this.getSkeleton()
+      const skeleton: Record<string, { x: number; y: number }> = {}
+      const keys = Object.keys(_skeleton)
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i]
+        const _joint = _skeleton[key]
+        const jx = typeof _joint.x === 'function' ? _joint.x() : _joint.x
+        const jy = typeof _joint.y === 'function' ? _joint.y() : _joint.y
+        const joint = { x: jx + offset.x, y: jy + offset.y }
+        skeleton[key] = computeCoords(grid, joint)
+      }
+      const components = this.getComponentsBySkeleton(skeleton)
+      for (let i = 0; i < components.length; i++) {
+        components[i].render(canvas, { offset: { x: 0, y: 0 }, scale })
+      }
+    }
+
+    if (fontRenderStyle.value === 'black' || fill) {
+      ctx.fillStyle = '#000'
+      ctx.fill('nonzero')
+      ctx.closePath()
+    } else if (fontRenderStyle.value === 'color') {
+      ctx.fillStyle = fillColor || '#000'
+      ctx.fill('nonzero')
+      ctx.closePath()
+    } else {
+      ctx.closePath()
+    }
+  }
+
+  render_grid_forceUpdate(
+    canvas: HTMLCanvasElement,
+    renderBackground: boolean = true,
+    offset: { x: number; y: number } = { x: 0, y: 0 },
+    fill: boolean = false,
+    scale: number = 1,
+    grid: ILayoutTransformGrid,
+    useSkeletonGrid: boolean = false,
+    fillColor: string = '#000',
+  ): void {
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    renderCanvas(orderedListWithItemsForGlyph(this._glyph), canvas, {
+      offset,
+      scale,
+      fill: false,
+      forceUpdate: true,
+      grid,
+      useSkeletonGrid,
+      skipPrimitivesForSkeletonPreview: useSkeletonGrid,
+    })
+
+    if (!useSkeletonGrid) {
+      this._components.forEach((component: any) => {
+        if (component.render_grid) {
+          component.render_grid(canvas, { offset, scale, grid })
+        }
+      })
+    } else if (this.getSkeleton && this.getComponentsBySkeleton) {
+      ctx.beginPath()
+      const _skeleton = this.getSkeleton()
+      const skeleton: Record<string, { x: number; y: number }> = {}
+      const keys = Object.keys(_skeleton)
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i]
+        const _joint = _skeleton[key]
+        const jx = typeof _joint.x === 'function' ? _joint.x() : _joint.x
+        const jy = typeof _joint.y === 'function' ? _joint.y() : _joint.y
+        const joint = { x: jx + offset.x, y: jy + offset.y }
+        skeleton[key] = computeCoords(grid, joint)
+      }
+      const components = this.getComponentsBySkeleton(skeleton)
+      for (let i = 0; i < components.length; i++) {
+        components[i].render(canvas, { offset: { x: 0, y: 0 }, scale })
+      }
+    }
+
+    if (fontRenderStyle.value === 'black' || fill) {
+      ctx.fillStyle = '#000'
+      ctx.fill('nonzero')
+      ctx.closePath()
+    } else if (fontRenderStyle.value === 'color') {
+      ctx.fillStyle = fillColor || '#000'
+      ctx.fill('nonzero')
+      ctx.closePath()
+    } else {
       ctx.closePath()
     }
   }

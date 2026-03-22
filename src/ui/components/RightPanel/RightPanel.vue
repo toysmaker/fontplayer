@@ -20,6 +20,7 @@ import PictureEditPanel from './paramsEditPanels/PictureEditPanel.vue'
 import GlyphEditPanel from './paramsEditPanels/GlyphEditPanel.vue'
 import GlyphParamsPanel from './paramsEditPanels/GlyphParamsPanel.vue'
 import MetricsEditPanel from './paramsEditPanels/MetricsEditPanel.vue'
+import LayoutGridEditPanel from './paramsEditPanels/LayoutGridEditPanel.vue'
 import PictureImportParamsPanel from './paramsEditPanels/PictureImportParamsPanel.vue'
 
 const { t } = useI18n()
@@ -46,6 +47,9 @@ if (import.meta.env.DEV) {
     <!-- 字符编辑 metrics 工具：度量参数 -->
     <metrics-edit-panel
       v-else-if="editStatus === EditStatus.Edit && tool === 'metrics'"
+    />
+    <layout-grid-edit-panel
+      v-else-if="editStatus === EditStatus.Edit && tool === 'grid'"
     />
     <!-- 字形编辑 params 工具：显示字形参数面板（骨架绑定等） -->
     <glyph-params-panel

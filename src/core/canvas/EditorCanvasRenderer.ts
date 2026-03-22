@@ -18,6 +18,19 @@ import { fontRenderStyle } from '../script/globals'
 import { orderedListWithItemsForGlyph } from '../utils/glyph'
 import { instanceManager } from '../instance/InstanceManager'
 import { editModeFixedBounds } from '@/features/tools/select/PenSelectTool'
+import type { ILayoutTransformGrid } from '../utils/grid'
+import { computeCoords } from '../utils/grid'
+
+function applyLayoutTransformToPoints(
+  options: IRenderOptions,
+  points: Array<{ x: number; y: number }>,
+): Array<{ x: number; y: number }> {
+  const g = options.grid as ILayoutTransformGrid | undefined
+  if (!g?.initialGrid || !g?.currentGrid) {
+    return points
+  }
+  return points.map((p) => computeCoords(g, p))
+}
 
 /** 轮廓/彩色绘制用色：面板写在 IComponent.fillColor；否则 value.fillColor；字形嵌套时用 layerTint */
 function effectivePrimitiveFillColor(component: IComponent, options: IRenderOptions): string {
@@ -128,7 +141,9 @@ export function renderCanvas(
       offset: options.offset
     })
   }
-  
+
+  const skipPrim = options.skipPrimitivesForSkeletonPreview === true
+
   // 按组件列表顺序渲染所有组件
   for (const component of components) {
     // 如果组件不可见则跳过
@@ -149,6 +164,9 @@ export function renderCanvas(
 
     // 渲染图片组件
     if (component.type === 'picture') {
+      if (skipPrim) {
+        continue
+      }
       // 如果有未完成的路径，先绘制它
       if (currentPathStarted) {
         flushAccumulatedPathBeforeDirectDraw(ctx, options, component)
@@ -329,25 +347,31 @@ export function renderCanvas(
         }
       }
       
-      // 直接调用字形实例的 render 方法（与原工程一致）
       const glyphTint = glyphInstanceDisplayFill(component as IComponent, glyphValue)
-      if (options.forceUpdate) {
-        glyphInstance.render_forceUpdate(canvas, true, {
-          x: (options.offset?.x || 0) + (component as IGlyphComponent).ox,
-          y: (options.offset?.y || 0) + (component as IGlyphComponent).oy,
-        }, false, scale, glyphTint)
+      const g = options.grid as ILayoutTransformGrid | undefined
+      const hasLayoutTransform = !!(g?.initialGrid && g?.currentGrid)
+      const useSk = options.useSkeletonGrid ?? false
+      const ox = (options.offset?.x || 0) + (component as IGlyphComponent).ox
+      const oy = (options.offset?.y || 0) + (component as IGlyphComponent).oy
+      if (hasLayoutTransform) {
+        if (options.forceUpdate) {
+          glyphInstance.render_grid_forceUpdate(canvas, true, { x: ox, y: oy }, false, scale, g, useSk, glyphTint)
+        } else {
+          glyphInstance.render_grid(canvas, true, { x: ox, y: oy }, false, scale, g, useSk, glyphTint)
+        }
+      } else if (options.forceUpdate) {
+        glyphInstance.render_forceUpdate(canvas, true, { x: ox, y: oy }, false, scale, glyphTint)
       } else {
-        glyphInstance.render(canvas, true, {
-          x: (options.offset?.x || 0) + (component as IGlyphComponent).ox,
-          y: (options.offset?.y || 0) + (component as IGlyphComponent).oy,
-        }, false, scale, glyphTint)
+        glyphInstance.render(canvas, true, { x: ox, y: oy }, false, scale, glyphTint)
       }
       continue
     }
 
-    // 对于路径组件，需要检查是否需要开始新的路径
-    if (component.type === 'pen' || component.type === 'polygon' || component.type === 'ellipse' || component.type === 'rectangle') {
-      // 如果还没有开始路径，开始新路径
+    // 对于路径组件，需要检查是否需要开始新的路径（仅内层 skipPrimitives 时不绘制存储轮廓）
+    if (
+      !skipPrim &&
+      (component.type === 'pen' || component.type === 'polygon' || component.type === 'ellipse' || component.type === 'rectangle')
+    ) {
       if (!currentPathStarted && fontRenderStyle.value !== 'color') {
         ctx.beginPath()
         currentPathStarted = true
@@ -356,6 +380,9 @@ export function renderCanvas(
 
     // 渲染钢笔组件
     if (component.type === 'pen') {
+      if (skipPrim) {
+        continue
+      }
       const { x, y, w, h, rotation, flipX, flipY } = component
       const _x = mapCanvasX(x) * scale
       const _y = mapCanvasY(y) * scale
@@ -377,6 +404,7 @@ export function renderCanvas(
       let _points = transformPoints(points, {
         x, y, w, h, rotation: 0, flipX, flipY,
       }, fixedBounds)
+      _points = applyLayoutTransformToPoints(options, _points)
       _points = _points.map((point) => {
         return mapCanvasCoords({
           x: point.x * scale,
@@ -420,6 +448,9 @@ export function renderCanvas(
 
     // 渲染多边形组件
     if (component.type === 'polygon') {
+      if (skipPrim) {
+        continue
+      }
       const { x, y, w, h, rotation, flipX, flipY } = component
       const _x = mapCanvasX(x) * scale
       const _y = mapCanvasY(y) * scale
@@ -432,6 +463,7 @@ export function renderCanvas(
       let _points = transformPoints(points, {
         x, y, w, h, rotation: 0, flipX, flipY,
       })
+      _points = applyLayoutTransformToPoints(options, _points)
       _points = _points.map((point) => {
         return mapCanvasCoords({
           x: point.x * scale,
@@ -475,6 +507,9 @@ export function renderCanvas(
 
     // 渲染椭圆组件
     if (component.type === 'ellipse') {
+      if (skipPrim) {
+        continue
+      }
       const { x, y, w, h, rotation } = component
       const _x = mapCanvasX(x) * scale
       const _y = mapCanvasY(y) * scale
@@ -518,6 +553,9 @@ export function renderCanvas(
 
     // 渲染长方形组件
     if (component.type === 'rectangle') {
+      if (skipPrim) {
+        continue
+      }
       const { x, y, w, h, rotation } = component
       const _x = mapCanvasX(x) * scale
       const _y = mapCanvasY(y) * scale
@@ -599,6 +637,8 @@ export function render(
     components?: IComponent[]
     background?: IBackground
     grid?: IGrid
+    /** 字符九宫格预览：initialGrid + currentGrid + 可选 gridEditTarget */
+    layoutTransformGrid?: ILayoutTransformGrid
   } = { mode: 'character' }
 ): void {
   if (import.meta.env.DEV) {
@@ -658,11 +698,16 @@ export function render(
       // 计算 scale：canvas 显示尺寸 / canvas 实际尺寸
       // 如果 canvas 实际尺寸是 2000，显示尺寸是 500，scale 应该是 1（因为坐标已经通过 mapCanvasX/Y 映射了）
       // 但为了确保组件渲染到整个 canvas，我们需要确保坐标映射正确
+      const layoutBundle = options.layoutTransformGrid
+      const useSkeletonGrid = options.character?.info?.useSkeletonGrid ?? false
       renderCanvas(options.components, canvas, {
         forceUpdate,
         fill: false,
         offset: { x: 0, y: 0 },
-        scale: 1, // scale 保持为 1，坐标映射由 mapCanvasX/Y 处理
+        scale: 1,
+        grid: layoutBundle,
+        useSkeletonGrid,
+        skipPrimitivesForSkeletonPreview: false,
       })
     } else {
       if (import.meta.env.DEV) {

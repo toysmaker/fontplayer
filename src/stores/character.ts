@@ -5,7 +5,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed, reactive } from 'vue'
-import type { ICharacterFileLite, IComponent } from '@/core/types'
+import type { ICharacterFileLite, IComponent, IGridItem } from '@/core/types'
 import { useProjectStore } from './project'
 import { useEditorStore } from './editor'
 import { instanceManager } from '@/core/instance'
@@ -14,6 +14,54 @@ import { selectedItemByUUID } from '@/core/utils/component'
 import { genUUID } from '@/utils/uuid'
 import * as R from 'ramda'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
+
+export function defaultGridItem(): IGridItem {
+  return {
+    dx: 0,
+    dy: 0,
+    dx1: 0,
+    dy1: 0,
+    dx2: 0,
+    dy2: 0,
+    dx3: 0,
+    dy3: 0,
+    dx4: 0,
+    dy4: 0,
+    ox: 500,
+    oy: 500,
+    width: 1000,
+    height: 1000,
+    centerSquareScale: 1,
+  }
+}
+
+/** 补全 info.gridSettings.initialGrid / currentGrid，兼容旧数据 */
+export function ensureCharacterInfoGridSettings(character: ICharacterFileLite) {
+  if (!character.info) {
+    character.info = {}
+  }
+  const info = character.info
+  if (!info.gridSettings) {
+    const ig = defaultGridItem()
+    info.gridSettings = {
+      dx: 0,
+      dy: 0,
+      centerSquareSize: 1000 / 3,
+      size: 1000,
+      default: true,
+      initialGrid: R.clone(ig),
+      currentGrid: R.clone(ig),
+    }
+    return
+  }
+  const gs = info.gridSettings
+  if (!gs.initialGrid) {
+    gs.initialGrid = gs.currentGrid ? R.clone(gs.currentGrid) : defaultGridItem()
+  }
+  if (!gs.currentGrid) {
+    gs.currentGrid = R.clone(gs.initialGrid)
+  }
+}
 
 export const useCharacterStore = defineStore('character', () => {
   const projectStore = useProjectStore()
@@ -248,6 +296,8 @@ export const useCharacterStore = defineStore('character', () => {
         orderedListCount: editingCharacter.value.orderedList.length
       })
     }
+
+    ensureCharacterInfoGridSettings(editingCharacter.value)
     
     // 标记为正在编辑，触发实例化
     instanceManager.markEditing(uuid)
@@ -354,6 +404,37 @@ export const useCharacterStore = defineStore('character', () => {
     if (editingCharacter.value) {
       editingCharacter.value.selectedComponentsUUIDs = []
     }
+  }
+
+  /**
+   * 更新正在编辑字符的九宫格（initial 或 current），并同步简写字段供背景格 / 脚本 getRatioCoords
+   */
+  function patchEditingCharacterGridSettings(next: IGridItem, target: 'initialGrid' | 'currentGrid') {
+    if (!editingCharacter.value) return
+    ensureCharacterInfoGridSettings(editingCharacter.value)
+    const gs = editingCharacter.value.info!.gridSettings!
+    const clone = R.clone(next) as IGridItem
+    if (target === 'currentGrid') {
+      gs.currentGrid = clone
+      gs.dx = clone.dx
+      gs.dy = clone.dy
+      gs.size = clone.width
+      gs.centerSquareSize = (clone.width / 3) * clone.centerSquareScale
+    } else {
+      gs.initialGrid = clone
+    }
+  }
+
+  /** 右栏直接改 currentGrid 数值时同步 dx/dy/size/centerSquareSize（背景格 / getRatioCoords） */
+  function syncGridSettingsShorthandFromCurrentGrid() {
+    if (!editingCharacter.value?.info?.gridSettings?.currentGrid) return
+    ensureCharacterInfoGridSettings(editingCharacter.value)
+    const gs = editingCharacter.value.info!.gridSettings!
+    const c = gs.currentGrid!
+    gs.dx = c.dx
+    gs.dy = c.dy
+    gs.size = c.width
+    gs.centerSquareSize = (c.width / 3) * c.centerSquareScale
   }
 
   /**
@@ -622,6 +703,8 @@ export const useCharacterStore = defineStore('character', () => {
     getCharacterInstance,
     selectComponent,
     clearSelection,
+    patchEditingCharacterGridSettings,
+    syncGridSettingsShorthandFromCurrentGrid,
     updateComponent,
     modifyComponent,
     replaceGlyphComponentWithComponents,

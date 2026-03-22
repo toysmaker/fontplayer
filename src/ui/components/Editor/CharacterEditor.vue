@@ -28,6 +28,16 @@
             >
               <MetricsController />
             </div>
+            <div
+              v-show="toolStore.tool === 'grid'"
+              class="metrics-overlay"
+            >
+              <GridControllerFree
+                v-if="gridControllerProps"
+                v-bind="gridControllerProps"
+                @change="onGridControllerChange"
+              />
+            </div>
             <canvas
               ref="canvasRef"
               class="editor-canvas"
@@ -101,6 +111,9 @@ import { useToolStore } from '@/stores/tool'
 import { useDialogsStore } from '@/stores/dialogs'
 import { useCharacterMetricsDraftStore } from '@/stores/characterMetricsDraft'
 import MetricsController from '@/ui/components/Widgets/MetricsController.vue'
+import GridControllerFree from '@/ui/components/Widgets/GridControllerFree.vue'
+import { useCharacterGridEditStore } from '@/stores/characterGridEdit'
+import type { IGridItem } from '@/core/types'
 import type { ToolType } from '@/features/tools'
 
 const characterStore = useCharacterStore()
@@ -111,6 +124,7 @@ const editorPreference = useEditorPreferenceStore()
 const bottomBarToolStore = useBottomBarToolStore()
 const toolStore = useToolStore()
 const characterMetricsDraftStore = useCharacterMetricsDraftStore()
+const characterGridEditStore = useCharacterGridEditStore()
 const canvasRef = ref<HTMLCanvasElement>()
 let dragger: BaseGlyphDragger | null = null
 let selectControlCheckInterval: number | null = null
@@ -154,6 +168,33 @@ const displayHeight = computed(() => {
 const editorBackground = computed<IBackground>(() => editorPreference.background)
 const editorGrid = computed<IGrid>(() => editorPreference.grid)
 
+const layoutTransformGrid = computed(() => {
+  const ch = characterStore.editingCharacter
+  const gs = ch?.info?.gridSettings
+  if (!gs?.initialGrid || !gs?.currentGrid) return undefined
+  return {
+    initialGrid: gs.initialGrid,
+    currentGrid: gs.currentGrid,
+    gridEditTarget: characterGridEditStore.gridEditTarget,
+  }
+})
+
+const gridControllerProps = computed(() => {
+  const ch = characterStore.editingCharacter
+  if (!ch?.info?.gridSettings) return null
+  const t = characterGridEditStore.gridEditTarget
+  const g =
+    t === 'initialGrid' ? ch.info.gridSettings.initialGrid : ch.info.gridSettings.currentGrid
+  if (!g) return null
+  return { ...g }
+})
+
+function onGridControllerChange(next: IGridItem) {
+  characterStore.patchEditingCharacterGridSettings(next, characterGridEditStore.gridEditTarget)
+  characterGridEditStore.markLayoutGridDirty()
+  renderCanvas()
+}
+
 // 渲染画布
 const renderCanvas = () => {
   if (!canvasRef.value || !editingCharacter.value) {
@@ -182,6 +223,7 @@ const renderCanvas = () => {
     components: components,
     background: editorBackground.value,
     grid: editorGrid.value,
+    layoutTransformGrid: layoutTransformGrid.value,
   })
   
   // 渲染关键点和辅助线（在主要渲染之后）
@@ -514,6 +556,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  characterGridEditStore.resetToCurrent()
   // 离开字符编辑时勿保留 metrics/grid，避免 GlyphEditor 等场景 tool 无效
   if (toolStore.tool === 'metrics' || toolStore.tool === 'grid') {
     toolStore.setTool('select')
@@ -663,6 +706,23 @@ watch([() => editorPreference.background, () => editorPreference.grid], () => {
   renderCanvas()
 })
 
+watch(
+  () => [
+    characterGridEditStore.gridEditTarget,
+    characterStore.editingCharacter?.info?.useSkeletonGrid,
+  ] as const,
+  () => {
+    renderCanvas()
+  },
+)
+
+watch(
+  () => characterGridEditStore.mainCanvasRerenderNonce,
+  () => {
+    renderCanvas()
+  },
+)
+
 // 监听工具切换
 watch(() => toolStore.tool, async (newTool) => {
   if (import.meta.env.DEV) {
@@ -682,6 +742,10 @@ watch(() => toolStore.tool, async (newTool) => {
     // 与选择工具互斥：清空选中与 glyphDragger（switch 后 cleanupDragger 会再执行一次，此处先清选项）
     characterStore.clearSelection()
     characterMetricsDraftStore.hydrateFromEditingCharacter()
+  }
+
+  if (newTool === 'grid') {
+    characterStore.clearSelection()
   }
 
   if (newTool) {
