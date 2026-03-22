@@ -11,6 +11,10 @@ export function setGlobalConstantsMap(constantsMap: ConstantsMap) {
   globalConstantsMap = constantsMap
 }
 
+export function getGlobalConstantsMap(): ConstantsMap | null {
+  return globalConstantsMap
+}
+
 import { ConstantsMap } from './ConstantsMap'
 
 class ParametersMap {

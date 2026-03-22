@@ -345,6 +345,8 @@ const editStatusToRustString = (status: EditStatus): string => {
       return 'radicalglyphlist'
     case EditStatus.CompGlyphList:
       return 'compglyphlist'
+    case EditStatus.AdvancedEdit:
+      return 'advancededit'
     default:
       return 'characterlist'
   }

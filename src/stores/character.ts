@@ -654,6 +654,22 @@ export const useCharacterStore = defineStore('character', () => {
   /**
    * 添加组件到当前编辑的字符文件
    */
+  /**
+   * 清空工程中全部字符的预览/轮廓缓存引用并持久化，触发列表重绘（如高级编辑「一键更新全局变量」）
+   */
+  async function invalidateAllCachedCharacterPreviews() {
+    const file = projectStore.selectedFile
+    if (!file) return
+    for (const meta of file.characterList) {
+      const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
+      if (!ch) continue
+      ch.previewRef = undefined
+      ch.contourRef = undefined
+      await characterDataManager.updateCharacter(file.uuid, ch)
+    }
+    characterListVersion.value++
+  }
+
   function addComponent(component: IComponent) {
     if (!editingCharacter.value) return false
 
@@ -700,6 +716,7 @@ export const useCharacterStore = defineStore('character', () => {
     setEditCharacterFileByUUID,
     resetEditCharacterFile,
     updateCharacterListFromEditFile,
+    invalidateAllCachedCharacterPreviews,
     getCharacterInstance,
     selectComponent,
     clearSelection,

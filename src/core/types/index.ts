@@ -299,6 +299,10 @@ export interface ICharacterFileLite {
   glyph_script?: string
   contourRef?: string // IndexedDB key for contour data
   previewRef?: string // IndexedDB key for preview data
+  /** 部件拆解（部分批量脚本依赖；可选） */
+  decomposition?: unknown
+  /** 部件匹配表（部分批量脚本依赖；可选） */
+  matches?: unknown
 }
 
 /**
@@ -459,4 +463,5 @@ export enum EditStatus {
   Edit = 'Edit',
   Glyph = 'Glyph',
   Pic = 'Pic',
+  AdvancedEdit = 'AdvancedEdit',
 }

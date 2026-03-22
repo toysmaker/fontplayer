@@ -7,6 +7,7 @@ import type { ICustomGlyph } from '../types'
 import { instanceManager } from '../instance/InstanceManager'
 import { CustomGlyph } from '../instance/CustomGlyph'
 import { ConstantsMap } from './ConstantsMap'
+import { getGlobalConstantsMap } from './ParametersMap'
 import { useProjectStore } from '@/stores/project'
 import { FP } from './FPUtils'
 import { selectedFile } from './globals'
@@ -190,8 +191,11 @@ export function executeGlyphScript(
       // 获取项目存储（用于获取 constantsMap 和 selectedFile）
       const projectStore = useProjectStore()
       
-      // 从 store 获取统一的 constantsMap（使用单例模式）
-      const constantsMap = projectStore.constantsMap || ConstantsMap.getInstance([])
+      // 优先使用 ParametersMap 当前注入的 map（高级编辑预览时 setGlobalConstantsMap 指向面板常量）
+      const constantsMap =
+        getGlobalConstantsMap() ||
+        projectStore.constantsMap ||
+        ConstantsMap.getInstance([])
 
       // 注入 selectedFile 到脚本执行环境的全局状态
       originalSelectedFile = selectedFile.value

@@ -49,6 +49,7 @@
       <div class="dialog-footer">
         <div class="footer-left">
           <n-switch
+            v-if="!dialogs.glyphComponentsStrokeReplaceHandler"
             :value="dialogs.glyphComponentsMultiSelect"
             @update:value="dialogs.toggleGlyphComponentsMultiSelect"
           >
@@ -177,6 +178,14 @@ function addGlyphToCurrentContainer(glyph: ICustomGlyph, nameNonce = 0) {
 }
 
 function handleSelect(glyph: ICustomGlyph) {
+  const strokeCb = dialogs.glyphComponentsStrokeReplaceHandler
+  if (strokeCb) {
+    strokeCb(glyph.uuid)
+    dialogs.clearGlyphComponentsStrokeReplaceHandler()
+    dialogs.closeGlyphComponentsDialog()
+    visible.value = false
+    return
+  }
   if (!dialogs.glyphComponentsMultiSelect) {
     const ok = addGlyphToCurrentContainer(glyph)
     if (!ok) {

@@ -340,6 +340,8 @@ export class ProjectLoader {
       selectedComponentsUUIDs: character.selectedComponentsUUIDs,
       script: character.script,
       glyph_script: character.glyph_script,
+      decomposition: character.decomposition,
+      matches: character.matches,
     }
 
     // 工程文件中不包含 contour/preview（导出时已删除），需要重新计算

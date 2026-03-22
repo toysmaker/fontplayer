@@ -32,6 +32,11 @@ export interface IConvertOptions {
    * false/省略时用当前文件字体的 metrics。对齐原 `font.ts` 的 `isGlyph`。
    */
   isGlyph?: boolean
+  /**
+   * 与原版 `componentsToContours(..., { advancedEdit: true })` 对应。
+   * 调用方应在转换前将 `setGlobalConstantsMap` 指向高级编辑用的 ConstantsMap（面板常量）。
+   */
+  advancedEdit?: boolean
 }
 
 /**

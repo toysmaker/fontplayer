@@ -30,6 +30,11 @@ class ConstantsMap {
 		ConstantsMap.instance = null
 	}
 
+	/** 非单例：高级编辑面板等需要独立 constants 映射时使用 */
+	public static createLocal (constants: Array<IConstant> = []): ConstantsMap {
+		return new ConstantsMap(constants)
+	}
+
 	public update (constants: Array<IConstant>) {
 		this.constants = constants
 	}

@@ -19,12 +19,27 @@ export const useDialogsStore = defineStore('dialogs', () => {
 
   const glyphComponentsSelectedCount = computed(() => glyphComponentsSelectedPicks.value.length)
 
+  /** 高级编辑「笔画替换」：选模板后回调 uuid，不插入到当前编辑字符 */
+  const glyphComponentsStrokeReplaceHandler = ref<((templateUuid: string) => void) | null>(null)
+
+  function openGlyphComponentsDialogForStrokeReplace(onPicked: (templateUuid: string) => void) {
+    glyphComponentsStrokeReplaceHandler.value = onPicked
+    glyphComponentsMultiSelect.value = false
+    glyphComponentsSelectedPicks.value = []
+    glyphComponentsDialogVisible.value = true
+  }
+
+  function clearGlyphComponentsStrokeReplaceHandler() {
+    glyphComponentsStrokeReplaceHandler.value = null
+  }
+
   function openGlyphComponentsDialog() {
     glyphComponentsDialogVisible.value = true
   }
 
   function closeGlyphComponentsDialog() {
     glyphComponentsDialogVisible.value = false
+    glyphComponentsStrokeReplaceHandler.value = null
     // 保持与原工程一致：关闭后清空多选与已选
     glyphComponentsMultiSelect.value = false
     glyphComponentsSelectedPicks.value = []
@@ -93,6 +108,9 @@ export const useDialogsStore = defineStore('dialogs', () => {
     glyphComponentsMultiSelect,
     glyphComponentsSelectedPicks,
     glyphComponentsSelectedCount,
+    glyphComponentsStrokeReplaceHandler,
+    openGlyphComponentsDialogForStrokeReplace,
+    clearGlyphComponentsStrokeReplaceHandler,
     openGlyphComponentsDialog,
     closeGlyphComponentsDialog,
     setGlyphComponentsActiveTab,

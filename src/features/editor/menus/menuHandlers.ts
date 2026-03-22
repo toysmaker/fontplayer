@@ -75,7 +75,8 @@ export function createDisabledRules(ctx: {
     return (
       editorStore.editStatus !== EditStatus.Edit &&
       editorStore.editStatus !== EditStatus.Glyph &&
-      editorStore.editStatus !== EditStatus.Pic
+      editorStore.editStatus !== EditStatus.Pic &&
+      editorStore.editStatus !== EditStatus.AdvancedEdit
     )
   }
 

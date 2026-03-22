@@ -57,9 +57,10 @@ export const useEditorStore = defineStore('editor', () => {
                          editStatus.value === EditStatus.CompGlyphList || 
                          editStatus.value === EditStatus.GlyphList
     const isEditStatus = status === EditStatus.Edit || status === EditStatus.Glyph
-    
-    if (isListStatus && isEditStatus) {
-      // 保存当前的列表状态到 prevStatus
+    const enteringAdvanced = status === EditStatus.AdvancedEdit
+
+    if (isListStatus && (isEditStatus || enteringAdvanced)) {
+      // 保存当前的列表状态到 prevStatus（进入字符/字形编辑或高级编辑）
       prevStatus.value = editStatus.value
       if (import.meta.env.DEV) {
         console.log(`[EditorStore] Saving prevStatus: ${prevStatus.value} -> entering ${status}`)
@@ -84,6 +85,12 @@ export const useEditorStore = defineStore('editor', () => {
       case EditStatus.Pic:
         showLeftPanel.value = true
         showRightPanel.value = true
+        showToolbar.value = false
+        showBottomBar.value = false
+        break
+      case EditStatus.AdvancedEdit:
+        showLeftPanel.value = false
+        showRightPanel.value = false
         showToolbar.value = false
         showBottomBar.value = false
         break

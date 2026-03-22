@@ -10,6 +10,7 @@ import { ParameterType } from '../types'
 import { instanceManager, type IInstance } from './InstanceManager'
 import { orderedListWithItemsForGlyph } from '../utils/glyph'
 import { useProjectStore } from '@/stores/project'
+import { getGlobalConstantsMap } from '../script/ParametersMap'
 import { renderCanvas } from '../canvas/EditorCanvasRenderer'
 import { fontRenderStyle } from '../script/globals'
 import { computeCoords, type ILayoutTransformGrid } from '../utils/grid'
@@ -510,6 +511,23 @@ export class CustomGlyph implements IInstance {
   private getParameterValue(param: IParameter): any {
     // Number 或 RingController 类型，直接返回 value
     if (param.type === ParameterType.Number || param.type === ParameterType.RingController) {
+      return param.value
+    }
+
+    // 高级编辑预览：字形参数已改为 AdvancedEditConstant，须走 setGlobalConstantsMap 注入的面板常量
+    if (param.type === ParameterType.AdvancedEditConstant) {
+      const uuidValue = String(param.value)
+      const globalCm = getGlobalConstantsMap()
+      if (globalCm && typeof globalCm.getByUUID === 'function' && uuidValue) {
+        const resolved = globalCm.getByUUID(uuidValue)
+        if (resolved !== undefined) return resolved
+      }
+      const projectStore = useProjectStore()
+      const cm = projectStore.constantsMap
+      if (cm && typeof cm.getByUUID === 'function' && uuidValue) {
+        const resolved = cm.getByUUID(uuidValue)
+        if (resolved !== undefined) return resolved
+      }
       return param.value
     }
     

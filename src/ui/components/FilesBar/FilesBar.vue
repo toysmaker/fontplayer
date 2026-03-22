@@ -24,7 +24,7 @@
         </span>
       </span>
       <span class="advanced-edit-btn" v-show="files.length > 0">
-        <n-button type="primary" size="small">
+        <n-button type="primary" size="small" @click="openAdvancedEdit">
           <template #icon>
             <font-awesome-icon :icon="['fas', 'wrench']" />
           </template>
@@ -209,6 +209,10 @@ const fontPreviewStyle = computed({
 // 处理预览样式变化
 const handlePreviewStyleChange = () => {
   // 全局变量已更新，列表将在下次渲染时使用新样式
+}
+
+function openAdvancedEdit() {
+  editorStore.setEditStatus(EditStatus.AdvancedEdit)
 }
 
 // 处理设置按钮点击

@@ -30,6 +30,7 @@
       <CharacterEditor v-if="editStatus === EditStatus.Edit" />
       <GlyphEditor v-else-if="editStatus === EditStatus.Glyph" />
       <PictureImportWorkspace v-else-if="editStatus === EditStatus.Pic" />
+      <AdvancedEditPanel v-else-if="editStatus === EditStatus.AdvancedEdit" class="advanced-edit-panel-wrapper" />
       <n-empty v-else-if="!isListMode" :description="t('panels.editorMain.featureInDevelopment')" />
     </div>
     
@@ -76,6 +77,7 @@ import CharacterEditor from '@/ui/components/Editor/CharacterEditor.vue'
 import GlyphEditor from '@/ui/components/Editor/GlyphEditor.vue'
 import PictureImportWorkspace from '@/ui/components/Editor/PictureImportWorkspace.vue'
 import FilesBar from '@/ui/components/FilesBar/FilesBar.vue'
+import AdvancedEditPanel from '@/ui/views/AdvancedEditPanel/AdvancedEditPanel.vue'
 
 const { t } = useI18n()
 
@@ -170,6 +172,12 @@ const handleTabChange = (status: EditStatus) => {
   border: 1px solid var(--primary-1);
   line-height: 40px;
   background: var(--primary-5);
+}
+
+.advanced-edit-panel-wrapper {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 </style>
