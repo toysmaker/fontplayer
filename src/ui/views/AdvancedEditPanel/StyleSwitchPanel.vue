@@ -1,47 +1,12 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
-import { NButton, NScrollbar } from 'naive-ui'
-import { genUUID } from '@/utils/uuid'
-import { ParameterType } from '@/core/types'
+import { NButton, NFormItem, NInput, NScrollbar } from 'naive-ui'
 import { useAdvancedEditStore } from '@/stores/advancedEdit'
 
 const advancedEdit = useAdvancedEditStore()
 
 onMounted(() => {
-  advancedEdit.styles = [
-    {
-      uuid: 'default',
-      name: '默认风格',
-      strokeStyle: '默认风格',
-      constants: [],
-      parameters: [],
-    },
-    {
-      uuid: genUUID(),
-      name: '字玩标准黑体',
-      strokeStyle: '字玩标准黑体',
-      constants: [
-        { name: '起笔风格', value: 2 },
-        { name: '起笔数值', value: 1 },
-        { name: '转角风格', value: 1 },
-        { name: '转角数值', value: 1 },
-        { name: '字重变化', value: 0 },
-        { name: '弯曲程度', value: 1 },
-      ],
-      parameters: [
-        { name: '字重', value: 50, min: 40, max: 100, type: ParameterType.Number },
-      ],
-    },
-    {
-      uuid: genUUID(),
-      name: '字玩标准宋体',
-      strokeStyle: '字玩标准宋体',
-      constants: [],
-      parameters: [
-        { name: '字重', value: 50, min: 40, max: 100, type: ParameterType.Number },
-      ],
-    },
-  ]
+  advancedEdit.initStyleSwitchTemplates()
   advancedEdit.selectedStyleUUID = 'default'
   void advancedEdit.refreshStyleSwitchPreviews()
 })
@@ -59,6 +24,7 @@ function handleToggleEditSample() {
 }
 
 function handleSelectStyle(style: (typeof advancedEdit.styles)[0]) {
+  if (!advancedEdit.isStyleSwitchOptionEnabled(style)) return
   advancedEdit.selectedStyleUUID = style.uuid
   void advancedEdit.refreshStyleSwitchPreviews()
 }
@@ -70,6 +36,17 @@ function handleSelectStyle(style: (typeof advancedEdit.styles)[0]) {
       <div class="left">
         <div class="sample-characters-section">
           <h3>样例字符</h3>
+          <n-form-item label="">
+            <n-input
+              v-model:value="advancedEdit.sampleCharacters"
+              type="textarea"
+              :rows="4"
+              :disabled="!advancedEdit.isEditingSample"
+              placeholder="请输入最多20个字符，每个字符不能重复"
+              :maxlength="20"
+              show-count
+            />
+          </n-form-item>
           <n-button
             block
             :type="advancedEdit.isEditingSample ? 'success' : 'primary'"
@@ -105,15 +82,22 @@ function handleSelectStyle(style: (typeof advancedEdit.styles)[0]) {
         <n-scrollbar style="max-height: 100%">
           <div class="title">风格列表</div>
           <div class="style-list">
-            <div
-              v-for="style in advancedEdit.styles"
-              :key="style.uuid"
+            <n-button
+              v-for="preset in advancedEdit.styles"
+              :key="preset.uuid"
+              block
               class="style-item"
-              :class="{ selected: advancedEdit.selectedStyleUUID === style.uuid }"
-              @click="handleSelectStyle(style)"
+              :type="advancedEdit.selectedStyleUUID === preset.uuid ? 'primary' : 'default'"
+              :disabled="!advancedEdit.isStyleSwitchOptionEnabled(preset)"
+              :title="
+                !advancedEdit.isStyleSwitchOptionEnabled(preset) && preset.uuid !== 'default'
+                  ? '字库中无该风格的笔画模板'
+                  : ''
+              "
+              @click="handleSelectStyle(preset)"
             >
-              {{ style.name }}
-            </div>
+              {{ preset.name }}
+            </n-button>
           </div>
         </n-scrollbar>
       </div>
@@ -149,13 +133,19 @@ function handleSelectStyle(style: (typeof advancedEdit.styles)[0]) {
 .sample-characters-section h3 {
   margin: 0 0 15px 0;
   color: var(--light-0);
+  font-size: 16px;
 }
 .update-section {
   margin-top: auto;
+  text-align: center;
 }
 .main {
   flex: auto;
   overflow: auto;
+  min-width: 0;
+}
+.characters {
+  flex: 0 0 450px;
 }
 .character-preview {
   display: inline-block;
@@ -171,20 +161,25 @@ function handleSelectStyle(style: (typeof advancedEdit.styles)[0]) {
   flex: 0 0 260px;
   border-left: 1px solid var(--light-5);
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 .title {
   padding: 8px 10px;
   background: var(--primary-0);
   color: var(--light-0);
 }
-.style-item {
-  padding: 12px;
-  cursor: pointer;
-  border-bottom: 1px solid var(--light-5);
+.style-list {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 20px;
 }
-.style-item.selected {
-  background: var(--primary-5);
+.style-item {
+  justify-content: center;
+}
+:deep(.n-form-item-label) {
   color: var(--primary-0);
-  font-weight: bold;
 }
 </style>

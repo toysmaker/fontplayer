@@ -24,7 +24,13 @@ import { ContourConverter } from '@/core/font/converter'
 import { renderAdvancedEditPreview } from '@/core/canvas/advancedEditPreview'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
-import { orderedListWithItemsForGlyph } from '@/core/utils/glyph'
+import { orderedListWithItemsForGlyph, parameterRowsForGlyph } from '@/core/utils/glyph'
+import {
+  applySharedSerifConstantsPatch,
+  isSerifStylePreset,
+  processCharacterAfterSongStyleSwitch,
+  processCharacterBeforeSerifStyleSwitch,
+} from '@/features/advancedEdit/styleSwitchPostProcess'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 
@@ -38,15 +44,107 @@ export const PanelType = {
 
 export type PanelTypeId = (typeof PanelType)[keyof typeof PanelType]
 
-/** 字形参数可能是扁平数组，也可能是 `{ parameters: [...] }`（与 CustomGlyph 构造函数一致） */
-function parameterRowsForGlyph(g: ICustomGlyph): Array<{ type: ParameterType; name: string; value: unknown }> | undefined {
-  const raw = g.parameters as unknown
-  if (!raw) return undefined
-  if (Array.isArray(raw)) return raw as Array<{ type: ParameterType; name: string; value: unknown }>
-  const inner = (raw as { parameters?: unknown }).parameters
-  if (Array.isArray(inner)) return inner as Array<{ type: ParameterType; name: string; value: unknown }>
-  return undefined
+export type StyleSwitchPreset = {
+  uuid: string
+  name: string
+  strokeStyle: string
+  constants: Array<{ name: string; value: number }>
+  parameters: Array<{
+    name: string
+    value: number
+    min?: number
+    max?: number
+    type?: ParameterType
+  }>
 }
+
+/** 与原 StyleSwitchPanel 一致的可导入风格模板（uuid 固定，便于选中态持久） */
+export const STYLE_SWITCH_PRESETS: StyleSwitchPreset[] = [
+  {
+    uuid: 'default',
+    name: '默认风格',
+    strokeStyle: '默认风格',
+    constants: [],
+    parameters: [],
+  },
+  {
+    uuid: 'ss-heiti',
+    name: '字玩标准黑体',
+    strokeStyle: '字玩标准黑体',
+    constants: [
+      { name: '起笔风格', value: 2 },
+      { name: '起笔数值', value: 1 },
+      { name: '转角风格', value: 1 },
+      { name: '转角数值', value: 1 },
+      { name: '字重变化', value: 0 },
+      { name: '弯曲程度', value: 1 },
+    ],
+    parameters: [
+      { name: '字重', value: 50, min: 40, max: 100, type: ParameterType.Number },
+    ],
+  },
+  {
+    uuid: 'ss-heiti-round',
+    name: '字玩标准黑体-圆角',
+    strokeStyle: '字玩标准黑体',
+    constants: [
+      { name: '起笔风格', value: 2 },
+      { name: '起笔数值', value: 1 },
+      { name: '转角风格', value: 0 },
+      { name: '转角数值', value: 1 },
+      { name: '字重变化', value: 0 },
+      { name: '弯曲程度', value: 2 },
+    ],
+    parameters: [
+      { name: '字重', value: 50, min: 40, max: 100, type: ParameterType.Number },
+    ],
+  },
+  {
+    uuid: 'ss-sketch',
+    name: '测试手绘风格',
+    strokeStyle: '测试手绘风格',
+    constants: [],
+    parameters: [
+      { name: '字重', value: 50, min: 40, max: 100, type: ParameterType.Number },
+    ],
+  },
+  {
+    uuid: 'ss-song',
+    name: '字玩标准宋体',
+    strokeStyle: '字玩标准宋体',
+    constants: [],
+    parameters: [
+      { name: '字重', value: 50, min: 40, max: 100, type: ParameterType.Number },
+    ],
+  },
+  {
+    uuid: 'ss-fangsong',
+    name: '字玩标准仿宋',
+    strokeStyle: '字玩标准仿宋',
+    constants: [],
+    parameters: [
+      { name: '字重', value: 30, min: 40, max: 100, type: ParameterType.Number },
+    ],
+  },
+  {
+    uuid: 'ss-kai',
+    name: '字玩标准楷体',
+    strokeStyle: '字玩标准楷体',
+    constants: [],
+    parameters: [
+      { name: '字重', value: 50, min: 40, max: 100, type: ParameterType.Number },
+    ],
+  },
+  {
+    uuid: 'ss-li',
+    name: '字玩标准隶书',
+    strokeStyle: '字玩标准隶书',
+    constants: [],
+    parameters: [
+      { name: '字重', value: 50, min: 40, max: 100, type: ParameterType.Number },
+    ],
+  },
+]
 
 function rewriteGlyphParamsForAdvancedPreview(root: ICharacterFileLite) {
   const walkGlyph = (g: ICustomGlyph) => {
@@ -103,15 +201,24 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
   )
 
   const selectedStyleUUID = ref('default')
-  const styles = ref<
-    Array<{
-      uuid: string
-      name: string
-      strokeStyle: string
-      constants: Array<{ name: string; value: number }>
-      parameters: Array<{ name: string; value: number; min?: number; max?: number; type?: ParameterType }>
-    }>
-  >([])
+  const styles = ref<StyleSwitchPreset[]>([])
+
+  function initStyleSwitchTemplates() {
+    if (styles.value.length) return
+    styles.value = STYLE_SWITCH_PRESETS.map((p) => R.clone(p))
+  }
+
+  /** 当前字库笔画池中是否存在该风格（任一笔画即可） */
+  function projectHasStrokeStyle(strokeStyle: string): boolean {
+    const f = projectStore.selectedFile
+    if (!f?.stroke_glyphs?.length) return false
+    return f.stroke_glyphs.some((g) => g.style === strokeStyle)
+  }
+
+  function isStyleSwitchOptionEnabled(preset: StyleSwitchPreset): boolean {
+    if (preset.uuid === 'default') return true
+    return projectHasStrokeStyle(preset.strokeStyle)
+  }
 
   function setActivePanel(p: PanelTypeId) {
     activePanel.value = p
@@ -450,7 +557,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     return f.stroke_glyphs.filter((g) => g.style === strokeStyle)
   }
 
-  function mergeStyleConstantsInto(target: IConstant[], style: (typeof styles.value)[0]) {
+  function mergeStyleConstantsInto(target: IConstant[], style: StyleSwitchPreset) {
     for (const c of target) {
       for (const sc of style.constants) {
         if (c.name === sc.name) c.value = sc.value
@@ -458,10 +565,10 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     }
   }
 
-  /** 仅替换笔画参数（不修改面板 constants）；预览时配合临时 global constants map */
+  /** 仅替换笔画数据；不在此执行脚本，避免与 ContourConverter 内 executeGlyphScript 重复执行（tempData 会导致第二次跳过，预览错位） */
   function applyStyleStrokeReplacementsToCharacter(
     characterFile: ICharacterFileLite,
-    style: (typeof styles.value)[0] | undefined,
+    style: StyleSwitchPreset | undefined,
   ) {
     if (!style) return
     const strokeListByStyle = getStrokeListByStyle(style.strokeStyle)
@@ -473,11 +580,10 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
         const cur = gc.value as ICustomGlyph
         if (cur.name !== strokeName) continue
         const glyph = R.clone(strokeGlyph)
-        const params = ((glyph.parameters as { parameters?: any[] })?.parameters) || []
-        const srcParams =
-          (cur.parameters as { parameters?: any[] } | undefined)?.parameters || []
-        for (let j = 0; j < params.length; j++) {
-          const parameter = params[j]
+        const destParams = parameterRowsForGlyph(glyph) ?? []
+        const srcParams = parameterRowsForGlyph(cur) ?? []
+        for (let j = 0; j < destParams.length; j++) {
+          const parameter = destParams[j]
           const originParameter = srcParams.find((q: { name: string }) => q.name === parameter.name)
           if (originParameter && originParameter.type !== ParameterType.AdvancedEditConstant) {
             let replaced = false
@@ -494,12 +600,11 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
           }
         }
         gc.value = glyph
-        executeGlyphScript(glyph, gc.uuid)
       }
     }
   }
 
-  function switchStyle2OnCharacter(characterFile: ICharacterFileLite, style: (typeof styles.value)[0] | undefined) {
+  function switchStyle2OnCharacter(characterFile: ICharacterFileLite, style: StyleSwitchPreset | undefined) {
     if (!style) return
     const strokeListByStyle = getStrokeListByStyle(style.strokeStyle)
     for (const strokeGlyph of strokeListByStyle) {
@@ -510,11 +615,10 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
         const cur = gc.value as ICustomGlyph
         if (cur.name !== strokeName) continue
         const glyph = R.clone(strokeGlyph)
-        const params = ((glyph.parameters as { parameters?: any[] })?.parameters) || []
-        const srcParams =
-          (cur.parameters as { parameters?: any[] } | undefined)?.parameters || []
-        for (let j = 0; j < params.length; j++) {
-          const parameter = params[j]
+        const destParams = parameterRowsForGlyph(glyph) ?? []
+        const srcParams = parameterRowsForGlyph(cur) ?? []
+        for (let j = 0; j < destParams.length; j++) {
+          const parameter = destParams[j]
           const originParameter = srcParams.find((q: { name: string }) => q.name === parameter.name)
           if (originParameter && originParameter.type !== ParameterType.Constant) {
             let replaced = false
@@ -531,7 +635,6 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
           }
         }
         gc.value = glyph
-        executeGlyphScript(glyph, gc.uuid)
       }
     }
   }
@@ -541,6 +644,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     await updateSampleCharactersList()
     const mergedConstants = R.clone(constants.value)
     if (style) mergeStyleConstantsInto(mergedConstants, style)
+    if (style && isSerifStylePreset(style)) applySharedSerifConstantsPatch(mergedConstants)
     const tempMap = ConstantsMap.createLocal(mergedConstants)
     const prevG = getGlobalConstantsMap()
     setGlobalConstantsMap(tempMap)
@@ -548,26 +652,44 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
       const next: ICharacterFileLite[] = []
       for (const orig of originSampleCharactersList.value) {
         const c = R.clone(orig)
+        if (style?.uuid === 'ss-fangsong') {
+          processCharacterBeforeSerifStyleSwitch(c, mergedConstants, 'fangsong')
+        } else if (style?.uuid === 'ss-kai') {
+          processCharacterBeforeSerifStyleSwitch(c, mergedConstants, 'kai')
+        } else if (style?.uuid === 'ss-li') {
+          processCharacterBeforeSerifStyleSwitch(c, mergedConstants, 'li')
+        }
         applyStyleStrokeReplacementsToCharacter(c, style)
+        if (style?.uuid === 'ss-song') {
+          processCharacterAfterSongStyleSwitch(c, mergedConstants)
+        }
+        rewriteGlyphParamsForAdvancedPreview(c)
         next.push(c)
       }
       sampleCharactersList.value = next
       await nextTick()
-      for (const character of sampleCharactersList.value) {
-        const canvas = document.getElementById(
-          `advanced-edit-preview-canvas-${character.uuid}`,
-        ) as HTMLCanvasElement | null
-        if (!canvas) continue
-        const m = getFontMetrics()
-        const ordered = orderedListWithItemsForCharacterFile(character)
-        const contours = ContourConverter.componentsToContours(
-          ordered,
-          { ...m, preview: true, forceUpdate: true, advancedEdit: true },
-          { x: 0, y: 0 },
-        )
-        const fillColors = ContourConverter.getFillColors(ordered as IComponent[])
-        renderAdvancedEditPreview(canvas, contours, fillColors, projectStore.fontPreviewStyle)
-      }
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            for (const character of sampleCharactersList.value) {
+              const canvas = document.getElementById(
+                `advanced-edit-preview-canvas-${character.uuid}`,
+              ) as HTMLCanvasElement | null
+              if (!canvas) continue
+              const m = getFontMetrics()
+              const ordered = orderedListWithItemsForCharacterFile(character)
+              const contours = ContourConverter.componentsToContours(
+                ordered,
+                { ...m, preview: true, forceUpdate: true, advancedEdit: true },
+                { x: 0, y: 0 },
+              )
+              const fillColors = ContourConverter.getFillColors(ordered as IComponent[])
+              renderAdvancedEditPreview(canvas, contours, fillColors, projectStore.fontPreviewStyle)
+            }
+            resolve()
+          })
+        })
+      })
     } finally {
       if (prevG) setGlobalConstantsMap(prevG)
     }
@@ -577,12 +699,24 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     const style = styles.value.find((s) => s.uuid === selectedStyleUUID.value)
     const file = projectStore.selectedFile
     if (!style || !file) return
+    if (style.uuid !== 'default' && !projectHasStrokeStyle(style.strokeStyle)) return
     if (!file.constants) file.constants = []
     mergeStyleConstantsInto(file.constants, style)
+    if (isSerifStylePreset(style)) applySharedSerifConstantsPatch(file.constants)
     for (const meta of file.characterList) {
       const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
       if (!ch) continue
+      if (style.uuid === 'ss-fangsong') {
+        processCharacterBeforeSerifStyleSwitch(ch, file.constants, 'fangsong')
+      } else if (style.uuid === 'ss-kai') {
+        processCharacterBeforeSerifStyleSwitch(ch, file.constants, 'kai')
+      } else if (style.uuid === 'ss-li') {
+        processCharacterBeforeSerifStyleSwitch(ch, file.constants, 'li')
+      }
       switchStyle2OnCharacter(ch, style)
+      if (style.uuid === 'ss-song') {
+        processCharacterAfterSongStyleSwitch(ch, file.constants)
+      }
       await characterDataManager.updateCharacter(file.uuid, ch)
     }
     constants.value = R.clone(file.constants)
@@ -647,6 +781,9 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     applyStrokeReplacementsToAll,
     styles,
     selectedStyleUUID,
+    initStyleSwitchTemplates,
+    isStyleSwitchOptionEnabled,
+    projectHasStrokeStyle,
     refreshStyleSwitchPreviews,
     applyStyleToEntireProject,
     getGlyphByUUID,
