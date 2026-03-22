@@ -6,11 +6,19 @@ import type {
   IGlyphComponent,
   ICustomGlyphComponent,
   ICustomGlyph,
+  ICharacterFileLite,
+  IPenComponent,
+  IPolygonComponent,
+  IRectangleComponent,
+  IEllipseComponent,
 } from '@/core/types'
 import { ComponentType } from '@/core/types'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+import { selectedItemByUUID } from '@/core/utils/component'
+import { computeCoords, type ILayoutTransformGrid } from '@/core/utils/grid'
+import { transformPoints, getBound, getEllipsePoints, type IPoint } from '@/core/utils/math'
 
 type OrderedItem = {
   type: string
@@ -339,5 +347,218 @@ export const formatContainerGlyphComponents = (
   container.components = formattedComponents
   ;(container as any).orderedList = formattedOrder
   return true
+}
+
+/**
+ * 与 character store 的 orderedListWithItemsForCurrentCharacterFile 一致（用于应用布局后就地改坐标）
+ */
+export function orderedListWithItemsForCharacterFile(
+  character: ICharacterFileLite,
+): IComponent[] {
+  if (!character.components?.length) {
+    return []
+  }
+  if (!character.orderedList?.length) {
+    return character.components
+  }
+  return character.orderedList
+    .map((item: { type: string; uuid: string }) => {
+      if (item.type === 'group') {
+        return null
+      }
+      if (item.type !== 'component') {
+        return null
+      }
+      return selectedItemByUUID(character.components, item.uuid)
+    })
+    .filter((item): item is IComponent => item != null)
+}
+
+export interface IFormatGridComponentsOptions {
+  grid: ILayoutTransformGrid | null
+  offset?: { x: number; y: number }
+  /** 为 true 时跳过笔划类（对齐旧版 canvas.formatGridComponents） */
+  useSkeletonGrid?: boolean
+}
+
+/**
+ * 将九宫格 initialGrid→currentGrid 的变换写入各组件数据（对齐原 fontplayer canvas.formatGridComponents）
+ * 须在 formatContainerGlyphComponents 之后、重置 gridSettings 之前调用。
+ */
+export function formatGridComponents(
+  components: IComponent[],
+  options: IFormatGridComponentsOptions,
+): void {
+  if (!options.grid?.initialGrid || !options.grid?.currentGrid) {
+    return
+  }
+  const grid = options.grid
+  const useSkeletonGrid = options.useSkeletonGrid ?? false
+  const offset = options.offset ?? { x: 0, y: 0 }
+  const translate = (point: IPoint) => ({
+    x: offset.x + point.x,
+    y: offset.y + point.y,
+  })
+
+  for (const component of components) {
+    if (!component || component.visible === false) {
+      continue
+    }
+
+    if (component.type === ComponentType.Pen) {
+      if (useSkeletonGrid) {
+        continue
+      }
+      const { x, y, w, h, rotation, flipX, flipY } = component
+      const { points } = component.value as IPenComponent
+      let _points = transformPoints(points, {
+        x,
+        y,
+        w,
+        h,
+        rotation,
+        flipX,
+        flipY,
+      })
+      _points = _points.map((point: IPoint) => {
+        const mapped = computeCoords(grid, translate(point))
+        point.x = mapped.x
+        point.y = mapped.y
+        return point
+      })
+      const bound = getBound(_points)
+      component.x = bound.x
+      component.y = bound.y
+      component.w = bound.w
+      component.h = bound.h
+      component.rotation = 0
+      component.flipX = false
+      component.flipY = false
+      const pv = component.value as IPenComponent
+      pv.points = _points
+      pv.contour = undefined
+      pv.preview = undefined
+    }
+
+    if (component.type === ComponentType.Polygon) {
+      if (useSkeletonGrid) {
+        continue
+      }
+      const { x, y, w, h, rotation, flipX, flipY } = component
+      const { points } = component.value as IPolygonComponent
+      let _points = transformPoints(points, {
+        x,
+        y,
+        w,
+        h,
+        rotation,
+        flipX,
+        flipY,
+      })
+      _points = _points.map((point: IPoint) => {
+        const mapped = computeCoords(grid, translate(point))
+        point.x = mapped.x
+        point.y = mapped.y
+        return point
+      })
+      const bound = getBound(_points)
+      component.x = bound.x
+      component.y = bound.y
+      component.w = bound.w
+      component.h = bound.h
+      component.rotation = 0
+      component.flipX = false
+      component.flipY = false
+      const pv = component.value as IPolygonComponent
+      pv.points = _points
+      pv.contour = undefined
+      pv.preview = undefined
+    }
+
+    if (component.type === ComponentType.Ellipse) {
+      if (useSkeletonGrid) {
+        continue
+      }
+      const comp = component
+      const { x, y, w, h, rotation, flipX, flipY } = comp
+      const ellipseValue = component.value as IEllipseComponent
+      const radiusX = ellipseValue.radiusX || w / 2
+      const radiusY = ellipseValue.radiusY || h / 2
+      const ellipseX = x
+      const ellipseY = y
+      let points = getEllipsePoints(
+        radiusX,
+        radiusY,
+        1000,
+        ellipseX + radiusX,
+        ellipseY + radiusY,
+      )
+      let _points = transformPoints(points, {
+        x,
+        y,
+        w,
+        h,
+        rotation,
+        flipX,
+        flipY,
+      })
+      _points = _points.map((point: IPoint) => {
+        const coords = computeCoords(grid, translate(point))
+        point.x = coords.x
+        point.y = coords.y
+        return point
+      })
+      const bound = getBound(_points)
+      const newRadiusX = bound.w / 2
+      const newRadiusY = bound.h / 2
+      comp.x = bound.x
+      comp.y = bound.y
+      comp.w = bound.w
+      comp.h = bound.h
+      comp.rotation = 0
+      comp.flipX = false
+      comp.flipY = false
+      ellipseValue.radiusX = newRadiusX
+      ellipseValue.radiusY = newRadiusY
+      ellipseValue.contour = undefined
+      ellipseValue.preview = undefined
+    }
+
+    if (component.type === ComponentType.Rectangle) {
+      if (useSkeletonGrid) {
+        continue
+      }
+      const { x, y, w, h, rotation } = component
+      const p0 = { x, y }
+      const p1 = { x: x + w, y: y + h }
+      let _points = transformPoints([p0, p1], {
+        x,
+        y,
+        w,
+        h,
+        rotation,
+        flipX: component.flipX,
+        flipY: component.flipY,
+      })
+      _points = _points.map((point: IPoint) => {
+        const mapped = computeCoords(grid, translate(point))
+        return { x: mapped.x, y: mapped.y }
+      })
+      const width = _points[1].x - _points[0].x
+      const height = _points[1].y - _points[0].y
+      component.x = x
+      component.y = y
+      component.w = w
+      component.h = h
+      component.rotation = 0
+      component.flipX = false
+      component.flipY = false
+      const rv = component.value as IRectangleComponent
+      rv.width = width
+      rv.height = height
+      rv.contour = undefined
+      rv.preview = undefined
+    }
+  }
 }
 

@@ -23,7 +23,12 @@ import { ComponentType } from '@/core/types'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
-import { formatContainerGlyphComponents } from '@/features/editor/services/FormatGlyphService'
+import {
+  formatContainerGlyphComponents,
+  formatGridComponents,
+  orderedListWithItemsForCharacterFile,
+} from '@/features/editor/services/FormatGlyphService'
+import type { ILayoutTransformGrid } from '@/core/utils/grid'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -128,7 +133,17 @@ function confirmApplyGrid() {
     onPositiveClick: () => {
       const ch = characterStore.editingCharacter
       if (!ch) return
+      ensureCharacterInfoGridSettings(ch)
+      const gs = ch.info!.gridSettings!
+      const layoutBundle: ILayoutTransformGrid = {
+        initialGrid: R.clone(gs.initialGrid!),
+        currentGrid: R.clone(gs.currentGrid!),
+      }
       formatContainerGlyphComponents(ch)
+      formatGridComponents(orderedListWithItemsForCharacterFile(ch), {
+        grid: layoutBundle,
+        offset: { x: 0, y: 0 },
+      })
       ch.info = ch.info || {}
       ch.info.gridSettings = R.clone(buildDefaultGridSettingsPayload()) as any
       ensureCharacterInfoGridSettings(ch)
