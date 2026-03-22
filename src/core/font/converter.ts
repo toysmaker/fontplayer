@@ -81,7 +81,7 @@ export class ContourConverter {
     const contours: IContours = []
     const scriptTypes = ['glyph-pen', 'glyph-polygon', 'glyph-rectangle', 'glyph-ellipse']
     for (const component of components) {
-      if (!component.usedInCharacter) continue
+      if (component.usedInCharacter === false) continue
       const { x, y, w, h, rotation, flipX, flipY } = component
       const value = (component as any).value
       const isScriptComponent = scriptTypes.includes(component.type)
@@ -236,7 +236,7 @@ export class ContourConverter {
     }
 
     for (const component of components) {
-      if (!component.usedInCharacter) continue
+      if (component.usedInCharacter === false) continue
 
       try {
       const { x, y, w, h, rotation, flipX, flipY } = component
@@ -655,17 +655,15 @@ export class ContourConverter {
     const fillColors: string[] = []
 
     for (const component of components) {
-      if (!component.usedInCharacter) continue
+      if (component.usedInCharacter === false) continue
 
-      const value = component.value as any
-
-      if (component.type === 'glyph') {
-        // 如果是字形组件，需要展开其子组件
-        // TODO: 实现字形组件的展开逻辑
-        fillColors.push(value.fillColor || '#000')
-      } else {
-        fillColors.push(value.fillColor || '#000')
-      }
+      const raw = component as any
+      const value = raw.value
+      const fill =
+        (value && value.fillColor) ||
+        raw.fillColor ||
+        '#000'
+      fillColors.push(fill)
     }
 
     return fillColors

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted } from 'vue'
-import { NButton, NScrollbar } from 'naive-ui'
+import { NButton, NFormItem, NInput, NScrollbar } from 'naive-ui'
 import { useAdvancedEditStore } from '@/stores/advancedEdit'
 import { useDialogsStore } from '@/stores/dialogs'
 
@@ -9,12 +9,7 @@ const dialogs = useDialogsStore()
 
 onMounted(async () => {
   await advancedEdit.getStrokeListFromProject()
-  await advancedEdit.updatePreviewList()
   await advancedEdit.refreshStrokeReplacePreviews()
-  await nextTick()
-  for (const s of advancedEdit.strokeList) {
-    advancedEdit.renderStrokePreviewCanvas(s.uuid)
-  }
 })
 
 onUnmounted(() => {
@@ -32,10 +27,16 @@ function handleToggleEditSample() {
 async function handleSelectStroke(stroke: (typeof advancedEdit.strokeList)[0]) {
   advancedEdit.selectedStrokeUUID = stroke.uuid
   await nextTick()
-  advancedEdit.renderStrokePreviewCanvas(stroke.uuid)
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      advancedEdit.renderStrokePreviewCanvas(stroke.uuid)
+    })
+  })
 }
 
-function handleSetReplacementStroke() {
+/** 必须先锁定当前行，否则 setReplacementStroke 因找不到 selectedStroke 直接 return */
+function handleSetReplacementStroke(stroke: (typeof advancedEdit.strokeList)[0]) {
+  advancedEdit.selectedStrokeUUID = stroke.uuid
   advancedEdit.onStrokeReplacement = true
   dialogs.openGlyphComponentsDialogForStrokeReplace((uuid) => {
     void advancedEdit.setReplacementStroke(uuid)
@@ -50,6 +51,17 @@ function handleSetReplacementStroke() {
       <div class="left">
         <div class="sample-characters-section">
           <h3>样例字符</h3>
+          <n-form-item label="">
+            <n-input
+              v-model:value="advancedEdit.sampleCharacters"
+              type="textarea"
+              :rows="4"
+              :disabled="!advancedEdit.isEditingSample"
+              placeholder="请输入最多20个字符，每个字符不能重复"
+              :maxlength="20"
+              show-count
+            />
+          </n-form-item>
           <n-button
             block
             :type="advancedEdit.isEditingSample ? 'success' : 'primary'"
@@ -89,17 +101,12 @@ function handleSetReplacementStroke() {
               v-for="stroke in advancedEdit.strokeList"
               :key="stroke.uuid"
               class="stroke-item"
+              :class="{ 'stroke-item--selected': advancedEdit.selectedStrokeUUID === stroke.uuid }"
               @click="handleSelectStroke(stroke)"
             >
               <div class="stroke-preview">
                 <canvas
-                  v-if="!stroke.replaced"
-                  :class="`stroke-preview-${stroke.uuid}`"
-                  width="100"
-                  height="100"
-                />
-                <canvas
-                  v-else
+                  :id="`advanced-edit-stroke-canvas-${stroke.uuid}`"
                   :class="`stroke-preview-${stroke.uuid}`"
                   width="100"
                   height="100"
@@ -109,7 +116,7 @@ function handleSetReplacementStroke() {
                 <div class="stroke-name">{{ stroke.name }}</div>
                 <div class="stroke-style">{{ stroke.style }}</div>
                 <div class="replacement-setting-btn">
-                  <n-button size="small" type="primary" @click.stop="handleSetReplacementStroke">
+                  <n-button size="small" type="primary" @click.stop="handleSetReplacementStroke(stroke)">
                     {{ stroke.replaced ? '修改替换笔画' : '设置替换笔画' }}
                   </n-button>
                 </div>
@@ -157,6 +164,7 @@ function handleSetReplacementStroke() {
 .main {
   flex: auto;
   overflow: auto;
+  min-width: 0;
 }
 .characters {
   flex: 0 0 450px;
@@ -175,6 +183,8 @@ function handleSetReplacementStroke() {
   flex: 0 0 260px;
   border-left: 1px solid var(--light-5);
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 .title {
   padding: 8px 10px;
@@ -185,6 +195,9 @@ function handleSetReplacementStroke() {
   padding: 10px;
   border-bottom: 1px solid var(--light-5);
   cursor: pointer;
+}
+.stroke-item--selected {
+  box-shadow: inset 3px 0 0 var(--primary-5);
 }
 .stroke-list {
   padding-bottom: 20px;

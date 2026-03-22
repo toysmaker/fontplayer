@@ -25,6 +25,8 @@ import { renderAdvancedEditPreview } from '@/core/canvas/advancedEditPreview'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { orderedListWithItemsForGlyph } from '@/core/utils/glyph'
+import { instanceManager } from '@/core/instance/InstanceManager'
+import { CustomGlyph } from '@/core/instance/CustomGlyph'
 
 export const PanelType = {
   GlobalVariables: 'globalVariables',
@@ -258,31 +260,80 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     }
   }
 
+  /**
+   * 右侧笔画缩略图：与 CustomGlyph.components 一致 —— 同时包含字形内引用/有序列表组件与脚本生成的 _components。
+   */
   function renderStrokePreviewCanvas(uuid?: string) {
     const targets = uuid
       ? strokeList.value.filter((s) => s.uuid === uuid)
       : strokeList.value
     for (const stroke of targets) {
-      const key = stroke.replaced && stroke.replacement ? stroke.replacement.uuid : stroke.uuid
-      const glyph = strokeMap.get(key)
-      if (!glyph) continue
-      const canvases = document.querySelectorAll<HTMLCanvasElement>(
-        `.stroke-preview-${stroke.uuid}`,
-      )
-      const ordered = orderedListWithItemsForGlyph(R.clone(glyph))
-      const contours = ContourConverter.componentsToContours(ordered as IComponent[], {
-        unitsPerEm: 1000,
-        descender: -200,
-        advanceWidth: 1000,
-        preview: true,
-        forceUpdate: true,
-        isGlyph: true,
-      }, { x: 0, y: 0 })
-      const fillColors = ContourConverter.getFillColors(ordered as IComponent[])
-      canvases.forEach((canvas) => {
-        renderAdvancedEditPreview(canvas, contours, fillColors, projectStore.fontPreviewStyle)
-      })
+      const glyphKey = stroke.replaced && stroke.replacement ? stroke.replacement.uuid : stroke.uuid
+      const sourceGlyph = strokeMap.get(glyphKey)
+      if (!sourceGlyph) continue
+      const byId = document.getElementById(
+        `advanced-edit-stroke-canvas-${stroke.uuid}`,
+      ) as HTMLCanvasElement | null
+      const canvases = byId
+        ? [byId]
+        : Array.from(
+            document.querySelectorAll<HTMLCanvasElement>(
+              `.stroke-preview-${CSS.escape(stroke.uuid)}`,
+            ),
+          )
+      if (!canvases.length) continue
+
+      const instanceKey = `adv-stroke-sidebar-${stroke.uuid}`
+      if (instanceManager.isTemporary(instanceKey)) {
+        instanceManager.releaseTemporaryInstance(instanceKey)
+      }
+
+      const glyph = R.clone(sourceGlyph) as ICustomGlyph
+      try {
+        executeGlyphScript(glyph, instanceKey)
+        const inst = instanceManager.acquireTemporaryInstance(
+          instanceKey,
+          () => new CustomGlyph(glyph),
+          'glyph',
+        ) as CustomGlyph
+        const fromGlyph = orderedListWithItemsForGlyph(glyph) as IComponent[]
+        const fromScript = (inst._components ?? []) as IComponent[]
+        const list = fromGlyph.concat(fromScript)
+        const contours = ContourConverter.componentsToContours(
+          list,
+          {
+            unitsPerEm: 1000,
+            descender: -200,
+            advanceWidth: 1000,
+            preview: true,
+            forceUpdate: true,
+            isGlyph: true,
+          },
+          { x: 0, y: 0 },
+        )
+        const fillColors = ContourConverter.getFillColors(list)
+        canvases.forEach((canvas) => {
+          renderAdvancedEditPreview(canvas, contours, fillColors, projectStore.fontPreviewStyle)
+        })
+      } catch (e) {
+        console.error('[advancedEdit] renderStrokePreviewCanvas', stroke.uuid, e)
+      } finally {
+        instanceManager.releaseTemporaryInstance(instanceKey)
+      }
     }
+  }
+
+  /** 右侧笔画列表 canvas 在 n-scrollbar 内，需等布局后再 querySelector */
+  async function redrawStrokeListPreviews() {
+    await nextTick()
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          renderStrokePreviewCanvas()
+          resolve()
+        })
+      })
+    })
   }
 
   async function setReplacementStroke(templateUuid: string) {
@@ -299,23 +350,22 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
       style: targetGlyph.style,
     }
     await refreshStrokeReplacePreviews()
-    await nextTick()
-    renderStrokePreviewCanvas(sel.uuid)
   }
 
   function replaceStrokeForCharacter(characterFile: ICharacterFileLite, stroke: (typeof strokeList.value)[0]) {
     const originUUID = stroke.uuid
     const targetUUID = stroke.replacement!.uuid
-    const targetStrokeGlyph = R.clone(strokeMap.get(targetUUID)!)
+    const source = strokeMap.get(targetUUID)
+    if (!source) return
+    const targetStrokeGlyph = R.clone(source)
     for (let i = 0; i < characterFile.components.length; i++) {
       const component = characterFile.components[i]
       const gc = component as IGlyphComponent
       const cur = gc.value as ICustomGlyph
       if (component.type === 'glyph' && cur.uuid === originUUID) {
         const glyph = targetStrokeGlyph
-        const destParams = ((glyph.parameters as { parameters?: any[] })?.parameters) || []
-        const srcParams =
-          (cur.parameters as { parameters?: any[] } | undefined)?.parameters || []
+        const destParams = parameterRowsForGlyph(glyph) ?? []
+        const srcParams = parameterRowsForGlyph(cur) ?? []
         for (let j = 0; j < destParams.length; j++) {
           const parameter = destParams[j]
           const originParameter = srcParams.find((q: { name: string }) => q.name === parameter.name)
@@ -347,27 +397,36 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
       for (const s of strokeList.value) {
         if (s.replaced) replaceStrokeForCharacter(c, s)
       }
+      rewriteGlyphParamsForAdvancedPreview(c)
       next.push(c)
     }
     sampleCharactersList.value = next
     await nextTick()
-    runWithAdvancedConstantsMap(() => {
-      for (const character of sampleCharactersList.value) {
-        const canvas = document.getElementById(
-          `advanced-edit-preview-canvas-${character.uuid}`,
-        ) as HTMLCanvasElement | null
-        if (!canvas) continue
-        const m = getFontMetrics()
-        const ordered = orderedListWithItemsForCharacterFile(character)
-        const contours = ContourConverter.componentsToContours(
-          ordered,
-          { ...m, preview: true, forceUpdate: true, advancedEdit: true },
-          { x: 0, y: 0 },
-        )
-        const fillColors = ContourConverter.getFillColors(ordered as IComponent[])
-        renderAdvancedEditPreview(canvas, contours, fillColors, projectStore.fontPreviewStyle)
-      }
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          runWithAdvancedConstantsMap(() => {
+            for (const character of sampleCharactersList.value) {
+              const canvas = document.getElementById(
+                `advanced-edit-preview-canvas-${character.uuid}`,
+              ) as HTMLCanvasElement | null
+              if (!canvas) continue
+              const m = getFontMetrics()
+              const ordered = orderedListWithItemsForCharacterFile(character)
+              const contours = ContourConverter.componentsToContours(
+                ordered,
+                { ...m, preview: true, forceUpdate: true, advancedEdit: true },
+                { x: 0, y: 0 },
+              )
+              const fillColors = ContourConverter.getFillColors(ordered as IComponent[])
+              renderAdvancedEditPreview(canvas, contours, fillColors, projectStore.fontPreviewStyle)
+            }
+          })
+          resolve()
+        })
+      })
     })
+    await redrawStrokeListPreviews()
   }
 
   async function applyStrokeReplacementsToAll() {
@@ -582,6 +641,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     onStrokeReplacement,
     getStrokeListFromProject,
     renderStrokePreviewCanvas,
+    redrawStrokeListPreviews,
     setReplacementStroke,
     refreshStrokeReplacePreviews,
     applyStrokeReplacementsToAll,
