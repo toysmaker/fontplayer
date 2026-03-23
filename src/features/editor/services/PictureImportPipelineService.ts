@@ -6,7 +6,7 @@ import * as R from 'ramda'
 import { genUUID } from '@/utils/uuid'
 import { getBound } from '@/core/utils/math'
 import { fitCurve } from '@/core/utils/fitCurve'
-import type { IComponent, IPenComponent, IPolygonComponent } from '@/core/types'
+import type { IComponent, IGlyphComponent, IPenComponent, IPolygonComponent } from '@/core/types'
 import {
   toBlackWhiteBitMap,
   reversePixelsData,
@@ -257,6 +257,57 @@ export const PictureImportPipelineService = {
     const polys = store.contoursComponents
     const curves = polygonsToPenCurves(polys, store.maxError, store.dropThreshold)
     store.setCurvesComponents(curves)
+  },
+
+  /**
+   * 测试手绘模板等批处理场景：从解码后的位图走与 Pic 导入相同的
+   * 二值化 → findContoursCCOMP_TS → 多边形 → fitCurve 钢笔链路（非 OpenCV）。
+   * 对齐原工程 thumbnail + curvesComponents 过滤（总折线长、maxError）。
+   */
+  traceHandDrawnImageToPenComponents(
+    img: HTMLImageElement,
+    options: Partial<{
+      thumbnailMax: number
+      rThreshold: number
+      gThreshold: number
+      bThreshold: number
+      maxError: number
+      dropThreshold: number
+      importEmWidth: number
+      importEmHeight: number
+      minPolylineLength: number
+    }> = {},
+  ): IGlyphComponent[] {
+    const thumbnailMax = options.thumbnailMax ?? 1000
+    const r = options.rThreshold ?? 128
+    const g = options.gThreshold ?? 128
+    const b = options.bThreshold ?? 128
+    const maxErr = options.maxError ?? 5
+    const drop = options.dropThreshold ?? 4
+    const emW = options.importEmWidth ?? 1000
+    const emH = options.importEmHeight ?? 1000
+    const minLen = options.minPolylineLength ?? 200
+
+    const { pixels, width, height } = buildThumbnailCanvas(img, thumbnailMax)
+    const bw = toBlackWhiteBitMap(pixels, { r, g, b }, { x: 0, y: 0, size: -1, width, height })
+    const reversed = reversePixelsData(bw, width, height)
+    const mask = rgbaToBinaryMask(reversed, width, height, GRAY_THRESHOLD)
+    const { contours, hierarchy } = findContoursCCOMP_TS(mask, width, height)
+    const polys = contourToPolygonComponents(contours, hierarchy, width, height, emW, emH)
+    const curves = polygonsToPenCurves(polys, maxErr, drop) as IGlyphComponent[]
+
+    return curves.filter((component) => {
+      const points = (component.value as IPenComponent).points
+      if (!points?.length) return false
+      let totalLength = 0
+      let last = points[0]
+      for (let j = 1; j < points.length; j++) {
+        const p = points[j]
+        totalLength += Math.hypot(p.x - last.x, p.y - last.y)
+        last = p
+      }
+      return totalLength > minLen
+    })
   },
 
   /** 重置 RGB 阈值与 processPixels 为缩略图原图，并重建轮廓/曲线 */

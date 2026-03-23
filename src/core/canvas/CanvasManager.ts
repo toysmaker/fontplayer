@@ -617,24 +617,33 @@ export class CanvasManager {
     const ctx = canvas.getContext('2d')
     if (!ctx) return false
     
-    // 快速检查：读取中心点和几个角落的像素
-    // 如果都是白色（255,255,255）或透明（alpha=0），可能没有实际内容
+    // 多点采样：仅采中心时，细笔画/未铺底前透明像素会误判为「无内容」，
+    // 与父级白底叠看后像「有预览却有红叉」。
     try {
-      const centerX = Math.floor(canvas.width / 2)
-      const centerY = Math.floor(canvas.height / 2)
-      
-      // 检查中心点
-      const centerData = ctx.getImageData(centerX, centerY, 1, 1)
-      const centerAlpha = centerData.data[3]
-      
-      // 如果中心点是透明的，肯定没有内容
-      if (centerAlpha === 0) {
-        return false
+      const w = canvas.width
+      const h = canvas.height
+      const xs = new Set([
+        Math.floor(w / 2),
+        0,
+        w - 1,
+        Math.floor(w / 4),
+        Math.floor((3 * w) / 4),
+      ])
+      const ys = new Set([
+        Math.floor(h / 2),
+        0,
+        h - 1,
+        Math.floor(h / 4),
+        Math.floor((3 * h) / 4),
+      ])
+      for (const x of xs) {
+        for (const y of ys) {
+          if (x < 0 || y < 0 || x >= w || y >= h) continue
+          const d = ctx.getImageData(x, y, 1, 1).data
+          if (d[3] > 0) return true
+        }
       }
-      
-      // 如果中心点有非透明像素，认为有内容
-      // 注意：这可能会误判白色背景，但结合 canvasUUIDMap 可以避免误判
-      return centerAlpha > 0
+      return false
     } catch {
       // 如果读取失败（可能Canvas被清空或未初始化），返回false
       return false

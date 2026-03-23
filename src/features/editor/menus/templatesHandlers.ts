@@ -6,7 +6,11 @@
 
 import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
-import type { ICustomGlyph, IParameter } from '@/core/types'
+import type { ICustomGlyph, IGlyphComponent, IParameter } from '@/core/types'
+import { CustomGlyph } from '@/core/instance/CustomGlyph'
+import { instanceManager } from '@/core/instance/InstanceManager'
+import { PictureImportPipelineService } from '@/features/editor/services/PictureImportPipelineService'
+import { strokeFnMap } from '@/templates/strokeFnMap'
 import { ParameterType, EditStatus } from '@/core/types'
 import { genUUID } from '@/utils/uuid'
 import { hei_strokes, kai_strokes, li_strokes } from '@/templates/strokes_1'
@@ -85,6 +89,41 @@ function addHeiStrokeExtraParams(parameters: IParameter[]) {
     { uuid: genUUID(), name: '弯曲程度', type: ParameterType.Number, value: 1, min: 0, max: 2 },
   )
 }
+function strokesPublicBaseUrl(): string {
+  const base = import.meta.env.BASE_URL || '/'
+  return base.endsWith('/') ? base : `${base}/`
+}
+
+function loadImageFromUrl(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error(`图片加载失败: ${url}`))
+    img.src = url
+  })
+}
+
+function appendPenComponentsToGlyph(glyph: ICustomGlyph, components: IGlyphComponent[]) {
+  for (const c of components) {
+    glyph.components.push(c)
+    glyph.orderedList.push({ type: 'component', uuid: c.uuid })
+  }
+}
+
+function handDrawnTemplateParameters(stroke: (typeof hei_strokes)[number]): IParameter[] {
+  const parameters = paramsFromStroke(stroke)
+  addRefPositionParam(parameters)
+  parameters.push({
+    uuid: genUUID(),
+    name: '弯曲程度',
+    type: ParameterType.Number,
+    value: 1,
+    min: 0,
+    max: 2,
+  })
+  return parameters
+}
+
 function addKaiLiExtraParams(parameters: IParameter[], 字重Default: number) {
   addRefPositionParam(parameters)
   parameters.push(
@@ -134,14 +173,79 @@ export async function importTemplate3(): Promise<void> {
   const file = projectStore.selectedFile
   if (!file) return
   ensureStrokeGlyphs(file)
+
+  const entries: { glyph: ICustomGlyph; name: string }[] = []
   for (let i = 0; i < hei_strokes.length; i++) {
     const stroke = hei_strokes[i]
     const { name } = stroke
-    const uuid = genUUID()
     const glyph = createBaseGlyph(name, '测试手绘风格', '', [])
-    glyph.uuid = uuid
     file.stroke_glyphs!.push(glyph)
+    entries.push({ glyph, name })
   }
+
+  const base = strokesPublicBaseUrl()
+  const total = entries.length
+  projectStore.loading = true
+  projectStore.loadingTotal = Math.max(1, total)
+  projectStore.loadingProgress = 0
+  projectStore.loadingMessage = '正在导入测试手绘模板（识别轮廓与骨架绑定）…'
+
+  try {
+    for (let i = 0; i < entries.length; i++) {
+      const { glyph, name } = entries[i]
+      const url = `${base}strokes/${encodeURIComponent(name)}.png`
+      const res = await fetch(url)
+      if (!res.ok) {
+        throw new Error(`无法加载笔画图: ${url} (${res.status})`)
+      }
+      const blob = await res.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      try {
+        const img = await loadImageFromUrl(objectUrl)
+        const components = PictureImportPipelineService.traceHandDrawnImageToPenComponents(img)
+        appendPenComponentsToGlyph(glyph, components)
+      } finally {
+        URL.revokeObjectURL(objectUrl)
+      }
+
+      const strokeDef = hei_strokes.find(s => s.name === name)
+      if (strokeDef) {
+        glyph.parameters = handDrawnTemplateParameters(strokeDef)
+      }
+      glyph.skeleton = {
+        type: name,
+        ox: 0,
+        oy: 0,
+        dynamicWeight: false,
+      }
+
+      const strokeFn = strokeFnMap[name as keyof typeof strokeFnMap]
+      if (strokeFn) {
+        const inst = instanceManager.acquireTemporaryInstance(
+          glyph.uuid,
+          () => new CustomGlyph(glyph),
+          'glyph',
+        ) as CustomGlyph
+        try {
+          strokeFn.instanceBasicGlyph(glyph, inst)
+          strokeFn.bindSkeletonGlyph(glyph)
+          strokeFn.updateSkeletonListenerAfterBind(inst)
+        } finally {
+          instanceManager.releaseTemporaryInstance(glyph.uuid)
+        }
+      } else {
+        console.warn(`[importTemplate3] strokeFnMap 中无笔画类型: ${name}`)
+      }
+
+      projectStore.loadingProgress = i + 1
+    }
+  } finally {
+    projectStore.loading = false
+    projectStore.loadingProgress = 0
+    projectStore.loadingTotal = 0
+    projectStore.loadingMessage = ''
+  }
+
   projectStore.markFileUnsaved(file.uuid)
   editorStore.setEditStatus(EditStatus.StrokeGlyphList)
 }

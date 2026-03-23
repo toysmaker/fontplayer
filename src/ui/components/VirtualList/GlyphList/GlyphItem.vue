@@ -55,6 +55,16 @@ const glyphStore = useGlyphStore()
 const showEmptyLines = computed(() => {
   const glyphUUID = props.glyph.uuid
   const glyphName = props.glyph.name
+
+  // 已绑定骨架的笔画：预览由 ScriptExecutor + 骨架生成，可无 script、也可能暂无钢笔组件
+  // （例如轮廓被过滤为空），不得走「无组件无脚本」分支误标红叉
+  if (props.glyph.skeleton) {
+    return false
+  }
+  // 测试手绘模板在 createBaseGlyph 即写入 style；若工程往返后 skeleton 丢失，仍避免误标
+  if (props.glyph.style === '测试手绘风格') {
+    return false
+  }
   
   // 检查字形是否有组件数据或脚本
   const hasComponents = props.glyph.components && props.glyph.components.length > 0
