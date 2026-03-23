@@ -226,11 +226,11 @@ export class ProjectLoader {
         )
 
         // 5. 存储到 IndexedDB（并行存储，提高性能）
-        const indexDBPromises: Promise<void>[] = []
+        const indexedDBPromises: Promise<void>[] = []
 
         if (contours.length > 0) {
           const contourKey = IndexedDBManager.generateContourKey(glyph.uuid)
-          indexDBPromises.push(
+          indexedDBPromises.push(
             indexedDBManager.set(contourKey, contours).then(() => {
               glyph.contourRef = contourKey
             })
@@ -239,7 +239,7 @@ export class ProjectLoader {
 
         if (previews.length > 0) {
           const previewKey = IndexedDBManager.generatePreviewKey(glyph.uuid)
-          indexDBPromises.push(
+          indexedDBPromises.push(
             indexedDBManager.set(previewKey, previews).then(() => {
               glyph.previewRef = previewKey
             })
@@ -247,8 +247,8 @@ export class ProjectLoader {
         }
 
         // 等待所有 IndexedDB 操作完成
-        if (indexDBPromises.length > 0) {
-          await Promise.all(indexDBPromises)
+        if (indexedDBPromises.length > 0) {
+          await Promise.all(indexedDBPromises)
         }
       } finally {
         // 6. 释放临时实例（清理 _o 引用）
@@ -351,11 +351,11 @@ export class ProjectLoader {
     // 如果有轮廓或预览数据（旧格式工程文件），存储到 IndexedDB
     // 注意：由于工程文件中通常不包含这些数据，这里主要是为了兼容旧格式
     // 使用 Promise.all 并行处理，提高性能
-    const indexDBPromises: Promise<void>[] = []
+    const indexedDBPromises: Promise<void>[] = []
     
     if (character.contour) {
       const contourKey = IndexedDBManager.generateContourKey(character.uuid)
-      indexDBPromises.push(
+      indexedDBPromises.push(
         indexedDBManager.set(contourKey, character.contour).then(() => {
           characterLite.contourRef = contourKey
         })
@@ -364,7 +364,7 @@ export class ProjectLoader {
 
     if (character.preview) {
       const previewKey = IndexedDBManager.generatePreviewKey(character.uuid)
-      indexDBPromises.push(
+      indexedDBPromises.push(
         indexedDBManager.set(previewKey, character.preview).then(() => {
           characterLite.previewRef = previewKey
         })
@@ -372,8 +372,8 @@ export class ProjectLoader {
     }
     
     // 等待所有 IndexedDB 操作完成
-    if (indexDBPromises.length > 0) {
-      await Promise.all(indexDBPromises)
+    if (indexedDBPromises.length > 0) {
+      await Promise.all(indexedDBPromises)
     }
 
     // TODO: 如果需要预计算轮廓（提升首次渲染性能），可以在这里调用轮廓计算
