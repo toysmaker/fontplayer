@@ -1,6 +1,6 @@
 import { glyphRuntime } from './glyphRuntime'
 import { strokeFnMap } from '@/templates/strokeFnMap'
-import { extractLeafParts, findPartByMatch, getDecompositionTree } from '@/features/advancedEdit/decomposition'
+import { extractLeafParts, findPartByMatch, getDecompositionTree } from '@/features/decomposition/utils'
 import type { ICustomGlyph, IGlyphComponent } from '@/core/types'
 import { getComponentBound } from './utils'
 

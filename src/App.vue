@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
 import { NConfigProvider, NMessageProvider, NNotificationProvider, NDialogProvider, type GlobalThemeOverrides } from 'naive-ui'
+import ProjectTagPromptDialog from '@/ui/dialogs/ProjectTagPromptDialog.vue'
 import { initTauri } from './utils/tauri-renderer'
 import { getCSSVariable } from './utils/theme'
 import paper from 'paper'
@@ -76,6 +77,7 @@ const themeOverrides: GlobalThemeOverrides = {
       <n-notification-provider>
         <n-dialog-provider>
           <RouterView />
+          <ProjectTagPromptDialog />
         </n-dialog-provider>
       </n-notification-provider>
     </n-message-provider>

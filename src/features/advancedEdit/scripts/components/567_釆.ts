@@ -1,7 +1,7 @@
 import { glyphRuntime } from '../glyphRuntime'
 import { ParameterType } from "@/core/types"
-import { extractLeafParts } from "@/features/advancedEdit/decomposition"
-import { chainTransformStrokes, getComponentBound, getParentBound, standardTransformStrokes } from "../utils"
+import { extractLeafParts } from "@/features/decomposition/utils"
+import { chainTransformStrokes, flatNewStrokeIndex, getComponentBound, getParentBound, standardTransformStrokes } from "../utils"
 import * as R from 'ramda'
 
 const parameters = [
@@ -131,14 +131,14 @@ const update = (originCharacters, characters, _parameters) => {
         // 撇
         {
           const origin_joints = glyphRuntime(origin_strokes[0][0])!.getJoints()
-          let originStartX = glyphRuntime(newStrokes[0][0])!.getJoints()[0].x + newStrokes[0][0].ox
-          let originEndX = glyphRuntime(newStrokes[0][0])!.getJoints()[1].x + newStrokes[0][0].ox
-          let originStartY = glyphRuntime(newStrokes[0][0])!.getJoints()[0].y + newStrokes[0][0].oy
-          let originEndY = glyphRuntime(newStrokes[0][0])!.getJoints()[1].y + newStrokes[0][0].oy
-          let newStartX = glyphRuntime(newStrokes[0][0])!.getJoints()[0].x + newStrokes[0][0].ox
-          let newEndX = glyphRuntime(newStrokes[0][0])!.getJoints()[1].x + newStrokes[0][0].ox
-          let newStartY = glyphRuntime(newStrokes[0][0])!.getJoints()[0].y + newStrokes[0][0].oy
-          let newEndY = glyphRuntime(newStrokes[0][0])!.getJoints()[1].y + newStrokes[0][0].oy
+          let originStartX = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 0)])!.getJoints()[0].x + newStrokes[flatNewStrokeIndex(origin_strokes, 0)].ox
+          let originEndX = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 0)])!.getJoints()[1].x + newStrokes[flatNewStrokeIndex(origin_strokes, 0)].ox
+          let originStartY = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 0)])!.getJoints()[0].y + newStrokes[flatNewStrokeIndex(origin_strokes, 0)].oy
+          let originEndY = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 0)])!.getJoints()[1].y + newStrokes[flatNewStrokeIndex(origin_strokes, 0)].oy
+          let newStartX = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 0)])!.getJoints()[0].x + newStrokes[flatNewStrokeIndex(origin_strokes, 0)].ox
+          let newEndX = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 0)])!.getJoints()[1].x + newStrokes[flatNewStrokeIndex(origin_strokes, 0)].ox
+          let newStartY = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 0)])!.getJoints()[0].y + newStrokes[flatNewStrokeIndex(origin_strokes, 0)].oy
+          let newEndY = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 0)])!.getJoints()[1].y + newStrokes[flatNewStrokeIndex(origin_strokes, 0)].oy
 
           // 曲直度
           if (parameters['曲直度'] < 0) {
@@ -148,8 +148,8 @@ const update = (originCharacters, characters, _parameters) => {
             newEndY -= parameters['曲直度'] * (newEndY - newStartY)
           }
 
-          const originBendDegree = glyphRuntime(newStrokes[0][0])!.getParam('弯曲度') as number
-          const minBendDegree = -30 * Number(glyphRuntime(newStrokes[0][0])!.getParam('弯曲程度'))
+          const originBendDegree = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 0)])!.getParam('弯曲度') as number
+          const minBendDegree = -30 * Number(glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 0)])!.getParam('弯曲程度'))
           glyphRuntime(strokes[0][0])!.setParam('弯曲度', originBendDegree + Math.abs(parameters['曲直度']) * (minBendDegree - originBendDegree))
 
           // 衔接位置
@@ -179,11 +179,11 @@ const update = (originCharacters, characters, _parameters) => {
 
         // 凸展度
         {
-          const originShuStartY = glyphRuntime(newStrokes[1][0])!.getNonRefJoints()[0].y + newStrokes[1][0].oy
-          const originHengzheStartY = glyphRuntime(newStrokes[2][0])!.getNonRefJoints()[1].y + newStrokes[2][0].oy
-          const originShuEndY = glyphRuntime(newStrokes[1][0])!.getNonRefJoints()[1].y + newStrokes[1][0].oy
-          const originHengStartY = glyphRuntime(newStrokes[4][0])!.getNonRefJoints()[0].y + newStrokes[4][0].oy
-          const originHengzheEndY = glyphRuntime(newStrokes[2][0])!.getNonRefJoints()[2].y + newStrokes[2][0].oy
+          const originShuStartY = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 1)])!.getNonRefJoints()[0].y + newStrokes[flatNewStrokeIndex(origin_strokes, 1)].oy
+          const originHengzheStartY = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 2)])!.getNonRefJoints()[1].y + newStrokes[flatNewStrokeIndex(origin_strokes, 2)].oy
+          const originShuEndY = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 1)])!.getNonRefJoints()[1].y + newStrokes[flatNewStrokeIndex(origin_strokes, 1)].oy
+          const originHengStartY = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 4)])!.getNonRefJoints()[0].y + newStrokes[flatNewStrokeIndex(origin_strokes, 4)].oy
+          const originHengzheEndY = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 2)])!.getNonRefJoints()[2].y + newStrokes[flatNewStrokeIndex(origin_strokes, 2)].oy
 
           let newShuEndY = originShuEndY
           let newHengzheEndY = originHengzheEndY

@@ -123,6 +123,23 @@ const getCompnentFromCharacter = (character: ICharacterFileLite, uuid: string) =
   return character.components.find((component) => component.uuid === uuid)
 }
 
+/**
+ * `standardTransformStrokes` 返回 R.flatten 后的一维数组。此处求原二维 `originStrokes[groupIndex]` 这一笔里
+ * 「第一个」组件在扁平结果中的下标（旧代码误写为 `newStrokes[groupIndex][0]`）。
+ */
+export function flatNewStrokeIndex(
+  originStrokes: ReadonlyArray<ReadonlyArray<unknown>>,
+  groupIndex: number,
+): number {
+  let idx = 0
+  const n = Math.min(groupIndex, originStrokes.length)
+  for (let g = 0; g < n; g++) {
+    const row = originStrokes[g]
+    idx += Array.isArray(row) ? row.length : 0
+  }
+  return idx
+}
+
 const standardTransformStrokes = (strokes: Array<Array<IGlyphComponent>>, transform: ITransform, originCharacter?: ICharacterFileLite, updateStrokes = false) => {
   const { xScale, yScale, xOffset, yOffset } = transform
   const tempStrokes = R.flatten(updateStrokes ? strokes : R.clone(strokes))
@@ -164,9 +181,6 @@ const standardTransformStrokes = (strokes: Array<Array<IGlyphComponent>>, transf
       executeGlyphScript(gv, gc.uuid)
     }
   })
-  // console.log('tempStrokes', tempStrokes)
-  // console.log('strokes', strokes)
-  // debugger
   return tempStrokes
 }
 
@@ -716,7 +730,6 @@ interface IBoundTransform {
 }
 
 const applyConstrastTransform = (strokes, contrast, targetBound, character, updateStrokes = true) => {
-  debugger
   const targetStrokes = updateStrokes ? strokes : R.clone(strokes)
   const originBound = getComponentBound(strokes)
   const degree = (contrast[2] - contrast[0]) / (contrast[1] - contrast[0])

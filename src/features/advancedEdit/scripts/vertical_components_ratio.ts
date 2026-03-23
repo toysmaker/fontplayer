@@ -1,6 +1,6 @@
 import { glyphRuntime } from './glyphRuntime'
 import { strokeFnMap } from '@/templates/strokeFnMap'
-import { extractLeafParts, findPartByMatch, getDecompositionTree } from '@/features/advancedEdit/decomposition'
+import { extractLeafParts, findPartByMatch, getDecompositionTree } from '@/features/decomposition/utils'
 import type { ICustomGlyph, IGlyphComponent } from '@/core/types'
 import { getComponentBound } from './utils'
 
@@ -201,9 +201,6 @@ const computeTransformSequence = (match, parts, tree, options: ITransformOptions
     const b = secondPartBounds.height / parentHeight
     const gap0 = firstPartBounds.y - parentBounds.y
     const gap01 = secondPartBounds.y - firstPartBounds.y - firstPartBounds.height
-    if (gap01 < 0) {
-      debugger
-    }
     const gap1 = parentBounds.y + parentHeight - secondPartBounds.y - secondPartBounds.height
     const d = gap0 / parentHeight
     const e = gap01 / parentHeight
@@ -271,9 +268,6 @@ const updateVerticalComponentsRatio = (originCharacters, characters, parameters)
 
     for (let j = 0; j < parts.length; j++) {
       const part = parts[j]
-      if (part.name === '由') {
-        debugger
-      }
       const strokes = part.strokes
       const origin_strokes = part.origin_strokes
       for (let k = 0; k < strokes.length; k++) {

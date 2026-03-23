@@ -15,6 +15,20 @@ export class FileHandler {
   private lastSavedPath: string | null = null
 
   /**
+   * 保存 / 另存为 / 导出前：弹出标签输入，取消则中止
+   */
+  private async ensureProjectTagBeforeSave(): Promise<boolean> {
+    const file = this.projectStore.selectedFile
+    if (!file) return false
+    const { useDialogsStore } = await import('@/stores/dialogs')
+    const dialogs = useDialogsStore()
+    const result = await dialogs.openProjectTagPrompt(file.tag ?? '')
+    if (result === null) return false
+    this.projectStore.updateFile(file.uuid, { tag: result })
+    return true
+  }
+
+  /**
    * 获取 projectStore（延迟获取，避免在模块加载时调用）
    */
   private get projectStore() {
@@ -269,6 +283,8 @@ export class FileHandler {
       throw new Error('No file selected')
     }
 
+    if (!(await this.ensureProjectTagBeforeSave())) return
+
     let filePath = this.lastSavedPath
 
     if (!filePath) {
@@ -301,6 +317,8 @@ export class FileHandler {
     if (!file) {
       throw new Error('No file selected')
     }
+
+    if (!(await this.ensureProjectTagBeforeSave())) return
 
     const { save } = await import('@tauri-apps/plugin-dialog')
     const filePath = await save({
@@ -403,6 +421,8 @@ export class FileHandler {
     if (!file) {
       throw new Error('No file selected')
     }
+
+    if (!(await this.ensureProjectTagBeforeSave())) return
 
     if (isTauri()) {
       const { save } = await import('@tauri-apps/plugin-dialog')
@@ -521,6 +541,7 @@ export class FileHandler {
       await write('"iconsCount":' + JSON.stringify(file.iconsCount ?? 0) + ',')
       await write('"fontSettings":' + JSON.stringify(file.fontSettings ?? null) + ',')
       await write('"variants":' + JSON.stringify(file.variants ?? null) + ',')
+      await write('"tag":' + JSON.stringify(file.tag ?? '') + ',')
       await write('"characterList":[')
 
       // 逐字符流式写入（核心：每个字符序列化后立即写入并释放内存）
@@ -604,6 +625,7 @@ export class FileHandler {
       file: {
         uuid: file.uuid,
         name: file.name,
+        tag: file.tag ?? '',
         width: file.width,
         height: file.height,
         saved: true,

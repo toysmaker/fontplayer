@@ -6,6 +6,7 @@
 import type { IFile, IFontSettings } from '@/core/types'
 import { genUUID } from '@/utils/uuid'
 import { useProjectStore } from '@/stores/project'
+import { loadDecompositionData } from '@/features/decomposition/processing'
 import { hasChineseChar } from '@/fontManager/utils'
 import { convertToPinyin } from 'tiny-pinyin'
 
@@ -120,6 +121,12 @@ export class ProjectCreator {
     const success = projectStore.addFile(project)
     if (!success) {
       throw new Error('Failed to add project to store')
+    }
+
+    try {
+      await loadDecompositionData()
+    } catch (e) {
+      console.error('[decomposition] createProject prewarm failed', e)
     }
 
     // 4. 选择新创建的工程

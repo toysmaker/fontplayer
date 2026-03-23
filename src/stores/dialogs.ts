@@ -102,6 +102,32 @@ export const useDialogsStore = defineStore('dialogs', () => {
     exportColorFontDialogVisible.value = false
   }
 
+  /** 保存/导出工程前：填写 tag */
+  const projectTagPromptVisible = ref(false)
+  const projectTagDraft = ref('')
+  let projectTagResolve: ((value: string | null) => void) | null = null
+
+  function openProjectTagPrompt(defaultTag: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      projectTagDraft.value = defaultTag ?? ''
+      projectTagResolve = resolve
+      projectTagPromptVisible.value = true
+    })
+  }
+
+  function confirmProjectTagPrompt() {
+    projectTagPromptVisible.value = false
+    const v = projectTagDraft.value.trim()
+    projectTagResolve?.(v)
+    projectTagResolve = null
+  }
+
+  function cancelProjectTagPrompt() {
+    projectTagPromptVisible.value = false
+    projectTagResolve?.(null)
+    projectTagResolve = null
+  }
+
   return {
     glyphComponentsDialogVisible,
     glyphComponentsActiveTab,
@@ -130,6 +156,12 @@ export const useDialogsStore = defineStore('dialogs', () => {
     exportColorFontDialogVisible,
     openExportColorFontDialog,
     closeExportColorFontDialog,
+
+    projectTagPromptVisible,
+    projectTagDraft,
+    openProjectTagPrompt,
+    confirmProjectTagPrompt,
+    cancelProjectTagPrompt,
   }
 })
 

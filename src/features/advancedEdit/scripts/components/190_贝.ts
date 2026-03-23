@@ -1,7 +1,7 @@
 import { glyphRuntime } from '../glyphRuntime'
 import { ParameterType } from "@/core/types"
-import { extractLeafParts } from "@/features/advancedEdit/decomposition"
-import { applyConstrastTransform, chainTransformStrokes, getComponentBound, getParentBound, POINT_REF, standardTransformStrokes, transformBound } from "../utils"
+import { extractLeafParts } from "@/features/decomposition/utils"
+import { applyConstrastTransform, chainTransformStrokes, flatNewStrokeIndex, getComponentBound, getParentBound, POINT_REF, standardTransformStrokes, transformBound } from "../utils"
 import * as R from 'ramda'
 
 const parameters = [
@@ -151,11 +151,6 @@ const update = (originCharacters, characters, _parameters) => {
                 x: parentBound.x,
               })
             }
-            console.log('boundOfPart0', boundOfPart0)
-            console.log('boundOfPart1', boundOfPart1)
-            console.log('targetBoundOfPart0', targetBoundOfPart0)
-            console.log('targetBoundOfPart1', targetBoundOfPart1)
-            debugger
             applyConstrastTransform(strokesOfPart0, [0, 1, parameters['对比度']], targetBoundOfPart0, character)
             applyConstrastTransform(strokesOfPart1, [0, 1, parameters['对比度']], targetBoundOfPart1, character)
           } else if (Math.abs(parameters['对比度']) > 1) {
@@ -180,11 +175,11 @@ const update = (originCharacters, characters, _parameters) => {
 
         // // 对比度
         // {
-        //   const originHengHorizontalSpan = glyphRuntime(newStrokes[1][0])!.getParam('横-水平延伸') as number
-        //   const originPieHorizontalSpan = glyphRuntime(newStrokes[2][0])!.getParam('水平延伸') as number
-        //   const originDianVerticalSpan = glyphRuntime(newStrokes[3][0])!.getParam('水平延伸') as number
-        //   const originPieEndX = glyphRuntime(newStrokes[2][0])!.getNonRefJoints()[1].x + newStrokes[2][0].ox
-        //   const originDianEndX = glyphRuntime(newStrokes[3][0])!.getNonRefJoints()[1].x + newStrokes[3][0].ox
+        //   const originHengHorizontalSpan = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 1)])!.getParam('横-水平延伸') as number
+        //   const originPieHorizontalSpan = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 2)])!.getParam('水平延伸') as number
+        //   const originDianVerticalSpan = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 3)])!.getParam('水平延伸') as number
+        //   const originPieEndX = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 2)])!.getNonRefJoints()[1].x + newStrokes[flatNewStrokeIndex(origin_strokes, 2)].ox
+        //   const originDianEndX = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 3)])!.getNonRefJoints()[1].x + newStrokes[flatNewStrokeIndex(origin_strokes, 3)].ox
         //   if (parameters['对比度'] > 0) {
         //     // 上半部分
         //     glyphRuntime(strokes[1][0])!.setParam('横-水平延伸', originHengHorizontalSpan * (0.5 - 0.5 * parameters['对比度']))
@@ -208,15 +203,15 @@ const update = (originCharacters, characters, _parameters) => {
         // 衔接位置
         {
           if (parameters['衔接位置'] < 0) {
-            const bendCursor = glyphRuntime(newStrokes[2][0])!.getParam('弯曲游标') as number
-            const verticalSpan = glyphRuntime(newStrokes[3][0])!.getParam('竖直延伸') as number
+            const bendCursor = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 2)])!.getParam('弯曲游标') as number
+            const verticalSpan = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 3)])!.getParam('竖直延伸') as number
             glyphRuntime(strokes[2][0])!.setParam('弯曲游标', bendCursor + parameters['衔接位置'] * 0.3)
             glyphRuntime(strokes[3][0])!.setParam('竖直延伸', verticalSpan + parameters['衔接位置'] * 100)
             strokes[3][0].value.oy = origin_strokes[3][0].oy - verticalSpan + parameters['衔接位置'] * 100
           }
           if (parameters['衔接位置'] > 0) {
-            const bendCursor = glyphRuntime(newStrokes[2][0])!.getParam('弯曲游标') as number
-            const verticalSpan = glyphRuntime(newStrokes[3][0])!.getParam('竖直延伸') as number
+            const bendCursor = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 2)])!.getParam('弯曲游标') as number
+            const verticalSpan = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 3)])!.getParam('竖直延伸') as number
             glyphRuntime(strokes[2][0])!.setParam('弯曲游标', bendCursor + parameters['衔接位置'] * 0.3)
             glyphRuntime(strokes[3][0])!.setParam('竖直延伸', verticalSpan - parameters['衔接位置'] * 100)
             strokes[3][0].value.oy = origin_strokes[3][0].oy + verticalSpan + parameters['衔接位置'] * 100

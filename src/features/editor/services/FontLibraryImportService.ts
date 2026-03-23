@@ -19,6 +19,7 @@ import type { useProjectStore } from '@/stores/project'
 import type { useEditorStore } from '@/stores/editor'
 import type { useCharacterStore } from '@/stores/character'
 import { isTauri } from '@/utils/env'
+import { loadDecompositionData } from '@/features/decomposition/processing'
 
 export type FontImportStores = {
   projectStore: ReturnType<typeof useProjectStore>
@@ -225,6 +226,11 @@ export async function importFontLibraryFromBuffer(options: ImportFontBufferOptio
   }
 
   projectStore.addFile(file)
+  try {
+    await loadDecompositionData()
+  } catch (e) {
+    console.error('[decomposition] font import prewarm failed', e)
+  }
   projectStore.selectFile(file.uuid)
   editorStore.setEditStatus(EditStatus.CharacterList)
   characterStore.resetEditCharacterFile()

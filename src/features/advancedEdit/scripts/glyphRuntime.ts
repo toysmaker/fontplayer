@@ -4,7 +4,8 @@ import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import type { ICustomGlyph, IGlyphComponent } from '@/core/types'
 
 /** 高级编辑脚本用：按组件 uuid 取临时 CustomGlyph 实例（与 ContourConverter 一致） */
-export function glyphRuntime(comp: IGlyphComponent): CustomGlyph | null {
+export function glyphRuntime(comp: IGlyphComponent | null | undefined): CustomGlyph | null {
+  if (!comp) return null
   const gv = comp.value as ICustomGlyph
   if (!gv) return null
   try {

@@ -1,6 +1,6 @@
 import { glyphRuntime } from '../glyphRuntime'
-import { ParameterType } from "@/core/types"
-import { extractLeafParts } from "@/features/advancedEdit/decomposition"
+import { ParameterType, type IGlyphComponent } from '@/core/types'
+import { extractLeafParts } from "@/features/decomposition/utils"
 import { chainTransformStrokes, getComponentBound, getParentBound, standardTransformStrokes } from "../utils"
 import * as R from 'ramda'
 
@@ -138,13 +138,26 @@ const update = (originCharacters, characters, _parameters) => {
           xOffset: xOffset,
           yOffset: yOffset,
         }
-        const newStrokes = standardTransformStrokes(origin_strokes, transform)
-        const newBound = getComponentBound(newStrokes)
-        const originGap = Math.abs((glyphRuntime(newStrokes[0][0])!.getJoints()[1].x + newStrokes[0][0].ox) - (glyphRuntime(newStrokes[1][0])!.getJoints()[1].x + newStrokes[1][0].ox))
-
-        if (parameters['高度缩放比例'] > 0) {
-          chainTransformStrokes(parts, character, origin_ordered_components, strokes_id, originBounds, newBound)
+        // standardTransformStrokes 返回的是 flatten 后的一维数组，不是 [[comp], [comp]] 结构
+        const newStrokes = standardTransformStrokes(origin_strokes, transform) as IGlyphComponent[]
+        const idxSecondStroke = origin_strokes[0]?.length ?? 0
+        const ns0 = newStrokes[0]
+        const ns1 = newStrokes[idxSecondStroke]
+        if (!ns0 || !ns1) {
+          continue
         }
+        const rt0 = glyphRuntime(ns0)
+        const rt1 = glyphRuntime(ns1)
+        if (!rt0 || !rt1) {
+          continue
+        }
+        const newBound = getComponentBound(newStrokes)
+        const originGap = Math.abs(
+          rt0.getJoints()[1].x + ns0.ox - (rt1.getJoints()[1].x + ns1.ox),
+        )
+
+        // chainTransformStrokes 会改同字内其它部件；若与 ns0/ns1 共享字形 value，先执行会导致 rt0/rt1 关节异常。
+        // 须在根据 newStrokes 算完左右点后再链式变换。
 
         // 左点
         {
@@ -176,9 +189,9 @@ const update = (originCharacters, characters, _parameters) => {
           //   }
           // }
 
-          let newStartX = glyphRuntime(newStrokes[0][0])!.getJoints()[0].x + newStrokes[0][0].ox
-          console.log('new joints', glyphRuntime(newStrokes[0][0])!.getJoints())
-          let newEndX = glyphRuntime(newStrokes[0][0])!.getJoints()[1].x + newStrokes[0][0].ox
+          let newStartX = rt0.getJoints()[0].x + ns0.ox
+          console.log('new joints', rt0.getJoints())
+          let newEndX = rt0.getJoints()[1].x + ns0.ox
 
           const delta = (parentBounds.width / 2 - (newEndX - newStartX) - originGap / 2) * parameters['离散度']
           newEndX -= delta
@@ -194,8 +207,8 @@ const update = (originCharacters, characters, _parameters) => {
             newEndX += parameters['倾斜度'] * (newEndX - newStartX)
           }
 
-          let newStartY = glyphRuntime(newStrokes[0][0])!.getJoints()[0].y + newStrokes[0][0].oy
-          let newEndY = glyphRuntime(newStrokes[0][0])!.getJoints()[1].y + newStrokes[0][0].oy
+          let newStartY = rt0.getJoints()[0].y + ns0.oy
+          let newEndY = rt0.getJoints()[1].y + ns0.oy
           if (parameters['倾斜度'] > 0) {
             newEndY -= parameters['倾斜度'] * (newEndY - newStartY)
           }
@@ -244,8 +257,8 @@ const update = (originCharacters, characters, _parameters) => {
           //   }
           // }
 
-          let newStartX = glyphRuntime(newStrokes[1][0])!.getJoints()[0].x + newStrokes[1][0].ox
-          let newEndX = glyphRuntime(newStrokes[1][0])!.getJoints()[1].x + newStrokes[1][0].ox
+          let newStartX = rt1.getJoints()[0].x + ns1.ox
+          let newEndX = rt1.getJoints()[1].x + ns1.ox
 
           const delta = (parentBounds.width / 2 - (newStartX - newEndX) - originGap / 2) * parameters['离散度']
           newEndX += delta
@@ -260,8 +273,8 @@ const update = (originCharacters, characters, _parameters) => {
           if (parameters['倾斜度'] < 0) {
             newEndX += parameters['倾斜度'] * (newEndX - newStartX)
           }
-          let newStartY = glyphRuntime(newStrokes[1][0])!.getJoints()[0].y + newStrokes[1][0].oy//averageY
-          let newEndY = glyphRuntime(newStrokes[1][0])!.getJoints()[1].y + newStrokes[1][0].oy
+          let newStartY = rt1.getJoints()[0].y + ns1.oy // averageY
+          let newEndY = rt1.getJoints()[1].y + ns1.oy
           if (parameters['倾斜度'] > 0) {
             newEndY -= parameters['倾斜度'] * (newEndY - newStartY)
           }
@@ -279,6 +292,10 @@ const update = (originCharacters, characters, _parameters) => {
             startY: newStartY,
             endY: newEndY,
           }
+        }
+
+        if (parameters['高度缩放比例'] > 0) {
+          chainTransformStrokes(parts, character, origin_ordered_components, strokes_id, originBounds, newBound)
         }
 
         // 后处理

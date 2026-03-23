@@ -1,7 +1,7 @@
 import { glyphRuntime } from '../glyphRuntime'
 import { ParameterType } from "@/core/types"
-import { extractLeafParts } from "@/features/advancedEdit/decomposition"
-import { chainTransformStrokes, getComponentBound, getParentBound, standardTransformStrokes } from "../utils"
+import { extractLeafParts } from "@/features/decomposition/utils"
+import { chainTransformStrokes, flatNewStrokeIndex, getComponentBound, getParentBound, standardTransformStrokes } from "../utils"
 import * as R from 'ramda'
 
 const parameters = [
@@ -116,13 +116,13 @@ const update = (originCharacters, characters, _parameters) => {
 
         // 曲直度
         {
-          const originPieVerticalSpan = glyphRuntime(newStrokes[0][0])!.getParam('竖直延伸') as number
+          const originPieVerticalSpan = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 0)])!.getParam('竖直延伸') as number
 
-          if (newStrokes[1][0].value.name === '竖挑') {
-            const originTiaoVerticalSpan = glyphRuntime(newStrokes[1][0])!.getParam('挑-竖直延伸') as number
+          if ((newStrokes[flatNewStrokeIndex(origin_strokes, 1)]!.value as { name: string }).name === '竖挑') {
+            const originTiaoVerticalSpan = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 1)])!.getParam('挑-竖直延伸') as number
             glyphRuntime(strokes[1][0])!.setParam('挑-竖直延伸', originTiaoVerticalSpan - originTiaoVerticalSpan * Math.abs(parameters['曲直度']))
           } else {
-            const originGouHorizontalSpan = glyphRuntime(newStrokes[1][0])!.getParam('钩-水平延伸') as number
+            const originGouHorizontalSpan = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 1)])!.getParam('钩-水平延伸') as number
             glyphRuntime(strokes[1][0])!.setParam('钩-水平延伸', originGouHorizontalSpan - originGouHorizontalSpan * Math.abs(parameters['曲直度']))
           }
 
@@ -132,7 +132,7 @@ const update = (originCharacters, characters, _parameters) => {
 
         // 对比度
         {
-          const originPieHorizontalSpan = glyphRuntime(newStrokes[0][0])!.getParam('水平延伸') as number
+          const originPieHorizontalSpan = glyphRuntime(newStrokes[flatNewStrokeIndex(origin_strokes, 0)])!.getParam('水平延伸') as number
           if (parameters['对比度'] < 0) {
             glyphRuntime(strokes[0][0])!.setParam('水平延伸', originPieHorizontalSpan + (newBound.width - originPieHorizontalSpan) * Math.abs(parameters['对比度']))
           } else {

@@ -97,10 +97,25 @@ function needsDecomposition(scriptId: string) {
   )
 }
 
+/** 与 decomposition 字典、笔画脚本约定一致：decomposition 可为 null，但必须已写入（非 undefined）；matches 须非空数组 */
+function characterHasDecompositionScriptData(ch: ICharacterFileLite): boolean {
+  if (!Array.isArray(ch.matches) || ch.matches.length === 0) return false
+  if (ch.decomposition === undefined) return false
+  if (ch.decomposition === null) return true
+  return typeof ch.decomposition === 'string'
+}
+
 function guardDecomposition(): boolean {
-  const ch = advancedEdit.sampleCharactersList[0]
-  if (!ch?.decomposition || !ch?.matches) {
-    message.warning('当前样例字符缺少 decomposition / matches，无法运行该脚本（部分旧工程才有此数据）')
+  const list = advancedEdit.sampleCharactersList
+  if (!list.length) {
+    message.warning('样例字符列表为空：请在「样例字符」中加入当前工程内存在的字')
+    return false
+  }
+  const bad = list.find((ch) => !characterHasDecompositionScriptData(ch))
+  if (bad) {
+    message.warning(
+      `样例「${bad.character?.text ?? bad.uuid}」缺少可用的 decomposition / matches（未写入或仅旧工程无此数据）。若为默认模板工程，请确认打开时已成功加载部件字典并完成分解写入。`,
+    )
     return false
   }
   return true

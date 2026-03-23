@@ -87,6 +87,13 @@ const dialogs = {
 			confirm: '确认',
 			cancel: '取消',
 		},
+		projectTagPrompt: {
+			title: '工程标签',
+			label: '标签（将写入工程文件）',
+			placeholder: '可选，用于区分或检索工程',
+			confirm: '确定',
+			cancel: '取消',
+		},
 		addIconDialog: {
 			title: '添加图标',
 			iconName: '图标名称',
@@ -345,6 +352,13 @@ const dialogs = {
 		saveAsDialog: {
 			title: 'Save As Project',
 			confirm: 'Confirm',
+			cancel: 'Cancel',
+		},
+		projectTagPrompt: {
+			title: 'Project tag',
+			label: 'Tag (saved in project file)',
+			placeholder: 'Optional, for identification or search',
+			confirm: 'OK',
 			cancel: 'Cancel',
 		},
 		addIconDialog: {

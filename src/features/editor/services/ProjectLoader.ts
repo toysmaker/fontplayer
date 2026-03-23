@@ -13,6 +13,14 @@ import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { ContourConverter } from '@/core/font/converter'
+import {
+  buildDecompositionForOpenedProjectCharacters,
+  loadDecompositionData,
+  tryEnsureDecompositionLookup,
+} from '@/features/decomposition/processing'
+
+/** 带此 tag 的工程在加载完成后会为字符列表补全部件分解数据 */
+const DEFAULT_TEMPLATE_PROJECT_TAG = '字玩默认模板工程'
 
 export interface LoadProgress {
   loaded: number
@@ -44,7 +52,13 @@ export class ProjectLoader {
     try {
       const store = this.projectStore
       store.loading = true
-      
+
+      try {
+        await loadDecompositionData()
+      } catch (e) {
+        console.error('[decomposition] project open prewarm failed', e)
+      }
+
       // 检查是否需要迁移
       if (ProjectMigrator.needsMigration(data)) {
         this.updateProgress(0, '正在迁移工程文件格式...')
@@ -59,7 +73,27 @@ export class ProjectLoader {
       
       // 2. 处理字符数据
       await this.processCharacters(data.file)
-      
+
+      // 2b. 默认模板工程：字符已入 IDB 后补全 decomposition（仅此时增加 loadingTotal）
+      const fileForDecomp = data.file
+      const projectTag = typeof fileForDecomp.tag === 'string' ? fileForDecomp.tag : undefined
+      const metaListAfterChars = (fileForDecomp.characterList || []) as ICharacterFileMetadata[]
+      if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && metaListAfterChars.length > 0) {
+        const map = await tryEnsureDecompositionLookup()
+        if (map) {
+          const extra = metaListAfterChars.length
+          store.loadingTotal += extra
+          const progressBase = store.loadingProgress
+          await buildDecompositionForOpenedProjectCharacters(fileForDecomp.uuid, metaListAfterChars, {
+            map,
+            onProgress: (done, total) => {
+              this.updateProgress(progressBase + done, `部件分解 (${done}/${total})`)
+            },
+            yieldToMain: () => this.yieldToMainThread(),
+          })
+        }
+      }
+
       // 3. 处理常量数据
       const constants = data.constants || []
       if (constants.length > 0) {
@@ -73,6 +107,7 @@ export class ProjectLoader {
       const file: IFile = {
         uuid: data.file.uuid,
         name: data.file.name,
+        tag: typeof data.file.tag === 'string' ? data.file.tag : undefined,
         width: data.file.width,
         height: data.file.height,
         saved: false,

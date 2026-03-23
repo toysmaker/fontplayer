@@ -432,6 +432,8 @@ export interface IRingParameter {
 export interface IFile {
   uuid: string
   name: string
+  /** 工程标签（写入 JSON `file.tag`，保存/导出前由用户确认） */
+  tag?: string
   width: number
   height: number
   saved: boolean
