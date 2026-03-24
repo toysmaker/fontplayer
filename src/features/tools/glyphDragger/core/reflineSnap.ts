@@ -108,7 +108,8 @@ export function getSnapRefline(
   reflines: SnapAxisLine[],
   snapDistance: number = 20,
 ): { dx: number; dy: number } | null {
-  let bestSnap: { dx: number; dy: number; distance: number } | null = null
+  let bestH: { dy: number; distance: number } | null = null
+  let bestV: { dx: number; distance: number } | null = null
 
   for (const keyline of keylines) {
     for (const refline of reflines) {
@@ -116,19 +117,23 @@ export function getSnapRefline(
       const distance = Math.abs(keyline.coord - refline.coord)
       if (distance >= snapDistance) continue
 
-      let dx = 0
-      let dy = 0
       if (keyline.type === 'horizontal') {
-        dy = keyline.coord - refline.coord
+        const dy = keyline.coord - refline.coord
+        if (!bestH || distance < bestH.distance) {
+          bestH = { dy, distance }
+        }
       } else {
-        dx = keyline.coord - refline.coord
-      }
-
-      if (!bestSnap || distance < bestSnap.distance) {
-        bestSnap = { dx, dy, distance }
+        const dx = keyline.coord - refline.coord
+        if (!bestV || distance < bestV.distance) {
+          bestV = { dx, distance }
+        }
       }
     }
   }
 
-  return bestSnap ? { dx: bestSnap.dx, dy: bestSnap.dy } : null
+  if (!bestH && !bestV) return null
+  return {
+    dx: bestV?.dx ?? 0,
+    dy: bestH?.dy ?? 0,
+  }
 }

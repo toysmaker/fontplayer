@@ -322,6 +322,42 @@ export abstract class BaseGlyphDragger {
     return collectStraightAxisLinesFromPenComponents(instance._components, ox, oy)
   }
 
+  /**
+   * 吸附前预热：为当前字形与所有 peer 建立临时实例并在需要时执行脚本，
+   * 避免 getAutoSnapKeyLines 在 requireExistingInstance 下因 peer 无实例而拿不到参考线。
+   */
+  private primeSnapInstancesForPeerSnapping(): void {
+    const comp = this.context.component
+    if (!comp || comp.type !== 'glyph') return
+
+    const seen = new Set<string>()
+
+    const primeOne = (c: IComponent | IGlyphComponent) => {
+      if (c.type !== 'glyph') return
+      const uuid = c.uuid
+      if (seen.has(uuid)) return
+      seen.add(uuid)
+      const v = c.value as ICustomGlyph | undefined
+      if (!v) return
+      const instance = instanceManager.acquireTemporaryInstance(
+        uuid,
+        () => new CustomGlyph(v),
+        'glyph',
+      ) as CustomGlyph
+      if (
+        instance._components.length === 0 &&
+        (v.script || v.script_reference || v.skeleton)
+      ) {
+        executeGlyphScript(v, uuid)
+      }
+    }
+
+    primeOne(comp as IComponent)
+    for (const p of this.getSnapKeyLinePeers(this.context.componentUUID)) {
+      primeOne(p)
+    }
+  }
+
   /** 其它顶层字形组件提供的参考线（不含当前拖拽组件） */
   private getAutoSnapKeyLines(): SnapAxisLine[] {
     const peers = this.getSnapKeyLinePeers(this.context.componentUUID)
@@ -484,6 +520,8 @@ export abstract class BaseGlyphDragger {
     // 记录初始的 ox 和 oy，用于拖拽时计算新位置（避免累加错误）
     this.initialOx = this.origin.ox
     this.initialOy = this.origin.oy
+
+    this.primeSnapInstancesForPeerSnapping()
     
     console.log('[BaseGlyphDragger.onMouseDown] Drag started:', {
       isDragging: this._isDragging,

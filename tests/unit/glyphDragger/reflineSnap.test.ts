@@ -99,6 +99,21 @@ describe('reflineSnap', () => {
       )
       expect(snap).toEqual({ dx: 0, dy: 2 })
     })
+
+    it('combines best horizontal and vertical snaps independently', () => {
+      const snap = getSnapRefline(
+        [
+          { type: 'horizontal', coord: 100 },
+          { type: 'vertical', coord: 50 },
+        ],
+        [
+          { type: 'horizontal', coord: 104 },
+          { type: 'vertical', coord: 52 },
+        ],
+        20,
+      )
+      expect(snap).toEqual({ dx: -2, dy: -4 })
+    })
   })
 
   describe('mergeSnapAxisLines', () => {
