@@ -614,7 +614,7 @@ const handleFormatGlyphComponent = () => {
           >
             <!-- Number 类型参数 -->
             <template v-if="parameter.type === ParameterType.Number">
-              <div class="parameter-control param-with-global-menu">
+              <div class="glyph-param-block">
                 <div class="param-inputs-grow">
                   <n-input-number
                     :value="parameter.value as number"
@@ -636,11 +636,14 @@ const handleFormatGlyphComponent = () => {
                 </div>
                 <n-popover trigger="click" placement="right" :width="260">
                   <template #trigger>
-                    <n-button quaternary size="tiny" class="param-global-menu-trigger" :focusable="false">
-                      <n-icon>
-                        <font-awesome-icon :icon="['fas', 'ellipsis-vertical']" />
-                      </n-icon>
-                    </n-button>
+                    <span class="constant-note constant-note--trigger constant-note--local">
+                      <span class="constant-note-text constant-note-text--local">{{ t('panels.paramsPanel.params.localVariableNote') }}</span>
+                      <span class="constant-note-icon">
+                        <n-icon>
+                          <font-awesome-icon :icon="['fas', 'pen-to-square']" />
+                        </n-icon>
+                      </span>
+                    </span>
                   </template>
                   <div class="global-param-popover-actions">
                     <n-button block size="small" @click="openSetAsDialog(parameter)">
@@ -656,20 +659,23 @@ const handleFormatGlyphComponent = () => {
             
             <!-- Enum 类型参数 -->
             <template v-else-if="parameter.type === ParameterType.Enum">
-              <div class="parameter-control param-with-global-menu">
+              <div class="glyph-param-block">
                 <n-select
-                  class="param-inputs-grow enum-select-grow"
+                  class="enum-select-grow"
                   :value="parameter.value"
                   :options="parameter.options?.map(opt => ({ label: opt.label, value: opt.value })) || []"
                   @update:value="(v) => handleChangeParameter(parameter, v)"
                 />
                 <n-popover trigger="click" placement="right" :width="260">
                   <template #trigger>
-                    <n-button quaternary size="tiny" class="param-global-menu-trigger" :focusable="false">
-                      <n-icon>
-                        <font-awesome-icon :icon="['fas', 'ellipsis-vertical']" />
-                      </n-icon>
-                    </n-button>
+                    <span class="constant-note constant-note--trigger constant-note--local">
+                      <span class="constant-note-text constant-note-text--local">{{ t('panels.paramsPanel.params.localVariableNote') }}</span>
+                      <span class="constant-note-icon">
+                        <n-icon>
+                          <font-awesome-icon :icon="['fas', 'pen-to-square']" />
+                        </n-icon>
+                      </span>
+                    </span>
                   </template>
                   <div class="global-param-popover-actions">
                     <n-button block size="small" @click="openSetAsDialog(parameter)">
@@ -685,7 +691,7 @@ const handleFormatGlyphComponent = () => {
             
             <!-- Constant 类型参数（显示常量值，可编辑但不更新列表；按常量自身 type 渲染） -->
             <template v-else-if="parameter.type === ParameterType.Constant">
-              <div class="constant-param">
+              <div class="glyph-param-block">
                 <template v-if="getConstantMeta(String(parameter.value))?.type === ParameterType.Enum">
                   <n-select
                     :value="getConstantValue(parameter) as any"
@@ -714,8 +720,8 @@ const handleFormatGlyphComponent = () => {
                 </template>
                 <n-popover trigger="click" placement="right" :width="260">
                   <template #trigger>
-                    <span class="constant-note constant-note--trigger">
-                      <span class="constant-note-text">{{ t('panels.paramsPanel.params.globalConstantNote') }}</span>
+                    <span class="constant-note constant-note--trigger constant-note--global">
+                      <span class="constant-note-text constant-note-text--global">{{ t('panels.paramsPanel.params.globalConstantNote') }}</span>
                       <span class="constant-note-icon">
                         <n-icon>
                           <font-awesome-icon :icon="['fas', 'pen-to-square']" />
@@ -852,18 +858,6 @@ const handleFormatGlyphComponent = () => {
   color: var(--text-color-1);
 }
 
-.parameter-control {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-.param-with-global-menu {
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 6px;
-}
-
 .param-inputs-grow {
   flex: 1;
   min-width: 0;
@@ -871,13 +865,8 @@ const handleFormatGlyphComponent = () => {
   flex-direction: column;
 }
 
-.param-global-menu-trigger {
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
 .enum-select-grow {
-  flex: 1;
+  width: 100%;
   min-width: 0;
 }
 
@@ -887,35 +876,38 @@ const handleFormatGlyphComponent = () => {
   gap: 8px;
 }
 
-.parameter-control .n-input-number {
-  width: 100%
-}
-
-.parameter-control .n-slider {
-  width: 100%;
-}
-
-.constant-param {
+.glyph-param-block {
   display: flex;
   flex-direction: column;
   width: 100%;
   position: relative;
 }
 
-.constant-param .n-input-number {
+.glyph-param-block .n-input-number {
   width: 100%;
 }
 
-.constant-param .n-slider {
+.glyph-param-block .n-slider {
+  width: 100%;
+}
+
+.glyph-param-block .enum-select-grow {
   width: 100%;
 }
 
 .constant-note {
   font-size: 12px;
-  color: #7a2703;
   font-weight: bold;
   white-space: nowrap;
   margin-top: 8px;
+}
+
+.constant-note--global {
+  color: #7a2703;
+}
+
+.constant-note--local {
+  color: var(--primary-0);
 }
 
 .constant-note :deep(.n-icon) {
@@ -930,6 +922,14 @@ const handleFormatGlyphComponent = () => {
 
 .constant-note-text {
   margin-right: 5px;
+}
+
+.constant-note-text--global {
+  color: #7a2703;
+}
+
+.constant-note-text--local {
+  color: var(--primary-0);
 }
 
 .format-component-wrap {

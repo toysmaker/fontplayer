@@ -75,6 +75,7 @@ const panels = {
 			params: {
 				title: '参数',
 				globalConstantNote: '全局常量',
+				localVariableNote: '局部变量',
 				globalParamUpdateProgress: '正在刷新引用全局变量的字形…',
 				globalParamUpdateScanCharacters: '正在扫描字符 {current} / {total} …',
 				globalParamUpdateScanGlyphs: '正在扫描笔画/部首/部件/字形列表中的引用…',
@@ -355,6 +356,7 @@ const panels = {
 			params: {
 				title: 'Parameters',
 				globalConstantNote: 'Global constant',
+				localVariableNote: 'Local variable',
 				globalParamUpdateProgress: 'Refreshing glyphs that use this global variable…',
 				globalParamUpdateScanCharacters: 'Scanning characters {current} / {total} …',
 				globalParamUpdateScanGlyphs: 'Scanning stroke/radical/comp/glyph lists for references…',
