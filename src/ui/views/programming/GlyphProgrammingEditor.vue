@@ -4,7 +4,6 @@ import { useI18n } from 'vue-i18n'
 import {
   NTabs,
   NTabPane,
-  NScrollbar,
   NButton,
   NInput,
   NInputNumber,
@@ -85,6 +84,10 @@ function mountEditor() {
       basicSetup,
       javascript(),
       oneDark,
+      EditorView.theme({
+        '&': { height: '100%' },
+        '.cm-scroller': { overflow: 'auto' },
+      }),
       EditorView.updateListener.of((v) => {
         script.value = v.state.doc.toString()
       }),
@@ -341,7 +344,7 @@ function resetScript() {
     <div class="left-panel">
       <n-tabs v-model:value="activeTab" class="prog-tabs" type="line">
         <n-tab-pane :name="'global-constants'" :tab="t('programming.global-constants')">
-          <n-scrollbar class="prog-scrollbar">
+          <div class="prog-pane-scroll">
             <n-form label-placement="left" :show-feedback="false" size="small" class="prog-left-form">
             <n-button class="add-constant-button" block @pointerdown="addConstant">
               {{ t('programming.new-constant') }}
@@ -507,10 +510,10 @@ function resetScript() {
               </n-icon>
             </div>
             </n-form>
-          </n-scrollbar>
+          </div>
         </n-tab-pane>
         <n-tab-pane :name="'glyph-parameters'" :tab="t('programming.glyph-parameters')">
-          <n-scrollbar class="prog-scrollbar">
+          <div class="prog-pane-scroll">
             <n-form label-placement="left" :show-feedback="false" size="small" class="prog-left-form">
             <n-button class="add-parameter-button" block @pointerdown="addParameter">
               {{ t('programming.new-parameter') }}
@@ -676,7 +679,7 @@ function resetScript() {
               </n-icon>
             </div>
             </n-form>
-          </n-scrollbar>
+          </div>
         </n-tab-pane>
       </n-tabs>
     </div>
@@ -698,15 +701,16 @@ function resetScript() {
 <style scoped>
 .glyph-programming-editor {
   width: 100%;
-  height: 100%;
   display: flex;
   flex-direction: row;
 }
 .right-panel {
-  flex: 0 0 980px;
-  width: 980px;
+  flex: 1 1 980px;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .right-panel .codes-header {
   background-color: white;

@@ -4,7 +4,6 @@ import { useI18n } from 'vue-i18n'
 import {
   NTabs,
   NTabPane,
-  NScrollbar,
   NButton,
   NInput,
   NInputNumber,
@@ -186,7 +185,7 @@ function removeOption(param: IConstant, option: { value: number }) {
     <div class="left-panel">
       <n-tabs v-model:value="activeTab" class="prog-tabs" type="line">
         <n-tab-pane :name="'global-constants'" :tab="t('programming.global-constants')">
-          <n-scrollbar class="prog-scrollbar">
+          <div class="prog-pane-scroll">
             <n-form label-placement="left" :show-feedback="false" size="small" class="prog-left-form">
             <n-button class="add-constant-button" block @pointerdown="addConstant">
               {{ t('programming.new-constant') }}
@@ -352,7 +351,7 @@ function removeOption(param: IConstant, option: { value: number }) {
               </n-icon>
             </div>
             </n-form>
-          </n-scrollbar>
+          </div>
         </n-tab-pane>
       </n-tabs>
     </div>
@@ -378,15 +377,16 @@ function removeOption(param: IConstant, option: { value: number }) {
 <style scoped>
 .glyph-programming-editor {
   width: 100%;
-  height: 100%;
   display: flex;
   flex-direction: row;
 }
 .right-panel {
-  flex: 0 0 980px;
-  width: 980px;
+  flex: 1 1 980px;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .right-panel .codes-header {
   background-color: white;
@@ -406,7 +406,8 @@ function removeOption(param: IConstant, option: { value: number }) {
   min-height: 0;
   position: relative;
   background-color: #282c34;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   pointer-events: none;
 }
 .codes-disabled-overlay {

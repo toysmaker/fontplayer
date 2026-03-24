@@ -3,11 +3,17 @@
  * 选择器均挂在 .glyph-programming-editor 下，避免污染全局
  */
 
-/* 独立路由窗口：占满视口；左侧 tab+滚动区、右侧脚本区在内容少时仍拉满高度 */
+/* 独立路由窗口：占满视口（避免仅 min-height 时父链未拉高导致子项 height:100% 失效、无法滚动） */
 .glyph-programming-editor {
+  box-sizing: border-box;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
   min-height: 100vh;
   min-height: 100dvh;
   align-items: stretch;
+  overflow: hidden;
 }
 
 .glyph-programming-editor .left-panel {
@@ -25,14 +31,19 @@
 .glyph-programming-editor .right-panel {
   align-self: stretch;
   min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ---------- Tabs（对齐 el-tabs：灰字、激活深蓝+下划线） ---------- */
-.glyph-programming-editor .prog-tabs :deep(.n-tabs-nav) {
+.glyph-programming-editor .prog-tabs .n-tabs-nav {
   border-bottom: 1px solid #dcdfe6;
 }
 
-.glyph-programming-editor .prog-tabs :deep(.n-tabs-tab) {
+.glyph-programming-editor .prog-tabs .n-tabs-tab {
   color: #909399;
   font-size: 14px;
   padding: 0 16px;
@@ -42,16 +53,16 @@
   box-sizing: border-box;
 }
 
-.glyph-programming-editor .prog-tabs :deep(.n-tabs-tab:hover) {
+.glyph-programming-editor .prog-tabs .n-tabs-tab:hover {
   color: var(--primary-0);
 }
 
-.glyph-programming-editor .prog-tabs :deep(.n-tabs-tab.n-tabs-tab--active) {
+.glyph-programming-editor .prog-tabs .n-tabs-tab.n-tabs-tab--active {
   color: var(--primary-0);
   font-weight: 700;
 }
 
-.glyph-programming-editor .prog-tabs :deep(.n-tabs-bar) {
+.glyph-programming-editor .prog-tabs .n-tabs-bar {
   height: 2px;
   border-radius: 0;
   background-color: var(--primary-0) !important;
@@ -64,33 +75,33 @@
   flex-direction: column;
 }
 
-.glyph-programming-editor .prog-tabs :deep(.n-tabs-pane-wrapper) {
+.glyph-programming-editor .prog-tabs .n-tabs-pane-wrapper {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* Naive 默认 overflow:hidden；与 flex:1 配合才能限制 pane 高度 */
+  overflow: hidden;
 }
 
-/* 让 pane 内容区参与纵向 flex，内部的 n-scrollbar 才能拉高 */
-.glyph-programming-editor .prog-tabs :deep(.n-tab-pane) {
+/* 让 pane 占满 tabs 剩余高度；overflow 裁剪后子级 .prog-pane-scroll 才能纵向滚动。
+ * 注意：本文件经 <style src> 引入为全局 CSS，不能使用 Vue 的 :deep()（浏览器会丢弃整段选择器）。 */
+.glyph-programming-editor .prog-tabs .n-tab-pane {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
-/* 组件根节点同时带 .prog-scrollbar 与 .n-scrollbar */
-.glyph-programming-editor .prog-scrollbar {
+/* 左侧列表：用原生滚动区，避免 n-scrollbar 在 flex 链高度未解析时无法滚动 */
+.glyph-programming-editor .prog-pane-scroll {
   flex: 1;
   min-height: 0;
-  height: 100%;
-  max-height: none;
-}
-
-.glyph-programming-editor .prog-scrollbar :deep(.n-scrollbar-container) {
-  height: 100%;
-  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ---------- 左侧 n-form：与 el-form horizontal 一致（label 与控件同一行、无校验预留高度） ---------- */
@@ -98,7 +109,7 @@
   width: 100%;
 }
 
-.glyph-programming-editor .prog-left-form :deep(.n-form-item-feedback-wrapper) {
+.glyph-programming-editor .prog-left-form .n-form-item-feedback-wrapper {
   min-height: 0;
 }
 
@@ -134,25 +145,25 @@
   margin: 5px 0;
 }
 
-.glyph-programming-editor .prog-form-item :deep(.n-form-item-label) {
+.glyph-programming-editor .prog-form-item .n-form-item-label {
   color: #000 !important;
 }
 
-.glyph-programming-editor .prog-form-item:not(.prog-form-item--label80) :deep(.n-form-item-label) {
+.glyph-programming-editor .prog-form-item:not(.prog-form-item--label80) .n-form-item-label {
   width: 42px !important;
   min-width: 42px !important;
   padding-right: 8px !important;
   justify-content: flex-end;
 }
 
-.glyph-programming-editor .prog-form-item.prog-form-item--label80 :deep(.n-form-item-label) {
+.glyph-programming-editor .prog-form-item.prog-form-item--label80 .n-form-item-label {
   width: 80px !important;
   min-width: 80px !important;
   padding-right: 8px !important;
   justify-content: flex-end;
 }
 
-.glyph-programming-editor .prog-form-item :deep(.n-form-item-blank) {
+.glyph-programming-editor .prog-form-item .n-form-item-blank {
   flex: 1;
   min-width: 0;
 }
@@ -176,31 +187,31 @@
 }
 
 /* ---------- 输入、选择：方角、白底、主色文字（对齐原 el-input） ---------- */
-.glyph-programming-editor .left-panel :deep(.n-input .n-input-wrapper) {
+.glyph-programming-editor .left-panel .n-input .n-input-wrapper {
   border-radius: 0;
   background-color: #fff;
 }
 
-.glyph-programming-editor .left-panel :deep(.n-input__input-el) {
+.glyph-programming-editor .left-panel .n-input__input-el {
   color: var(--primary-0) !important;
 }
 
-.glyph-programming-editor .left-panel :deep(.n-base-selection) {
+.glyph-programming-editor .left-panel .n-base-selection {
   border-radius: 0;
   --n-border: 1px solid #dcdfe6;
 }
 
-.glyph-programming-editor .left-panel :deep(.n-base-selection .n-base-selection-label) {
+.glyph-programming-editor .left-panel .n-base-selection .n-base-selection-label {
   color: var(--primary-0);
 }
 
-.glyph-programming-editor .left-panel :deep(.n-base-selection:hover),
-.glyph-programming-editor .left-panel :deep(.n-input-wrapper:hover) {
+.glyph-programming-editor .left-panel .n-base-selection:hover,
+.glyph-programming-editor .left-panel .n-input-wrapper:hover {
   border-color: var(--primary-0);
 }
 
-.glyph-programming-editor .left-panel :deep(.n-base-selection.n-base-selection--focus),
-.glyph-programming-editor .left-panel :deep(.n-input.n-input--focus .n-input-wrapper) {
+.glyph-programming-editor .left-panel .n-base-selection.n-base-selection--focus,
+.glyph-programming-editor .left-panel .n-input.n-input--focus .n-input-wrapper {
   border-color: var(--primary-0);
   box-shadow: none;
 }
@@ -213,13 +224,13 @@
   margin-bottom: 5px;
 }
 
-.glyph-programming-editor .parameter-value :deep(.n-input-number),
-.glyph-programming-editor .option-value :deep(.n-input-number) {
+.glyph-programming-editor .parameter-value .n-input-number,
+.glyph-programming-editor .option-value .n-input-number {
   width: 100% !important;
 }
 
 /* Naive InputNumber 内加减：颜色对齐原 el-input-number（深蓝底、白图标），位置仍为 Naive 默认 */
-.glyph-programming-editor .left-panel :deep(.n-input-number .n-button) {
+.glyph-programming-editor .left-panel .n-input-number .n-button {
   border-radius: 0 !important;
   min-width: 28px;
   height: 28px;
@@ -234,16 +245,16 @@
   --n-text-color-focus: #fff !important;
 }
 
-.glyph-programming-editor .left-panel :deep(.n-input-number .n-button:not(:disabled):hover) {
+.glyph-programming-editor .left-panel .n-input-number .n-button:not(:disabled:hover) {
   background-color: var(--primary-1) !important;
 }
 
-.glyph-programming-editor .left-panel :deep(.n-input-number .n-button:disabled) {
+.glyph-programming-editor .left-panel .n-input-number .n-button:disabled {
   opacity: 0.45;
 }
 
-.glyph-programming-editor .left-panel :deep(.n-input-number .n-button .n-icon),
-.glyph-programming-editor .left-panel :deep(.n-input-number .n-base-icon) {
+.glyph-programming-editor .left-panel .n-input-number .n-button .n-icon,
+.glyph-programming-editor .left-panel .n-input-number .n-base-icon {
   color: #fff !important;
 }
 
@@ -386,21 +397,21 @@
   margin-top: 6px;
 }
 
-.glyph-programming-editor .ring-inner-tabs :deep(.n-tabs-nav) {
+.glyph-programming-editor .ring-inner-tabs .n-tabs-nav {
   background-color: #f5f7fa;
   border: 1px solid #dcdfe6;
   border-bottom: none;
   border-radius: 0;
 }
 
-.glyph-programming-editor .ring-inner-tabs :deep(.n-tabs-pane-wrapper) {
+.glyph-programming-editor .ring-inner-tabs .n-tabs-pane-wrapper {
   border: 1px solid #dcdfe6;
   padding: 10px;
   background: #fff;
   border-radius: 0;
 }
 
-.glyph-programming-editor .ring-inner-tabs :deep(.n-tabs-tab) {
+.glyph-programming-editor .ring-inner-tabs .n-tabs-tab {
   border-radius: 0;
 }
 
