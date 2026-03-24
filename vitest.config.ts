@@ -25,7 +25,6 @@ export default defineConfig({
         '**/*.config.*',
         '**/dist/**',
         '**/build/**',
-        'src/fontManager/**', // 排除fontManager目录（按用户要求）
         'src-tauri/**',
         'scripts/**',
       ],
@@ -33,6 +32,13 @@ export default defineConfig({
         'src/**/*.ts',
         'src/**/*.vue',
       ],
+      // 渐进门禁：随覆盖率提升可提高阈值，目标 100%（见 tests/COVERAGE_BASELINE.md）
+      thresholds: {
+        lines: 15,
+        branches: 8,
+        functions: 12,
+        statements: 15,
+      },
     },
   },
   resolve: {

@@ -3,7 +3,17 @@
  * 用于设置测试环境，如创建测试项目等
  */
 
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Page, expect } from '@playwright/test'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
+/** 最小工程 JSON 夹具（壳数据，见 fixtures/README.md） */
+export const MINIMAL_PROJECT_FIXTURE_PATH = join(
+  __dirname,
+  '../fixtures/minimal-project-file.json',
+)
 
 /**
  * 创建一个测试项目

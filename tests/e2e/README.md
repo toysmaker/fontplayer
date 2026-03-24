@@ -1,5 +1,9 @@
 # E2E 测试说明
 
+## 夹具校验
+
+- `fixtures/minimal-project-file.json` 的结构校验在 **Vitest** 中执行：`tests/unit/e2e-fixtures/minimal-project-json.test.ts`（避免为本用例启动 dev server）。
+
 ## 测试状态
 
 E2E 测试分为两类：

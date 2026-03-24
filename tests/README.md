@@ -12,12 +12,14 @@ tests/
 │   ├── renderer/                  # 渲染器测试
 │   ├── script/                    # 脚本功能测试
 │   ├── tools/                     # 工具测试
-│   └── glyphDragger/              # glyphDragger测试
+│   ├── glyphDragger/              # glyphDragger测试
+│   └── fontManager/               # 字体构建/解析（OpenType 表）
 ├── integration/                   # 集成测试
 │   ├── project-flow.test.ts
 │   ├── converter-integration.test.ts
 │   ├── renderer-integration.test.ts
-│   └── script-integration.test.ts
+│   ├── script-integration.test.ts
+│   └── fontManager/               # create → buffer → parse 等闭环
 ├── e2e/                           # E2E测试
 │   ├── project.spec.ts
 │   ├── character-list.spec.ts
@@ -26,6 +28,8 @@ tests/
 ├── setup/                         # 测试配置
 │   ├── vitest.setup.ts
 │   └── mocks/                     # Mock数据
+├── fixtures/                      # 二进制等静态夹具
+│   └── fonts/                     # 极小 TTF/OTF（parse 集成测）
 └── helpers/                       # 测试辅助函数
     ├── test-utils.ts
     └── mock-helpers.ts
@@ -50,6 +54,9 @@ npm run test:ui
 
 # 运行测试（单次运行，不watch）
 npm run test:run
+
+# 仅 fontManager
+pnpm run test:fontManager
 ```
 
 ### E2E测试
@@ -61,6 +68,8 @@ npm run test:e2e
 # 运行E2E测试（UI模式）
 npx playwright test --ui
 ```
+
+功能与测试文件映射见 [docs/testing/traceability.md](../docs/testing/traceability.md)。
 
 ## 覆盖率目标
 
@@ -128,9 +137,14 @@ npx playwright test --ui
 - ✅ CharacterGlyphDragger
 - ✅ GlyphGlyphDragger
 
+### fontManager（导出/解析字体）
+- 单元：`tests/unit/fontManager/`（encode、decode、validators、utils、各表逻辑）
+- 集成：`tests/integration/fontManager/`（roundtrip、fixture 解析）
+- 覆盖率：`src/fontManager/**` 已纳入 Vitest v8 `coverage.include`，不再排除
+
 ## 注意事项
 
-1. **fontManager目录**: 按用户要求，暂不测试（直接从原工程复制，未做修改）
+1. **fontManager 导出菜单**：单测中 `vi.mock('file-saver')` / `vi.mock('jszip')`；`parseUrl` 用 `vi.stubGlobal('fetch', ...)`。
 2. **Mock策略**: 使用vitest的vi.mock进行依赖mock
 3. **测试环境**: 使用jsdom模拟DOM环境
 4. **覆盖率**: 使用v8 provider生成覆盖率报告

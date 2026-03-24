@@ -1,0 +1,31 @@
+{
+  "uuid": "e2e-fixture-project-uuid",
+  "name": "E2E Fixture Project",
+  "width": 1000,
+  "height": 1000,
+  "saved": true,
+  "iconsCount": 0,
+  "fontSettings": {
+    "unitsPerEm": 1000,
+    "ascender": 800,
+    "descender": -200,
+    "tables": {
+      "name": []
+    }
+  },
+  "characterList": [
+    {
+      "uuid": "e2e-fixture-char-uuid",
+      "type": "character",
+      "character": {
+        "text": "测",
+        "unicode": 27979
+      }
+    }
+  ],
+  "glyphs": [],
+  "stroke_glyphs": [],
+  "radical_glyphs": [],
+  "comp_glyphs": [],
+  "constants": []
+}

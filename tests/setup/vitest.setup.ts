@@ -2,6 +2,7 @@
  * Vitest 测试环境设置
  */
 
+import './mocks/tauri'
 import { vi } from 'vitest'
 import { config } from '@vue/test-utils'
 
