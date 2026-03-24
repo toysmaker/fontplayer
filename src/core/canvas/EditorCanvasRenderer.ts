@@ -802,7 +802,14 @@ export function render(
         if (hasSkeleton) {
           needsScriptExecution = false
         }
-        
+
+        // 无脚本且无骨架的字形（如只有钢笔组件）：executeGlyphScript 只会 clear() _components 而不会重新填充，
+        // _components 永远为空 → needsScriptExecution 永远为 true → 死循环。
+        const hasScript = !!(options.glyph?.script || options.glyph?.script_reference)
+        if (!hasScript && !hasSkeleton) {
+          needsScriptExecution = false
+        }
+
         if (needsScriptExecution) {
           if (import.meta.env.DEV) {
             console.log('[EditorCanvasRenderer] ✅ Executing script for internal components:', {

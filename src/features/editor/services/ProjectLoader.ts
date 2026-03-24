@@ -119,12 +119,6 @@ export class ProjectLoader {
         radical_glyphs: data.radical_glyphs || [],
         comp_glyphs: data.comp_glyphs || [],
         constants: constants,
-        constantGlyphMap:
-          data.constantGlyphMap && typeof data.constantGlyphMap === 'object' && !Array.isArray(data.constantGlyphMap)
-            ? Object.fromEntries(
-                Object.entries(data.constantGlyphMap as Record<string, unknown>).map(([k, v]) => [k, String(v ?? '')]),
-              )
-            : undefined,
         variants: data.file.variants,
       }
 

@@ -19,7 +19,6 @@ export class ProjectMigrator {
       radical_glyphs: oldData.radical_glyphs || [],
       comp_glyphs: oldData.comp_glyphs || [],
       constants: oldData.constants || [],
-      constantGlyphMap: oldData.constantGlyphMap || {},
     }
 
     return migrated

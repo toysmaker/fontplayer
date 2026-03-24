@@ -363,6 +363,23 @@ const schedulePeriodicCleanup = () => {
   }
 }
 
+const handleForceGlyphListRefresh = () => {
+  renderCache.clear()
+  CanvasManager.forceCleanupAllCache()
+  const { start, end } = visibleRange.value
+  visibleItems.value = [...glyphList.value.slice(start, end)]
+  scheduleRender()
+}
+
+const onForceGlyphListRefreshEvent = (ev: Event) => {
+  const e = ev as CustomEvent<{ done?: () => void }>
+  try {
+    handleForceGlyphListRefresh()
+  } finally {
+    e.detail?.done?.()
+  }
+}
+
 onMounted(() => {
   updateContainerSize()
   
@@ -372,12 +389,16 @@ onMounted(() => {
     })
     resizeObserver.observe(containerRef.value)
   }
+
+  window.addEventListener('force-glyph-list-refresh', onForceGlyphListRefreshEvent)
   
   // 启动定期清理
   schedulePeriodicCleanup()
 })
 
 onUnmounted(() => {
+  window.removeEventListener('force-glyph-list-refresh', onForceGlyphListRefreshEvent)
+
   if (resizeObserver) {
     resizeObserver.disconnect()
     resizeObserver = null

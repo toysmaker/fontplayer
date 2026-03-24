@@ -155,13 +155,6 @@ export function createImportHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
       }
     }
 
-    if (parsed.constantGlyphMap && typeof parsed.constantGlyphMap === 'object') {
-      if (!file.constantGlyphMap) file.constantGlyphMap = {}
-      for (const [k, v] of Object.entries(parsed.constantGlyphMap)) {
-        file.constantGlyphMap[k] = String(v ?? '')
-      }
-    }
-
     let repeatMark = false
     for (const plain of parsed.glyphs) {
       let glyph: ICustomGlyph

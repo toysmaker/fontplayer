@@ -5,22 +5,50 @@
  */
 
 import { ref, computed, watch, nextTick } from 'vue'
-import { NInputNumber, NForm, NFormItem, NInput, NEmpty, NSlider, NSelect, NSwitch, NIcon, NButton, NColorPicker } from 'naive-ui'
+import {
+  NInputNumber,
+  NForm,
+  NFormItem,
+  NInput,
+  NEmpty,
+  NSlider,
+  NSelect,
+  NSwitch,
+  NIcon,
+  NButton,
+  NColorPicker,
+  NPopover,
+  NModal,
+  useDialog,
+  useMessage,
+} from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from '../composables/useComponentEditor'
 import { useEditorStore } from '@/stores/editor'
 import { useCharacterStore } from '@/stores/character'
 import { useGlyphStore } from '@/stores/glyph'
 import { useProjectStore } from '@/stores/project'
-import { EditStatus, ParameterType, IParameter, ICustomGlyph } from '@/core/types'
+import { useCharacterGridEditStore } from '@/stores/characterGridEdit'
+import { EditStatus, ParameterType, IParameter, ICustomGlyph, IConstant } from '@/core/types'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+import { instanceManager } from '@/core/instance/InstanceManager'
 import { expandGlyphComponent } from '@/features/editor/services/FormatGlyphService'
-import { useDialog } from 'naive-ui'
 import { roundToPrecision } from '@/utils/number'
+import { genUUID } from '@/utils/uuid'
+import { collectProjectConstantUsageHitsAsync } from '@/features/editor/globalParam/traverseConstantUsages'
+import { characterDataManager } from '@/core/storage/CharacterDataManager'
 
 const { t } = useI18n()
+const dialog = useDialog()
+const message = useMessage()
 
 const { selectedComponent, selectedComponentUUID, modifyComponent, editStatus } = useComponentEditor()
+
+const showSetAsModal = ref(false)
+const showSelectModal = ref(false)
+const dialogTargetParam = ref<IParameter | null>(null)
+const setAsConstantName = ref('')
+const selectConstantUuid = ref<string | null>(null)
 
 const glyphInstanceFillColor = computed(() => {
   const c = selectedComponent.value
@@ -44,9 +72,292 @@ const editorStore = useEditorStore()
 const characterStore = useCharacterStore()
 const glyphStore = useGlyphStore()
 const projectStore = useProjectStore()
+const characterGridEditStore = useCharacterGridEditStore()
 
-const getConstantMeta = (uuid: string) => {
-  return projectStore.selectedFile?.constants?.find((c: any) => c.uuid === uuid) || null
+/** 与 VirtualCharacterList / VirtualGlyphList 约定：detail.done 在刷新完成后调用（可能多个 listener 共享同一 done） */
+function dispatchForceListRefresh(eventName: string): Promise<void> {
+  return Promise.race([
+    new Promise<void>((resolve) => {
+      let settled = false
+      const done = () => {
+        if (settled) return
+        settled = true
+        resolve()
+      }
+      window.dispatchEvent(new CustomEvent(eventName, { detail: { done } }))
+    }),
+    new Promise<void>((resolve) => setTimeout(resolve, eventName === 'force-character-list-refresh' ? 800 : 80)),
+  ])
+}
+
+const getConstantMeta = (uuid: string): IConstant | null => {
+  return projectStore.selectedFile?.constants?.find((c) => c.uuid === uuid) || null
+}
+
+const selectableConstantsForDialog = computed((): IConstant[] => {
+  const file = projectStore.selectedFile
+  const param = dialogTargetParam.value
+  if (!file?.constants?.length || !param) return []
+  const desiredType =
+    param.type === ParameterType.Constant
+      ? (getConstantMeta(String(param.value))?.type ?? ParameterType.Number)
+      : param.type
+  return file.constants.filter((c) => (c.type ?? ParameterType.Number) === desiredType)
+})
+
+watch(showSelectModal, (open) => {
+  if (open && selectableConstantsForDialog.value.length) {
+    selectConstantUuid.value = selectableConstantsForDialog.value[0].uuid
+  }
+})
+
+function applyToCurrentEmbeddedGlyph(mutate: (gv: ICustomGlyph) => void) {
+  const comp = selectedComponent.value
+  if (!comp || comp.type !== 'glyph') return
+  const gv0 = comp.value as ICustomGlyph
+  const gv: ICustomGlyph = {
+    ...gv0,
+    parameters: (gv0.parameters || []).map((p) => ({ ...p })),
+    system_script: gv0.system_script ? { ...gv0.system_script } : undefined,
+  }
+  mutate(gv)
+  modifyComponent({ value: gv })
+  void nextTick().then(() => executeGlyphScript(gv, comp.uuid))
+}
+
+function buildNewConstantFromParam(param: IParameter, name: string, uuid: string): IConstant | null {
+  const trimmed = name.trim()
+  if (!trimmed) return null
+  if (param.type === ParameterType.Number) {
+    const precision = param.max && param.max <= 10 ? 2 : 0
+    return {
+      uuid,
+      name: trimmed,
+      type: ParameterType.Number,
+      value: roundToPrecision(Number(param.value), precision),
+      min: param.min,
+      max: param.max,
+    }
+  }
+  if (param.type === ParameterType.Enum) {
+    return {
+      uuid,
+      name: trimmed,
+      type: ParameterType.Enum,
+      value: Number(param.value),
+      options: param.options ? param.options.map((o) => ({ ...o })) : [],
+    }
+  }
+  if (param.type === ParameterType.Constant) {
+    const meta = getConstantMeta(String(param.value))
+    if (!meta) return null
+    return {
+      uuid,
+      name: trimmed,
+      type: meta.type ?? ParameterType.Number,
+      value: meta.value,
+      min: meta.min,
+      max: meta.max,
+      options: meta.options ? meta.options.map((o) => ({ ...o })) : undefined,
+      ratio: meta.ratio,
+      ratioed: meta.ratioed,
+    }
+  }
+  return null
+}
+
+function openSetAsDialog(parameter: IParameter) {
+  dialogTargetParam.value = parameter
+  setAsConstantName.value = parameter.name
+  showSetAsModal.value = true
+}
+
+function openSelectDialog(parameter: IParameter) {
+  dialogTargetParam.value = parameter
+  showSelectModal.value = true
+}
+
+function confirmSetAsGlobal() {
+  const param = dialogTargetParam.value
+  const file = projectStore.selectedFile
+  if (!param || !file) return
+  if (!setAsConstantName.value.trim()) {
+    message.warning(t('panels.paramsPanel.params.emptyConstantName'))
+    return
+  }
+  const newUuid = genUUID()
+  const constant = buildNewConstantFromParam(param, setAsConstantName.value, newUuid)
+  if (!constant) {
+    message.warning(t('panels.paramsPanel.params.cannotCreateGlobalFromParam'))
+    return
+  }
+  if (!file.constants) file.constants = []
+  file.constants.push(constant)
+  applyToCurrentEmbeddedGlyph((gv) => {
+    const idx = gv.parameters.findIndex((p) => p.uuid === param.uuid)
+    if (idx < 0) return
+    gv.parameters[idx] = {
+      ...gv.parameters[idx],
+      type: ParameterType.Constant,
+      value: newUuid,
+    }
+    if (gv.system_script && param.name in gv.system_script) {
+      delete gv.system_script[param.name]
+    }
+  })
+  projectStore.markFileUnsaved(file.uuid)
+  showSetAsModal.value = false
+  dialogTargetParam.value = null
+}
+
+function confirmSelectGlobal() {
+  const param = dialogTargetParam.value
+  const file = projectStore.selectedFile
+  const uuidPick = selectConstantUuid.value
+  if (!param || !file || !uuidPick) {
+    if (!selectableConstantsForDialog.value.length) {
+      message.warning(t('panels.paramsPanel.params.noMatchingGlobalParam'))
+    }
+    return
+  }
+  applyToCurrentEmbeddedGlyph((gv) => {
+    const idx = gv.parameters.findIndex((p) => p.uuid === param.uuid)
+    if (idx < 0) return
+    gv.parameters[idx] = {
+      ...gv.parameters[idx],
+      type: ParameterType.Constant,
+      value: uuidPick,
+    }
+    if (gv.system_script && param.name in gv.system_script) {
+      delete gv.system_script[param.name]
+    }
+  })
+  projectStore.markFileUnsaved(file.uuid)
+  showSelectModal.value = false
+  dialogTargetParam.value = null
+}
+
+function handleCancelGlobalParam(parameter: IParameter) {
+  if (parameter.type !== ParameterType.Constant) return
+  const meta = getConstantMeta(String(parameter.value))
+  if (!meta) return
+  const file = projectStore.selectedFile
+  applyToCurrentEmbeddedGlyph((gv) => {
+    const idx = gv.parameters.findIndex((p) => p.uuid === parameter.uuid)
+    if (idx < 0) return
+    const p = gv.parameters[idx]
+    gv.parameters[idx] = {
+      ...p,
+      type: meta.type ?? ParameterType.Number,
+      value: meta.value,
+      min: meta.min,
+      max: meta.max,
+      options: meta.options ? meta.options.map((o) => ({ ...o })) : undefined,
+      ratio: meta.ratio,
+      ratioed: meta.ratioed,
+    }
+    if (gv.system_script && parameter.name in gv.system_script) {
+      delete gv.system_script[parameter.name]
+    }
+  })
+  if (file) projectStore.markFileUnsaved(file.uuid)
+}
+
+async function handleUpdateGlobalParam(parameter: IParameter) {
+  if (parameter.type !== ParameterType.Constant) return
+  const file = projectStore.selectedFile
+  if (!file) return
+  const constantUuid = String(parameter.value)
+  const charList = file.characterList ?? []
+  const scanTotal = Math.max(1, charList.length + 1)
+
+  projectStore.loading = true
+  projectStore.loadingTotal = scanTotal
+  projectStore.loadingProgress = 0
+  projectStore.loadingMessage =
+    charList.length === 0
+      ? t('panels.paramsPanel.params.globalParamUpdateScanGlyphs')
+      : t('panels.paramsPanel.params.globalParamUpdateScanCharacters', {
+          current: 0,
+          total: charList.length,
+        })
+
+  let hits: Awaited<ReturnType<typeof collectProjectConstantUsageHitsAsync>> = []
+  try {
+    hits = await collectProjectConstantUsageHitsAsync({
+      file,
+      constantUuid,
+      editingCharacter: characterStore.editingCharacter,
+      loadCharacter: (f, u) => characterDataManager.loadCharacter(f, u),
+      onScanProgress: (done, total) => {
+        projectStore.loadingProgress = done
+        projectStore.loadingTotal = total
+        if (charList.length === 0) {
+          projectStore.loadingMessage = t('panels.paramsPanel.params.globalParamUpdateScanGlyphs')
+        } else if (done <= charList.length) {
+          projectStore.loadingMessage = t('panels.paramsPanel.params.globalParamUpdateScanCharacters', {
+            current: done,
+            total: charList.length,
+          })
+        } else {
+          projectStore.loadingMessage = t('panels.paramsPanel.params.globalParamUpdateScanGlyphs')
+        }
+      },
+    })
+  } catch (e) {
+    console.error('[handleUpdateGlobalParam] scan failed', e)
+    message.error(String((e as Error)?.message || e))
+  }
+
+  const execTotal = Math.max(1, hits.length)
+  projectStore.loadingTotal = execTotal
+  projectStore.loadingProgress = 0
+  projectStore.loadingMessage = t('panels.paramsPanel.params.globalParamUpdateProgress')
+
+  try {
+    if (hits.length === 0) {
+      projectStore.loadingProgress = 1
+    }
+    for (let i = 0; i < hits.length; i++) {
+      const h = hits[i]
+      // 无脚本且无骨架的字形：executeGlyphScript 只会 clear() _components 而不填充，
+      // 跳过以避免清空实例组件并触发渲染器死循环
+      if (h.glyph.script || h.glyph.script_reference || h.glyph.skeleton) {
+        executeGlyphScript(h.glyph, h.componentUuid)
+        // 释放本次为更新创建的临时实例，避免 temporaryInstances 无限增长
+        if (!instanceManager.isEditing(h.componentUuid)) {
+          instanceManager.releaseTemporaryInstance(h.componentUuid)
+        }
+      }
+      projectStore.loadingProgress = i + 1
+      projectStore.loadingMessage =
+        t('panels.paramsPanel.params.globalParamUpdateProgress') +
+        ' ' +
+        t('panels.paramsPanel.params.globalParamUpdateProgressDetail', {
+          current: i + 1,
+          total: hits.length,
+        })
+      if (i % 10 === 9) await nextTick()
+    }
+  } finally {
+    projectStore.loading = false
+    projectStore.loadingProgress = 0
+    projectStore.loadingTotal = 0
+    projectStore.loadingMessage = ''
+  }
+
+  characterStore.characterListVersion++
+  glyphStore.glyphListVersion++
+  if (editStatus.value === EditStatus.Glyph) {
+    glyphStore.programmingPreviewTick++
+  }
+  if (editStatus.value === EditStatus.Edit) {
+    characterGridEditStore.bumpMainCanvasRerender()
+    await dispatchForceListRefresh('force-character-list-refresh')
+  } else if (editStatus.value === EditStatus.Glyph) {
+    await dispatchForceListRefresh('force-glyph-list-refresh')
+  }
+  await nextTick()
 }
 
 // 获取字形组件的参数数组
@@ -176,8 +487,6 @@ const handleChangeName = (name: string) => {
   modifyComponent({ name })
 }
 
-  const dialog = useDialog()
-
 const handleFormatGlyphComponent = () => {
   if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') {
     dialog.warning({
@@ -299,34 +608,73 @@ const handleFormatGlyphComponent = () => {
           >
             <!-- Number 类型参数 -->
             <template v-if="parameter.type === ParameterType.Number">
-              <div class="parameter-control">
-                <n-input-number
-                  :value="parameter.value as number"
-                  :step="parameter.max && parameter.max <= 10 ? 0.01 : 1"
-                  :min="parameter.min"
-                  :max="parameter.max"
-                  :precision="parameter.max && parameter.max <= 10 ? 2 : 0"
-                  @update:value="(v) => handleChangeParameter(parameter, v ?? 0)"
-                />
-                <n-slider
-                  :value="parameter.value as number"
-                  :step="parameter.max && parameter.max <= 10 ? 0.01 : 1"
-                  :min="parameter.min ?? 0"
-                  :max="parameter.max ?? 100"
-                  :precision="parameter.max && parameter.max <= 10 ? 2 : 0"
-                  @update:value="(v) => handleChangeParameter(parameter, v)"
-                  style="width: 100%; margin-top: 8px;"
-                />
+              <div class="parameter-control param-with-global-menu">
+                <div class="param-inputs-grow">
+                  <n-input-number
+                    :value="parameter.value as number"
+                    :step="parameter.max && parameter.max <= 10 ? 0.01 : 1"
+                    :min="parameter.min"
+                    :max="parameter.max"
+                    :precision="parameter.max && parameter.max <= 10 ? 2 : 0"
+                    @update:value="(v) => handleChangeParameter(parameter, v ?? 0)"
+                  />
+                  <n-slider
+                    :value="parameter.value as number"
+                    :step="parameter.max && parameter.max <= 10 ? 0.01 : 1"
+                    :min="parameter.min ?? 0"
+                    :max="parameter.max ?? 100"
+                    :precision="parameter.max && parameter.max <= 10 ? 2 : 0"
+                    @update:value="(v) => handleChangeParameter(parameter, v)"
+                    style="width: 100%; margin-top: 8px;"
+                  />
+                </div>
+                <n-popover trigger="click" placement="right" :width="260">
+                  <template #trigger>
+                    <n-button quaternary size="tiny" class="param-global-menu-trigger" :focusable="false">
+                      <n-icon>
+                        <font-awesome-icon :icon="['fas', 'ellipsis-vertical']" />
+                      </n-icon>
+                    </n-button>
+                  </template>
+                  <div class="global-param-popover-actions">
+                    <n-button block size="small" @click="openSetAsDialog(parameter)">
+                      {{ t('panels.paramsPanel.setAsGlobalParam') }}
+                    </n-button>
+                    <n-button block size="small" @click="openSelectDialog(parameter)">
+                      {{ t('panels.paramsPanel.selectGlobalParam') }}
+                    </n-button>
+                  </div>
+                </n-popover>
               </div>
             </template>
             
             <!-- Enum 类型参数 -->
             <template v-else-if="parameter.type === ParameterType.Enum">
-              <n-select
-                :value="parameter.value"
-                :options="parameter.options?.map(opt => ({ label: opt.label, value: opt.value })) || []"
-                @update:value="(v) => handleChangeParameter(parameter, v)"
-              />
+              <div class="parameter-control param-with-global-menu">
+                <n-select
+                  class="param-inputs-grow enum-select-grow"
+                  :value="parameter.value"
+                  :options="parameter.options?.map(opt => ({ label: opt.label, value: opt.value })) || []"
+                  @update:value="(v) => handleChangeParameter(parameter, v)"
+                />
+                <n-popover trigger="click" placement="right" :width="260">
+                  <template #trigger>
+                    <n-button quaternary size="tiny" class="param-global-menu-trigger" :focusable="false">
+                      <n-icon>
+                        <font-awesome-icon :icon="['fas', 'ellipsis-vertical']" />
+                      </n-icon>
+                    </n-button>
+                  </template>
+                  <div class="global-param-popover-actions">
+                    <n-button block size="small" @click="openSetAsDialog(parameter)">
+                      {{ t('panels.paramsPanel.setAsGlobalParam') }}
+                    </n-button>
+                    <n-button block size="small" @click="openSelectDialog(parameter)">
+                      {{ t('panels.paramsPanel.selectGlobalParam') }}
+                    </n-button>
+                  </div>
+                </n-popover>
+              </div>
             </template>
             
             <!-- Constant 类型参数（显示常量值，可编辑但不更新列表；按常量自身 type 渲染） -->
@@ -358,14 +706,32 @@ const handleFormatGlyphComponent = () => {
                     style="width: 100%; margin-top: 8px;"
                   />
                 </template>
-                <span class="constant-note">
-                  <span class="constant-note-text">全局常量</span>
-                  <span class="constant-note-icon">
-                    <n-icon name="edit">
-                      <font-awesome-icon :icon="['fas', 'pen-to-square']" />
-                    </n-icon>
-                  </span>
-                </span>
+                <n-popover trigger="click" placement="right" :width="260">
+                  <template #trigger>
+                    <span class="constant-note constant-note--trigger">
+                      <span class="constant-note-text">{{ t('panels.paramsPanel.params.globalConstantNote') }}</span>
+                      <span class="constant-note-icon">
+                        <n-icon>
+                          <font-awesome-icon :icon="['fas', 'pen-to-square']" />
+                        </n-icon>
+                      </span>
+                    </span>
+                  </template>
+                  <div class="global-param-popover-actions">
+                    <n-button block size="small" @click="handleCancelGlobalParam(parameter)">
+                      {{ t('panels.paramsPanel.cancelGlobalParam') }}
+                    </n-button>
+                    <n-button block size="small" @click="openSetAsDialog(parameter)">
+                      {{ t('panels.paramsPanel.setAsGlobalParam') }}
+                    </n-button>
+                    <n-button block size="small" @click="openSelectDialog(parameter)">
+                      {{ t('panels.paramsPanel.selectGlobalParam') }}
+                    </n-button>
+                    <n-button type="primary" block size="small" @click="handleUpdateGlobalParam(parameter)">
+                      {{ t('panels.paramsPanel.updateGlobalParam') }}
+                    </n-button>
+                  </div>
+                </n-popover>
               </div>
             </template>
           </n-form-item>
@@ -421,8 +787,46 @@ const handleFormatGlyphComponent = () => {
     </template>
     
     <div v-else class="empty-state">
-      <n-empty description="未选中组件" />
+      <n-empty :description="t('panels.paramsPanel.params.glyphPanelNoSelection')" />
     </div>
+
+    <n-modal
+      v-model:show="showSetAsModal"
+      preset="dialog"
+      :title="t('dialogs.setAsGlobalParamDialog.title')"
+      :style="{ width: '360px' }"
+    >
+      <n-form label-placement="left" label-width="88">
+        <n-form-item :label="t('dialogs.setAsGlobalParamDialog.paramName')">
+          <n-input v-model:value="setAsConstantName" :maxlength="100" show-count @keyup.enter="confirmSetAsGlobal" />
+        </n-form-item>
+      </n-form>
+      <template #action>
+        <n-button @click="showSetAsModal = false">{{ t('dialogs.setAsGlobalParamDialog.cancel') }}</n-button>
+        <n-button type="primary" @click="confirmSetAsGlobal">{{ t('dialogs.setAsGlobalParamDialog.confirm') }}</n-button>
+      </template>
+    </n-modal>
+
+    <n-modal
+      v-model:show="showSelectModal"
+      preset="dialog"
+      :title="t('dialogs.selectGlobalParamDialog.title')"
+      :style="{ width: '360px' }"
+    >
+      <n-form label-placement="left" label-width="88">
+        <n-form-item :label="t('dialogs.selectGlobalParamDialog.globalParam')">
+          <n-select
+            v-model:value="selectConstantUuid"
+            :options="selectableConstantsForDialog.map((c) => ({ label: c.name, value: c.uuid }))"
+            :placeholder="t('dialogs.selectGlobalParamDialog.globalParam')"
+          />
+        </n-form-item>
+      </n-form>
+      <template #action>
+        <n-button @click="showSelectModal = false">{{ t('dialogs.selectGlobalParamDialog.cancel') }}</n-button>
+        <n-button type="primary" @click="confirmSelectGlobal">{{ t('dialogs.selectGlobalParamDialog.confirm') }}</n-button>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -446,6 +850,35 @@ const handleFormatGlyphComponent = () => {
   display: flex;
   flex-direction: column;
   width: 100%;
+}
+
+.param-with-global-menu {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.param-inputs-grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.param-global-menu-trigger {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.enum-select-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.global-param-popover-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .parameter-control .n-input-number {
@@ -477,9 +910,16 @@ const handleFormatGlyphComponent = () => {
   font-weight: bold;
   white-space: nowrap;
   margin-top: 8px;
-  .n-icon {
-    font-size: 14px !important;
-  }
+}
+
+.constant-note :deep(.n-icon) {
+  font-size: 14px !important;
+}
+
+.constant-note--trigger {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
 }
 
 .constant-note-text {

@@ -74,6 +74,15 @@ const panels = {
 			},
 			params: {
 				title: '参数',
+				globalConstantNote: '全局常量',
+				globalParamUpdateProgress: '正在刷新引用全局变量的字形…',
+				globalParamUpdateScanCharacters: '正在扫描字符 {current} / {total} …',
+				globalParamUpdateScanGlyphs: '正在扫描笔画/部首/部件/字形列表中的引用…',
+				globalParamUpdateProgressDetail: '{current} / {total}',
+				emptyConstantName: '请输入常量名称',
+				noMatchingGlobalParam: '没有可绑定的同类型全局变量',
+				cannotCreateGlobalFromParam: '当前参数类型无法新建为全局变量',
+				glyphPanelNoSelection: '未选中组件',
 			},
 			glyphParamsPanel: {
 				styleTag: '风格标签',
@@ -345,6 +354,15 @@ const panels = {
 			},
 			params: {
 				title: 'Parameters',
+				globalConstantNote: 'Global constant',
+				globalParamUpdateProgress: 'Refreshing glyphs that use this global variable…',
+				globalParamUpdateScanCharacters: 'Scanning characters {current} / {total} …',
+				globalParamUpdateScanGlyphs: 'Scanning stroke/radical/comp/glyph lists for references…',
+				globalParamUpdateProgressDetail: '{current} / {total}',
+				emptyConstantName: 'Please enter a constant name',
+				noMatchingGlobalParam: 'No global variable of the same type to bind',
+				cannotCreateGlobalFromParam: 'This parameter type cannot be turned into a global variable',
+				glyphPanelNoSelection: 'No component selected',
 			},
 			glyphParamsPanel: {
 				styleTag: 'Style Tag',

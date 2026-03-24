@@ -445,6 +445,13 @@ const handleForceCharacterListRefresh = async () => {
   scheduleRender()
 }
 
+const onForceCharacterListRefreshEvent = (ev: Event) => {
+  const e = ev as CustomEvent<{ done?: () => void }>
+  void handleForceCharacterListRefresh().finally(() => {
+    e.detail?.done?.()
+  })
+}
+
 onMounted(() => {
   updateContainerSize()
 
@@ -455,14 +462,14 @@ onMounted(() => {
     resizeObserver.observe(containerRef.value)
   }
 
-  window.addEventListener('force-character-list-refresh', handleForceCharacterListRefresh)
+  window.addEventListener('force-character-list-refresh', onForceCharacterListRefreshEvent)
 
   // 启动定期清理
   schedulePeriodicCleanup()
 })
 
 onUnmounted(() => {
-  window.removeEventListener('force-character-list-refresh', handleForceCharacterListRefresh)
+  window.removeEventListener('force-character-list-refresh', onForceCharacterListRefreshEvent)
 
   if (resizeObserver) {
     resizeObserver.disconnect()

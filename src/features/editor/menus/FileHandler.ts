@@ -585,9 +585,8 @@ export class FileHandler {
         await write('],')
       }
 
-      // constants 和 constantGlyphMap，最后闭合根对象
-      await write('"constants":' + JSON.stringify(file.constants ?? []))
-      await write(',"constantGlyphMap":' + JSON.stringify(file.constantGlyphMap ?? {}) + '}')
+      // constants，最后闭合根对象
+      await write('"constants":' + JSON.stringify(file.constants ?? []) + '}')
 
       await flush()
     } finally {
@@ -639,7 +638,6 @@ export class FileHandler {
       radical_glyphs: this.cleanupGlyphArray(file.radical_glyphs),
       comp_glyphs: this.cleanupGlyphArray(file.comp_glyphs),
       constants: file.constants || [],
-      constantGlyphMap: { ...(file.constantGlyphMap ?? {}) },
     }
   }
 

@@ -38,6 +38,11 @@ function getScript(glyph: ICustomGlyph, projectStore?: ReturnType<typeof useProj
   return null
 }
 
+export type ExecuteGlyphScriptOptions = {
+  /** 同一调用树内防止组件环导致无限递归；由内部递归传入，外部勿手动复用同一 Set */
+  recursionGuard?: Set<string>
+}
+
 /**
  * 执行字形脚本
  * 使用临时实例机制，执行完后自动释放
@@ -47,17 +52,38 @@ function getScript(glyph: ICustomGlyph, projectStore?: ReturnType<typeof useProj
  */
 export function executeGlyphScript(
   targetGlyph: ICustomGlyph,
-  instanceKey?: string
+  instanceKey?: string,
+  options?: ExecuteGlyphScriptOptions,
 ): void {
   const key = instanceKey || targetGlyph.uuid
-  console.log('[executeGlyphScript] CALLED:', {
-    key,
-    glyphUUID: targetGlyph.uuid,
-    glyphName: targetGlyph.name,
-    stackTrace: new Error().stack?.split('\n').slice(1, 4).join('\n')
-  })
-  
+  const guard = options?.recursionGuard ?? new Set<string>()
+  if (guard.has(key)) {
+    if (import.meta.env.DEV) {
+      console.warn('[executeGlyphScript] Skipping: component already in call stack:', key, targetGlyph.name)
+    }
+    return
+  }
+  // 通过字形 UUID 检测循环引用：同一字形通过不同组件实例 UUID 进入时，
+  // 仍应阻止递归，否则会产生指数级展开（A→B→A 通过不同 component.uuid 绕过 key 检测）
+  const glyphUuidGuardKey = 'glyph:' + targetGlyph.uuid
+  if (guard.has(glyphUuidGuardKey)) {
+    if (import.meta.env.DEV) {
+      console.warn('[executeGlyphScript] Skipping: glyph type already in call stack:', targetGlyph.uuid, targetGlyph.name)
+    }
+    return
+  }
+  guard.add(key)
+  guard.add(glyphUuidGuardKey)
+
   try {
+    if (import.meta.env.DEV) {
+      console.log('[executeGlyphScript] CALLED:', {
+        key,
+        glyphUUID: targetGlyph.uuid,
+        glyphName: targetGlyph.name,
+      })
+    }
+
     // 使用 instanceKey 或 targetGlyph.uuid 作为实例池的 key
     // 当从 characterFile 的 component 调用时，使用 component.uuid 确保每个组件有独立的实例
     
@@ -69,11 +95,6 @@ export function executeGlyphScript(
     // 否则会按 glyph.uuid 存实例，导致同一字形的多个组件共享一个实例，出现「选 A 动 B」、拖拽错位、只有第一个能拖等问题。
     const isExplicitKey = instanceKey !== undefined && instanceKey !== null
     const isTemporary = instanceManager.isTemporary(key)
-    console.log('[executeGlyphScript] Instance check:', {
-      key,
-      isTemporary,
-      isExplicitKey
-    })
     
     if (isExplicitKey) {
       // 字符/字形编辑中传入的 component.uuid：只用 acquireTemporaryInstance(key)，保证每个组件独占一个实例
@@ -127,22 +148,17 @@ export function executeGlyphScript(
     }
     
     if (existingInstance.tempData) {
-      console.log('[executeGlyphScript] ⚠️ SKIPPING script execution due to tempData:', {
-          key,
-          tempDataKeys: Object.keys(existingInstance.tempData),
-          componentsCount: existingInstance._components?.length || 0
-        })
       return
     }
-    
-    console.log('[executeGlyphScript] ✅ Proceeding with script execution (no tempData)')
 
-    // 递归执行子字形组件的脚本
+    // 递归执行子字形组件的脚本（必须传 component.uuid 与编辑态一致；共享 recursionGuard 防止环）
     if (targetGlyph.components) {
       for (let i = 0; i < targetGlyph.components.length; i++) {
         const component = targetGlyph.components[i]
         if (component.type === 'glyph') {
-          executeGlyphScript(component.value as ICustomGlyph)
+          executeGlyphScript(component.value as ICustomGlyph, component.uuid, {
+            recursionGuard: guard,
+          })
         }
       }
     }
@@ -221,60 +237,20 @@ export function executeGlyphScript(
         // console.log(`Script preview (first 500 chars):`, script.substring(0, 500))
         // console.log(`Full script:`, script)
         
-        // 在执行脚本前检查组件数量和参数值
-        const componentsBefore = glyphInstance._components?.length || 0
-        console.log(`[ScriptExecutor] Components before script execution: ${componentsBefore}`)
-        
-        // 检查关键参数的值（用于调试）
-        const startStyleType = glyphInstance.getParam('起笔风格')
-        const weight = glyphInstance.getParam('字重')
-        const horizontalSpan = glyphInstance.getParam('水平延伸')
-        const verticalSpan = glyphInstance.getParam('竖直延伸')
-        console.log(`[ScriptExecutor] Key parameters before execution for ${targetGlyph.uuid}:`, {
-          '起笔风格': startStyleType,
-          '字重': weight,
-          '水平延伸': horizontalSpan,
-          '竖直延伸': verticalSpan,
-          'parameters array length': targetGlyph.parameters?.length || 0,
-          'parameters array': targetGlyph.parameters?.map((p: any) => ({ name: p.name, value: p.value })) || [],
-        })
-        
         try {
           const fn = new Function(scriptCode)
           fn()
-          
-          // 在执行脚本后立即检查组件状态
-          const componentsAfter = glyphInstance._components?.length || 0
-          console.log(`[ScriptExecutor] Components after script execution: ${componentsAfter}`)
-          if (componentsAfter > componentsBefore) {
-            // 检查新添加的组件
-            for (let i = componentsBefore; i < componentsAfter; i++) {
-              const comp = glyphInstance._components[i]
-              console.log(`[ScriptExecutor] New component ${i}:`, {
-                type: comp.type,
-                points: comp.points?.length || 0,
-                hasPathBegan: comp.hasPathBegan,
-                preview: comp.preview?.length || 0,
-                contour: comp.contour?.length || 0,
-              })
-            }
-          }
         } catch (scriptError) {
           console.error(`[ScriptExecutor] Error executing script for ${targetGlyph.uuid}:`, scriptError)
           throw scriptError
         }
-      } else {
-        console.log(`[ScriptExecutor] No script found for glyph ${targetGlyph.uuid}`)
       }
 
       // 执行 glyph_script（组件级别的脚本）
       if (targetGlyph.glyph_script) {
         const keys = Object.keys(targetGlyph.glyph_script)
-        console.log(`[ScriptExecutor] Executing ${keys.length} glyph_script(s) for glyph ${targetGlyph.uuid}`)
         for (let i = 0; i < keys.length; i++) {
-          const script = targetGlyph.glyph_script[keys[i]]
-          console.log(`  glyph_script[${keys[i]}]:`, script.substring(0, 200))
-          const fn = new Function(script)
+          const fn = new Function(targetGlyph.glyph_script[keys[i]])
           fn()
         }
       }
@@ -282,11 +258,8 @@ export function executeGlyphScript(
       // 执行 param_script（参数级别的脚本）
       if (targetGlyph.param_script) {
         const keys = Object.keys(targetGlyph.param_script)
-        console.log(`[ScriptExecutor] Executing ${keys.length} param_script(s) for glyph ${targetGlyph.uuid}`)
         for (let i = 0; i < keys.length; i++) {
-          const script = targetGlyph.param_script[keys[i]]
-          console.log(`  param_script[${keys[i]}]:`, script.substring(0, 200))
-          const fn = new Function(script)
+          const fn = new Function(targetGlyph.param_script[keys[i]])
           fn()
         }
       }
@@ -328,27 +301,6 @@ export function executeGlyphScript(
         selectedFile.value = originalSelectedFile
       }
       
-      // 调试：检查脚本执行后组件的数量和状态
-      const componentsCount = glyphInstance._components?.length || 0
-      if (componentsCount > 0) {
-        console.log(`Script executed for ${targetGlyph.uuid}, generated ${componentsCount} components`)
-        // 检查每个组件的状态
-        glyphInstance._components.forEach((comp: any, index: number) => {
-          const pointsCount = comp.points?.length || 0
-          const previewCount = comp.preview?.length || 0
-          const contourCount = comp.contour?.length || 0
-          const hasPathBegan = comp.hasPathBegan
-          console.log(`  Component ${index} (${comp.type}): points=${pointsCount}, preview=${previewCount}, contour=${contourCount}, hasPathBegan=${hasPathBegan}`)
-          // 如果是 PenComponent，打印 points 的详细信息
-          if (comp.type === 'glyph-pen' && comp.points) {
-            console.log(`    Points detail:`, comp.points.map((p: any, i: number) => 
-              `[${i}] type=${p.type}, x=${p.x}, y=${p.y}, origin=${p.origin}`
-            ).join(', '))
-          }
-        })
-      } else {
-        console.warn(`Script executed for ${targetGlyph.uuid}, but no components were generated`)
-      }
       
       // 注意：不在这里释放临时实例，因为转换轮廓时还需要访问实例的 _components
       // 实例会在转换完成后由调用者释放，或者由实例池的 LRU 策略管理
@@ -363,9 +315,9 @@ export function executeGlyphScript(
     }
   } catch (e) {
     console.error('Error executing glyph script:', e)
-    // 确保在错误时也释放实例（如果内层 catch 没有释放）
-    // 注意：如果内层 catch 已经释放了，这里再次释放是安全的（releaseTemporaryInstance 会检查）
-    const key = instanceKey || targetGlyph.uuid
     instanceManager.releaseTemporaryInstance(key)
+  } finally {
+    guard.delete(key)
+    guard.delete(glyphUuidGuardKey)
   }
 }

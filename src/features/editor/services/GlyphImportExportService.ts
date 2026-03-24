@@ -13,7 +13,6 @@ export type ParsedGlyphExchange = {
   version: 'legacy' | '2.0'
   glyphs: unknown[]
   constants?: unknown[]
-  constantGlyphMap?: Record<string, unknown>
 }
 
 function parametersToArray(parameters: unknown): any[] {
@@ -135,7 +134,6 @@ export function buildExportPayload(file: IFile, editStatus: EditStatus): Record<
     version: '2.0',
     glyphs,
     constants: file.constants ?? [],
-    constantGlyphMap: { ...(file.constantGlyphMap ?? {}) },
   }
 }
 
@@ -155,10 +153,6 @@ export function parseImportedJson(text: string): ParsedGlyphExchange {
     version: normalizeVersion(data.version),
     glyphs: data.glyphs as unknown[],
     constants: Array.isArray(data.constants) ? data.constants : undefined,
-    constantGlyphMap:
-      data.constantGlyphMap && typeof data.constantGlyphMap === 'object'
-        ? (data.constantGlyphMap as Record<string, unknown>)
-        : undefined,
   }
 }
 

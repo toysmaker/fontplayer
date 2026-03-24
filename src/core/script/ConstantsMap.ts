@@ -56,16 +56,7 @@ class ConstantsMap {
 		}
 		for (let i = 0; i < this.constants.length; i++) {
 			if (this.constants[i].uuid === uuid) {
-				const value = this.constants[i].value
-				if (import.meta.env.DEV) {
-					console.log(`[ConstantsMap.getByUUID] Found constant:`, {
-						uuid,
-						name: this.constants[i].name,
-						value,
-						type: typeof value
-					})
-				}
-				return value
+				return this.constants[i].value
 			}
 		}
 		if (import.meta.env.DEV) {

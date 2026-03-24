@@ -481,24 +481,7 @@ export class CustomGlyph implements IInstance {
     
     const param = this._glyph.parameters.find((p: IParameter) => p.name === name)
     if (!param) {
-      if (import.meta.env.DEV && (name === '水平延伸' || name === '竖直延伸' || name === '字重')) {
-        console.warn(`[CustomGlyph.getParam] Parameter '${name}' not found for glyph ${this._glyph.uuid}. Available params:`, 
-          this._glyph.parameters.map((p: IParameter) => p.name))
-      }
       return undefined
-    }
-    
-    // 调试：打印参数完整信息（特别是水平延伸和竖直延伸）
-    if (import.meta.env.DEV && (name === '水平延伸' || name === '竖直延伸' || name === '字重' || name === '起笔风格')) {
-      console.log(`[CustomGlyph.getParam] ${this._glyph.uuid} - Parameter '${name}':`, {
-        uuid: param.uuid,
-        name: param.name,
-        type: param.type,
-        value: param.value,
-        valueType: typeof param.value,
-        glyphUUID: this._glyph.uuid,
-        glyphName: this._glyph.name,
-      })
     }
     
     // 处理不同类型的参数
@@ -547,13 +530,6 @@ export class CustomGlyph implements IInstance {
         
         const resolvedValue = constantsMap.getByUUID(uuidValue)
         if (resolvedValue !== undefined) {
-          if (import.meta.env.DEV) {
-            console.log(`[CustomGlyph.getParam] ${param.name} (Constant):`, {
-              uuid: uuidValue,
-              resolvedValue: resolvedValue,
-              type: typeof resolvedValue
-            })
-          }
           return resolvedValue
         } else {
           if (import.meta.env.DEV) {
