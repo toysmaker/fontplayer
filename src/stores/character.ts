@@ -4,7 +4,7 @@
  */
 
 import { defineStore } from 'pinia'
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import type { ICharacterFileLite, IComponent, IGridItem } from '@/core/types'
 import { useProjectStore } from './project'
 import { useEditorStore } from './editor'
@@ -63,6 +63,24 @@ export function ensureCharacterInfoGridSettings(character: ICharacterFileLite) {
   }
 }
 
+/**
+ * 递归收集字符/复合字形树中所有字形组件的 placement uuid（与 executeGlyphScript / 临时实例的 instanceKey 一致）
+ */
+export function collectGlyphPlacementUUIDsRecursive(components: IComponent[]): string[] {
+  const out: string[] = []
+  const walk = (list: IComponent[]) => {
+    for (const comp of list) {
+      if (comp.type === 'glyph' && comp.uuid) {
+        out.push(comp.uuid)
+        const subs = (comp.value as { components?: IComponent[] })?.components
+        if (subs?.length) walk(subs)
+      }
+    }
+  }
+  walk(components)
+  return out
+}
+
 export const useCharacterStore = defineStore('character', () => {
   const projectStore = useProjectStore()
   const editorStore = useEditorStore()
@@ -87,6 +105,9 @@ export const useCharacterStore = defineStore('character', () => {
   // 当前编辑的字符文件（独立对象，与列表分离，提升性能）
   // 由于列表中有大量字符时，computed属性计算过慢，editCharacterFile改用手动赋值，不使用computed
   const editingCharacter = ref<ICharacterFileLite | null>(null)
+
+  /** 已为「字符编辑中的字形 placement」调用过 markEditing 的 component.uuid，退出或切换时需 unmark */
+  const markedGlyphPlacementUUIDsForCharacterEdit = ref<string[]>([])
 
   const selectedComponent = computed(() => {
     if (!selectedComponentUUID.value || !editingCharacter.value) {
@@ -209,6 +230,23 @@ export const useCharacterStore = defineStore('character', () => {
     return null
   }
 
+  function clearCharacterGlyphPlacementEditingMarks() {
+    for (const id of markedGlyphPlacementUUIDsForCharacterEdit.value) {
+      instanceManager.unmarkEditing(id)
+    }
+    markedGlyphPlacementUUIDsForCharacterEdit.value = []
+  }
+
+  /** 同步当前字符树中所有字形 placement 的编辑标记（先清除旧标记再按树重建） */
+  function applyCharacterGlyphPlacementEditingMarks(components: IComponent[]) {
+    clearCharacterGlyphPlacementEditingMarks()
+    const ids = collectGlyphPlacementUUIDsRecursive(components)
+    for (const id of ids) {
+      instanceManager.markEditing(id)
+    }
+    markedGlyphPlacementUUIDsForCharacterEdit.value = ids
+  }
+
   // Actions
   /**
    * 设置正在编辑的字符 UUID
@@ -303,12 +341,15 @@ export const useCharacterStore = defineStore('character', () => {
     instanceManager.markEditing(uuid)
     // 获取或创建实例（延迟实例化）
     getCharacterInstance()
+
+    applyCharacterGlyphPlacementEditingMarks(editingCharacter.value.components)
   }
 
   /**
    * 重置编辑字符（退出编辑时调用）
    */
   function resetEditCharacterFile() {
+    clearCharacterGlyphPlacementEditingMarks()
     editingCharacter.value = null
     editingCharacterUUID.value = ''
     selectedComponentUUID.value = ''
@@ -354,10 +395,11 @@ export const useCharacterStore = defineStore('character', () => {
     // 取消之前的编辑标记
     if (editingCharacterUUID.value) {
       instanceManager.unmarkEditing(editingCharacterUUID.value)
+      clearCharacterGlyphPlacementEditingMarks()
     }
-    
+
     // 从列表中设置编辑字符
-    setEditCharacterFileByUUID(uuid)
+    void setEditCharacterFileByUUID(uuid)
   }
 
   /**
@@ -690,6 +732,20 @@ export const useCharacterStore = defineStore('character', () => {
 
     return true
   }
+
+  // 编辑过程中增删顶层笔画时，同步 instanceKey 的 markEditing，避免新组件仍被 LRU 驱逐
+  watch(
+    () => {
+      const ch = editingCharacter.value
+      if (!ch?.components?.length) return ''
+      return ch.components.map((c) => c.uuid).join('\0')
+    },
+    () => {
+      const ch = editingCharacter.value
+      if (!ch?.components?.length || !editingCharacterUUID.value) return
+      applyCharacterGlyphPlacementEditingMarks(ch.components)
+    },
+  )
 
   return {
     // State

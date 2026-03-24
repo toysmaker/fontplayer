@@ -9,6 +9,7 @@
  *
  * 生命周期约定：
  * - 编辑界面：当前编辑字符/字形在进入编辑时 markEditing + getInstance，仅在对应 Editor 的 onUnmounted 中 unmarkEditing + releaseInstance，不在导出 SVG/图片时释放。
+ * - 字符编辑：除字符页 uuid 外，对当前字符树下所有字形 placement 的 component.uuid 也会 markEditing，避免多笔画时临时实例超过 LRU 上限被误删（见 character store）。
  * - 画布渲染（EditorCanvasRenderer）：字形组件通过 acquireTemporaryInstance 获取实例，不主动 release，由池子与 LRU 管理。
  * - 导出（ImportExportSvgService）：仅 getInstance / getOrCreateGlyphInstance，不释放。
  * - 轮廓转换（ContourConverter）/ 字体预览（GlyphRenderer）：使用临时实例，用完后立即 releaseTemporaryInstance，避免递归时超过池容量导致 LRU 误删仍在用的实例。
@@ -154,6 +155,14 @@ export class InstanceManager {
    */
   isTemporary(uuid: string): boolean {
     return this.temporaryInstances.has(uuid)
+  }
+
+  /**
+   * 检查实例是否存在于实例池中（不创建实例）
+   * 用于需要"只读取已有实例、不创建空实例"的场景，避免污染实例池
+   */
+  hasInstance(uuid: string): boolean {
+    return this.instancePool.has(uuid)
   }
 
   /**

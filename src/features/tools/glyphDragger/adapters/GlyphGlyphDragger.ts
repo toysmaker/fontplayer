@@ -6,7 +6,7 @@
 import { BaseGlyphDragger } from '../core/BaseGlyphDragger'
 import { JointManager } from '../core/JointManager'
 import type { IDragContext, IDraggerConfig, IJoint } from '../core/types'
-import type { IGlyphComponent, ICustomGlyph } from '@/core/types'
+import type { IComponent, IGlyphComponent, ICustomGlyph } from '@/core/types'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 
@@ -73,7 +73,17 @@ export class GlyphGlyphDragger extends BaseGlyphDragger {
     }
     return null
   }
-  
+
+  protected getSnapKeyLinePeers(
+    excludeComponentUuid: string,
+  ): Array<IComponent | IGlyphComponent> {
+    const list = this.glyphStore?.editingGlyph?.components ?? []
+    return list.filter(
+      (c): c is IComponent | IGlyphComponent =>
+        c.type === 'glyph' && c.uuid !== excludeComponentUuid,
+    )
+  }
+
   protected handleGlyphDrag(dx: number, dy: number): void {
     const { component } = this.context
     

@@ -7,11 +7,17 @@ import { throttle } from '@/utils/performance'
 import { JointManager } from './JointManager'
 import { ScriptExecutor } from './ScriptExecutor'
 import type { IDragContext, IDraggerConfig, IJoint } from './types'
-import type { ICustomGlyph, IComponent } from '@/core/types'
+import type { ICustomGlyph, IComponent, IGlyphComponent } from '@/core/types'
 import { computeGlyphComponentBoundingBox } from '@/core/utils/glyphBounds'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+import {
+  collectStraightAxisLinesFromPenComponents,
+  getSnapRefline,
+  mergeSnapAxisLines,
+  type SnapAxisLine,
+} from './reflineSnap'
 
 export abstract class BaseGlyphDragger {
   protected canvas: HTMLCanvasElement
@@ -162,6 +168,13 @@ export abstract class BaseGlyphDragger {
   protected abstract getOrigin(): { ox: number; oy: number }
   protected abstract handleGlyphDrag(dx: number, dy: number): void
   protected abstract handleDragEnd(): void
+
+  /**
+   * 吸附参考线来源：字符/字形编辑下顶层兄弟 glyph 组件（排除当前拖拽 uuid）。
+   */
+  protected abstract getSnapKeyLinePeers(
+    excludeComponentUuid: string,
+  ): Array<IComponent | IGlyphComponent>
   
   /**
    * 获取拖拽开始时的初始位置
@@ -266,6 +279,73 @@ export abstract class BaseGlyphDragger {
       y >= bbox.y &&
       y <= bbox.y + bbox.h
     )
+  }
+
+  /**
+   * 从实例池读取 pen 轮廓，在 (ox, oy) 下提取轴对齐参考线。
+   *
+   * @param requireExistingInstance
+   *   true  → peer 模式：只使用已存在于实例池的实例，不创建新空实例。
+   *           创建空实例会 (1) 导致 renderJoints 找到空实例无关键点（拖拽时闪烁）；
+   *           (2) 触发 LRU cleanupPool，驱逐有效实例（关键点较多的字符如"黄"尤甚）。
+   *   false → 当前组件模式：允许创建实例，并在 _components 为空时执行脚本确保填充，
+   *           解决"首次整体拖拽时吸附不生效"的问题。
+   */
+  private getSnapLinesForGlyphComponent(
+    comp: IComponent | IGlyphComponent,
+    ox: number,
+    oy: number,
+    requireExistingInstance: boolean = false,
+  ): SnapAxisLine[] {
+    if (comp.type !== 'glyph') return []
+    const gv = comp.value as ICustomGlyph | undefined
+    if (!gv) return []
+
+    // peer 模式：实例不在池中则跳过，避免创建空实例污染池和触发 LRU
+    if (requireExistingInstance && !instanceManager.hasInstance(comp.uuid)) {
+      return []
+    }
+
+    const instance = instanceManager.acquireTemporaryInstance(
+      comp.uuid,
+      () => new CustomGlyph(gv),
+      'glyph',
+    ) as CustomGlyph
+
+    // 当前组件模式：首次整体拖拽时 _components 可能为空（onMouseDown 不调用脚本），
+    // 主动执行脚本确保首次 mousemove 时吸附参考线即可生效
+    if (!requireExistingInstance && instance._components.length === 0 &&
+        (gv.script || gv.script_reference || gv.skeleton)) {
+      executeGlyphScript(gv, comp.uuid)
+    }
+
+    return collectStraightAxisLinesFromPenComponents(instance._components, ox, oy)
+  }
+
+  /** 其它顶层字形组件提供的参考线（不含当前拖拽组件） */
+  private getAutoSnapKeyLines(): SnapAxisLine[] {
+    const peers = this.getSnapKeyLinePeers(this.context.componentUUID)
+    // requireExistingInstance=true：只使用已存在的实例，不为 peer 创建空实例
+    const groups = peers.map((p) =>
+      this.getSnapLinesForGlyphComponent(p, p.ox ?? 0, p.oy ?? 0, true),
+    )
+    return mergeSnapAxisLines(groups)
+  }
+
+  private applySnapDelta(dx: number, dy: number): { adjDx: number; adjDy: number } {
+    const comp = this.context.component
+    if (!comp || comp.type !== 'glyph') {
+      return { adjDx: dx, adjDy: dy }
+    }
+    const tempOx = this.initialOx + dx
+    const tempOy = this.initialOy + dy
+    const keylines = this.getAutoSnapKeyLines()
+    const reflines = this.getSnapLinesForGlyphComponent(comp, tempOx, tempOy)
+    const snap = getSnapRefline(keylines, reflines)
+    return {
+      adjDx: dx + (snap?.dx ?? 0),
+      adjDy: dy + (snap?.dy ?? 0),
+    }
   }
   
   // 统一的事件处理
@@ -464,33 +544,39 @@ export abstract class BaseGlyphDragger {
       dy
     })
     
-    // 处理关键点拖拽
-    if (this.draggingJoint && !this.isDraggingFirstJoint && this.context.glyph) {
-      // 拖拽骨架（如果脚本支持）
-      // 执行骨架拖拽脚本，并在节流函数中触发重新渲染
-      console.log('[BaseGlyphDragger.onMouseMove] Calling throttledSkeletonDrag:', {
-          jointName: this.draggingJoint.name,
-          dx,
-          dy,
-          componentUUID: this.context.componentUUID
-        })
+    const movingWholeComponent =
+      this.context.component?.type === 'glyph' &&
+      (!this.draggingJoint || this.isDraggingFirstJoint)
+
+    if (movingWholeComponent) {
+      const { adjDx, adjDy } = this.applySnapDelta(dx, dy)
+      console.log('[BaseGlyphDragger.onMouseMove] Calling throttledGlyphDrag (snap)', {
+        adjDx,
+        adjDy,
+        isDraggingFirstJoint: this.isDraggingFirstJoint,
+      })
+      this.throttledGlyphDrag(adjDx, adjDy)
+    } else if (this.draggingJoint && !this.isDraggingFirstJoint && this.context.glyph) {
+      const { adjDx, adjDy } = this.applySnapDelta(dx, dy)
+      console.log('[BaseGlyphDragger.onMouseMove] Calling throttledSkeletonDrag (snap)', {
+        jointName: this.draggingJoint.name,
+        adjDx,
+        adjDy,
+        componentUUID: this.context.componentUUID,
+      })
       this.throttledSkeletonDrag(
         this.context.glyph,
         this.context.componentUUID,
         this.draggingJoint!,
-        dx,
-        dy
+        adjDx,
+        adjDy,
       )
-    } else if (!this.draggingJoint && this.context.component && this.context.component.type === 'glyph') {
-      // 没有拖拽关键点，但在包围框内，移动组件
-      console.log('[BaseGlyphDragger.onMouseMove] Calling throttledGlyphDrag')
-      this.throttledGlyphDrag(dx, dy)
     } else {
       console.log('[BaseGlyphDragger.onMouseMove] No drag action:', {
         hasDraggingJoint: !!this.draggingJoint,
         isDraggingFirstJoint: this.isDraggingFirstJoint,
         hasGlyph: !!this.context.glyph,
-        componentType: this.context.component?.type
+        componentType: this.context.component?.type,
       })
     }
     
@@ -525,22 +611,42 @@ export abstract class BaseGlyphDragger {
       dy,
       draggingJoint: this.draggingJoint?.name
     })
-    
-    // 调用脚本回调（非第一个关键点）
+
+    const movingWholeComponent =
+      this.context.component?.type === 'glyph' &&
+      (!this.draggingJoint || this.isDraggingFirstJoint)
+
+    if (movingWholeComponent) {
+      const { adjDx, adjDy } = this.applySnapDelta(dx, dy)
+      if (typeof (this.throttledGlyphDrag as any).cancel === 'function') {
+        ;(this.throttledGlyphDrag as any).cancel()
+      }
+      this.handleGlyphDrag(adjDx, adjDy)
+      this.config.onRender?.()
+    }
+
+    // 调用脚本回调（非第一个关键点），delta 与 mousemove 吸附一致
     if (
       this.context.glyph &&
       this.draggingJoint &&
       !this.isDraggingFirstJoint
     ) {
-      console.log('[BaseGlyphDragger.onMouseUp] Calling executeDragEnd')
+      const { adjDx, adjDy } = this.applySnapDelta(dx, dy)
+      if (typeof (this.throttledSkeletonDrag as any).cancel === 'function') {
+        ;(this.throttledSkeletonDrag as any).cancel()
+      }
+      console.log('[BaseGlyphDragger.onMouseUp] Calling executeDragEnd (snap)', {
+        adjDx,
+        adjDy,
+      })
       ScriptExecutor.executeDragEnd(
         this.context.glyph,
         this.context.componentUUID,
         {
           draggingJoint: this.draggingJoint,
-          deltaX: dx,
-          deltaY: dy
-        }
+          deltaX: adjDx,
+          deltaY: adjDy,
+        },
       )
     }
     
