@@ -18,6 +18,7 @@ import {
   loadDecompositionData,
   tryEnsureDecompositionLookup,
 } from '@/features/decomposition/processing'
+import { replaceGlyphScript } from '@/features/temporaryScripts/fileProcessing'
 
 /** 带此 tag 的工程在加载完成后会为字符列表补全部件分解数据 */
 const DEFAULT_TEMPLATE_PROJECT_TAG = '字玩默认模板工程'
@@ -68,6 +69,19 @@ export class ProjectLoader {
       store.loadingTotal = this.calculateTotal(data)
       store.loadingProgress = 0
 
+      const projectTag = typeof data.file?.tag === 'string' ? data.file.tag : undefined
+
+      // MARK: 替换笔画模板脚本
+      if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && data.stroke_glyphs?.length) {
+        this.updateProgress(0, '同步笔画模板脚本...')
+        try {
+          await replaceGlyphScript(data.stroke_glyphs)
+        } catch (e) {
+          console.error('[ProjectLoader] replaceGlyphScript failed', e)
+        }
+        await this.yieldToMainThread()
+      }
+
       // 1. 处理字形数据
       await this.processGlyphs(data)
       
@@ -76,7 +90,6 @@ export class ProjectLoader {
 
       // 2b. 默认模板工程：字符已入 IDB 后补全 decomposition（仅此时增加 loadingTotal）
       const fileForDecomp = data.file
-      const projectTag = typeof fileForDecomp.tag === 'string' ? fileForDecomp.tag : undefined
       const metaListAfterChars = (fileForDecomp.characterList || []) as ICharacterFileMetadata[]
       if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && metaListAfterChars.length > 0) {
         const map = await tryEnsureDecompositionLookup()

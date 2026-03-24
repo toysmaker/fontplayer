@@ -367,7 +367,9 @@ const handleForceGlyphListRefresh = () => {
   renderCache.clear()
   CanvasManager.forceCleanupAllCache()
   const { start, end } = visibleRange.value
-  visibleItems.value = [...glyphList.value.slice(start, end)]
+  // 创建副本并清除 previewRef，强制 GlyphRenderer.renderPreview 重新执行脚本计算轮廓，
+  // 避免使用更新全局变量前在 IndexedDB 中缓存的旧预览数据
+  visibleItems.value = glyphList.value.slice(start, end).map(g => ({ ...g, previewRef: undefined }))
   scheduleRender()
 }
 
@@ -536,22 +538,22 @@ const scheduleRender = () => {
   if (projectStore.loading) {
     return
   }
-  
-  if (isRendering.value) return
-  
+
   const visible = visibleItems.value
   const newItems: string[] = []
-  
+
   for (const item of visible) {
     const cacheKey = `${item.uuid}_rendered`
     if (!renderCache.has(cacheKey) && !renderQueue.value.includes(item.uuid)) {
       newItems.push(item.uuid)
     }
   }
-  
+
   if (newItems.length > 0) {
     renderQueue.value.push(...newItems)
-    processRenderQueue()
+    if (!isRendering.value) {
+      processRenderQueue()
+    }
   }
 }
 

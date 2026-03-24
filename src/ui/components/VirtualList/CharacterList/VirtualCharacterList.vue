@@ -430,6 +430,8 @@ const schedulePeriodicCleanup = () => {
 const handleForceCharacterListRefresh = async () => {
   renderCache.clear()
   CanvasManager.forceCleanupAllCache()
+  // 强制刷新时清理字符数据缓存，避免返回携带旧 previewRef 的缓存对象
+  characterDataManager.forceCleanupAllCache()
 
   // 重新从 IndexedDB 加载当前可见项，确保使用格式化后的最新数据而非内存中的旧数据
   const fileUUID = projectStore.selectedFile?.uuid
@@ -437,6 +439,9 @@ const handleForceCharacterListRefresh = async () => {
     const reloaded: ICharacterFileLite[] = []
     for (const item of visibleItems.value) {
       const fresh = await characterDataManager.loadCharacter(fileUUID, item.uuid)
+      // 清除 previewRef：强制 renderPreview 重新执行脚本计算轮廓，
+      // 避免加载到更新全局变量前在 IndexedDB 中缓存的旧预览数据
+      if (fresh) fresh.previewRef = undefined
       reloaded.push(fresh || item)
     }
     visibleItems.value = reloaded
@@ -623,12 +628,10 @@ const scheduleRender = () => {
   if (projectStore.loading) {
     return
   }
-  
-  if (isRendering.value) return
-  
+
   const visible = visibleItems.value
   const newItems: string[] = []
-  
+
   for (const item of visible) {
     const cacheKey = `${item.uuid}_rendered`
     if (!renderCache.has(cacheKey) && !renderQueue.value.includes(item.uuid)) {
@@ -636,11 +639,11 @@ const scheduleRender = () => {
     }
   }
 
-  console.log('newItems', newItems)
-  
   if (newItems.length > 0) {
     renderQueue.value.push(...newItems)
-    processRenderQueue()
+    if (!isRendering.value) {
+      processRenderQueue()
+    }
   }
 }
 

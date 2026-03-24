@@ -318,6 +318,7 @@ async function handleUpdateGlobalParam(parameter: IParameter) {
     if (hits.length === 0) {
       projectStore.loadingProgress = 1
     }
+    let lastYieldTime = performance.now()
     for (let i = 0; i < hits.length; i++) {
       const h = hits[i]
       // 无脚本且无骨架的字形：executeGlyphScript 只会 clear() _components 而不填充，
@@ -337,7 +338,12 @@ async function handleUpdateGlobalParam(parameter: IParameter) {
           current: i + 1,
           total: hits.length,
         })
-      if (i % 10 === 9) await nextTick()
+      // 时间驱动的让步：每 ~16ms 让出主线程，让浏览器有机会重绘进度条
+      const now = performance.now()
+      if (now - lastYieldTime >= 16) {
+        await new Promise<void>(resolve => setTimeout(resolve, 0))
+        lastYieldTime = performance.now()
+      }
     }
   } finally {
     projectStore.loading = false
