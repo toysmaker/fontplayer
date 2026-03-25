@@ -486,11 +486,7 @@ export class PenSelectTool extends BaseTool {
     // 在编辑模式下，使用固定的初始边界框；否则使用当前点的边界框
     const fixedBounds = editMode ? editModeFixedBounds.get(uuid) : undefined
     
-    // 转换点（应用组件的变换）
-    // 注意：在编辑模式下，points 是相对于 initialOriginBounds 的，所以需要使用 fixedBounds
-    const transformed_points = transformPoints(points, {
-      x, y, w, h, rotation, flipX, flipY,
-    }, fixedBounds)
+    const transformed_points = transformPoints(points, { x, y, w, h, rotation, flipX, flipY }, fixedBounds)
     
     // 格式化点并生成轮廓
     const contour_points = formatPoints(transformed_points, options, 1)
@@ -505,14 +501,15 @@ export class PenSelectTool extends BaseTool {
       })
     })
     const preview_contour = genPenContour(preview_points, true)
-    
-    // 更新组件的 contour 和 preview
-    modifyComponent(uuid, {
+
+    const patch: Partial<IComponent> = {
       value: {
         contour: contour,
         preview: preview_contour,
-      }
-    } as Partial<IComponent>)
+      } as IComponent['value'],
+    }
+
+    modifyComponent(uuid, patch as Partial<IComponent>)
   }
 
   /**
@@ -601,16 +598,37 @@ export class PenSelectTool extends BaseTool {
       ctx.translate(-(_x + _w / 2), -(_y + _h / 2))
     }
 
-    // 渲染包围框（与 SelectTool 样式完全一致）
+    const _points = this.transformPenPoints(selectedComponent, true)
+
+    // 编辑态包围框随当前点集 AABB（画布坐标），不再固定为组件 x,y,w,h
+    let bx = _x
+    let by = _y
+    let bw = _w
+    let bh = _h
+    if (_points.length > 0) {
+      let minX = Infinity
+      let minY = Infinity
+      let maxX = -Infinity
+      let maxY = -Infinity
+      for (const p of _points) {
+        minX = Math.min(minX, p.x)
+        minY = Math.min(minY, p.y)
+        maxX = Math.max(maxX, p.x)
+        maxY = Math.max(maxY, p.y)
+      }
+      bx = minX
+      by = minY
+      bw = maxX - minX
+      bh = maxY - minY
+    }
+
     const d = strokeWidth * 2 // 顶点控件内部宽高为 strokeWidth 的两倍
     ctx.strokeStyle = '#79bbff'
-    ctx.strokeRect(_x, _y, _w, _h)
-    ctx.strokeRect(_x - d, _y - d, d * 2, d * 2)
-    ctx.strokeRect(_x + _w - d, _y - d, d * 2, d * 2)
-    ctx.strokeRect(_x - d, _y + _h - d, d * 2, d * 2)
-    ctx.strokeRect(_x + _w - d, _y + _h - d, d * 2, d * 2)
-
-    const _points = this.transformPenPoints(selectedComponent, true)
+    ctx.strokeRect(bx, by, bw, bh)
+    ctx.strokeRect(bx - d, by - d, d * 2, d * 2)
+    ctx.strokeRect(bx + bw - d, by - d, d * 2, d * 2)
+    ctx.strokeRect(bx - d, by + bh - d, d * 2, d * 2)
+    ctx.strokeRect(bx + bw - d, by + bh - d, d * 2, d * 2)
     const _map = listToMap(_points, 'uuid')
 
     // 找到selectAnchor对应的索引

@@ -104,6 +104,7 @@ const dialogs = {
 			title: '添加文字',
 			confirm: '确认',
 			cancel: '取消',
+			duplicateUnicode: '已存在相同 Unicode 的字符，无法重复添加。',
 		},
 		addGlyphDialog: {
 			title: '添加字形',
@@ -371,6 +372,8 @@ const dialogs = {
 			title: 'Add Character',
 			confirm: 'Confirm',
 			cancel: 'Cancel',
+			duplicateUnicode:
+				'A character with this Unicode code point already exists. Duplicates are not allowed.',
 		},
 		addGlyphDialog: {
 			title: 'Add Glyph',

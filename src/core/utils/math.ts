@@ -111,7 +111,22 @@ export function transformPoints(
 }
 
 /**
- * 获取椭圆点数组
+ * Y 向下坐标系中多边形有向面积（鞋带公式）的一半；外轮廓取逆时针时通常为负值。
+ */
+export function polygonSignedAreaYDown(
+  points: Array<{ x: number; y: number }>
+): number {
+  if (points.length < 3) return 0
+  let s = 0
+  for (let i = 0; i < points.length; i++) {
+    const j = (i + 1) % points.length
+    s += points[i].x * points[j].y - points[j].x * points[i].y
+  }
+  return s / 2
+}
+
+/**
+ * 获取椭圆点数组（闭合近似为逆时针，便于 nonzero 与其它笔划组合）
  */
 export function getEllipsePoints(
   radiusX: number,
@@ -136,11 +151,16 @@ export function getEllipsePoints(
       y: originY - y,
     })
   }
-  return points1.concat(points2.reverse())
+  const loop = points1.concat(points2.reverse())
+  // 逆时针（Y 向下）：有向面积应为负；若为正则整体反转
+  if (polygonSignedAreaYDown(loop) > 0) {
+    return [...loop].reverse()
+  }
+  return loop
 }
 
 /**
- * 获取矩形点数组
+ * 获取矩形点数组（Y 向下为逆时针：左上 → 左下 → 右下 → 右上）
  */
 export function getRectanglePoints(
   rectX: number,
@@ -149,22 +169,10 @@ export function getRectanglePoints(
   originY: number
 ): Array<{ x: number; y: number }> {
   return [
-    {
-      x: originX,
-      y: originY,
-    },
-    {
-      x: originX + rectX,
-      y: originY,
-    },
-    {
-      x: originX + rectX,
-      y: originY + rectY,
-    },
-    {
-      x: originX,
-      y: originY + rectY,
-    },
+    { x: originX, y: originY },
+    { x: originX, y: originY + rectY },
+    { x: originX + rectX, y: originY + rectY },
+    { x: originX + rectX, y: originY },
   ]
 }
 

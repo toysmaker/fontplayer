@@ -10,8 +10,7 @@ import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from '../composables/useComponentEditor'
 import { EditStatus, IPenComponent } from '@/core/types'
 import { editModeFixedBounds } from '@/features/tools/select/PenSelectTool'
-import { getBound } from '@/core/utils/math'
-import { roundToPrecision } from '@/utils/number'
+import { computePenLayoutUpdatesFromFixedBounds } from '@/features/tools/select/penLayoutSync'
 
 const { t } = useI18n()
 
@@ -74,38 +73,10 @@ const handleChangeEditMode = (editMode: boolean) => {
     const points = currentValue.points
 
     if (fixedBounds && points && points.length > 0) {
-      const { x: ox, y: oy, w: ow, h: oh } = fixedBounds
-      const newRaw = getBound(points)
-      const { x: nx, y: ny, w: nw, h: nh } = newRaw
-      const { x, y, w, h } = comp
-
-      if (ow > 0 && oh > 0) {
-        const { rotation, flipX, flipY } = comp
-        const r = (rotation || 0) * Math.PI / 180
-        const cos_r = Math.cos(r)
-        const sin_r = Math.sin(r)
-
-        // 旋转后，包围框中心偏移量（设计空间坐标）
-        // 若中心偏移非零且存在旋转，旋转轴跟着移动，路径会整体跳位
-        const Mx = (nx + nw / 2 - ox - ow / 2) * w / ow
-        const My = (ny + nh / 2 - oy - oh / 2) * h / oh
-
-        // 翻转时原始公式会引入额外的前旋转坐标偏移 σ
-        const sx = flipX ? (2 * (nx - ox) + (nw - ow)) * w / ow : 0
-        const sy = flipY ? (2 * (ny - oy) + (nh - oh)) * h / oh : 0
-
-        // 修正量 δ = (R-I)*M - R*σ，消除旋转轴偏移带来的视觉跳位
-        const dx = (cos_r - 1) * Mx - sin_r * My - (cos_r * sx - sin_r * sy)
-        const dy = sin_r * Mx + (cos_r - 1) * My - (sin_r * sx + cos_r * sy)
-
-        updates.x = roundToPrecision(x + (nx - ox) * w / ow + dx)
-        updates.y = roundToPrecision(y + (ny - oy) * h / oh + dy)
-        updates.w = roundToPrecision(nw * w / ow)
-        updates.h = roundToPrecision(nh * h / oh)
-      }
+      const layout = computePenLayoutUpdatesFromFixedBounds(comp, fixedBounds, points)
+      if (layout) Object.assign(updates, layout)
     }
 
-    // 清理 editModeFixedBounds，避免旧数据影响下次进入编辑模式
     editModeFixedBounds.delete(uuid)
   }
 
@@ -189,13 +160,14 @@ const clearPenFillColor = () => handleChangeFillColor(null)
               @update:value="handleChangeRot"
             />
           </n-form-item>
-          <n-form-item :label="t('panels.paramsPanel.horizontalFlip')">
+          <!-- 翻转暂时隐藏（稳定性），数据字段仍保留 -->
+          <n-form-item v-if="false" :label="t('panels.paramsPanel.horizontalFlip')">
             <n-switch
               :value="selectedComponent.flipX"
               @update:value="handleChangeFlipX"
             />
           </n-form-item>
-          <n-form-item :label="t('panels.paramsPanel.verticalFlip')">
+          <n-form-item v-if="false" :label="t('panels.paramsPanel.verticalFlip')">
             <n-switch
               :value="selectedComponent.flipY"
               @update:value="handleChangeFlipY"

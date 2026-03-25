@@ -77,10 +77,12 @@ import BottomBar from '@/ui/components/BottomBar/BottomBar.vue'
 import EditFilesBar from '@/ui/components/FilesBar/EditFilesBar.vue'
 import type { ICustomGlyph } from '@/core/types'
 import { render } from '@/core/canvas/EditorCanvasRenderer'
-import { mapCanvasWidth, mapCanvasHeight } from '@/utils/canvas'
+import { mapCanvasWidth, mapCanvasHeight, mapCanvasX, mapCanvasY } from '@/utils/canvas'
+import { getStrokeWidth } from '@/utils/canvas-utils'
 import type { IBackground, IGrid } from '@/core/canvas/types'
 import { useEditorPreferenceStore } from '@/stores/editorPreference'
 import { renderJoints, renderRefLines } from '@/core/script/Joint'
+import { JointManager } from '@/features/tools/glyphDragger/core/JointManager'
 import { useEditorStore } from '@/stores/editor'
 import { fontRenderStyle } from '@/core/script/globals'
 import { bottomBarToolManager } from '@/features/bottomBar/BottomBarToolManager'
@@ -204,6 +206,45 @@ const renderCanvas = async () => {
     if (root) {
       if (editorStore.checkJoints || shouldRenderEditingGlyphJoints) {
         renderJoints(root, canvasRef.value)
+
+        // 悬停关键点红色高亮（与 CharacterEditor 一致；导入字形拖拽吸附时可见）
+        const sel = (glyphStore as any).selectedComponent
+        if (
+          editorStore.checkJoints &&
+          sel &&
+          sel.type === 'glyph' &&
+          dragger &&
+          !dragger.isDragging()
+        ) {
+          const hoverJoint = dragger.getHoverJoint()
+          if (hoverJoint) {
+            const joints = dragger.getJointsForHighlight()
+            const isFirst = JointManager.isFirstJoint(hoverJoint, joints)
+            if (!isFirst) {
+              const ctx = canvasRef.value.getContext('2d')
+              if (ctx) {
+                let x: number, y: number
+                if (typeof hoverJoint.x === 'function') {
+                  x = hoverJoint.x()
+                } else {
+                  x = hoverJoint.x as number
+                }
+                if (typeof hoverJoint.y === 'function') {
+                  y = hoverJoint.y()
+                } else {
+                  y = hoverJoint.y as number
+                }
+                const _x = mapCanvasX(x)
+                const _y = mapCanvasY(y)
+                const _d = getStrokeWidth() * 2
+                ctx.save()
+                ctx.fillStyle = 'red'
+                ctx.fillRect(_x - _d, _y - _d, 2 * _d, 2 * _d)
+                ctx.restore()
+              }
+            }
+          }
+        }
       }
       if (editorStore.checkRefLines) {
         renderRefLines(root, canvasRef.value)

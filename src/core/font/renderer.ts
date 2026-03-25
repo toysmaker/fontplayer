@@ -101,14 +101,15 @@ export class RenderEngine {
         ctx.fill('nonzero')
       }
     } else {
-      // 黑色模式：Pass 1 - 所有非实心轮廓（pen/polygon）合并到一个路径，使用非零环绕规则
-      ctx.beginPath()
+      // 黑色模式：Pass 1 — 每个非实心轮廓单独 path + fill('nonzero')，避免多轮廓合并时单次 closePath 与非零规则异常
       for (const contour of contours) {
+        if (!contour || !contour.length) continue
+        ctx.beginPath()
         drawContourPath(contour)
+        ctx.closePath()
+        ctx.fillStyle = fillColor
+        ctx.fill('nonzero')
       }
-      ctx.closePath()
-      ctx.fillStyle = fillColor
-      ctx.fill('nonzero')
     }
 
     // Pass 2 - 实心轮廓（矩形/椭圆）单独绘制，始终实心填充，最后绘制以覆盖在上方
@@ -118,7 +119,7 @@ export class RenderEngine {
       drawContourPath(contour)
       ctx.closePath()
       ctx.fillStyle = fillColor
-      ctx.fill()
+      ctx.fill('nonzero')
     }
   }
 

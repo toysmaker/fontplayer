@@ -106,6 +106,7 @@ import { reexecuteAllGlyphScriptsInEditingCharacter } from '@/features/editor/gl
 import { rebuildCharacterListPreviewAfterExitEdit } from '@/features/editor/listPreview/rebuildListPreviewAfterEditorExit'
 import { discardGlobalConstantsDraftOnLeave } from '@/stores/editorConstantsSession'
 import { mapCanvasX, mapCanvasY } from '@/utils/canvas'
+import { getStrokeWidth } from '@/utils/canvas-utils'
 import { bottomBarToolManager } from '@/features/bottomBar/BottomBarToolManager'
 import { useBottomBarToolStore } from '@/stores/bottomBarTool'
 import { toolManager, SelectTool, PenTool, PolygonTool, EllipseTool, RectangleTool, OverlayModeTool } from '@/features/tools'
@@ -277,9 +278,9 @@ const renderCanvas = () => {
                 // 转换为 canvas 坐标
                 const _x = mapCanvasX(x)
                 const _y = mapCanvasY(y)
-                const _d = 10
-                
-                // 绘制红色方块（参考原工程样式）
+                const _d = getStrokeWidth() * 2
+
+                // 绘制红色方块（约为关节默认 hit 的 2 倍，随 getStrokeWidth 缩放）
                 ctx.save()
                 ctx.fillStyle = 'red'
                 ctx.fillRect(_x - _d, _y - _d, 2 * _d, 2 * _d)

@@ -161,6 +161,15 @@ const _handleConfirm = async () => {
     return
   }
 
+  const unicodeLabel = toUnicodeString(ch)
+  const duplicate = file.characterList?.some(
+    (m) => m.character?.unicode === unicodeLabel
+  )
+  if (duplicate) {
+    message.warning(t('dialogs.addTextDialog.duplicateUnicode'))
+    return
+  }
+
   const characterUUID = genUUID()
   const fileUUID = genUUID()
 
@@ -170,7 +179,7 @@ const _handleConfirm = async () => {
     character: {
       uuid: characterUUID,
       text: ch,
-      unicode: toUnicodeString(ch),
+      unicode: unicodeLabel,
     },
     components: [],
     groups: [],
