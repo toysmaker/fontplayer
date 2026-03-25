@@ -204,6 +204,42 @@ function runCanvasRefreshAfterCancelGlobalDraft(constantUuid: string) {
   })
 }
 
+/** 当前编辑字符/字形内所有引用该常量的字形组件执行脚本；仅刷新主画布/编程预览，不更新列表缩略图 */
+function runGlyphScriptsOnAllConstantUsagesInEditingScope(constantUuid: string): boolean {
+  const status = editStatus.value
+  if (status === EditStatus.Edit && characterStore.editingCharacter) {
+    const hits = dedupeConstantUsageHitsByComponent(
+      collectCharacterComponentHits(characterStore.editingCharacter, constantUuid),
+    )
+    for (const h of hits) {
+      if (h.glyph.script || h.glyph.script_reference || h.glyph.skeleton) {
+        executeGlyphScript(h.glyph, h.componentUuid)
+        if (!instanceManager.isEditing(h.componentUuid)) {
+          instanceManager.releaseTemporaryInstance(h.componentUuid)
+        }
+      }
+    }
+    characterGridEditStore.bumpMainCanvasRerender()
+    return true
+  }
+  if (status === EditStatus.Glyph && glyphStore.editingGlyph) {
+    const hits = dedupeConstantUsageHitsByComponent(
+      collectStandaloneGlyphEditingHits(glyphStore.editingGlyph, constantUuid),
+    )
+    for (const h of hits) {
+      if (h.glyph.script || h.glyph.script_reference || h.glyph.skeleton) {
+        executeGlyphScript(h.glyph, h.componentUuid)
+        if (!instanceManager.isEditing(h.componentUuid)) {
+          instanceManager.releaseTemporaryInstance(h.componentUuid)
+        }
+      }
+    }
+    glyphStore.programmingPreviewTick++
+    return true
+  }
+  return false
+}
+
 function isOtherGlobalEditLocking(parameter: IParameter) {
   void draftVersion.value
   if (parameter.type !== ParameterType.Constant) return false
@@ -666,17 +702,17 @@ const handleChangeParameter = async (parameter: IParameter, value: number | stri
   modifyComponent({
     value: updatedGlyphValue,
   })
-  
-  // 执行字形脚本（使用更新后的字形数据）
+
   try {
-    executeGlyphScript(updatedGlyphValue, selectedComponent.value.uuid)
-    
-    // 脚本执行完成后，再次更新组件以确保画布重新渲染
-    // 由于 modifyComponent 已经更新了组件，CharacterEditor/GlyphEditor 中的 watch
-    // 会监听到 orderedListWithItemsForCurrentCharacterFile/orderedListWithItemsForCurrentGlyph 的变化
-    // 从而自动触发 renderCanvas()
-    // 注意：这里不调用 updateCharacterListFromEditFile 或 updateGlyphListFromEditFile
-    // 因为用户要求只更新当前字符的显示，不更新列表
+    if (parameter.type === ParameterType.Constant) {
+      const constantUUID = String(parameter.value)
+      const ranAll = runGlyphScriptsOnAllConstantUsagesInEditingScope(constantUUID)
+      if (!ranAll) {
+        executeGlyphScript(updatedGlyphValue, selectedComponent.value.uuid)
+      }
+    } else {
+      executeGlyphScript(updatedGlyphValue, selectedComponent.value.uuid)
+    }
   } catch (error) {
     console.error('Error executing glyph script after parameter change:', error)
   }
