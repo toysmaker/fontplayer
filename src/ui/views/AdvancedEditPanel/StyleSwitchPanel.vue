@@ -57,7 +57,7 @@ function handleSelectStyle(style: (typeof advancedEdit.styles)[0]) {
           </n-button>
         </div>
         <div class="update-section">
-          <n-button type="error" size="large" block @click="advancedEdit.applyStyleToEntireProject">
+          <n-button type="error" size="large" block @click="void advancedEdit.applyStyleToEntireProject()">
             一键更新全部字库
           </n-button>
         </div>

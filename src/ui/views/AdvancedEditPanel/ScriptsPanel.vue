@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, nextTick } from 'vue'
 import {
   NButton,
   NFormItem,
@@ -15,6 +15,7 @@ import { ParameterType } from '@/core/types'
 import { useAdvancedEditStore } from '@/stores/advancedEdit'
 import { useProjectStore } from '@/stores/project'
 import { useCharacterStore } from '@/stores/character'
+import { useGlyphStore } from '@/stores/glyph'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import { updateWidthStrokesContrast } from '@/features/advancedEdit/scripts/width_strokes_contrast'
 import { updateHeightStrokesContrast } from '@/features/advancedEdit/scripts/height_strokes_contrast'
@@ -28,7 +29,23 @@ import type { ICharacterFileLite } from '@/core/types'
 const advancedEdit = useAdvancedEditStore()
 const projectStore = useProjectStore()
 const characterStore = useCharacterStore()
+const glyphStore = useGlyphStore()
 const message = useMessage()
+
+function dispatchForceListRefresh(eventName: string): Promise<void> {
+  return Promise.race([
+    new Promise<void>((resolve) => {
+      let settled = false
+      const done = () => {
+        if (settled) return
+        settled = true
+        resolve()
+      }
+      window.dispatchEvent(new CustomEvent(eventName, { detail: { done } }))
+    }),
+    new Promise<void>((resolve) => setTimeout(resolve, eventName === 'force-character-list-refresh' ? 800 : 80)),
+  ])
+}
 
 const activeType = ref<'global' | 'components'>('global')
 const activeTypeOptions = [
@@ -173,46 +190,115 @@ async function applyScriptToEntireProject() {
     message.warning('请先选择脚本')
     return
   }
-  if (needsDecomposition(activeScript.value)) {
-    const first = await characterDataManager.loadCharacter(file.uuid, file.characterList[0]?.uuid)
-    if (!first?.decomposition || !first?.matches) {
-      message.warning('工程字符缺少 decomposition / matches，无法批量运行该脚本')
-      return
-    }
-  }
+
+  const list = file.characterList ?? []
+  const loadCount = list.length
+  let lastYield = performance.now()
+
+  projectStore.loading = true
+  projectStore.loadingMessage = '正在加载全部字符…'
+  projectStore.loadingProgress = 0
+  projectStore.loadingTotal = Math.max(1, loadCount)
 
   const origins: ICharacterFileLite[] = []
   const currents: ICharacterFileLite[] = []
-  for (const meta of file.characterList) {
-    const o = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
-    if (!o) continue
-    origins.push(R.clone(o))
-    currents.push(R.clone(o))
+  let skippedNoDecomp = 0
+
+  let bulkCompleted = false
+  try {
+    for (let i = 0; i < list.length; i++) {
+      const meta = list[i]
+      const o = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
+      if (!o) continue
+      if (needsDecomposition(activeScript.value) && !characterHasDecompositionScriptData(o)) {
+        skippedNoDecomp++
+        projectStore.loadingProgress = i + 1
+        const now = performance.now()
+        if (now - lastYield >= 16) {
+          await new Promise<void>((r) => setTimeout(r, 0))
+          lastYield = performance.now()
+        }
+        continue
+      }
+      origins.push(R.clone(o))
+      currents.push(R.clone(o))
+      projectStore.loadingProgress = i + 1
+      const now = performance.now()
+      if (now - lastYield >= 16) {
+        await new Promise<void>((r) => setTimeout(r, 0))
+        lastYield = performance.now()
+      }
+    }
+
+    if (needsDecomposition(activeScript.value) && currents.length === 0) {
+      message.warning('没有可供处理的字符：全部缺少 decomposition / matches 数据')
+      return
+    }
+
+    projectStore.loadingTotal = Math.max(1, loadCount + currents.length)
+    projectStore.loadingProgress = loadCount
+    projectStore.loadingMessage = '正在应用脚本…'
+
+    const params = parameters.value
+    if (activeScript.value === 'width_strokes_contrast') {
+      updateWidthStrokesContrast(origins, currents, params)
+    } else if (activeScript.value === 'height_strokes_contrast') {
+      updateHeightStrokesContrast(origins, currents, params)
+    } else if (activeScript.value === 'width_components_contrast') {
+      updateWidthComponentsContrast(origins, currents, params)
+    } else if (activeScript.value === 'height_components_contrast') {
+      updateHeightComponentsContrast(origins, currents, params)
+    } else if (activeScript.value === 'horizontal_components_ratio') {
+      updateHorizontalComponentsRatio(origins, currents, params)
+    } else if (activeScript.value === 'vertical_components_ratio') {
+      updateVerticalComponentsRatio(origins, currents, params)
+    } else if (activeType.value === 'components') {
+      componentsScriptsArr.find((s) => s.id === activeScript.value)?.update(origins, currents, params)
+    }
+
+    projectStore.loadingMessage = '正在写回全部字符…'
+    for (let i = 0; i < currents.length; i++) {
+      await characterDataManager.updateCharacter(file.uuid, currents[i])
+      projectStore.loadingProgress = loadCount + i + 1
+      const now = performance.now()
+      if (now - lastYield >= 16) {
+        await new Promise<void>((r) => setTimeout(r, 0))
+        lastYield = performance.now()
+      }
+    }
+
+    projectStore.markFileUnsaved(file.uuid)
+    await characterStore.invalidateAllCachedCharacterPreviews()
+
+    await advancedEdit.updateSampleCharactersList()
+    await nextTick()
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          advancedEdit.updateCharactersAndPreview()
+          resolve()
+        })
+      })
+    })
+
+    bulkCompleted = true
+    if (skippedNoDecomp > 0) {
+      message.success(`已写回 ${currents.length} 个字符；已跳过 ${skippedNoDecomp} 个缺少 decomposition / matches 的字符`)
+    } else {
+      message.success('已写回全部字符')
+    }
+  } finally {
+    projectStore.loading = false
+    projectStore.loadingProgress = 0
+    projectStore.loadingTotal = 0
+    projectStore.loadingMessage = ''
   }
 
-  const params = parameters.value
-  if (activeScript.value === 'width_strokes_contrast') {
-    updateWidthStrokesContrast(origins, currents, params)
-  } else if (activeScript.value === 'height_strokes_contrast') {
-    updateHeightStrokesContrast(origins, currents, params)
-  } else if (activeScript.value === 'width_components_contrast') {
-    updateWidthComponentsContrast(origins, currents, params)
-  } else if (activeScript.value === 'height_components_contrast') {
-    updateHeightComponentsContrast(origins, currents, params)
-  } else if (activeScript.value === 'horizontal_components_ratio') {
-    updateHorizontalComponentsRatio(origins, currents, params)
-  } else if (activeScript.value === 'vertical_components_ratio') {
-    updateVerticalComponentsRatio(origins, currents, params)
-  } else if (activeType.value === 'components') {
-    componentsScriptsArr.find((s) => s.id === activeScript.value)?.update(origins, currents, params)
+  if (bulkCompleted) {
+    characterStore.characterListVersion++
+    glyphStore.glyphListVersion++
+    await dispatchForceListRefresh('force-character-list-refresh')
   }
-
-  for (const ch of currents) {
-    await characterDataManager.updateCharacter(file.uuid, ch)
-  }
-  projectStore.markFileUnsaved(file.uuid)
-  await characterStore.invalidateAllCachedCharacterPreviews()
-  message.success('已写回全部字符')
 }
 </script>
 

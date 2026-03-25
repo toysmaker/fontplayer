@@ -184,6 +184,69 @@ export async function collectProjectConstantUsageHitsAsync(options: {
   return dedupeConstantUsageHitsByComponent(hits)
 }
 
+/**
+ * 一次扫描多个全局常量 uuid：每个字符只从 IDB 加载一次，避免多次 collect 导致命中对象引用不一致。
+ * characterByUuid 仅包含「至少有一处常量引用」的字符，供批量脚本后写回。
+ */
+export async function collectProjectConstantUsageHitsForUuidsAsync(options: {
+  file: IFile
+  constantUuids: string[]
+  editingCharacter: ICharacterFileLite | null | undefined
+  loadCharacter: (fileUUID: string, characterUUID: string) => Promise<ICharacterFileLite | null>
+  onScanProgress?: (done: number, total: number) => void
+}): Promise<{
+  hits: ConstantUsageHit[]
+  characterByUuid: Map<string, ICharacterFileLite>
+}> {
+  const { file, constantUuids, editingCharacter, loadCharacter, onScanProgress } = options
+  const unique = [...new Set(constantUuids.map(String).filter(Boolean))]
+  const hits: ConstantUsageHit[] = []
+  const characterByUuid = new Map<string, ICharacterFileLite>()
+  const charList = file.characterList ?? []
+  const editingUuid = editingCharacter?.uuid
+  const scanTotal = Math.max(1, charList.length + 1)
+
+  let done = 0
+  for (let i = 0; i < charList.length; i++) {
+    const meta = charList[i]
+    let ch: ICharacterFileLite | null = null
+    if (editingUuid && meta.uuid === editingUuid && editingCharacter) {
+      ch = editingCharacter
+    } else {
+      try {
+        ch = await loadCharacter(file.uuid, meta.uuid)
+      } catch (e) {
+        console.warn('[collectProjectConstantUsageHitsForUuidsAsync] loadCharacter failed', meta.uuid, e)
+        ch = null
+      }
+    }
+    if (ch && unique.length) {
+      const row: ConstantUsageHit[] = []
+      for (const uid of unique) {
+        row.push(...collectCharacterComponentHits(ch, uid))
+      }
+      if (row.length) {
+        characterByUuid.set(ch.uuid, ch)
+        hits.push(...row)
+      }
+    }
+    done++
+    onScanProgress?.(done, scanTotal)
+  }
+
+  for (const uid of unique) {
+    const bucketHits = await collectGlyphBucketHitsYielding(file, uid, {
+      yieldEvery: 40,
+      onYield: () => onScanProgress?.(done, scanTotal),
+    })
+    hits.push(...bucketHits)
+  }
+  done++
+  onScanProgress?.(done, scanTotal)
+
+  return { hits: dedupeConstantUsageHitsByComponent(hits), characterByUuid }
+}
+
 /** 命中次数（与需要执行的 executeGlyphScript 次数一致） */
 export function countConstantUsagesInProject(options: {
   file: IFile

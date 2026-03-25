@@ -5,6 +5,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, nextTick } from 'vue'
 import * as R from 'ramda'
+import { i18n } from '@/i18n'
 import type {
   ICharacterFileLite,
   IComponent,
@@ -16,6 +17,7 @@ import { ParameterType } from '@/core/types'
 import { useProjectStore } from '@/stores/project'
 import { useCharacterStore } from '@/stores/character'
 import { useEditorStore } from '@/stores/editor'
+import { useGlyphStore } from '@/stores/glyph'
 import { EditStatus } from '@/core/types'
 import { ConstantsMap } from '@/core/script/ConstantsMap'
 import { getGlobalConstantsMap, setGlobalConstantsMap } from '@/core/script/ParametersMap'
@@ -30,9 +32,25 @@ import {
   isSerifStylePreset,
   processCharacterAfterSongStyleSwitch,
   processCharacterBeforeSerifStyleSwitch,
-} from '@/features/advancedEdit/styleSwitchPostProcess'
+} from '../features/advancedEdit/styleSwitchPostProcess'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
+import { collectProjectConstantUsageHitsForUuidsAsync } from '@/features/editor/globalParam/traverseConstantUsages'
+
+function dispatchForceListRefresh(eventName: string): Promise<void> {
+  return Promise.race([
+    new Promise<void>((resolve) => {
+      let settled = false
+      const done = () => {
+        if (settled) return
+        settled = true
+        resolve()
+      }
+      window.dispatchEvent(new CustomEvent(eventName, { detail: { done } }))
+    }),
+    new Promise<void>((resolve) => setTimeout(resolve, eventName === 'force-character-list-refresh' ? 800 : 80)),
+  ])
+}
 
 export const PanelType = {
   GlobalVariables: 'globalVariables',
@@ -173,6 +191,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
   const projectStore = useProjectStore()
   const characterStore = useCharacterStore()
   const editorStore = useEditorStore()
+  const glyphStore = useGlyphStore()
 
   const activePanel = ref<PanelTypeId>(PanelType.GlobalVariables)
   const sampleCharacters = ref('白日依山尽黄河入海流欲穷千里目更上一层楼')
@@ -318,13 +337,134 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     }
   }
 
+  async function afterBulkMutateMainList() {
+    characterStore.characterListVersion++
+    glyphStore.glyphListVersion++
+    await dispatchForceListRefresh('force-character-list-refresh')
+  }
+
+  /** 从磁盘重载样例、重绘中间栏；可选重绘笔画替换侧栏 */
+  async function refreshAdvancedEditSamplesAfterBulk(options?: { redrawStrokeSidebar?: boolean }) {
+    await updateSampleCharactersList()
+    await nextTick()
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          updateCharactersAndPreview()
+          resolve()
+        })
+      })
+    })
+    if (options?.redrawStrokeSidebar && strokeList.value.length) {
+      await redrawStrokeListPreviews()
+    }
+  }
+
   async function applyConstantsToEntireProject() {
     const file = projectStore.selectedFile
     if (!file) return
-    file.constants = R.clone(constants.value)
-    projectStore.markFileUnsaved(file.uuid)
-    restoreProjectConstantsMap()
-    await characterStore.invalidateAllCachedCharacterPreviews()
+
+    const t = i18n.global.t
+    const charList = file.characterList ?? []
+    const scanTotal = Math.max(1, charList.length + 1)
+
+    projectStore.loading = true
+    projectStore.loadingTotal = scanTotal
+    projectStore.loadingProgress = 0
+    projectStore.loadingMessage =
+      charList.length === 0
+        ? String(t('panels.paramsPanel.params.globalParamUpdateScanGlyphs'))
+        : String(
+            t('panels.paramsPanel.params.globalParamUpdateScanCharacters', {
+              current: 0,
+              total: charList.length,
+            }),
+          )
+
+    let bulkCompleted = false
+    try {
+      file.constants = R.clone(constants.value)
+      projectStore.markFileUnsaved(file.uuid)
+      restoreProjectConstantsMap()
+
+      const constantUuids = [...new Set((file.constants ?? []).map((c) => c.uuid).filter(Boolean))]
+
+      const { hits, characterByUuid } = await collectProjectConstantUsageHitsForUuidsAsync({
+        file,
+        constantUuids,
+        editingCharacter: characterStore.editingCharacter,
+        loadCharacter: (f, u) => characterDataManager.loadCharacter(f, u),
+        onScanProgress: (done, total) => {
+          projectStore.loadingProgress = done
+          projectStore.loadingTotal = total
+          if (charList.length === 0) {
+            projectStore.loadingMessage = String(t('panels.paramsPanel.params.globalParamUpdateScanGlyphs'))
+          } else if (done <= charList.length) {
+            projectStore.loadingMessage = String(
+              t('panels.paramsPanel.params.globalParamUpdateScanCharacters', {
+                current: Math.min(done, charList.length),
+                total: charList.length,
+              }),
+            )
+          } else {
+            projectStore.loadingMessage = String(t('panels.paramsPanel.params.globalParamUpdateScanGlyphs'))
+          }
+        },
+      })
+
+      const execTotal = Math.max(1, hits.length)
+      projectStore.loadingTotal = execTotal
+      projectStore.loadingProgress = 0
+      projectStore.loadingMessage = String(t('panels.paramsPanel.params.globalParamUpdateProgress'))
+
+      const dirtyCharacterUuids = new Set<string>()
+      let lastYield = performance.now()
+
+      for (let i = 0; i < hits.length; i++) {
+        const h = hits[i]
+        if (h.glyph.script || h.glyph.script_reference || h.glyph.skeleton) {
+          executeGlyphScript(h.glyph, h.componentUuid)
+          if (!instanceManager.isEditing(h.componentUuid)) {
+            instanceManager.releaseTemporaryInstance(h.componentUuid)
+          }
+          if (h.characterUuid) dirtyCharacterUuids.add(h.characterUuid)
+        }
+        projectStore.loadingProgress = Math.max(1, i + 1)
+        projectStore.loadingMessage =
+          String(t('panels.paramsPanel.params.globalParamUpdateProgress')) +
+          ' ' +
+          String(
+            t('panels.paramsPanel.params.globalParamUpdateProgressDetail', {
+              current: i + 1,
+              total: hits.length,
+            }),
+          )
+        const now = performance.now()
+        if (now - lastYield >= 16) {
+          await new Promise<void>((r) => setTimeout(r, 0))
+          lastYield = performance.now()
+        }
+      }
+
+      if (hits.length === 0) {
+        projectStore.loadingProgress = 1
+      }
+
+      for (const cid of dirtyCharacterUuids) {
+        const ch = characterByUuid.get(cid)
+        if (ch) await characterDataManager.updateCharacter(file.uuid, ch)
+      }
+
+      await characterStore.invalidateAllCachedCharacterPreviews()
+      await refreshAdvancedEditSamplesAfterBulk({ redrawStrokeSidebar: strokeList.value.length > 0 })
+      bulkCompleted = true
+    } finally {
+      projectStore.loading = false
+      projectStore.loadingProgress = 0
+      projectStore.loadingTotal = 0
+      projectStore.loadingMessage = ''
+    }
+    if (bulkCompleted) await afterBulkMutateMainList()
   }
 
   function getGlyphByUUID(uuid: string): ICustomGlyph | undefined {
@@ -433,6 +573,10 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
   /** 右侧笔画列表 canvas 在 n-scrollbar 内，需等布局后再 querySelector */
   async function redrawStrokeListPreviews() {
     await nextTick()
+    await nextTick()
+    const strokeListEl = document.querySelector('.stroke-list')
+    void strokeListEl?.getBoundingClientRect()
+    await new Promise<void>((r) => setTimeout(r, 0))
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -496,6 +640,23 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     }
   }
 
+  /** v-if 切 tab 后 flex/滚动区首帧布局未稳定，canvas 可能仍为 0 尺寸；强制同步布局并多帧后再绘制 */
+  async function waitForAdvancedEditSampleGridPaint(): Promise<void> {
+    await nextTick()
+    await nextTick()
+    const grid = document.getElementById('advanced-edit-characters-list')
+    void grid?.offsetHeight
+    void grid?.getBoundingClientRect()
+    await new Promise<void>((r) => setTimeout(r, 0))
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => resolve())
+        })
+      })
+    })
+  }
+
   async function refreshStrokeReplacePreviews() {
     await updateSampleCharactersList()
     const next: ICharacterFileLite[] = []
@@ -508,30 +669,23 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
       next.push(c)
     }
     sampleCharactersList.value = next
-    await nextTick()
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          runWithAdvancedConstantsMap(() => {
-            for (const character of sampleCharactersList.value) {
-              const canvas = document.getElementById(
-                `advanced-edit-preview-canvas-${character.uuid}`,
-              ) as HTMLCanvasElement | null
-              if (!canvas) continue
-              const m = getFontMetrics()
-              const ordered = orderedListWithItemsForCharacterFile(character)
-              const contours = ContourConverter.componentsToContours(
-                ordered,
-                { ...m, preview: true, forceUpdate: true, advancedEdit: true },
-                { x: 0, y: 0 },
-              )
-              const fillColors = ContourConverter.getFillColors(ordered as IComponent[])
-              renderAdvancedEditPreview(canvas, contours, fillColors, projectStore.fontPreviewStyle)
-            }
-          })
-          resolve()
-        })
-      })
+    await waitForAdvancedEditSampleGridPaint()
+    runWithAdvancedConstantsMap(() => {
+      for (const character of sampleCharactersList.value) {
+        const canvas = document.getElementById(
+          `advanced-edit-preview-canvas-${character.uuid}`,
+        ) as HTMLCanvasElement | null
+        if (!canvas) continue
+        const m = getFontMetrics()
+        const ordered = orderedListWithItemsForCharacterFile(character)
+        const contours = ContourConverter.componentsToContours(
+          ordered,
+          { ...m, preview: true, forceUpdate: true, advancedEdit: true },
+          { x: 0, y: 0 },
+        )
+        const fillColors = ContourConverter.getFillColors(ordered as IComponent[])
+        renderAdvancedEditPreview(canvas, contours, fillColors, projectStore.fontPreviewStyle)
+      }
     })
     await redrawStrokeListPreviews()
   }
@@ -539,16 +693,41 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
   async function applyStrokeReplacementsToAll() {
     const file = projectStore.selectedFile
     if (!file) return
-    for (const meta of file.characterList) {
-      const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
-      if (!ch) continue
-      for (const s of strokeList.value) {
-        if (s.replaced) replaceStrokeForCharacter(ch, s)
+    const list = file.characterList ?? []
+    const n = Math.max(1, list.length)
+    projectStore.loading = true
+    projectStore.loadingTotal = n
+    projectStore.loadingProgress = 0
+    projectStore.loadingMessage = '正在将笔画替换写入全部字符…'
+    let lastYield = performance.now()
+    let bulkCompleted = false
+    try {
+      for (let i = 0; i < list.length; i++) {
+        const meta = list[i]
+        const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
+        if (!ch) continue
+        for (const s of strokeList.value) {
+          if (s.replaced) replaceStrokeForCharacter(ch, s)
+        }
+        await characterDataManager.updateCharacter(file.uuid, ch)
+        projectStore.loadingProgress = i + 1
+        const now = performance.now()
+        if (now - lastYield >= 16) {
+          await new Promise<void>((r) => setTimeout(r, 0))
+          lastYield = performance.now()
+        }
       }
-      await characterDataManager.updateCharacter(file.uuid, ch)
+      projectStore.markFileUnsaved(file.uuid)
+      await characterStore.invalidateAllCachedCharacterPreviews()
+      await refreshStrokeReplacePreviews()
+      bulkCompleted = true
+    } finally {
+      projectStore.loading = false
+      projectStore.loadingProgress = 0
+      projectStore.loadingTotal = 0
+      projectStore.loadingMessage = ''
     }
-    projectStore.markFileUnsaved(file.uuid)
-    await characterStore.invalidateAllCachedCharacterPreviews()
+    if (bulkCompleted) await afterBulkMutateMainList()
   }
 
   function getStrokeListByStyle(strokeStyle: string): ICustomGlyph[] {
@@ -639,6 +818,47 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     }
   }
 
+  /** 写回全库时与原版 switchStyle2 一致：替换后执行字形脚本 */
+  function switchStyle2OnCharacterWithScripts(
+    characterFile: ICharacterFileLite,
+    style: StyleSwitchPreset | undefined,
+  ) {
+    if (!style) return
+    const strokeListByStyle = getStrokeListByStyle(style.strokeStyle)
+    for (const strokeGlyph of strokeListByStyle) {
+      const strokeName = strokeGlyph.name
+      for (let i = 0; i < characterFile.components.length; i++) {
+        const component = characterFile.components[i]
+        if (component.type !== 'glyph') continue
+        const gc = component as IGlyphComponent
+        const cur = gc.value as ICustomGlyph
+        if (cur.name !== strokeName) continue
+        const glyph = R.clone(strokeGlyph)
+        const destParams = parameterRowsForGlyph(glyph) ?? []
+        const srcParams = parameterRowsForGlyph(cur) ?? []
+        for (let j = 0; j < destParams.length; j++) {
+          const parameter = destParams[j]
+          const originParameter = srcParams.find((q: { name: string }) => q.name === parameter.name)
+          if (originParameter && originParameter.type !== ParameterType.Constant) {
+            let replaced = false
+            for (const sp of style.parameters) {
+              if (parameter.name === sp.name) {
+                parameter.value = sp.value
+                replaced = true
+              }
+            }
+            if (!replaced) parameter.value = originParameter.value
+          } else if (originParameter && originParameter.type === ParameterType.Constant) {
+            parameter.type = ParameterType.Constant
+            parameter.value = originParameter.value
+          }
+        }
+        gc.value = glyph
+        executeGlyphScript(glyph, component.uuid)
+      }
+    }
+  }
+
   async function refreshStyleSwitchPreviews() {
     const style = styles.value.find((s) => s.uuid === selectedStyleUUID.value)
     await updateSampleCharactersList()
@@ -700,29 +920,57 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     const file = projectStore.selectedFile
     if (!style || !file) return
     if (style.uuid !== 'default' && !projectHasStrokeStyle(style.strokeStyle)) return
-    if (!file.constants) file.constants = []
-    mergeStyleConstantsInto(file.constants, style)
-    if (isSerifStylePreset(style)) applySharedSerifConstantsPatch(file.constants)
-    for (const meta of file.characterList) {
-      const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
-      if (!ch) continue
-      if (style.uuid === 'ss-fangsong') {
-        processCharacterBeforeSerifStyleSwitch(ch, file.constants, 'fangsong')
-      } else if (style.uuid === 'ss-kai') {
-        processCharacterBeforeSerifStyleSwitch(ch, file.constants, 'kai')
-      } else if (style.uuid === 'ss-li') {
-        processCharacterBeforeSerifStyleSwitch(ch, file.constants, 'li')
+
+    const list = file.characterList ?? []
+    const n = Math.max(1, list.length)
+    projectStore.loading = true
+    projectStore.loadingTotal = n
+    projectStore.loadingProgress = 0
+    projectStore.loadingMessage = '正在应用风格到全部字符…'
+    let lastYield = performance.now()
+    let bulkCompleted = false
+
+    try {
+      if (!file.constants) file.constants = []
+      mergeStyleConstantsInto(file.constants, style)
+      if (isSerifStylePreset(style)) applySharedSerifConstantsPatch(file.constants)
+
+      for (let i = 0; i < list.length; i++) {
+        const meta = list[i]
+        const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
+        if (!ch) continue
+        if (style.uuid === 'ss-fangsong') {
+          processCharacterBeforeSerifStyleSwitch(ch, file.constants, 'fangsong')
+        } else if (style.uuid === 'ss-kai') {
+          processCharacterBeforeSerifStyleSwitch(ch, file.constants, 'kai')
+        } else if (style.uuid === 'ss-li') {
+          processCharacterBeforeSerifStyleSwitch(ch, file.constants, 'li')
+        }
+        switchStyle2OnCharacterWithScripts(ch, style)
+        if (style.uuid === 'ss-song') {
+          processCharacterAfterSongStyleSwitch(ch, file.constants)
+        }
+        await characterDataManager.updateCharacter(file.uuid, ch)
+        projectStore.loadingProgress = i + 1
+        const now = performance.now()
+        if (now - lastYield >= 16) {
+          await new Promise<void>((r) => setTimeout(r, 0))
+          lastYield = performance.now()
+        }
       }
-      switchStyle2OnCharacter(ch, style)
-      if (style.uuid === 'ss-song') {
-        processCharacterAfterSongStyleSwitch(ch, file.constants)
-      }
-      await characterDataManager.updateCharacter(file.uuid, ch)
+      constants.value = R.clone(file.constants)
+      projectStore.markFileUnsaved(file.uuid)
+      restoreProjectConstantsMap()
+      await characterStore.invalidateAllCachedCharacterPreviews()
+      await refreshStyleSwitchPreviews()
+      bulkCompleted = true
+    } finally {
+      projectStore.loading = false
+      projectStore.loadingProgress = 0
+      projectStore.loadingTotal = 0
+      projectStore.loadingMessage = ''
     }
-    constants.value = R.clone(file.constants)
-    projectStore.markFileUnsaved(file.uuid)
-    restoreProjectConstantsMap()
-    await characterStore.invalidateAllCachedCharacterPreviews()
+    if (bulkCompleted) await afterBulkMutateMainList()
   }
 
   async function enterPanel() {

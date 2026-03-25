@@ -448,6 +448,16 @@ const handleForceCharacterListRefresh = async () => {
   }
 
   scheduleRender()
+  // 批量操作常在 finally 里才将 projectStore.loading 置 false；若本回调触发时仍为 true，
+  // scheduleRender 会直接 return。下一帧再调度一次，避免前几项预览一直空白。
+  await nextTick()
+  if (!projectStore.loading) {
+    scheduleRender()
+  } else {
+    requestAnimationFrame(() => {
+      if (!projectStore.loading) scheduleRender()
+    })
+  }
 }
 
 const onForceCharacterListRefreshEvent = (ev: Event) => {

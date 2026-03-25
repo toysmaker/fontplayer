@@ -76,7 +76,7 @@ watch(
           </n-button>
         </div>
         <div class="update-section">
-          <n-button type="error" size="large" block @click="advancedEdit.applyConstantsToEntireProject">
+          <n-button type="error" size="large" block @click="void advancedEdit.applyConstantsToEntireProject()">
             一键更新全部字库
           </n-button>
         </div>
