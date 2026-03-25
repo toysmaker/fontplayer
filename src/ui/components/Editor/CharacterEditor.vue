@@ -102,6 +102,9 @@ import { renderJoints, renderRefLines } from '@/core/script/Joint'
 import { useEditorStore } from '@/stores/editor'
 import { fontRenderStyle } from '@/core/script/globals'
 import { JointManager } from '@/features/tools/glyphDragger/core/JointManager'
+import { reexecuteAllGlyphScriptsInEditingCharacter } from '@/features/editor/globalParam/reexecuteCharacterGlyphScripts'
+import { rebuildCharacterListPreviewAfterExitEdit } from '@/features/editor/listPreview/rebuildListPreviewAfterEditorExit'
+import { discardGlobalConstantsDraftOnLeave } from '@/stores/editorConstantsSession'
 import { mapCanvasX, mapCanvasY } from '@/utils/canvas'
 import { bottomBarToolManager } from '@/features/bottomBar/BottomBarToolManager'
 import { useBottomBarToolStore } from '@/stores/bottomBarTool'
@@ -573,7 +576,19 @@ onUnmounted(() => {
   // 退出编辑时，将编辑字符的数据同步回列表，并释放字符实例（统一在 unmount 中释放）
   const editingCharacterUUID = (characterStore as any).editingCharacterUUID
   if (editingCharacterUUID) {
+    // 须先于任何 executeGlyphScript / CharacterRenderer：v-if 卸掉 CharacterEditor 时子组件 GlyphEditPanel
+    // 的 watch 可能尚未执行 endSession，getGlobalConstantsMap() 仍指向草稿，导致写回列表与预览仍用草稿常量。
+    discardGlobalConstantsDraftOnLeave()
+    // 离开前用已提交的全局常量重算顶层字形脚本，避免「未提交草稿」或仅局部重算导致的内存几何
+    // 被写回列表/IDB，列表预览与再次进入时的参数不一致。
+    const ch = (characterStore as any).editingCharacter as ICharacterFileLite | null
+    reexecuteAllGlyphScriptsInEditingCharacter(ch)
     ;(characterStore as any).updateCharacterListFromEditFile()
+    void rebuildCharacterListPreviewAfterExitEdit(editingCharacterUUID).catch((e) => {
+      if (import.meta.env.DEV) {
+        console.error('[CharacterEditor] rebuildCharacterListPreviewAfterExitEdit', e)
+      }
+    })
     instanceManager.unmarkEditing(editingCharacterUUID)
     instanceManager.releaseInstance(editingCharacterUUID)
     ;(characterStore as any).resetEditCharacterFile()

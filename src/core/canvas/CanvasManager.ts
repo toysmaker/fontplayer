@@ -725,9 +725,12 @@ export class CanvasManager {
   /**
    * 使指定 UUID 的缓存失效，强制下次渲染时重新绘制
    * 用于单个字符/字形被修改后刷新其预览
+   * 须同时清除 contentVersions，否则 CharacterRenderer/GlyphRenderer 里
+   * getContentVersion 在仅全局常量等变化时可能不变，needsRerender 为 false 会从旧 ImageData 恢复错误缩略图。
    */
   static invalidateCache(uuid: string): void {
     this.renderCache.delete(uuid)
+    this.contentVersions.delete(uuid)
   }
   
   /**

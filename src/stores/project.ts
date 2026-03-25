@@ -5,6 +5,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
+import * as R from 'ramda'
 import type { IFile, ICharacterFileLite } from '@/core/types'
 import { indexedDBManager } from '@/core/storage/IndexedDBManager'
 import { ConstantsMap } from '@/core/script/ConstantsMap'
@@ -127,6 +128,17 @@ export const useProjectStore = defineStore('project', () => {
     selectedFileUUID.value = ''
   }
 
+  /**
+   * 用当前工程已保存的 file.constants 重建 ConstantsMap 单例（深拷贝数组，避免与草稿会话共享引用）。
+   * 退出字符/字形编辑时调用，确保脚本与列表预览在 getGlobalConstantsMap() 已为 null 后只读已提交常量。
+   */
+  function resyncConstantsMapFromCommittedFile() {
+    const file = selectedFile.value
+    ConstantsMap.resetInstance()
+    const committed = file?.constants?.length ? R.clone(file.constants) : []
+    constantsMap.value = ConstantsMap.getInstance(committed)
+  }
+
   return {
     // State
     files,
@@ -150,5 +162,6 @@ export const useProjectStore = defineStore('project', () => {
     markFileSaved,
     markFileUnsaved,
     clearFiles,
+    resyncConstantsMapFromCommittedFile,
   }
 })

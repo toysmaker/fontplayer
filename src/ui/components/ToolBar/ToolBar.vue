@@ -182,18 +182,20 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NIcon } from 'naive-ui'
+import { NIcon, useDialog } from 'naive-ui'
 import { useEditorStore } from '@/stores/editor'
 import { useToolStore } from '@/stores/tool'
 import { useDialogsStore } from '@/stores/dialogs'
 import { EditStatus } from '@/core/types'
 import { createDebouncedHandler } from '@/utils/debounce-click'
+import { confirmLeaveGlyphEditIfDirty } from '@/stores/editorConstantsSession'
 import {
   openProgrammingWindow,
   setupProgrammingWindowBridge,
 } from '@/features/programming/programmingWindowBridge'
 
 const { t } = useI18n()
+const dialog = useDialog()
 
 const editorStore = useEditorStore()
 const toolStore = useToolStore()
@@ -234,14 +236,22 @@ onUnmounted(() => {
 })
 
 // 返回列表
-const _handleToList = () => {
+const _handleToList = async () => {
+  if (
+    editorStore.editStatus === EditStatus.Edit ||
+    editorStore.editStatus === EditStatus.Glyph
+  ) {
+    const ok = await confirmLeaveGlyphEditIfDirty({ dialog, t })
+    if (!ok) return
+  }
+
   // 返回到之前保存的列表状态，如果没有则返回到字符列表
   const targetStatus = editorStore.prevStatus || EditStatus.CharacterList
-  
+
   if (import.meta.env.DEV) {
     console.log(`[ToolBar] handleToList: current=${editorStore.editStatus}, prevStatus=${targetStatus}`)
   }
-  
+
   // 确保返回到的是列表状态
   if (
     targetStatus === EditStatus.CharacterList ||

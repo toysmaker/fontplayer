@@ -64,6 +64,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { NCard, NEmpty } from 'naive-ui'
 import { useGlyphStore } from '@/stores/glyph'
+import { useProjectStore } from '@/stores/project'
 import { DraggerManager, getOrCreateDragger } from '@/features/tools/glyphDragger'
 import type { BaseGlyphDragger } from '@/features/tools/glyphDragger'
 import { instanceManager } from '@/core/instance/InstanceManager'
@@ -92,8 +93,11 @@ import { useDialogsStore } from '@/stores/dialogs'
 import { initSkeletonDragger, renderSkeletonSelector, renderBoneAndWeight } from '@/features/tools/skeletonBind'
 import { onSkeletonBind, onSkeletonDragging, onWeightSetting } from '@/stores/skeletonDragger'
 import type { ToolType } from '@/features/tools'
+import { rebuildGlyphListPreviewAfterExitEdit } from '@/features/editor/listPreview/rebuildListPreviewAfterEditorExit'
+import { discardGlobalConstantsDraftOnLeave } from '@/stores/editorConstantsSession'
 
 const glyphStore = useGlyphStore()
+const projectStore = useProjectStore()
 const editorStore = useEditorStore()
 const editorPreference = useEditorPreferenceStore()
 const bottomBarToolStore = useBottomBarToolStore()
@@ -535,8 +539,23 @@ onUnmounted(() => {
   // 退出编辑时，将编辑字形的数据同步回列表
   const editingGlyphUUID = (glyphStore as any).editingGlyphUUID
   if (editingGlyphUUID) {
+    discardGlobalConstantsDraftOnLeave()
     ;(glyphStore as any).updateGlyphListFromEditFile()
-    
+    const cat = (glyphStore as any).glyphCategory as keyof Pick<
+      NonNullable<typeof projectStore.selectedFile>,
+      'glyphs' | 'stroke_glyphs' | 'radical_glyphs' | 'comp_glyphs'
+    >
+    const file = projectStore.selectedFile
+    const list = file?.[cat] as ICustomGlyph[] | undefined
+    const g = list?.find((x) => x.uuid === editingGlyphUUID)
+    if (g && file) {
+      void rebuildGlyphListPreviewAfterExitEdit(g, file.fontSettings).catch((e) => {
+        if (import.meta.env.DEV) {
+          console.error('[GlyphEditor] rebuildGlyphListPreviewAfterExitEdit', e)
+        }
+      })
+    }
+
     // 取消编辑标记并释放字形实例（字形编辑界面全程维护该字形本身的实例）
     if (import.meta.env.DEV) {
       console.log('[GlyphEditor.onUnmounted] Releasing glyph instance:', {

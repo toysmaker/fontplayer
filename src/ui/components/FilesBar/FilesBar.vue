@@ -125,17 +125,19 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { NButton, NPopover, NModal, NInput, NRadioGroup, NRadio, useMessage } from 'naive-ui'
+import { NButton, NPopover, NModal, NInput, NRadioGroup, NRadio, useMessage, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
 import { EditStatus } from '@/core/types'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import { isTauri } from '@/utils/env'
+import { confirmLeaveGlyphEditIfDirty } from '@/stores/editorConstantsSession'
 
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
 const message = useMessage()
+const dialog = useDialog()
 const { locale, t } = useI18n()
 
 // 处理语言切换
@@ -211,7 +213,14 @@ const handlePreviewStyleChange = () => {
   // 全局变量已更新，列表将在下次渲染时使用新样式
 }
 
-function openAdvancedEdit() {
+async function openAdvancedEdit() {
+  if (
+    editStatus.value === EditStatus.Edit ||
+    editStatus.value === EditStatus.Glyph
+  ) {
+    const ok = await confirmLeaveGlyphEditIfDirty({ dialog, t })
+    if (!ok) return
+  }
   editorStore.setEditStatus(EditStatus.AdvancedEdit)
 }
 
@@ -241,7 +250,7 @@ const closeFile = (uuid: string) => {
 }
 
 // 搜索文件功能
-const searchFile = () => {
+const searchFile = async () => {
   // 如果已经在搜索状态，则取消搜索
   if (isCharacterSearching.value) {
     editorStore.setIsCharacterSearching(false)
@@ -251,6 +260,10 @@ const searchFile = () => {
 
   // 如果不在字符列表状态，先跳转到字符列表
   if (editStatus.value !== EditStatus.CharacterList) {
+    if (editStatus.value === EditStatus.Edit || editStatus.value === EditStatus.Glyph) {
+      const ok = await confirmLeaveGlyphEditIfDirty({ dialog, t })
+      if (!ok) return
+    }
     editorStore.setEditStatus(EditStatus.CharacterList)
   }
 

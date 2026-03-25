@@ -7,7 +7,7 @@ export { ParameterType }
 // 全局 constantsMap（简化版本，实际应该从项目存储中获取）
 let globalConstantsMap: ConstantsMap | null = null
 
-export function setGlobalConstantsMap(constantsMap: ConstantsMap) {
+export function setGlobalConstantsMap(constantsMap: ConstantsMap | null) {
   globalConstantsMap = constantsMap
 }
 

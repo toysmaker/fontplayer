@@ -256,7 +256,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     try {
       return fn()
     } finally {
-      if (prev) setGlobalConstantsMap(prev)
+      setGlobalConstantsMap(prev)
     }
   }
 
@@ -911,7 +911,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
         })
       })
     } finally {
-      if (prevG) setGlobalConstantsMap(prevG)
+      setGlobalConstantsMap(prevG)
     }
   }
 

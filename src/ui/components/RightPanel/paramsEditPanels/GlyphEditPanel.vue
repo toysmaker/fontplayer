@@ -5,6 +5,7 @@
  */
 
 import { ref, computed, watch, nextTick } from 'vue'
+import { storeToRefs } from 'pinia'
 import {
   NInputNumber,
   NForm,
@@ -35,8 +36,15 @@ import { instanceManager } from '@/core/instance/InstanceManager'
 import { expandGlyphComponent } from '@/features/editor/services/FormatGlyphService'
 import { roundToPrecision } from '@/utils/number'
 import { genUUID } from '@/utils/uuid'
-import { collectProjectConstantUsageHitsAsync } from '@/features/editor/globalParam/traverseConstantUsages'
+import {
+  collectCharacterComponentHits,
+  collectProjectConstantUsageHitsAsync,
+  dedupeConstantUsageHitsByComponent,
+} from '@/features/editor/globalParam/traverseConstantUsages'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
+import {
+  useEditorConstantsSessionStore,
+} from '@/stores/editorConstantsSession'
 
 const { t } = useI18n()
 const dialog = useDialog()
@@ -73,6 +81,8 @@ const characterStore = useCharacterStore()
 const glyphStore = useGlyphStore()
 const projectStore = useProjectStore()
 const characterGridEditStore = useCharacterGridEditStore()
+const editorConstantsSession = useEditorConstantsSessionStore()
+const { draftVersion } = storeToRefs(editorConstantsSession)
 
 /** 与 VirtualCharacterList / VirtualGlyphList 约定：detail.done 在刷新完成后调用（可能多个 listener 共享同一 done） */
 function dispatchForceListRefresh(eventName: string): Promise<void> {
@@ -91,19 +101,38 @@ function dispatchForceListRefresh(eventName: string): Promise<void> {
 }
 
 const getConstantMeta = (uuid: string): IConstant | null => {
+  if (editorConstantsSession.active) {
+    return editorConstantsSession.getConstantMeta(uuid)
+  }
   return projectStore.selectedFile?.constants?.find((c) => c.uuid === uuid) || null
 }
 
 const selectableConstantsForDialog = computed((): IConstant[] => {
   const file = projectStore.selectedFile
   const param = dialogTargetParam.value
-  if (!file?.constants?.length || !param) return []
+  if (!param) return []
+  const pool = editorConstantsSession.active
+    ? editorConstantsSession.workingConstants
+    : file?.constants ?? []
+  if (!pool.length) return []
   const desiredType =
     param.type === ParameterType.Constant
       ? (getConstantMeta(String(param.value))?.type ?? ParameterType.Number)
       : param.type
-  return file.constants.filter((c) => (c.type ?? ParameterType.Number) === desiredType)
+  return pool.filter((c) => (c.type ?? ParameterType.Number) === desiredType)
 })
+
+watch(
+  () => [editStatus.value, projectStore.selectedFileUUID] as const,
+  ([status]) => {
+    if (status === EditStatus.Edit || status === EditStatus.Glyph) {
+      editorConstantsSession.startSession(projectStore.selectedFile)
+    } else {
+      editorConstantsSession.endSession()
+    }
+  },
+  { immediate: true },
+)
 
 watch(showSelectModal, (open) => {
   if (open && selectableConstantsForDialog.value.length) {
@@ -206,6 +235,7 @@ function confirmSetAsGlobal() {
     }
   })
   projectStore.markFileUnsaved(file.uuid)
+  editorConstantsSession.onNewConstantAppended(constant)
   showSetAsModal.value = false
   dialogTargetParam.value = null
 }
@@ -268,6 +298,9 @@ async function handleUpdateGlobalParam(parameter: IParameter) {
   const file = projectStore.selectedFile
   if (!file) return
   const constantUuid = String(parameter.value)
+  editorConstantsSession.mergeConstantToFile(constantUuid, file)
+  projectStore.markFileUnsaved(file.uuid)
+
   const charList = file.characterList ?? []
   const scanTotal = Math.max(1, charList.length + 1)
 
@@ -363,7 +396,61 @@ async function handleUpdateGlobalParam(parameter: IParameter) {
   } else if (editStatus.value === EditStatus.Glyph) {
     await dispatchForceListRefresh('force-glyph-list-refresh')
   }
+  editorConstantsSession.clearEditingModeForUuid(constantUuid)
+  editorConstantsSession.syncWorkingFromFile(projectStore.selectedFile)
   await nextTick()
+}
+
+function handleGlobalParamPrimaryAction(parameter: IParameter) {
+  if (parameter.type !== ParameterType.Constant) return
+  const uuid = String(parameter.value)
+  if (!editorConstantsSession.isEditingGlobal(uuid)) {
+    editorConstantsSession.beginEditGlobal(uuid)
+    return
+  }
+  void handleUpdateGlobalParam(parameter)
+}
+
+function handleCancelEditGlobalDraft(parameter: IParameter) {
+  if (parameter.type !== ParameterType.Constant) return
+  const constantUuid = String(parameter.value)
+  editorConstantsSession.cancelEditGlobalForUuid(constantUuid, projectStore.selectedFile)
+  const status = editStatus.value
+  const ch = characterStore.editingCharacter
+  void nextTick().then(async () => {
+    // 同一字符内可能有多处引用该常量；只重算当前选中会留下草稿脚本几何，退出后列表预览仍错。
+    if (ch) {
+      const hits = dedupeConstantUsageHitsByComponent(
+        collectCharacterComponentHits(ch, constantUuid),
+      )
+      for (const h of hits) {
+        if (h.glyph.script || h.glyph.script_reference || h.glyph.skeleton) {
+          executeGlyphScript(h.glyph, h.componentUuid)
+          if (!instanceManager.isEditing(h.componentUuid)) {
+            instanceManager.releaseTemporaryInstance(h.componentUuid)
+          }
+        }
+      }
+    }
+    // 与 handleUpdateGlobalParam 收尾一致：恢复常量后须 bump 画布并重刷列表缓存，
+    // 否则主编辑 canvas 仍显示草稿脚本结果，字符列表缩略图仍可能用旧 previewRef。
+    characterStore.characterListVersion++
+    glyphStore.glyphListVersion++
+    if (status === EditStatus.Glyph) {
+      glyphStore.programmingPreviewTick++
+    }
+    if (status === EditStatus.Edit) {
+      characterGridEditStore.bumpMainCanvasRerender()
+      await dispatchForceListRefresh('force-character-list-refresh')
+    } else if (status === EditStatus.Glyph) {
+      await dispatchForceListRefresh('force-glyph-list-refresh')
+    }
+  })
+}
+
+function isConstantControlsLocked(parameter: IParameter) {
+  if (parameter.type !== ParameterType.Constant) return true
+  return !editorConstantsSession.isEditingGlobal(String(parameter.value))
 }
 
 // 获取字形组件的参数数组
@@ -382,19 +469,25 @@ const glyphParameters = computed(() => {
 
 // 获取常量值（用于 Constant 类型参数）
 const getConstantValue = (param: IParameter): number | string => {
+  void draftVersion.value
   if (param.type !== ParameterType.Constant) {
     return param.value
   }
-  
+
+  const uuidValue = String(param.value)
+  if (editorConstantsSession.active) {
+    const v = editorConstantsSession.draftConstantsMap.getByUUID(uuidValue)
+    if (v !== undefined) return v
+  }
+
   const constantsMap = projectStore.constantsMap
   if (constantsMap && typeof constantsMap.getByUUID === 'function') {
-    const uuidValue = String(param.value)
     const resolvedValue = constantsMap.getByUUID(uuidValue)
     if (resolvedValue !== undefined) {
       return resolvedValue
     }
   }
-  
+
   return param.value
 }
 
@@ -417,26 +510,25 @@ const handleChangeParameter = async (parameter: IParameter, value: number | stri
     processedValue = roundToPrecision(value, precision)
   }
   
-  // 如果是 Constant 类型，更新全局常量的值
+  // 如果是 Constant 类型，更新工作副本中的常量（仅「编辑全局变量」模式下；提交前不写 file.constants）
   if (parameter.type === ParameterType.Constant) {
     const constantUUID = String(parameter.value)
-    const constantsMap = projectStore.constantsMap
-    
-    if (constantsMap) {
-      // Constant 的 value 存储为 number（Enum 常量也用 number 存储选项 value）
-      const numericValue = typeof processedValue === 'number' ? processedValue : Number(processedValue)
-      // 限制精度
-      const precision = parameter.max && parameter.max <= 10 ? 2 : 0
-      const roundedValue = roundToPrecision(numericValue, precision)
-      
-      // 更新 ConstantsMap 中的常量值
-      constantsMap.updateConstantValue(constantUUID, roundedValue)
-      
-      // 更新 selectedFile.constants 中的常量值（用于持久化，但不触发列表更新）
-      if (projectStore.selectedFile?.constants) {
-        const constant = projectStore.selectedFile.constants.find(c => c.uuid === constantUUID)
-        if (constant) {
-          constant.value = roundedValue
+    const numericValue = typeof processedValue === 'number' ? processedValue : Number(processedValue)
+    const precision = parameter.max && parameter.max <= 10 ? 2 : 0
+    const roundedValue = roundToPrecision(numericValue, precision)
+
+    if (editorConstantsSession.active) {
+      if (!editorConstantsSession.isEditingGlobal(constantUUID)) return
+      editorConstantsSession.updateWorkingConstant(constantUUID, roundedValue)
+    } else {
+      const constantsMap = projectStore.constantsMap
+      if (constantsMap) {
+        constantsMap.updateConstantValue(constantUUID, roundedValue)
+        if (projectStore.selectedFile?.constants) {
+          const constant = projectStore.selectedFile.constants.find((c) => c.uuid === constantUUID)
+          if (constant) {
+            constant.value = roundedValue
+          }
         }
       }
     }
@@ -695,6 +787,7 @@ const handleFormatGlyphComponent = () => {
                 <template v-if="getConstantMeta(String(parameter.value))?.type === ParameterType.Enum">
                   <n-select
                     :value="getConstantValue(parameter) as any"
+                    :disabled="isConstantControlsLocked(parameter)"
                     :options="getConstantMeta(String(parameter.value))?.options?.map((opt: any) => ({ label: opt.label, value: opt.value })) || []"
                     @update:value="(v) => handleChangeParameter(parameter, Number(v))"
                   />
@@ -702,6 +795,7 @@ const handleFormatGlyphComponent = () => {
                 <template v-else>
                   <n-input-number
                     :value="getConstantValue(parameter) as number"
+                    :disabled="isConstantControlsLocked(parameter)"
                     :step="(getConstantMeta(String(parameter.value))?.max ?? parameter.max) && (getConstantMeta(String(parameter.value))?.max ?? parameter.max) <= 10 ? 0.01 : 1"
                     :min="getConstantMeta(String(parameter.value))?.min ?? parameter.min"
                     :max="getConstantMeta(String(parameter.value))?.max ?? parameter.max"
@@ -710,6 +804,7 @@ const handleFormatGlyphComponent = () => {
                   />
                   <n-slider
                     :value="getConstantValue(parameter) as number"
+                    :disabled="isConstantControlsLocked(parameter)"
                     :step="(getConstantMeta(String(parameter.value))?.max ?? parameter.max) && (getConstantMeta(String(parameter.value))?.max ?? parameter.max) <= 10 ? 0.01 : 1"
                     :min="getConstantMeta(String(parameter.value))?.min ?? (parameter.min ?? 0)"
                     :max="getConstantMeta(String(parameter.value))?.max ?? (parameter.max ?? 100)"
@@ -739,8 +834,20 @@ const handleFormatGlyphComponent = () => {
                     <n-button block size="small" @click="openSelectDialog(parameter)">
                       {{ t('panels.paramsPanel.selectGlobalParam') }}
                     </n-button>
-                    <n-button type="primary" block size="small" @click="handleUpdateGlobalParam(parameter)">
-                      {{ t('panels.paramsPanel.updateGlobalParam') }}
+                    <n-button
+                      v-if="editorConstantsSession.isEditingGlobal(String(parameter.value))"
+                      block
+                      size="small"
+                      @click="handleCancelEditGlobalDraft(parameter)"
+                    >
+                      {{ t('panels.paramsPanel.params.cancelEditGlobalParam') }}
+                    </n-button>
+                    <n-button type="primary" block size="small" @click="handleGlobalParamPrimaryAction(parameter)">
+                      {{
+                        editorConstantsSession.isEditingGlobal(String(parameter.value))
+                          ? t('panels.paramsPanel.updateGlobalParam')
+                          : t('panels.paramsPanel.params.editGlobalParam')
+                      }}
                     </n-button>
                   </div>
                 </n-popover>

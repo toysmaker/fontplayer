@@ -514,35 +514,36 @@ export class CustomGlyph implements IInstance {
       return param.value
     }
     
-    // Constant 类型，需要从 constantsMap 解析
+    // Constant 类型：与 ScriptExecutor 一致，先 getGlobalConstantsMap（字形编辑草稿 / 高级编辑注入），再 projectStore
     if (param.type === ParameterType.Constant) {
-      const projectStore = useProjectStore()
-      const constantsMap = projectStore.constantsMap
-      if (constantsMap && typeof constantsMap.getByUUID === 'function') {
-        // 确保 value 是字符串类型
-        const uuidValue = String(param.value)
-        if (!uuidValue || uuidValue === '0' || uuidValue === '') {
-          if (import.meta.env.DEV) {
-            console.warn(`[CustomGlyph.getParam] ${param.name} (Constant): Invalid UUID value:`, param.value, 'returning as-is')
-          }
-          return param.value
-        }
-        
-        const resolvedValue = constantsMap.getByUUID(uuidValue)
-        if (resolvedValue !== undefined) {
-          return resolvedValue
-        } else {
-          if (import.meta.env.DEV) {
-            console.warn(`[CustomGlyph.getParam] ${param.name}: constantsMap.getByUUID('${uuidValue}') returned undefined, returning UUID`)
-          }
-          return param.value
-        }
-      } else {
+      const uuidValue = String(param.value)
+      if (!uuidValue || uuidValue === '0' || uuidValue === '') {
         if (import.meta.env.DEV) {
-          console.warn(`[CustomGlyph.getParam] ${param.name} (Constant): constantsMap not available, returning UUID:`, param.value)
+          console.warn(`[CustomGlyph.getParam] ${param.name} (Constant): Invalid UUID value:`, param.value, 'returning as-is')
         }
         return param.value
       }
+      const globalCm = getGlobalConstantsMap()
+      if (globalCm && typeof globalCm.getByUUID === 'function') {
+        const resolved = globalCm.getByUUID(uuidValue)
+        if (resolved !== undefined) return resolved
+      }
+      const projectStore = useProjectStore()
+      const constantsMap = projectStore.constantsMap
+      if (constantsMap && typeof constantsMap.getByUUID === 'function') {
+        const resolvedValue = constantsMap.getByUUID(uuidValue)
+        if (resolvedValue !== undefined) {
+          return resolvedValue
+        }
+        if (import.meta.env.DEV) {
+          console.warn(`[CustomGlyph.getParam] ${param.name}: constantsMap.getByUUID('${uuidValue}') returned undefined, returning UUID`)
+        }
+        return param.value
+      }
+      if (import.meta.env.DEV) {
+        console.warn(`[CustomGlyph.getParam] ${param.name} (Constant): constantsMap not available, returning UUID:`, param.value)
+      }
+      return param.value
     }
     
     // 如果 value 看起来像 UUID（但不是 Constant 类型），也尝试解析
@@ -552,6 +553,20 @@ export class CustomGlyph implements IInstance {
         param.value.includes('-') &&
         /^[a-zA-Z0-9_-]+$/.test(param.value) &&
         param.value !== '0') {
+      const globalCm = getGlobalConstantsMap()
+      if (globalCm && typeof globalCm.getByUUID === 'function') {
+        const resolved = globalCm.getByUUID(param.value)
+        if (resolved !== undefined) {
+          if (import.meta.env.DEV) {
+            console.log(`[CustomGlyph.getParam] ${param.name} (UUID-like, global):`, {
+              uuid: param.value,
+              resolvedValue: resolved,
+              paramType: param.type
+            })
+          }
+          return resolved
+        }
+      }
       const projectStore = useProjectStore()
       const constantsMap = projectStore.constantsMap
       if (constantsMap && typeof constantsMap.getByUUID === 'function') {
