@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   collectStraightAxisLinesFromPenComponents,
+  evaluateSnapReflineSticky,
   getSnapRefline,
   mergeSnapAxisLines,
 } from '@/features/tools/glyphDragger/core/reflineSnap'
@@ -113,6 +114,25 @@ describe('reflineSnap', () => {
         20,
       )
       expect(snap).toEqual({ dx: -2, dy: -4 })
+    })
+  })
+
+  describe('evaluateSnapReflineSticky', () => {
+    it('keeps same horizontal key target until ref pulls past snapOut', () => {
+      const key = [{ type: 'horizontal' as const, coord: 100 }]
+      const refNear = [{ type: 'horizontal' as const, coord: 85 }]
+      const r0 = evaluateSnapReflineSticky(key, refNear, 20, 24, null, null)
+      expect(r0.lockHNext).toBe(100)
+      expect(r0.dy).toBe(15)
+
+      const refMid = [{ type: 'horizontal' as const, coord: 78 }]
+      const r1 = evaluateSnapReflineSticky(key, refMid, 20, 24, 100, null)
+      expect(r1.lockHNext).toBe(100)
+      expect(r1.dy).toBe(22)
+
+      const refOut = [{ type: 'horizontal' as const, coord: 75 }]
+      const r2 = evaluateSnapReflineSticky(key, refOut, 20, 24, 100, null)
+      expect(r2.lockHNext).toBeNull()
     })
   })
 

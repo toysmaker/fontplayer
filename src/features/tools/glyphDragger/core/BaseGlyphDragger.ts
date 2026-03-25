@@ -14,10 +14,15 @@ import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import {
   collectStraightAxisLinesFromPenComponents,
-  getSnapRefline,
+  evaluateSnapReflineSticky,
   mergeSnapAxisLines,
   type SnapAxisLine,
 } from './reflineSnap'
+
+/** 进入吸附：仅当某 key/ref 对距离 < SNAP_IN（与旧版一致） */
+const SNAP_IN = 20
+/** 已锁定目标 key 线后，与该 key 的最近 ref 距离 ≤ SNAP_OUT 则保持吸附；略大于 SNAP_IN 以抑制阈值抖动 */
+const SNAP_OUT = 24
 
 export abstract class BaseGlyphDragger {
   protected canvas: HTMLCanvasElement
@@ -36,65 +41,65 @@ export abstract class BaseGlyphDragger {
   private _isActive: boolean = false
   /** 拖拽开始时从 canvas 上卸下 mousemove，避免与 window 冒泡重复触发 */
   private canvasMouseMoveSuspended = false
+  /** 吸附锁定：进入吸附时锁定的水平/垂直 key 线坐标（避免多参考线时每帧重选目标导致颤动） */
+  private snapLockHKey: number | null = null
+  private snapLockVKey: number | null = null
   
-  // 节流函数（单例，避免重复创建）
-  private throttledSkeletonDrag = throttle(
-    (glyph: ICustomGlyph, componentUUID: string, joint: IJoint, dx: number, dy: number) => {
-      ScriptExecutor.executeDrag(glyph, componentUUID, {
-        draggingJoint: joint,
-        deltaX: dx,
-        deltaY: dy
-      })
-      
-      // 骨架拖拽后，需要同步参数到组件 value，确保修改被保存
-      if (this.context.component && this.context.component.type === 'glyph') {
-        let glyphInstance: CustomGlyph | null = null
-        const isTemporary = instanceManager.isTemporary(componentUUID)
-        
-        if (isTemporary) {
-          glyphInstance = instanceManager.acquireTemporaryInstance(
-            componentUUID,
-            () => new CustomGlyph(glyph),
-            'glyph'
-          ) as CustomGlyph
-        } else {
-          glyphInstance = instanceManager.acquireTemporaryInstance(
-            componentUUID,
-            () => new CustomGlyph(glyph),
-            'glyph'
-          ) as CustomGlyph
+  /**
+   * 将拖拽中的临时字形实例参数写回组件 value（executeDrag 已在 applySnapDelta 中调用）。
+   */
+  private syncSkeletonGlyphValueToStore(
+    glyph: ICustomGlyph,
+    componentUUID: string,
+    triggerRender: boolean,
+  ): void {
+    if (this.context.component && this.context.component.type === 'glyph') {
+      const glyphInstance = instanceManager.acquireTemporaryInstance(
+        componentUUID,
+        () => new CustomGlyph(glyph),
+        'glyph',
+      ) as CustomGlyph
+
+      if (glyphInstance && glyphInstance._glyph.parameters) {
+        const updatedGlyphValue: ICustomGlyph = {
+          ...glyphInstance._glyph,
+          parameters: [...(glyphInstance._glyph.parameters || [])],
         }
-        
-        if (glyphInstance && glyphInstance._glyph.parameters) {
-          const updatedGlyphValue: ICustomGlyph = {
-            ...glyphInstance._glyph,
-            parameters: [...(glyphInstance._glyph.parameters || [])],
-          }
-          
-          // 只走 modifyComponent，避免先改 value 再 merge 触发两次深层响应；拖拽中 context.glyph 须与 store 一致
-          const comp = this.context.component as IComponent
-          if ((this.config as any).characterStore) {
-            ;(this.config as any).characterStore.modifyComponent(comp.uuid, {
-              value: updatedGlyphValue,
-            })
-          } else if ((this.config as any).glyphStore) {
-            ;(this.config as any).glyphStore.modifyComponent(comp.uuid, {
-              value: updatedGlyphValue,
-            })
-          }
-          if (comp.type === 'glyph') {
-            this.context.glyph = comp.value as ICustomGlyph
-          }
-          
-          this.config.onUpdate?.(this.context.component)
-        } else {
-          this.config.onUpdate?.(this.context.component)
+
+        const comp = this.context.component as IComponent
+        if ((this.config as any).characterStore) {
+          ;(this.config as any).characterStore.modifyComponent(comp.uuid, {
+            value: updatedGlyphValue,
+          })
+        } else if ((this.config as any).glyphStore) {
+          ;(this.config as any).glyphStore.modifyComponent(comp.uuid, {
+            value: updatedGlyphValue,
+          })
         }
+        if (comp.type === 'glyph') {
+          this.context.glyph = comp.value as ICustomGlyph
+        }
+
+        this.config.onUpdate?.(this.context.component)
+      } else {
+        this.config.onUpdate?.(this.context.component)
       }
-      
+    }
+
+    if (triggerRender) {
       this.config.onRender?.()
+    }
+  }
+
+  /**
+   * 骨架形变已在 applySnapDelta 内同步执行 executeDrag（先 raw 取线再 snapped），
+   * 此处仅节流：把实例参数写回 store + 渲染，避免重复 executeDrag 与吸附判断用的几何不一致。
+   */
+  private throttledSkeletonSync = throttle(
+    (glyph: ICustomGlyph, componentUUID: string) => {
+      this.syncSkeletonGlyphValueToStore(glyph, componentUUID, false)
     },
-    16, // 16ms ≈ 60fps
+    16,
     { leading: true, trailing: true }
   )
   
@@ -321,8 +326,8 @@ export abstract class BaseGlyphDragger {
   /**
    * @param forWholeGlyphTranslation
    *   true：整体平移组件，试探位置为 initialOrigin + 指针累积位移（与 handleGlyphDrag 一致）。
-   *   false：拖骨架非首点，组件 ox/oy 不变；参考线偏移须用拖拽起点时的原点，不能把鼠标位移加到 ox/oy 上，
-   *   否则与 keylines 比较失真，会在吸附阈值附近抖动。
+   *   false：拖骨架非首点，组件 ox/oy 不变；须先用指针累积位移 raw 更新实例再取 pen 轴对齐线，
+   *   否则 reflines 仍是上一帧吸附后的轮廓，与当前 dx/dy 语义不一致，会在吸附线附近剧烈颤动。
    */
   private applySnapDelta(
     dx: number,
@@ -333,15 +338,73 @@ export abstract class BaseGlyphDragger {
     if (!comp || comp.type !== 'glyph') {
       return { adjDx: dx, adjDy: dy }
     }
-    const tempOx = forWholeGlyphTranslation ? this.initialOx + dx : this.initialOx
-    const tempOy = forWholeGlyphTranslation ? this.initialOy + dy : this.initialOy
-    const keylines = this.getAutoSnapKeyLines()
-    const reflines = this.getSnapLinesForGlyphComponent(comp, tempOx, tempOy)
-    const snap = getSnapRefline(keylines, reflines)
-    return {
-      adjDx: dx + (snap?.dx ?? 0),
-      adjDy: dy + (snap?.dy ?? 0),
+
+    if (forWholeGlyphTranslation) {
+      const tempOx = this.initialOx + dx
+      const tempOy = this.initialOy + dy
+      const keylines = this.getAutoSnapKeyLines()
+      const reflines = this.getSnapLinesForGlyphComponent(comp, tempOx, tempOy)
+      const ev = evaluateSnapReflineSticky(
+        keylines,
+        reflines,
+        SNAP_IN,
+        SNAP_OUT,
+        this.snapLockHKey,
+        this.snapLockVKey,
+      )
+      this.snapLockHKey = ev.lockHNext
+      this.snapLockVKey = ev.lockVNext
+      return {
+        adjDx: dx + ev.dx,
+        adjDy: dy + ev.dy,
+      }
     }
+
+    const glyph = this.context.glyph
+    const joint = this.draggingJoint
+    if (!glyph || !joint) {
+      return { adjDx: dx, adjDy: dy }
+    }
+
+    ScriptExecutor.executeDrag(glyph, comp.uuid, {
+      draggingJoint: joint,
+      deltaX: dx,
+      deltaY: dy,
+    })
+
+    const snapInstance = instanceManager.acquireTemporaryInstance(
+      comp.uuid,
+      () => new CustomGlyph(glyph),
+      'glyph',
+    ) as CustomGlyph
+    const reflines = collectStraightAxisLinesFromPenComponents(
+      snapInstance._components,
+      this.initialOx,
+      this.initialOy,
+    )
+
+    const keylines = this.getAutoSnapKeyLines()
+    const ev = evaluateSnapReflineSticky(
+      keylines,
+      reflines,
+      SNAP_IN,
+      SNAP_OUT,
+      this.snapLockHKey,
+      this.snapLockVKey,
+    )
+    this.snapLockHKey = ev.lockHNext
+    this.snapLockVKey = ev.lockVNext
+
+    const adjDx = dx + ev.dx
+    const adjDy = dy + ev.dy
+
+    ScriptExecutor.executeDrag(glyph, comp.uuid, {
+      draggingJoint: joint,
+      deltaX: adjDx,
+      deltaY: adjDy,
+    })
+
+    return { adjDx, adjDy }
   }
   
   // 统一的事件处理
@@ -418,6 +481,8 @@ export abstract class BaseGlyphDragger {
     // 记录初始的 ox 和 oy，用于拖拽时计算新位置（避免累加错误）
     this.initialOx = this.origin.ox
     this.initialOy = this.origin.oy
+    this.snapLockHKey = null
+    this.snapLockVKey = null
 
     this.primeSnapInstancesForPeerSnapping()
     
@@ -458,14 +523,9 @@ export abstract class BaseGlyphDragger {
       const { adjDx, adjDy } = this.applySnapDelta(dx, dy, true)
       this.throttledGlyphDrag(adjDx, adjDy)
     } else if (this.draggingJoint && !this.isDraggingFirstJoint && this.context.glyph) {
-      const { adjDx, adjDy } = this.applySnapDelta(dx, dy, false)
-      this.throttledSkeletonDrag(
-        this.context.glyph,
-        this.context.componentUUID,
-        this.draggingJoint!,
-        adjDx,
-        adjDy,
-      )
+      this.applySnapDelta(dx, dy, false)
+      this.config.onRender?.()
+      this.throttledSkeletonSync(this.context.glyph, this.context.componentUUID)
     }
     
     // 注意：不要更新 lastX 和 lastY！
@@ -507,9 +567,10 @@ export abstract class BaseGlyphDragger {
       !this.isDraggingFirstJoint
     ) {
       const { adjDx, adjDy } = this.applySnapDelta(dx, dy, false)
-      if (typeof (this.throttledSkeletonDrag as any).cancel === 'function') {
-        ;(this.throttledSkeletonDrag as any).cancel()
+      if (typeof (this.throttledSkeletonSync as any).cancel === 'function') {
+        ;(this.throttledSkeletonSync as any).cancel()
       }
+      this.syncSkeletonGlyphValueToStore(this.context.glyph, this.context.componentUUID, false)
       ScriptExecutor.executeDragEnd(
         this.context.glyph,
         this.context.componentUUID,
@@ -519,6 +580,7 @@ export abstract class BaseGlyphDragger {
           deltaY: adjDy,
         },
       )
+      this.config.onRender?.()
     }
     
     this.handleDragEnd()
@@ -576,6 +638,8 @@ export abstract class BaseGlyphDragger {
     this.draggingJoint = null
     this.isDraggingFirstJoint = false
     this.hoverJoint = null
+    this.snapLockHKey = null
+    this.snapLockVKey = null
     this.lastX = 0
     this.lastY = 0
     window.removeEventListener('mouseup', this.onMouseUp)
@@ -628,8 +692,8 @@ export abstract class BaseGlyphDragger {
   }
   
   private cancelThrottledFunctions(): void {
-    if (typeof (this.throttledSkeletonDrag as any).cancel === 'function') {
-      (this.throttledSkeletonDrag as any).cancel()
+    if (typeof (this.throttledSkeletonSync as any).cancel === 'function') {
+      ;(this.throttledSkeletonSync as any).cancel()
     }
     if (typeof (this.throttledGlyphDrag as any).cancel === 'function') {
       (this.throttledGlyphDrag as any).cancel()

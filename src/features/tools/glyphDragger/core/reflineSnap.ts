@@ -99,6 +99,136 @@ export function mergeSnapAxisLines(groups: SnapAxisLine[][]): SnapAxisLine[] {
   return dedupeSnapAxisLines(groups.flat())
 }
 
+/** 仅在距离 < snapIn 的候选中，选水平方向最近的一对（与旧版 getSnapRefline 一致） */
+function findBestEntrySnapH(
+  keylines: SnapAxisLine[],
+  reflines: SnapAxisLine[],
+  snapIn: number,
+): { keyCoord: number; delta: number } | null {
+  let best: { keyCoord: number; delta: number; distance: number } | null = null
+  for (const keyline of keylines) {
+    if (keyline.type !== 'horizontal') continue
+    for (const refline of reflines) {
+      if (refline.type !== keyline.type) continue
+      const distance = Math.abs(keyline.coord - refline.coord)
+      if (distance >= snapIn) continue
+      const delta = keyline.coord - refline.coord
+      if (!best || distance < best.distance) {
+        best = { keyCoord: keyline.coord, delta, distance }
+      }
+    }
+  }
+  return best ? { keyCoord: best.keyCoord, delta: best.delta } : null
+}
+
+function findBestEntrySnapV(
+  keylines: SnapAxisLine[],
+  reflines: SnapAxisLine[],
+  snapIn: number,
+): { keyCoord: number; delta: number } | null {
+  let best: { keyCoord: number; delta: number; distance: number } | null = null
+  for (const keyline of keylines) {
+    if (keyline.type !== 'vertical') continue
+    for (const refline of reflines) {
+      if (refline.type !== keyline.type) continue
+      const distance = Math.abs(keyline.coord - refline.coord)
+      if (distance >= snapIn) continue
+      const delta = keyline.coord - refline.coord
+      if (!best || distance < best.distance) {
+        best = { keyCoord: keyline.coord, delta, distance }
+      }
+    }
+  }
+  return best ? { keyCoord: best.keyCoord, delta: best.delta } : null
+}
+
+/** 已锁定某条水平 key 线时：对当前 ref 水平线取与 keyCoord 最近的一条算 delta */
+function horizontalDeltaForLockedKey(
+  keyCoord: number,
+  reflines: SnapAxisLine[],
+): { dist: number; delta: number } | null {
+  let best: { dist: number; delta: number } | null = null
+  for (const ref of reflines) {
+    if (ref.type !== 'horizontal') continue
+    const dist = Math.abs(keyCoord - ref.coord)
+    const delta = keyCoord - ref.coord
+    if (!best || dist < best.dist) {
+      best = { dist, delta }
+    }
+  }
+  return best
+}
+
+function verticalDeltaForLockedKey(
+  keyCoord: number,
+  reflines: SnapAxisLine[],
+): { dist: number; delta: number } | null {
+  let best: { dist: number; delta: number } | null = null
+  for (const ref of reflines) {
+    if (ref.type !== 'vertical') continue
+    const dist = Math.abs(keyCoord - ref.coord)
+    const delta = keyCoord - ref.coord
+    if (!best || dist < best.dist) {
+      best = { dist, delta }
+    }
+  }
+  return best
+}
+
+/**
+ * 拖拽用吸附：锁定「进入吸附时」的那条 key 线坐标，直到与该线的最近 ref 距离 > snapOut 才释放。
+ * 避免多条参考线并存时每帧重选「全局最近 key」导致 dx/dy 突变、吸附线附近颤动。
+ */
+export function evaluateSnapReflineSticky(
+  keylines: SnapAxisLine[],
+  reflines: SnapAxisLine[],
+  snapIn: number,
+  snapOut: number,
+  lockHKey: number | null,
+  lockVKey: number | null,
+): {
+  dx: number
+  dy: number
+  lockHNext: number | null
+  lockVNext: number | null
+} {
+  let dy = 0
+  let lockHNext: number | null = null
+  if (lockHKey !== null) {
+    const p = horizontalDeltaForLockedKey(lockHKey, reflines)
+    if (p && p.dist <= snapOut) {
+      lockHNext = lockHKey
+      dy = p.delta
+    }
+  }
+  if (lockHNext === null) {
+    const nb = findBestEntrySnapH(keylines, reflines, snapIn)
+    if (nb) {
+      lockHNext = nb.keyCoord
+      dy = nb.delta
+    }
+  }
+
+  let dx = 0
+  let lockVNext: number | null = null
+  if (lockVKey !== null) {
+    const p = verticalDeltaForLockedKey(lockVKey, reflines)
+    if (p && p.dist <= snapOut) {
+      lockVNext = lockVKey
+      dx = p.delta
+    }
+  }
+  if (lockVNext === null) {
+    const nb = findBestEntrySnapV(keylines, reflines, snapIn)
+    if (nb) {
+      lockVNext = nb.keyCoord
+      dx = nb.delta
+    }
+  }
+
+  return { dx, dy, lockHNext, lockVNext }
+}
+
 /**
  * keylines: 其它组件提供的参考线；reflines: 当前组件在试探位置下的线。
  * 返回将 reflines 对齐到 keylines 所需的 delta（加到位移上）。
@@ -108,32 +238,11 @@ export function getSnapRefline(
   reflines: SnapAxisLine[],
   snapDistance: number = 20,
 ): { dx: number; dy: number } | null {
-  let bestH: { dy: number; distance: number } | null = null
-  let bestV: { dx: number; distance: number } | null = null
-
-  for (const keyline of keylines) {
-    for (const refline of reflines) {
-      if (keyline.type !== refline.type) continue
-      const distance = Math.abs(keyline.coord - refline.coord)
-      if (distance >= snapDistance) continue
-
-      if (keyline.type === 'horizontal') {
-        const dy = keyline.coord - refline.coord
-        if (!bestH || distance < bestH.distance) {
-          bestH = { dy, distance }
-        }
-      } else {
-        const dx = keyline.coord - refline.coord
-        if (!bestV || distance < bestV.distance) {
-          bestV = { dx, distance }
-        }
-      }
-    }
-  }
-
-  if (!bestH && !bestV) return null
+  const h = findBestEntrySnapH(keylines, reflines, snapDistance)
+  const v = findBestEntrySnapV(keylines, reflines, snapDistance)
+  if (!h && !v) return null
   return {
-    dx: bestV?.dx ?? 0,
-    dy: bestH?.dy ?? 0,
+    dx: v?.delta ?? 0,
+    dy: h?.delta ?? 0,
   }
 }
