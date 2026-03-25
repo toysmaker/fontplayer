@@ -4,7 +4,7 @@
  * 支持字符和字形两种编辑模式
  */
 
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   NInputNumber,
@@ -39,6 +39,7 @@ import { genUUID } from '@/utils/uuid'
 import {
   collectCharacterComponentHits,
   collectProjectConstantUsageHitsAsync,
+  collectStandaloneGlyphEditingHits,
   dedupeConstantUsageHitsByComponent,
 } from '@/features/editor/globalParam/traverseConstantUsages'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
@@ -137,6 +138,149 @@ watch(
 watch(showSelectModal, (open) => {
   if (open && selectableConstantsForDialog.value.length) {
     selectConstantUuid.value = selectableConstantsForDialog.value[0].uuid
+  }
+})
+
+function getCurrentSelectionTree(): string[] {
+  if (editStatus.value === EditStatus.Edit) {
+    return [...characterStore.selectedComponentsTree]
+  }
+  if (editStatus.value === EditStatus.Glyph) {
+    return [...glyphStore.selectedComponentsTree]
+  }
+  return []
+}
+
+function selectComponentByMode(uuid: string, tree: string[]) {
+  if (editStatus.value === EditStatus.Edit) {
+    characterStore.selectComponent(uuid, tree)
+  } else if (editStatus.value === EditStatus.Glyph) {
+    glyphStore.selectComponent(uuid, tree)
+  }
+}
+
+/** 已调用 cancelEditGlobalForUuid 之后：重算脚本并刷新主画布 / 列表缓存 */
+function runCanvasRefreshAfterCancelGlobalDraft(constantUuid: string) {
+  const status = editStatus.value
+  const ch = characterStore.editingCharacter
+  const eg = glyphStore.editingGlyph
+  void nextTick().then(async () => {
+    if (status === EditStatus.Edit && ch) {
+      const hits = dedupeConstantUsageHitsByComponent(
+        collectCharacterComponentHits(ch, constantUuid),
+      )
+      for (const h of hits) {
+        if (h.glyph.script || h.glyph.script_reference || h.glyph.skeleton) {
+          executeGlyphScript(h.glyph, h.componentUuid)
+          if (!instanceManager.isEditing(h.componentUuid)) {
+            instanceManager.releaseTemporaryInstance(h.componentUuid)
+          }
+        }
+      }
+    } else if (status === EditStatus.Glyph && eg) {
+      const hits = dedupeConstantUsageHitsByComponent(
+        collectStandaloneGlyphEditingHits(eg, constantUuid),
+      )
+      for (const h of hits) {
+        if (h.glyph.script || h.glyph.script_reference || h.glyph.skeleton) {
+          executeGlyphScript(h.glyph, h.componentUuid)
+          if (!instanceManager.isEditing(h.componentUuid)) {
+            instanceManager.releaseTemporaryInstance(h.componentUuid)
+          }
+        }
+      }
+    }
+    characterStore.characterListVersion++
+    glyphStore.glyphListVersion++
+    if (status === EditStatus.Glyph) {
+      glyphStore.programmingPreviewTick++
+    }
+    if (status === EditStatus.Edit) {
+      characterGridEditStore.bumpMainCanvasRerender()
+      await dispatchForceListRefresh('force-character-list-refresh')
+    } else if (status === EditStatus.Glyph) {
+      await dispatchForceListRefresh('force-glyph-list-refresh')
+    }
+  })
+}
+
+function isOtherGlobalEditLocking(parameter: IParameter) {
+  void draftVersion.value
+  if (parameter.type !== ParameterType.Constant) return false
+  const self = String(parameter.value)
+  const active = editorConstantsSession.getActiveEditingGlobalUuid()
+  return !!active && active !== self
+}
+
+const selectionSnapshot = ref<{ uuid: string; tree: string[] }>({ uuid: '', tree: [] })
+const selectionRevertGuard = ref(false)
+
+watch(
+  selectedComponentUUID,
+  (newUuid, oldUuid) => {
+    if (selectionRevertGuard.value) {
+      selectionRevertGuard.value = false
+      selectionSnapshot.value = {
+        uuid: newUuid ?? '',
+        tree: getCurrentSelectionTree(),
+      }
+      return
+    }
+
+    const inPanel = editStatus.value === EditStatus.Edit || editStatus.value === EditStatus.Glyph
+    if (!inPanel || !editorConstantsSession.active) {
+      selectionSnapshot.value = {
+        uuid: newUuid ?? '',
+        tree: getCurrentSelectionTree(),
+      }
+      return
+    }
+
+    const activeGlobal = editorConstantsSession.getActiveEditingGlobalUuid()
+    if (!activeGlobal) {
+      selectionSnapshot.value = {
+        uuid: newUuid ?? '',
+        tree: getCurrentSelectionTree(),
+      }
+      return
+    }
+
+    if (oldUuid === undefined || newUuid === oldUuid) {
+      selectionSnapshot.value = {
+        uuid: newUuid ?? '',
+        tree: getCurrentSelectionTree(),
+      }
+      return
+    }
+
+    const intended = {
+      uuid: newUuid ?? '',
+      tree: getCurrentSelectionTree(),
+    }
+    const snap = selectionSnapshot.value
+
+    selectionRevertGuard.value = true
+    selectComponentByMode(snap.uuid, snap.tree)
+
+    dialog.warning({
+      title: t('panels.paramsPanel.params.unsavedGlobalEditSwitchSelectionTitle'),
+      content: t('panels.paramsPanel.params.unsavedGlobalEditSwitchSelection'),
+      positiveText: t('panels.paramsPanel.params.switchSelectionIgnore'),
+      negativeText: t('panels.paramsPanel.params.switchSelectionStay'),
+      onPositiveClick: () => {
+        editorConstantsSession.cancelEditGlobalForUuid(activeGlobal, projectStore.selectedFile)
+        runCanvasRefreshAfterCancelGlobalDraft(activeGlobal)
+        selectionRevertGuard.value = true
+        selectComponentByMode(intended.uuid, intended.tree)
+      },
+    })
+  },
+)
+
+onMounted(() => {
+  selectionSnapshot.value = {
+    uuid: selectedComponentUUID.value || '',
+    tree: getCurrentSelectionTree(),
   }
 })
 
@@ -415,37 +559,7 @@ function handleCancelEditGlobalDraft(parameter: IParameter) {
   if (parameter.type !== ParameterType.Constant) return
   const constantUuid = String(parameter.value)
   editorConstantsSession.cancelEditGlobalForUuid(constantUuid, projectStore.selectedFile)
-  const status = editStatus.value
-  const ch = characterStore.editingCharacter
-  void nextTick().then(async () => {
-    // 同一字符内可能有多处引用该常量；只重算当前选中会留下草稿脚本几何，退出后列表预览仍错。
-    if (ch) {
-      const hits = dedupeConstantUsageHitsByComponent(
-        collectCharacterComponentHits(ch, constantUuid),
-      )
-      for (const h of hits) {
-        if (h.glyph.script || h.glyph.script_reference || h.glyph.skeleton) {
-          executeGlyphScript(h.glyph, h.componentUuid)
-          if (!instanceManager.isEditing(h.componentUuid)) {
-            instanceManager.releaseTemporaryInstance(h.componentUuid)
-          }
-        }
-      }
-    }
-    // 与 handleUpdateGlobalParam 收尾一致：恢复常量后须 bump 画布并重刷列表缓存，
-    // 否则主编辑 canvas 仍显示草稿脚本结果，字符列表缩略图仍可能用旧 previewRef。
-    characterStore.characterListVersion++
-    glyphStore.glyphListVersion++
-    if (status === EditStatus.Glyph) {
-      glyphStore.programmingPreviewTick++
-    }
-    if (status === EditStatus.Edit) {
-      characterGridEditStore.bumpMainCanvasRerender()
-      await dispatchForceListRefresh('force-character-list-refresh')
-    } else if (status === EditStatus.Glyph) {
-      await dispatchForceListRefresh('force-glyph-list-refresh')
-    }
-  })
+  runCanvasRefreshAfterCancelGlobalDraft(constantUuid)
 }
 
 function isConstantControlsLocked(parameter: IParameter) {
@@ -842,7 +956,13 @@ const handleFormatGlyphComponent = () => {
                     >
                       {{ t('panels.paramsPanel.params.cancelEditGlobalParam') }}
                     </n-button>
-                    <n-button type="primary" block size="small" @click="handleGlobalParamPrimaryAction(parameter)">
+                    <n-button
+                      type="primary"
+                      block
+                      size="small"
+                      :disabled="isOtherGlobalEditLocking(parameter)"
+                      @click="handleGlobalParamPrimaryAction(parameter)"
+                    >
                       {{
                         editorConstantsSession.isEditingGlobal(String(parameter.value))
                           ? t('panels.paramsPanel.updateGlobalParam')

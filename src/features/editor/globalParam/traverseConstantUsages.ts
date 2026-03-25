@@ -88,6 +88,15 @@ function scanTopLevelGlyph(g: ICustomGlyph, constantUuid: string, onHit: (hit: C
   walkComponentsForEach(g.components, constantUuid, onHit, characterUuid)
 }
 
+/**
+ * 字形编程界面：当前正在编辑的独立字形根（非字符内嵌）上的常量引用。
+ */
+export function collectStandaloneGlyphEditingHits(g: ICustomGlyph, constantUuid: string): ConstantUsageHit[] {
+  const hits: ConstantUsageHit[] = []
+  scanTopLevelGlyph(g, constantUuid, (h) => hits.push(h), undefined)
+  return hits
+}
+
 /** 仅工程内四类字形列表（不含字符里的嵌套组件） */
 export function collectGlyphBucketHits(file: IFile, constantUuid: string): ConstantUsageHit[] {
   const hits: ConstantUsageHit[] = []

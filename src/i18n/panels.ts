@@ -90,6 +90,10 @@ const panels = {
 				unsavedGlobalConstantsLeave: '存在未提交到字库的全局变量修改，确定要离开吗？',
 				leaveDialogConfirm: '离开',
 				leaveDialogCancel: '取消',
+				unsavedGlobalEditSwitchSelectionTitle: '未提交的全局变量',
+				unsavedGlobalEditSwitchSelection: '正在编辑全局变量，切换选择将放弃未提交的修改并恢复为「未编辑」状态。',
+				switchSelectionIgnore: '仍要切换',
+				switchSelectionStay: '留在当前',
 			},
 			glyphParamsPanel: {
 				styleTag: '风格标签',
@@ -377,6 +381,10 @@ const panels = {
 				unsavedGlobalConstantsLeave: 'You have global variable changes that are not written to the font library. Leave anyway?',
 				leaveDialogConfirm: 'Leave',
 				leaveDialogCancel: 'Cancel',
+				unsavedGlobalEditSwitchSelectionTitle: 'Unsaved global variable',
+				unsavedGlobalEditSwitchSelection: 'You are editing a global variable. Switching selection will discard uncommitted changes and exit edit mode.',
+				switchSelectionIgnore: 'Switch anyway',
+				switchSelectionStay: 'Stay',
 			},
 			glyphParamsPanel: {
 				styleTag: 'Style Tag',

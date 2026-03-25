@@ -54,11 +54,20 @@ export const useEditorConstantsSessionStore = defineStore('editorConstantsSessio
     return editingGlobalUuids.value.has(uuid)
   }
 
+  /** 同时仅允许一个常量处于「编辑全局变量」模式；若已有其他常量在编辑则忽略 */
   function beginEditGlobal(uuid: string) {
-    const next = new Set(editingGlobalUuids.value)
-    next.add(uuid)
-    editingGlobalUuids.value = next
+    if (editingGlobalUuids.value.size > 0 && !editingGlobalUuids.value.has(uuid)) {
+      return
+    }
+    editingGlobalUuids.value = new Set([uuid])
     bumpDraft()
+  }
+
+  function getActiveEditingGlobalUuid(): string | undefined {
+    for (const u of editingGlobalUuids.value) {
+      return u
+    }
+    return undefined
   }
 
   function clearEditingModeForUuid(uuid: string) {
@@ -142,6 +151,7 @@ export const useEditorConstantsSessionStore = defineStore('editorConstantsSessio
     getConstantMeta,
     isEditingGlobal,
     beginEditGlobal,
+    getActiveEditingGlobalUuid,
     clearEditingModeForUuid,
     cancelEditGlobalForUuid,
     updateWorkingConstant,
