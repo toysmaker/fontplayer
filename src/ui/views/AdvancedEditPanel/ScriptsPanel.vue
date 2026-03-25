@@ -339,7 +339,6 @@ async function applyScriptToEntireProject() {
             :key="ch.uuid"
             class="character-preview char-preview"
           >
-            <span class="char-label">{{ ch.character.text }}</span>
             <canvas
               :id="`advanced-edit-preview-canvas-${ch.uuid}`"
               width="100"
@@ -393,6 +392,7 @@ async function applyScriptToEntireProject() {
                 <n-select
                   v-model:value="parameter.value"
                   :options="parameter.options || []"
+                  class="enum-param-select"
                   @update:value="() => updateScript()"
                 />
               </div>
@@ -443,15 +443,22 @@ async function applyScriptToEntireProject() {
   flex: auto;
   overflow: auto;
 }
-.character-preview {
-  display: inline-block;
-  margin: 10px;
-  width: 100px;
-  text-align: center;
+.characters {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 10px;
+  padding: 10px;
+  box-sizing: border-box;
 }
-.char-label {
-  font-size: 12px;
-  color: var(--primary-0);
+.character-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 100px;
+  width: 100px;
+  height: 100px;
+  box-sizing: border-box;
 }
 .right {
   flex: 0 0 260px;
@@ -466,13 +473,35 @@ async function applyScriptToEntireProject() {
 .script-item {
   padding: 0 10px 10px;
 }
+/* 与风格切换 .style-list 一致的内容区内边距 */
 .parameters-wrap {
   padding: 10px;
+  padding-bottom: 20px;
+  box-sizing: border-box;
 }
 .param-wrapper {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+.parameters-wrap :deep(.n-form-item-blank) {
+  min-width: 0;
+  width: 100%;
+}
+.parameters-wrap :deep(.n-form-item-blank > *) {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+.enum-param-select {
+  width: 100%;
+}
+.parameters-wrap :deep(.enum-param-select.n-select) {
+  width: 100%;
+}
+.parameters-wrap :deep(.enum-param-select .n-base-selection) {
   width: 100%;
 }
 </style>

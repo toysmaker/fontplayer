@@ -20,8 +20,8 @@ import {
 } from '@/features/decomposition/processing'
 import { replaceGlyphScript } from '@/features/temporaryScripts/fileProcessing'
 
-/** 带此 tag 的工程在加载完成后会为字符列表补全部件分解数据 */
-const DEFAULT_TEMPLATE_PROJECT_TAG = '字玩默认模板工程'
+/** 带此 tag 的工程在加载完成后会为字符列表补全部件分解数据（高级编辑「脚本」Tab 亦仅在此 tag 下显示） */
+export const DEFAULT_TEMPLATE_PROJECT_TAG = '字玩默认模板工程'
 
 export interface LoadProgress {
   loaded: number

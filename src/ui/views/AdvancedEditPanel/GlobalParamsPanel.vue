@@ -55,21 +55,19 @@ watch(
       <div class="left">
         <div class="sample-characters-section">
           <h3>样例字符</h3>
-          <n-form-item label="">
-            <n-input
-              v-model:value="advancedEdit.sampleCharacters"
-              type="textarea"
-              :rows="4"
-              :disabled="!advancedEdit.isEditingSample"
-              placeholder="请输入最多20个字符，每个字符不能重复"
-              :maxlength="20"
-              show-count
-            />
-          </n-form-item>
+          <n-input
+            v-model:value="advancedEdit.sampleCharacters"
+            type="textarea"
+            :rows="4"
+            :disabled="!advancedEdit.isEditingSample"
+            placeholder="请输入最多20个字符，每个字符不能重复"
+            :maxlength="20"
+            show-count
+          />
           <n-button
             block
             :type="advancedEdit.isEditingSample ? 'success' : 'primary'"
-            style="margin-bottom: 20px"
+            class="sample-edit-btn"
             @click="handleToggleEditSample"
           >
             {{ advancedEdit.isEditingSample ? '确认' : '编辑预览样例字符' }}
@@ -88,7 +86,6 @@ watch(
             :key="ch.uuid"
             class="character-preview char-preview"
           >
-            <span class="char-label">{{ ch.character.text }}</span>
             <canvas
               :id="`advanced-edit-preview-canvas-${ch.uuid}`"
               width="100"
@@ -130,7 +127,6 @@ watch(
                     v-model:value="parameter.value"
                     :options="parameter.options || []"
                     class="enum-param-select"
-                    style="width: 150px"
                   />
                 </div>
               </n-form-item>
@@ -159,35 +155,40 @@ watch(
 }
 .characters {
   flex: 0 0 450px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 10px;
+  padding: 10px;
+  box-sizing: border-box;
 }
 .character-preview {
-  display: inline-block;
-  margin: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 100px;
   width: 100px;
   height: 100px;
   box-sizing: border-box;
   cursor: pointer;
-  text-align: center;
-}
-.char-label {
-  display: block;
-  font-size: 12px;
-  color: var(--primary-0);
 }
 .left {
   border-right: 1px solid var(--light-5);
   flex: 0 0 300px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   padding: 20px;
   box-sizing: border-box;
   height: 100%;
 }
 .sample-characters-section h3 {
-  margin: 0 0 15px 0;
+  margin: 0 0 12px 0;
   color: var(--light-0);
   font-size: 16px;
+}
+.sample-edit-btn {
+  margin: 12px 0;
 }
 .update-section {
   margin-top: auto;
@@ -217,14 +218,37 @@ watch(
   background-color: var(--primary-0);
   color: var(--light-0);
 }
+/* 与风格切换右侧 .style-list 一致：内容区四周留白，避免控件贴边 */
 .parameters-form {
-  margin: 10px 0;
+  margin: 0;
+  padding: 10px;
+  padding-bottom: 20px;
+  box-sizing: border-box;
 }
 .param-wrapper {
   width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.parameters-form :deep(.n-form-item-blank) {
+  min-width: 0;
+  width: 100%;
+}
+.parameters-form :deep(.n-form-item-blank > *) {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+.enum-param-select {
+  width: 100%;
+}
+.parameters-form :deep(.enum-param-select.n-select) {
+  width: 100%;
+}
+.parameters-form :deep(.enum-param-select .n-base-selection) {
+  width: 100%;
 }
 :deep(.n-form-item-label) {
   color: var(--primary-0);

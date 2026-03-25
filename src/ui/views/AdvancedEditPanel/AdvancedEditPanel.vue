@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { NButton } from 'naive-ui'
-import { onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import {
   useAdvancedEditStore,
   PanelType,
 } from '@/stores/advancedEdit'
+import { useProjectStore } from '@/stores/project'
+import { DEFAULT_TEMPLATE_PROJECT_TAG } from '@/features/editor/services/ProjectLoader'
 import GlobalParamsPanel from './GlobalParamsPanel.vue'
 import ConditionFilterPanel from './ConditionFilterPanel.vue'
 import ScriptsPanel from './ScriptsPanel.vue'
@@ -12,6 +14,21 @@ import StrokeReplacePanel from './StrokeReplacePanel.vue'
 import StyleSwitchPanel from './StyleSwitchPanel.vue'
 
 const advancedEdit = useAdvancedEditStore()
+const projectStore = useProjectStore()
+
+const showScriptTab = computed(
+  () => projectStore.selectedFile?.tag === DEFAULT_TEMPLATE_PROJECT_TAG,
+)
+
+watch(
+  showScriptTab,
+  (show) => {
+    if (!show && advancedEdit.activePanel === PanelType.Script) {
+      advancedEdit.setActivePanel(PanelType.GlobalVariables)
+    }
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   void advancedEdit.enterPanel()
@@ -67,6 +84,7 @@ onUnmounted(() => {
           条件筛选
         </n-button>
         <n-button
+          v-if="showScriptTab"
           size="small"
           :type="advancedEdit.activePanel === PanelType.Script ? 'primary' : 'default'"
           @pointerdown="() => advancedEdit.setActivePanel(PanelType.Script)"
@@ -85,7 +103,7 @@ onUnmounted(() => {
     <main class="advanced-edit-panel-main">
       <GlobalParamsPanel v-if="advancedEdit.activePanel === PanelType.GlobalVariables" />
       <ConditionFilterPanel v-else-if="advancedEdit.activePanel === PanelType.ConditionFilter" />
-      <ScriptsPanel v-else-if="advancedEdit.activePanel === PanelType.Script" />
+      <ScriptsPanel v-else-if="showScriptTab && advancedEdit.activePanel === PanelType.Script" />
       <StrokeReplacePanel v-else-if="advancedEdit.activePanel === PanelType.StrokeReplace" />
       <StyleSwitchPanel v-else-if="advancedEdit.activePanel === PanelType.StyleSwitch" />
     </main>
@@ -122,6 +140,7 @@ onUnmounted(() => {
   flex: 0 0 100px;
   cursor: pointer;
   background-color: var(--primary-5);
+  color: var(--primary-0);
 }
 .to-list:hover {
   background-color: var(--primary-4);
@@ -129,6 +148,10 @@ onUnmounted(() => {
 .to-list-icon {
   flex: 0 0 32px;
   text-align: center;
+  color: var(--primary-0);
+}
+.to-list-label {
+  color: var(--primary-0);
 }
 .advanced-edit-panel-main {
   width: 100%;

@@ -4,7 +4,7 @@ import { NEmpty } from 'naive-ui'
 
 <template>
   <div class="condition-placeholder">
-    <n-empty description="条件筛选（占位，与原工程一致）" />
+    <n-empty description="条件筛选（暂未开发）" />
   </div>
 </template>
 
