@@ -47,7 +47,7 @@
         />
         <n-popover
           placement="bottom-end"
-          :width="120"
+          :width="200"
           trigger="hover"
         >
           <template #trigger>
@@ -224,10 +224,9 @@ async function openAdvancedEdit() {
   editorStore.setEditStatus(EditStatus.AdvancedEdit)
 }
 
-// 处理设置按钮点击
+// 与 EditorSidebar 一致：打开字体设置对话框
 const handleSettings = () => {
-  // TODO: 打开设置对话框
-  console.log('Settings clicked')
+  window.dispatchEvent(new CustomEvent('editor-font-settings'))
 }
 
 // 选择文件
@@ -410,20 +409,27 @@ const cancelSearch = () => {
 
 .info-list {
   padding: 5px 0;
+  min-width: 160px;
+  box-sizing: border-box;
 }
 
 .info-item {
   margin-bottom: 5px;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  white-space: nowrap;
 }
 
 .info-item-name {
+  flex: 0 1 auto;
   color: var(--primary-5);
 }
 
 .info-item-content {
-  margin-left: 20px;
+  flex: 0 0 auto;
+  margin-left: 0;
   color: var(--primary-5);
 }
 

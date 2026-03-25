@@ -331,6 +331,7 @@ const handleToList = createDebouncedHandler(_handleToList, 'ToolBar.handleToList
   justify-content: center;
 }
 
+/* 与 AdvancedEditPanel 右上角「字符列表」按钮一致（去掉过大 icon 字号与 label flex 撑开） */
 .to-list {
   margin: 5px;
   margin-left: auto;
@@ -351,13 +352,11 @@ const handleToList = createDebouncedHandler(_handleToList, 'ToolBar.handleToList
 
 .to-list-icon {
   flex: 0 0 32px;
-  font-size: 18px;
+  text-align: center;
+  color: var(--primary-0);
 }
 
 .to-list-label {
-  flex: 1;
-  text-align: center;
-  font-size: 14px;
   color: var(--primary-0);
 }
 </style>
