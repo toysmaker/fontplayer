@@ -119,6 +119,9 @@ const selectControl = ref<string>('null')
 // 防止 watch 回调重入：渲染路径中可能写入被监听数据（如 previewRef），导致循环更新
 const isRenderingFromWatch = ref(false)
 
+// 串行化画布渲染：骨架拖拽时 dragger onRender 与 orderedList deep watch 可能同帧连续触发，避免交错重绘
+let renderCanvasTail: Promise<void> = Promise.resolve()
+
 // Canvas 尺寸（字形编辑界面使用默认尺寸）
 const defaultUnitsPerEm = 1000
 const canvasWidth = computed(() => mapCanvasWidth(defaultUnitsPerEm))
@@ -132,8 +135,16 @@ const displayHeight = computed(() => 500)
 const editorBackground = computed<IBackground>(() => editorPreference.background)
 const editorGrid = computed<IGrid>(() => editorPreference.grid)
 
-// 渲染画布
-const renderCanvas = async () => {
+// 渲染画布（排队执行，禁止并发；内部与 CharacterEditor 一致为同步绘制）
+const renderCanvas = (): void => {
+  renderCanvasTail = renderCanvasTail
+    .then(() => {
+      runRenderCanvasSync()
+    })
+    .catch(() => {})
+}
+
+function runRenderCanvasSync() {
   if (!canvasRef.value || !editingGlyph.value) return
 
   // 每次渲染前先清空画布，避免参数修改后多次绘制叠加（确保与 render() 内 clearCanvas 一致）
@@ -144,31 +155,7 @@ const renderCanvas = async () => {
 
   const components = (glyphStore as any).orderedListWithItemsForCurrentGlyph
   
-  // 获取 Canvas 的显示尺寸（CSS style）
-  const computedStyle = window.getComputedStyle(canvasRef.value)
-  const displayWidth = parseFloat(computedStyle.width) || 0
-  const displayHeight = parseFloat(computedStyle.height) || 0
-  const zoom = editingGlyph.value.view?.zoom || 100
-  
-  if (import.meta.env.DEV) {
-    console.log('[GlyphEditor] Rendering canvas:', {
-      componentsCount: components.length,
-      canvasActualSize: { width: canvasRef.value.width, height: canvasRef.value.height },
-      canvasDisplaySize: { width: displayWidth, height: displayHeight },
-      canvasSizeRatio: { 
-        widthRatio: canvasRef.value.width / (displayWidth || 1), 
-        heightRatio: canvasRef.value.height / (displayHeight || 1) 
-      },
-      zoom: zoom,
-      editingGlyphUUID: editingGlyph.value.uuid,
-      editingGlyphName: editingGlyph.value.name,
-      editingGlyphComponentsCount: editingGlyph.value.components?.length || 0,
-      editingGlyphOrderedListCount: editingGlyph.value.orderedList?.length || 0,
-      components: components
-    })
-  }
-  
-  await render(canvasRef.value, true, false, {
+  render(canvasRef.value, true, false, {
     mode: 'glyph',
     glyph: editingGlyph.value,
     components: components, // 传入组件列表，用于渲染字形内部的组件
@@ -353,7 +340,7 @@ const reinitSelectDraggerIfNeeded = async () => {
     if (selectTool && typeof (selectTool as any).updatePenSelectToolState === 'function') {
       (selectTool as any).updatePenSelectToolState()
     }
-    await renderCanvas()
+    renderCanvas()
     return
   }
   cleanupDragger()
@@ -364,7 +351,7 @@ const reinitSelectDraggerIfNeeded = async () => {
   if (selectTool && typeof (selectTool as any).updatePenSelectToolState === 'function') {
     (selectTool as any).updatePenSelectToolState()
   }
-  await renderCanvas()
+  renderCanvas()
 }
 
 // 初始化工具系统
@@ -541,12 +528,12 @@ onMounted(async () => {
   }
   
   // 初始渲染
-  await renderCanvas()
+  renderCanvas()
   
   // 初始化工具系统（必须在 canvas 准备好之后）
   await initTools()
   // SelectTool.activate 才挂上 renderSelectEditor；此前 renderCanvas 不会绘制选择框
-  await renderCanvas()
+  renderCanvas()
 
   // 更新当前工具状态
   currentTool.value = (toolStore.tool as ToolType | '') || ''
@@ -627,7 +614,7 @@ watch(() => (glyphStore as any).editingGlyph, async () => {
   }
   
   // 重新渲染画布
-  await renderCanvas()
+  renderCanvas()
   
   // 只有在选择工具激活时才初始化 dragger（与 selectedComponent watch 逻辑保持一致）
   const currentTool = toolManager.getCurrentToolType()
@@ -645,7 +632,7 @@ watch(
   () => glyphStore.programmingPreviewTick,
   async () => {
     if (!editingGlyph.value || !canvasRef.value) return
-    await renderCanvas()
+    renderCanvas()
   },
 )
 
@@ -680,7 +667,7 @@ watch(() => (glyphStore as any).orderedListWithItemsForCurrentGlyph, async () =>
   if (isRenderingFromWatch.value) return
   isRenderingFromWatch.value = true
   try {
-    await renderCanvas()
+    renderCanvas()
   } finally {
     await nextTick()
     isRenderingFromWatch.value = false
@@ -728,18 +715,18 @@ watch(() => {
       (selectTool as any).updatePenSelectToolState()
     }
     // 重新渲染画布
-    await renderCanvas()
+    renderCanvas()
   }
 })
 
 // 监听关键点和辅助线显示状态变化，重新渲染
 watch([() => editorStore.checkJoints, () => editorStore.checkRefLines], async () => {
-  await renderCanvas()
+  renderCanvas()
 })
 
 // 监听渲染样式变化，重新渲染
 watch(() => fontRenderStyle.value, async () => {
-  await renderCanvas()
+  renderCanvas()
 })
 
 watch([() => editorPreference.background, () => editorPreference.grid], () => {
@@ -771,11 +758,11 @@ watch([onSkeletonDragging, () => toolStore.tool], async ([dragging, tool]) => {
         renderCanvas()
       },
     })
-    await renderCanvas()
+    renderCanvas()
   } else {
     closeSkeletonDragger && closeSkeletonDragger()
     closeSkeletonDragger = null
-    await renderCanvas()
+    renderCanvas()
   }
 })
 
@@ -788,7 +775,7 @@ watch(() => toolStore.tool, async (newTool) => {
 
   if (newTool) {
     await toolManager.switchTool(newTool as ToolType)
-    await renderCanvas()
+    renderCanvas()
 
     // 选择工具激活时，glyphDragger 和 SelectTool 可以同时存在
     // glyphDragger 处理字形组件的骨架拖拽，SelectTool 处理其他组件的选择和变换

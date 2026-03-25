@@ -104,9 +104,8 @@ describe('performance utils', () => {
 
       vi.advanceTimersByTime(100)
       expect(fn).toHaveBeenCalledTimes(2)
-      // The trailing call will use the last argument, but the exact value depends on timing
-      // Let's just verify it was called with some argument
-      expect(fn).toHaveBeenCalledTimes(2)
+      expect(fn.mock.calls[0]).toEqual([0])
+      expect(fn.mock.calls[1]).toEqual([9])
     })
   })
 })

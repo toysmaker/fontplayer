@@ -7,7 +7,7 @@ import type { ICustomGlyph, IFontSettings } from '../types'
 import { ContourConverter } from './converter'
 import { RenderEngine } from './renderer'
 import { CanvasManager } from '../canvas/CanvasManager'
-import { PathType } from './types'
+import { computePreviewContoursBounds } from './previewContourBounds'
 import { indexedDBManager } from '../storage/IndexedDBManager'
 import type { IContours } from './types'
 
@@ -156,30 +156,7 @@ export class GlyphRenderer {
       const projectStore = useProjectStore()
       const previewStyle = projectStore.fontPreviewStyle
 
-      // 计算所有轮廓的边界框（用于居中）
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-      for (const contour of allContoursCombined) {
-        for (const path of contour) {
-          minX = Math.min(minX, path.start.x, path.end.x)
-          minY = Math.min(minY, path.start.y, path.end.y)
-          maxX = Math.max(maxX, path.start.x, path.end.x)
-          maxY = Math.max(maxY, path.start.y, path.end.y)
-          if (path.type === PathType.QUADRATIC_BEZIER) {
-            const qPath = path as { control: { x: number; y: number } }
-            minX = Math.min(minX, qPath.control.x)
-            minY = Math.min(minY, qPath.control.y)
-            maxX = Math.max(maxX, qPath.control.x)
-            maxY = Math.max(maxY, qPath.control.y)
-          } else if (path.type === PathType.CUBIC_BEZIER) {
-            const cPath = path as { control1: { x: number; y: number }; control2: { x: number; y: number } }
-            minX = Math.min(minX, cPath.control1.x, cPath.control2.x)
-            minY = Math.min(minY, cPath.control1.y, cPath.control2.y)
-            maxX = Math.max(maxX, cPath.control1.x, cPath.control2.x)
-            maxY = Math.max(maxY, cPath.control1.y, cPath.control2.y)
-          }
-        }
-      }
-
+      const { minX, minY, maxX, maxY } = computePreviewContoursBounds(allContoursCombined)
       const contentWidth = maxX - minX
       const contentHeight = maxY - minY
       const offsetX = (canvas.width - contentWidth) / 2 - minX

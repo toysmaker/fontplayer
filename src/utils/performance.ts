@@ -12,6 +12,9 @@ export function throttle<T extends (...args: any[]) => any>(
 ): T & { cancel: () => void } {
   let timeout: ReturnType<typeof setTimeout> | null = null
   let previous = 0
+  /** 挂起 trailing 时使用「最后一次」调用的参数（旧实现闭包固定首次参数，拖拽会间歇用旧位移渲染，造成闪烁） */
+  let lastArgs: Parameters<T> | undefined
+  let lastThis: any
   const { leading = true, trailing = true } = options || {}
 
   const throttled = function (this: any, ...args: Parameters<T>) {
@@ -24,14 +27,22 @@ export function throttle<T extends (...args: any[]) => any>(
         clearTimeout(timeout)
         timeout = null
       }
+      lastArgs = undefined
       previous = now
       func.apply(this, args)
-    } else if (!timeout && trailing) {
-      timeout = setTimeout(() => {
-        previous = leading ? Date.now() : 0
-        timeout = null
-        func.apply(this, args)
-      }, remaining)
+    } else if (trailing) {
+      lastArgs = args
+      lastThis = this
+      if (!timeout) {
+        timeout = setTimeout(() => {
+          previous = leading ? Date.now() : 0
+          timeout = null
+          if (lastArgs) {
+            func.apply(lastThis, lastArgs)
+            lastArgs = undefined
+          }
+        }, remaining)
+      }
     }
   } as T & { cancel: () => void }
 
@@ -41,6 +52,7 @@ export function throttle<T extends (...args: any[]) => any>(
       timeout = null
     }
     previous = 0
+    lastArgs = undefined
   }
 
   return throttled

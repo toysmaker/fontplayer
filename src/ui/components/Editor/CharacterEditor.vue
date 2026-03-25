@@ -143,6 +143,9 @@ const selectControl = ref<string>('null')
 // 防止 watch 回调重入：渲染路径中可能写入被监听数据（如 previewRef），导致循环更新
 const isRenderingFromWatch = ref(false)
 
+// 串行化画布渲染：骨架拖拽时 dragger onRender 与 orderedList deep watch 可能同帧连续触发，避免交错重绘造成闪烁
+let renderCanvasTail: Promise<void> = Promise.resolve()
+
 // Canvas 尺寸
 const canvasWidth = computed(() => {
   if (!projectStore.selectedFile) return mapCanvasWidth(1000)
@@ -199,8 +202,16 @@ function onGridControllerChange(next: IGridItem) {
   renderCanvas()
 }
 
-// 渲染画布
-const renderCanvas = () => {
+// 渲染画布（排队执行，禁止并发）
+const renderCanvas = (): void => {
+  renderCanvasTail = renderCanvasTail
+    .then(() => {
+      runRenderCanvasSync()
+    })
+    .catch(() => {})
+}
+
+function runRenderCanvasSync() {
   if (!canvasRef.value || !editingCharacter.value) {
     if (import.meta.env.DEV) {
       console.warn('[CharacterEditor] Cannot render: canvas or editingCharacter is null')
@@ -209,17 +220,6 @@ const renderCanvas = () => {
   }
   
   const components = (characterStore as any).orderedListWithItemsForCurrentCharacterFile
-  
-  if (import.meta.env.DEV) {
-    console.log('[CharacterEditor] Rendering canvas:', {
-      componentsCount: components.length,
-      canvasSize: { width: canvasRef.value.width, height: canvasRef.value.height },
-      editingCharacterUUID: editingCharacter.value.uuid,
-      editingCharacterComponentsCount: editingCharacter.value.components?.length || 0,
-      editingCharacterOrderedListCount: editingCharacter.value.orderedList?.length || 0,
-      components: components
-    })
-  }
   
   render(canvasRef.value, true, false, {
     mode: 'character',
@@ -239,14 +239,6 @@ const renderCanvas = () => {
       selectedComponent.type === 'glyph' &&
       selectedComponent.visible !== false
     ) {
-      if (import.meta.env.DEV) {
-        console.log('[CharacterEditor] Rendering joints/reflines:', {
-          checkJoints: editorStore.checkJoints,
-          checkRefLines: editorStore.checkRefLines,
-          componentType: selectedComponent.type,
-          componentUUID: selectedComponent.uuid,
-        })
-      }
       if (editorStore.checkJoints) {
         renderJoints(selectedComponent, canvasRef.value)
         
