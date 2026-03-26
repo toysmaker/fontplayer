@@ -124,7 +124,7 @@ async function getVarFontContourRows(
       contours = contoursForCharacterFile(ch, file, fs, removeOverlap)
     }
     out.push({
-      unicode: parseInt(meta.character.unicode, 16),
+      unicode: parseInt(meta.character.unicode.replace(/^U\+/i, ''), 16),
       contours,
     })
     onAfterChar?.()
@@ -234,7 +234,7 @@ export async function buildExportVarFontBuffer(
         contours = contoursForCharacterFile(ch, file, fs, removeOverlap)
       }
       const { text, unicode } = meta.character
-      const uc = parseInt(unicode, 16)
+      const uc = parseInt(unicode.replace(/^U\+/i, ''), 16)
       fontCharacters.push({
         name: text,
         unicode: uc,

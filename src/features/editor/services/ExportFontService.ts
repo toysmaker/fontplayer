@@ -41,6 +41,42 @@ function normalizeContours(contours: IContours): IContours {
   return contours
 }
 
+/**
+ * 计算轮廓在 Y-up 字体坐标系中的有符号面积（鞋带公式）
+ * 正值 = 逆时针（CCW），负值 = 顺时针（CW）
+ */
+function contourSignedArea(contour: IContours[number]): number {
+  if (!contour || !contour.length) return 0
+  let area = 0
+  for (const seg of contour) {
+    area += seg.start.x * seg.end.y - seg.end.x * seg.start.y
+  }
+  // 隐式闭合：最后一个 end → 第一个 start
+  area += contour[contour.length - 1].end.x * contour[0].start.y -
+          contour[0].start.x * contour[contour.length - 1].end.y
+  return area / 2
+}
+
+/**
+ * 反转轮廓方向（CW ↔ CCW），仅适用于 LINE 类型轮廓（矩形/椭圆）
+ */
+function reverseContour(contour: IContours[number]): IContours[number] {
+  return contour.slice().reverse().map(seg => ({ ...seg, start: seg.end, end: seg.start }))
+}
+
+/**
+ * 确保实心轮廓（矩形、椭圆）在字体坐标系中为逆时针（CCW，正面积），
+ * 避免与钢笔/多边形轮廓叠加时产生意外镂空
+ */
+function ensureSolidContoursAreCCW(contours: IContours, solidFlags: boolean[]): IContours {
+  return contours.map((contour, i) => {
+    if (!solidFlags[i]) return contour
+    const area = contourSignedArea(contour)
+    // 面积 < 0 说明当前为 CW（顺时针），需要反转为 CCW
+    return area < 0 ? reverseContour(contour) : contour
+  })
+}
+
 function applyRemoveOverlap(contours: IContours): IContours {
   const nonEmpty = contours.filter((c) => c && c.length > 0)
   if (nonEmpty.length === 0) return normalizeContours(contours)
@@ -83,6 +119,9 @@ export function contoursForCharacterFile(
     { x: 0, y: 0 },
     solidFlags
   )
+
+  // 确保矩形/椭圆（solid）轮廓在字体坐标系中为逆时针（CCW），保证导出时填充正确
+  contours = ensureSolidContoursAreCCW(contours, solidFlags)
 
   if (removeOverlap) {
     contours = applyRemoveOverlap(contours)
@@ -183,7 +222,7 @@ export async function buildExportFontBuffer(
 
     const contours = contoursForCharacterFile(ch, file, fs, options.removeOverlap)
     const { text, unicode } = meta.character
-    const uc = parseInt(unicode, 16)
+    const uc = parseInt(unicode.replace(/^U\+/i, ''), 16)
 
     fontChars.push({
       name: text,

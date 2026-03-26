@@ -390,7 +390,7 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 		}
 	}
 	
-	const _headTable = options.tables ? options.tables.head : {}
+	const _headTable = options.tables?.head ?? {}
 	const convertToFlags = (flags: Array<boolean>) => {
 		let _flags = 0
 		for (let i = 0; i < flags.length; i++) {
@@ -433,7 +433,7 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 		glyphDataFormat: 0,
 	}
 
-	const _hheaTable = options.tables ? options.tables.hhea : {}
+	const _hheaTable = options.tables?.hhea ?? {}
 
 	// 定义hhea表
 	// define hhea table
@@ -484,7 +484,7 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 		maxpTable.maxComponentDepth = 0
 	}
 
-	const _os2Table = options.tables ? options.tables.os2 : {}
+	const _os2Table = options.tables?.os2 ?? {}
 	const convertToFsSelection = (fsSelection: Array<boolean>) => {
 		let _fsSelection = 0
 		for (let i = 0; i < fsSelection.length; i++) {
@@ -623,11 +623,26 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 	//const nameTable = createNameTable(names, languageTags)
 	
 	// 如果是可变字体，需要传入variants信息以添加axis names
-	const nameTable = options.tables ? 
-		createNameTable2(options.tables.name, options.variants) : 
+	// 同步 familyName 到 tables.name 中的 default 条目，确保字体名更改后导出正确
+	let nameTableEntries = options.tables?.name
+	if (nameTableEntries && options.familyName) {
+		const postScriptValue = enName.replace(/\s/g, '').slice(0, 63) + '-Regular'
+		nameTableEntries = nameTableEntries.map((entry: any) => {
+			if (!entry.default) return entry
+			if (entry.nameID === 1) return { ...entry, value: options.familyName }
+			if (entry.nameID === 4) {
+				const suffix = entry.langID === 0x804 ? ' 常规体' : ' Regular'
+				return { ...entry, value: options.familyName + suffix }
+			}
+			if (entry.nameID === 6) return { ...entry, value: postScriptValue }
+			return entry
+		})
+	}
+	const nameTable = nameTableEntries ?
+		createNameTable2(nameTableEntries, options.variants) :
 		createNameTable(names, languageTags)
 
-	const _postTable = options.tables ? options.tables.post : {}
+	const _postTable = options.tables?.post ?? {}
 
 	// 定义post表
 	// define post table
