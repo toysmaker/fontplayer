@@ -1,4 +1,5 @@
 import { strokeFnMap } from '@/templates/strokeFnMap'
+import { strokeFnMap as custom1StrokeFnMap } from '@/templates/custom_1/strokeFnMap'
 import * as R from 'ramda'
 import type { ICustomGlyph, IGlyphComponent, ICharacterFileLite } from '@/core/types'
 import { FP } from '@/core/script/FPUtils'
@@ -158,7 +159,11 @@ const standardTransformStrokes = (strokes: Array<Array<IGlyphComponent>>, transf
     if (!inst) return
     const joints = inst.getJoints()
     const pointsMap: Record<string, { x: number; y: number }> = {}
-    const firstJointIndex = joints.findIndex((joint) => !joint.name.includes('_ref')) || 0
+    // 与原版 fontplayer AdvancedEditPanel/scripts/utils/standardTransformStrokes 一致（含历史行为）：
+    // 1) firstJointIndex 使用 findIndex(...) || 0（若未找到非 _ref 关节则为 -1，与原版相同）
+    // 2) pointsMap 的 y 使用「减 gc.ox」而非减 oy——原版如此，strokeFnMap.computeParamsByJoints 依赖该坐标
+    const firstJointIndex =
+      joints.findIndex((joint) => !joint.name.includes('_ref')) || 0
     for (let i = 0; i < joints.length; i++) {
       const joint = joints[i]
       const newPoint = standardTransformPoint({ x: joint.x + ox, y: joint.y + oy }, originBound, newBound)
@@ -172,13 +177,49 @@ const standardTransformStrokes = (strokes: Array<Array<IGlyphComponent>>, transf
       }
     }
     const gv = gc.value as ICustomGlyph
-    const fn = strokeFnMap[gv.name as keyof typeof strokeFnMap] as
-      | { computeParamsByJoints: (m: typeof pointsMap, g: typeof inst) => any; updateParamsByJoints: (p: any, g: typeof inst) => void }
-      | undefined
-    if (fn) {
-      const parameters = fn.computeParamsByJoints(pointsMap, inst)
-      fn.updateParamsByJoints(parameters, inst)
-      executeGlyphScript(gv, gc.uuid)
+    const strokeName = gv.name as string
+
+    // 与原版一致：style===测试笔画模板 时走 templates/custom_1/strokeFnMap（非主 strokeFnMap 的 kai/ 实现）
+    if (gv.style === '测试笔画模板') {
+      const fn = (custom1StrokeFnMap as Record<string, { computeParamsByJoints: (m: unknown, g: unknown) => unknown; updateParamsByJoints: (p: unknown, g: unknown) => void }>)[strokeName]
+      if (fn) {
+        try {
+          const parameters = fn.computeParamsByJoints(pointsMap, inst)
+          fn.updateParamsByJoints(parameters, inst)
+          executeGlyphScript(gv, gc.uuid)
+        } catch (e) {
+          console.warn('[standardTransformStrokes] custom_1 joint/param update failed', strokeName, e)
+        }
+      } else {
+        console.warn('[standardTransformStrokes] custom_1 strokeFnMap missing', strokeName)
+      }
+    } else {
+      const instAny = inst as unknown as {
+        computeParamsByJoints?: (m: typeof pointsMap) => unknown
+        updateParamsByJoints?: (p: unknown) => void
+      }
+      if (typeof instAny.computeParamsByJoints === 'function' && typeof instAny.updateParamsByJoints === 'function') {
+        try {
+          const parameters = instAny.computeParamsByJoints(pointsMap)
+          instAny.updateParamsByJoints(parameters)
+          executeGlyphScript(gv, gc.uuid)
+        } catch (e) {
+          console.warn('[standardTransformStrokes] instance joint/param update failed', strokeName, e)
+        }
+      } else {
+        const fn = strokeFnMap[strokeName as keyof typeof strokeFnMap] as
+          | { computeParamsByJoints: (m: typeof pointsMap, g: typeof inst) => any; updateParamsByJoints: (p: any, g: typeof inst) => void }
+          | undefined
+        if (fn) {
+          try {
+            const parameters = fn.computeParamsByJoints(pointsMap, inst)
+            fn.updateParamsByJoints(parameters, inst)
+            executeGlyphScript(gv, gc.uuid)
+          } catch (e) {
+            console.warn('[standardTransformStrokes] kai strokeFnMap joint/param update failed', strokeName, e)
+          }
+        }
+      }
     }
   })
   return tempStrokes

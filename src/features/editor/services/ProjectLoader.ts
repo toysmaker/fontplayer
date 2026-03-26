@@ -16,9 +16,11 @@ import { ContourConverter } from '@/core/font/converter'
 import {
   buildDecompositionForOpenedProjectCharacters,
   loadDecompositionData,
+  mergeProjectStrokeGlyphsWithTemplatePack,
+  replaceTemplateComponentsForOpenedProject,
   tryEnsureDecompositionLookup,
 } from '@/features/decomposition/processing'
-import { replaceGlyphScript } from '@/features/temporaryScripts/fileProcessing'
+import { isTauri } from '@/utils/env'
 import { decompressCharacterAt, parseFpzBuffer, type DecodedFpz } from '@/features/editor/services/compressedTemplate/fpzFormat'
 import { decompressGlyphBundleIfPresent, parseFpBuffer } from '@/features/editor/services/projectArchive/fpProjectFormat'
 
@@ -67,11 +69,21 @@ export class ProjectLoader {
         this.updateProgress(0, '正在迁移工程文件格式...')
         data = await projectMigrator.migrate(data)
       }
-      
-      store.loadingTotal = this.calculateTotal(data)
-      store.loadingProgress = 0
 
       const projectTag = typeof data.file?.tag === 'string' ? data.file.tag : undefined
+
+      // MARK 临时脚本
+      // 对齐 legacy：将 字玩标准黑体_组件_v3.json 中全部笔画字形并入工程（须在 processGlyphs 之前）
+      if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG) {
+        try {
+          data.stroke_glyphs = await mergeProjectStrokeGlyphsWithTemplatePack(data.stroke_glyphs || [])
+        } catch (e) {
+          console.error('[ProjectLoader] merge template stroke_glyphs failed', e)
+        }
+      }
+
+      store.loadingTotal = this.calculateTotal(data)
+      store.loadingProgress = 0
 
       // // MARK: 替换笔画模板脚本
       // if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && data.stroke_glyphs?.length) {
@@ -106,6 +118,27 @@ export class ProjectLoader {
             },
             yieldToMain: () => this.yieldToMainThread(),
           })
+          // 临时脚本：默认模板「替换部件」仅在此 Web JSON 打开路径（loadProject）执行；.fp/.fpz 不跑，整段可删
+          if (!isTauri()) {
+            const extraReplace = metaListAfterChars.length
+            store.loadingTotal += extraReplace
+            const progressBaseReplace = store.loadingProgress
+            await replaceTemplateComponentsForOpenedProject(fileForDecomp.uuid, metaListAfterChars, {
+              map,
+              projectGlyphsForScriptLookup: [
+                ...(data.glyphs || []),
+                ...(data.stroke_glyphs || []),
+                ...(data.radical_glyphs || []),
+                ...(data.comp_glyphs || []),
+              ],
+              projectConstants: data.constants || [],
+              fontSettings: data.file?.fontSettings,
+              onProgress: (done, total) => {
+                this.updateProgress(progressBaseReplace + done, `替换部件 (${done}/${total})`)
+              },
+              yieldToMain: () => this.yieldToMainThread(),
+            })
+          }
         }
       }
 
@@ -192,16 +225,6 @@ export class ProjectLoader {
       store.loadingProgress = 0
 
       const projectTag = typeof data.file?.tag === 'string' ? data.file.tag : undefined
-
-      if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && data.stroke_glyphs?.length) {
-        this.updateProgress(0, '同步笔画模板脚本...')
-        try {
-          await replaceGlyphScript(data.stroke_glyphs)
-        } catch (e) {
-          console.error('[ProjectLoader] replaceGlyphScript failed', e)
-        }
-        await this.yieldToMainThread()
-      }
 
       await this.processGlyphs(data)
       await this.processCharactersFromFpz(data.file, decoded)
@@ -307,16 +330,6 @@ export class ProjectLoader {
       store.loadingProgress = 0
 
       const projectTag = typeof data.file?.tag === 'string' ? data.file.tag : undefined
-
-      if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && data.stroke_glyphs?.length) {
-        this.updateProgress(0, '同步笔画模板脚本...')
-        try {
-          await replaceGlyphScript(data.stroke_glyphs)
-        } catch (e) {
-          console.error('[ProjectLoader] replaceGlyphScript failed', e)
-        }
-        await this.yieldToMainThread()
-      }
 
       await this.processGlyphs(data)
       const decoded = decodedFp as unknown as DecodedFpz

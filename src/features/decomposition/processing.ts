@@ -12,6 +12,8 @@ import { buildStrokeUuidGroupsFromOrderedComponents } from '@/features/decomposi
 export interface CharacterDecompositionRow {
   character: string
   decomposition: string | null
+  /** 与 character_list_final_v8 一致；部件 id 匹配（如带下划线的 component name）时用到 */
+  decomposition2?: string | null
   matches: (number[] | null)[]
 }
 
@@ -199,3 +201,9 @@ export async function buildDecompositionForCharacterList(characters: ICharacterF
     await buildDecompositionForCharacter(c, map)
   }
 }
+
+export {
+  mergeProjectStrokeGlyphsWithTemplatePack,
+  replaceTemplateComponentsForOpenedProject,
+  type ReplaceTemplateComponentsOptions,
+} from './replaceTemplateComponents'

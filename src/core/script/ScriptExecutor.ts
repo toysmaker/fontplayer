@@ -14,6 +14,16 @@ import { selectedFile } from './globals'
 import { strokeFnMap, updateSkeletonTransformation } from '@/templates/strokeFnMap'
 
 /**
+ * 在工程尚未写入 projectStore 时（如 loadProject 中途的临时脚本），用于解析 script_reference。
+ * 与 selectedFile 内字形合并，前者优先匹配。
+ */
+let glyphScriptLookupExtras: ICustomGlyph[] | null = null
+
+export function setGlyphScriptLookupExtras(glyphs: ICustomGlyph[] | null): void {
+  glyphScriptLookupExtras = glyphs
+}
+
+/**
  * 获取脚本字符串
  */
 function getScript(glyph: ICustomGlyph, projectStore?: ReturnType<typeof useProjectStore>): string | null {
@@ -23,6 +33,7 @@ function getScript(glyph: ICustomGlyph, projectStore?: ReturnType<typeof useProj
     // 从项目存储中查找引用的字形
     if (projectStore) {
       const allGlyphs = [
+        ...(glyphScriptLookupExtras || []),
         ...(projectStore.selectedFile?.glyphs || []),
         ...(projectStore.selectedFile?.stroke_glyphs || []),
         ...(projectStore.selectedFile?.radical_glyphs || []),
