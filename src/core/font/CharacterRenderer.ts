@@ -7,7 +7,6 @@ import type { ICharacterFileLite, IFontSettings } from '../types'
 import { ContourConverter } from './converter'
 import { RenderEngine } from './renderer'
 import { CanvasManager } from '../canvas/CanvasManager'
-import { computePreviewContoursBounds } from './previewContourBounds'
 import { indexedDBManager, IndexedDBManager } from '../storage/IndexedDBManager'
 import { useProjectStore } from '@/stores/project'
 import type { IContours } from './types'
@@ -172,17 +171,14 @@ export class CharacterRenderer {
         fillColors = ContourConverter.getFillColors(components)
       }
 
-      const { minX, minY, maxX, maxY } = computePreviewContoursBounds(allContoursCombined)
-      const contentWidth = maxX - minX
-      const contentHeight = maxY - minY
-      const offsetX = (canvas.width - contentWidth) / 2 - minX
-      const offsetY = (canvas.height - contentHeight) / 2 - minY
-
+      // 使用实际字体坐标空间渲染，保持与编辑界面一致的位置关系
+      // preview_points 已按 100/unitsPerEm 缩放，坐标范围与 canvas（100×100）对齐
+      // offsetX = offsetY = 0 时，组件出现在 em-square 中的真实位置
       RenderEngine.renderPreview(canvas, nonzeroContours || [], {
         fillColors,
         previewStyle,
         scale: 1,
-        offset: { x: offsetX, y: offsetY },
+        offset: { x: 0, y: 0 },
         solidContours,
       })
       

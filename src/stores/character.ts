@@ -522,7 +522,17 @@ export const useCharacterStore = defineStore('character', () => {
         (component as any)[key] = optionValue
       }
     })
-    
+
+    // 清除组件轮廓缓存：当变换属性或形状数据发生变化时，缓存的 contour/preview 已失效
+    const TRANSFORM_KEYS = ['x', 'y', 'w', 'h', 'rotation', 'flipX', 'flipY', 'value']
+    if (Object.keys(options).some(k => TRANSFORM_KEYS.includes(k))) {
+      const v = (component as any).value
+      if (v) {
+        v.contour = undefined
+        v.preview = undefined
+      }
+    }
+
     return true
   }
 

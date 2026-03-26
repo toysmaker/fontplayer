@@ -7,7 +7,6 @@ import type { ICustomGlyph, IFontSettings } from '../types'
 import { ContourConverter } from './converter'
 import { RenderEngine } from './renderer'
 import { CanvasManager } from '../canvas/CanvasManager'
-import { computePreviewContoursBounds } from './previewContourBounds'
 import { indexedDBManager } from '../storage/IndexedDBManager'
 import type { IContours } from './types'
 
@@ -129,19 +128,20 @@ export class GlyphRenderer {
         nonzeroContours = allContours.filter((_, i) => !solidFlagsOut[i])
         solidContours = allContours.filter((_, i) => solidFlagsOut[i])
 
-        // 异步存储新格式到 IndexedDB（必须为可结构化克隆的纯数据，避免 DataCloneError）
+        // 持久化预览到 IndexedDB（await 确保 previewRef 在返回前已设置，避免竞态）
         if (allContours.length > 0 && !glyph.previewRef) {
           const { IndexedDBManager } = await import('../storage/IndexedDBManager')
           const previewKey = IndexedDBManager.generatePreviewKey(glyph.uuid)
-          const payload = JSON.parse(JSON.stringify({ nonzero: nonzeroContours, solid: solidContours }))
-          indexedDBManager.set(previewKey, payload).then(() => {
+          try {
+            const payload = JSON.parse(JSON.stringify({ nonzero: nonzeroContours, solid: solidContours }))
+            await indexedDBManager.set(previewKey, payload)
             glyph.previewRef = previewKey
             if (import.meta.env.DEV) {
               console.log(`[GlyphRenderer] Saved preview to IndexedDB for ${glyph.uuid}`)
             }
-          }).catch(error => {
+          } catch (error) {
             console.error(`[GlyphRenderer] Failed to save preview to IndexedDB for ${glyph.uuid}:`, error)
-          })
+          }
         }
       }
 
@@ -156,17 +156,14 @@ export class GlyphRenderer {
       const projectStore = useProjectStore()
       const previewStyle = projectStore.fontPreviewStyle
 
-      const { minX, minY, maxX, maxY } = computePreviewContoursBounds(allContoursCombined)
-      const contentWidth = maxX - minX
-      const contentHeight = maxY - minY
-      const offsetX = (canvas.width - contentWidth) / 2 - minX
-      const offsetY = (canvas.height - contentHeight) / 2 - minY
-
+      // 使用实际字体坐标空间渲染，保持与编辑界面一致的位置关系
+      // preview_points 已按 100/unitsPerEm 缩放，坐标范围与 canvas（100×100）对齐
+      // offsetX = offsetY = 0 时，组件出现在 em-square 中的真实位置
       RenderEngine.renderPreview(canvas, nonzeroContours || [], {
         fillColors: [],
         previewStyle,
         scale: 1,
-        offset: { x: offsetX, y: offsetY },
+        offset: { x: 0, y: 0 },
         solidContours,
       })
 

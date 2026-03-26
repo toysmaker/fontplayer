@@ -459,6 +459,10 @@ watch(() => glyphStore.glyphListVersion, () => {
   // 清除本地渲染缓存，让 scheduleRender 重新渲染
   renderCache.delete(`${uuid}_rendered`)
 
+  // 清除 CanvasManager 内存缓存和版本号（与 VirtualCharacterList 保持一致）
+  // 否则 canSkipRender 可能返回 true，导致跳过重新渲染
+  CanvasManager.invalidateCache(uuid)
+
   // 如果该项当前可见，直接替换 visibleItems 中的引用，触发 GlyphItem watcher
   const freshItem = glyphList.value.find(g => g.uuid === uuid)
   if (freshItem) {
