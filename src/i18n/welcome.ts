@@ -19,6 +19,8 @@ const welcome = {
 		template: {
 			name: '导入模板',
 			description: '导入字玩自带的测试模板',
+			webOnlyHint:
+				'默认模板体积较大，在浏览器中加载会很慢且可能占用大量临时存储。请使用桌面版客户端导入模板。',
 		},
 		playground: {
 			title: '玩一玩字玩',
@@ -45,6 +47,8 @@ const welcome = {
 		template: {
 			name: 'Import Template',
 			description: 'Import template that FontPlayer provides for testing',
+			webOnlyHint:
+				'The default template is large; loading it in a browser will be very slow and may use a lot of temporary storage. Please use the desktop app to import the template.',
 		},
 		playground: {
 			title: 'Playground',

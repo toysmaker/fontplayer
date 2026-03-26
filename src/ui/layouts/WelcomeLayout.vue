@@ -27,7 +27,12 @@
           <div class="item-name">{{ t('welcome.import.name') }}</div>
           <div class="description">{{ t('welcome.import.description') }}</div>
         </div>
-        <div class="item template-item">
+        <div
+          class="item template-item"
+          data-testid="import-template-button"
+          @click="handleImportTemplate"
+          @pointerup="handleImportTemplate"
+        >
           <div class="item-icon">
             <font-awesome-icon :icon="['fas', 'fa-file-import']" />
           </div>
@@ -65,6 +70,8 @@ import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
 import { useCharacterStore } from '@/stores/character'
 import { runFontLibraryImportPicker } from '@/features/editor/services/FontLibraryImportService'
+import { isTauri } from '@/utils/env'
+import { importBundledDefaultTemplate } from '@/features/editor/services/DefaultTemplateImportService'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -127,6 +134,28 @@ const _handleImportFont = async () => {
 }
 
 const handleImportFont = createDebouncedHandler(_handleImportFont, 'WelcomeLayout.importFont')
+
+const _handleImportTemplate = async () => {
+  if (!isTauri()) {
+    message.warning(t('welcome.template.webOnlyHint'))
+    return
+  }
+  try {
+    router.push('/editor')
+    await nextTick()
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        setTimeout(() => resolve(), 100)
+      })
+    })
+    await importBundledDefaultTemplate()
+  } catch (e) {
+    console.error('Welcome import template failed', e)
+    message.error(String((e as Error)?.message || e))
+  }
+}
+
+const handleImportTemplate = createDebouncedHandler(_handleImportTemplate, 'WelcomeLayout.importTemplate')
 
 const handleProjectCreated = () => {
   // 工程创建成功后跳转到编辑器

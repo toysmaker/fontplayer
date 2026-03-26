@@ -19,6 +19,7 @@ import {
   tryEnsureDecompositionLookup,
 } from '@/features/decomposition/processing'
 import { replaceGlyphScript } from '@/features/temporaryScripts/fileProcessing'
+import { decompressCharacterAt, parseFpzBuffer, type DecodedFpz } from '@/features/editor/services/compressedTemplate/fpzFormat'
 
 /** 带此 tag 的工程在加载完成后会为字符列表补全部件分解数据（高级编辑「脚本」Tab 亦仅在此 tag 下显示） */
 export const DEFAULT_TEMPLATE_PROJECT_TAG = '字玩默认模板工程'
@@ -155,6 +156,149 @@ export class ProjectLoader {
       console.error('Failed to load project:', error)
       throw error
     }
+  }
+
+  /**
+   * 从打包的 .fpz（默认模板）加载工程；字符自压缩块流式解压并写入 IDB，避免整份 characterList 驻留内存。
+   */
+  async loadProjectFromFpzArrayBuffer(buffer: ArrayBuffer): Promise<IFile> {
+    const decoded = parseFpzBuffer(buffer)
+    const header = decoded.headerProject as any
+    let data: any = {
+      ...header,
+      file: {
+        ...(header.file || {}),
+        characterList: new Array(decoded.characterCount).fill(null),
+      },
+    }
+
+    try {
+      const store = this.projectStore
+      store.loading = true
+
+      try {
+        await loadDecompositionData()
+      } catch (e) {
+        console.error('[decomposition] project open prewarm failed', e)
+      }
+
+      if (ProjectMigrator.needsMigration(data)) {
+        this.updateProgress(0, '正在迁移工程文件格式...')
+        data = await projectMigrator.migrate(data)
+      }
+
+      store.loadingTotal = this.calculateTotal(data)
+      store.loadingProgress = 0
+
+      const projectTag = typeof data.file?.tag === 'string' ? data.file.tag : undefined
+
+      if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && data.stroke_glyphs?.length) {
+        this.updateProgress(0, '同步笔画模板脚本...')
+        try {
+          await replaceGlyphScript(data.stroke_glyphs)
+        } catch (e) {
+          console.error('[ProjectLoader] replaceGlyphScript failed', e)
+        }
+        await this.yieldToMainThread()
+      }
+
+      await this.processGlyphs(data)
+      await this.processCharactersFromFpz(data.file, decoded)
+
+      const fileForDecomp = data.file
+      const metaListAfterChars = (fileForDecomp.characterList || []) as ICharacterFileMetadata[]
+      if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && metaListAfterChars.length > 0) {
+        const map = await tryEnsureDecompositionLookup()
+        if (map) {
+          const extra = metaListAfterChars.length
+          store.loadingTotal += extra
+          const progressBase = store.loadingProgress
+          await buildDecompositionForOpenedProjectCharacters(fileForDecomp.uuid, metaListAfterChars, {
+            map,
+            onProgress: (done, total) => {
+              this.updateProgress(progressBase + done, `部件分解 (${done}/${total})`)
+            },
+            yieldToMain: () => this.yieldToMainThread(),
+          })
+        }
+      }
+
+      const constants = data.constants || []
+      if (constants.length > 0) {
+        this.updateProgress(0, `加载全局常量: ${constants.length} 个`)
+      }
+
+      await this.yieldToMainThread()
+
+      const file: IFile = {
+        uuid: data.file.uuid,
+        name: data.file.name,
+        tag: typeof data.file.tag === 'string' ? data.file.tag : undefined,
+        width: data.file.width,
+        height: data.file.height,
+        saved: false,
+        iconsCount: data.file.characterList?.length || 0,
+        fontSettings: data.file.fontSettings,
+        characterList: data.file.characterList || [],
+        glyphs: data.glyphs || [],
+        stroke_glyphs: data.stroke_glyphs || [],
+        radical_glyphs: data.radical_glyphs || [],
+        comp_glyphs: data.comp_glyphs || [],
+        constants: constants,
+        variants: data.file.variants,
+      }
+
+      await this.yieldToMainThread()
+
+      this.updateProgress(store.loadingTotal - 1, '清理内存...')
+      await this.cleanupMemory(file)
+
+      this.updateProgress(store.loadingTotal, '工程加载完成')
+      await this.yieldToMainThread()
+      store.loading = false
+
+      return file
+    } catch (error) {
+      const store = this.projectStore
+      store.loading = false
+      console.error('Failed to load fpz project:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 逐块从 .fpz 读取字符并写入 IndexedDB（不经由完整 characterList 数组）
+   */
+  private async processCharactersFromFpz(file: any, decoded: DecodedFpz): Promise<void> {
+    const fontSettings = file.fontSettings
+    const fileUUID = file.uuid
+    const total = decoded.toc.length
+    const metadataList: ICharacterFileMetadata[] = []
+
+    for (let i = 0; i < total; i++) {
+      const character = await decompressCharacterAt(decoded, i)
+      const characterLite = await this.convertToCharacterLite(character, fontSettings)
+
+      const key = `character_${fileUUID}_${characterLite.uuid}`
+      await indexedDBManager.set(key, characterLite)
+
+      metadataList.push({
+        uuid: characterLite.uuid,
+        type: characterLite.type,
+        character: characterLite.character,
+      })
+
+      if ((i + 1) % 10 === 0 || i + 1 === total) {
+        const ch = character as { character?: { text?: string }; uuid?: string }
+        this.updateProgress(i + 1, `处理字符: ${ch.character?.text || ch.uuid} (${i + 1}/${total})`)
+      }
+      if ((i + 1) % 50 === 0) {
+        await this.yieldToMainThread()
+      }
+    }
+
+    this.updateProgress(total, '存储字符数据到IndexedDB...')
+    file.characterList = metadataList
   }
 
   /**
