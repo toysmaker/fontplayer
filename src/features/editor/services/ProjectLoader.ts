@@ -20,6 +20,7 @@ import {
 } from '@/features/decomposition/processing'
 import { replaceGlyphScript } from '@/features/temporaryScripts/fileProcessing'
 import { decompressCharacterAt, parseFpzBuffer, type DecodedFpz } from '@/features/editor/services/compressedTemplate/fpzFormat'
+import { decompressGlyphBundleIfPresent, parseFpBuffer } from '@/features/editor/services/projectArchive/fpProjectFormat'
 
 /** 带此 tag 的工程在加载完成后会为字符列表补全部件分解数据（高级编辑「脚本」Tab 亦仅在此 tag 下显示） */
 export const DEFAULT_TEMPLATE_PROJECT_TAG = '字玩默认模板工程'
@@ -72,16 +73,16 @@ export class ProjectLoader {
 
       const projectTag = typeof data.file?.tag === 'string' ? data.file.tag : undefined
 
-      // MARK: 替换笔画模板脚本
-      if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && data.stroke_glyphs?.length) {
-        this.updateProgress(0, '同步笔画模板脚本...')
-        try {
-          await replaceGlyphScript(data.stroke_glyphs)
-        } catch (e) {
-          console.error('[ProjectLoader] replaceGlyphScript failed', e)
-        }
-        await this.yieldToMainThread()
-      }
+      // // MARK: 替换笔画模板脚本
+      // if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && data.stroke_glyphs?.length) {
+      //   this.updateProgress(0, '同步笔画模板脚本...')
+      //   try {
+      //     await replaceGlyphScript(data.stroke_glyphs)
+      //   } catch (e) {
+      //     console.error('[ProjectLoader] replaceGlyphScript failed', e)
+      //   }
+      //   await this.yieldToMainThread()
+      // }
 
       // 1. 处理字形数据
       await this.processGlyphs(data)
@@ -262,6 +263,122 @@ export class ProjectLoader {
       const store = this.projectStore
       store.loading = false
       console.error('Failed to load fpz project:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 从字玩 .fp 工程文件加载（FP01 + 分块 gzip + 尾部字形 gzip）
+   */
+  async loadProjectFromFpArrayBuffer(buffer: ArrayBuffer): Promise<IFile> {
+    const decodedFp = parseFpBuffer(buffer)
+    const bundle = await decompressGlyphBundleIfPresent(decodedFp)
+    const header = decodedFp.headerProject as any
+    let data: any = {
+      ...header,
+      file: {
+        ...(header.file || {}),
+        characterList: new Array(decodedFp.characterCount).fill(null),
+      },
+    }
+    if (bundle) {
+      data.glyphs = bundle.glyphs ?? []
+      data.stroke_glyphs = bundle.stroke_glyphs ?? []
+      data.radical_glyphs = bundle.radical_glyphs ?? []
+      data.comp_glyphs = bundle.comp_glyphs ?? []
+    }
+
+    try {
+      const store = this.projectStore
+      store.loading = true
+
+      try {
+        await loadDecompositionData()
+      } catch (e) {
+        console.error('[decomposition] project open prewarm failed', e)
+      }
+
+      if (ProjectMigrator.needsMigration(data)) {
+        this.updateProgress(0, '正在迁移工程文件格式...')
+        data = await projectMigrator.migrate(data)
+      }
+
+      store.loadingTotal = this.calculateTotal(data)
+      store.loadingProgress = 0
+
+      const projectTag = typeof data.file?.tag === 'string' ? data.file.tag : undefined
+
+      if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && data.stroke_glyphs?.length) {
+        this.updateProgress(0, '同步笔画模板脚本...')
+        try {
+          await replaceGlyphScript(data.stroke_glyphs)
+        } catch (e) {
+          console.error('[ProjectLoader] replaceGlyphScript failed', e)
+        }
+        await this.yieldToMainThread()
+      }
+
+      await this.processGlyphs(data)
+      const decoded = decodedFp as unknown as DecodedFpz
+      await this.processCharactersFromFpz(data.file, decoded)
+
+      const fileForDecomp = data.file
+      const metaListAfterChars = (fileForDecomp.characterList || []) as ICharacterFileMetadata[]
+      if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && metaListAfterChars.length > 0) {
+        const map = await tryEnsureDecompositionLookup()
+        if (map) {
+          const extra = metaListAfterChars.length
+          store.loadingTotal += extra
+          const progressBase = store.loadingProgress
+          await buildDecompositionForOpenedProjectCharacters(fileForDecomp.uuid, metaListAfterChars, {
+            map,
+            onProgress: (done, total) => {
+              this.updateProgress(progressBase + done, `部件分解 (${done}/${total})`)
+            },
+            yieldToMain: () => this.yieldToMainThread(),
+          })
+        }
+      }
+
+      const constants = data.constants || []
+      if (constants.length > 0) {
+        this.updateProgress(0, `加载全局常量: ${constants.length} 个`)
+      }
+
+      await this.yieldToMainThread()
+
+      const file: IFile = {
+        uuid: data.file.uuid,
+        name: data.file.name,
+        tag: typeof data.file.tag === 'string' ? data.file.tag : undefined,
+        width: data.file.width,
+        height: data.file.height,
+        saved: false,
+        iconsCount: data.file.characterList?.length || 0,
+        fontSettings: data.file.fontSettings,
+        characterList: data.file.characterList || [],
+        glyphs: data.glyphs || [],
+        stroke_glyphs: data.stroke_glyphs || [],
+        radical_glyphs: data.radical_glyphs || [],
+        comp_glyphs: data.comp_glyphs || [],
+        constants: constants,
+        variants: data.file.variants,
+      }
+
+      await this.yieldToMainThread()
+
+      this.updateProgress(store.loadingTotal - 1, '清理内存...')
+      await this.cleanupMemory(file)
+
+      this.updateProgress(store.loadingTotal, '工程加载完成')
+      await this.yieldToMainThread()
+      store.loading = false
+
+      return file
+    } catch (error) {
+      const store = this.projectStore
+      store.loading = false
+      console.error('Failed to load fp project:', error)
       throw error
     }
   }

@@ -9,6 +9,26 @@ import { useProjectStore } from '@/stores/project'
 import { isTauri } from '@/utils/env'
 import type { ProjectConfig } from '../services/ProjectCreator'
 import localForage from 'localforage'
+import type { IFile } from '@/core/types'
+import {
+  encodeFpFile,
+  gzipCompressBytes,
+  isFpProjectFile,
+  FP_FLAG_SEMANTIC_STRIP,
+  type FpHeaderWrap,
+  type EncodeFpTocMeta,
+} from '@/features/editor/services/projectArchive/fpProjectFormat'
+import {
+  buildFpzHeaderProject,
+  stripCharacterForTemplate,
+  unicodeToCodePoint,
+} from '@/features/editor/services/compressedTemplate/stripTemplateProject'
+
+/** localForage: `.fp` ArrayBuffer */
+const PROJECT_CACHE_FP_KEY = 'project_cache_v3_fp'
+const PROJECT_CACHE_TS_KEY = 'project_cache_v3_timestamp'
+const LEGACY_PROJECT_CACHE_JSON_KEY = 'project_cache_v2'
+const LEGACY_PROJECT_CACHE_TS_KEY = 'project_cache_v2_timestamp'
 
 export class FileHandler {
   /** 记住上一次保存路径（Tauri 环境） */
@@ -42,7 +62,7 @@ export class FileHandler {
     return new Promise((resolve, reject) => {
       const input = document.createElement('input')
       input.type = 'file'
-      input.accept = '.json'
+      input.accept = '.json,.fp,application/json'
       input.style.display = 'none'
 
       input.addEventListener('change', async (e: Event) => {
@@ -58,8 +78,15 @@ export class FileHandler {
 
         reader.onload = async () => {
           try {
-            const data = JSON.parse(reader.result as string)
-            const projectFile = await projectLoader.loadProject(data)
+            const buf = reader.result as ArrayBuffer
+            let projectFile: IFile
+            if (isFpProjectFile(buf)) {
+              projectFile = await projectLoader.loadProjectFromFpArrayBuffer(buf)
+            } else {
+              const text = new TextDecoder('utf-8').decode(buf)
+              const data = JSON.parse(text)
+              projectFile = await projectLoader.loadProject(data)
+            }
             
             // 确保 loading 状态已清除
             await new Promise(resolve => {
@@ -93,7 +120,7 @@ export class FileHandler {
           reject(new Error('Failed to read file'))
         }
 
-        reader.readAsText(file)
+        reader.readAsArrayBuffer(file)
       })
 
       input.addEventListener('cancel', () => {
@@ -117,7 +144,10 @@ export class FileHandler {
     try {
       const { open } = await import('@tauri-apps/plugin-dialog')
       const file = await open({
-        filters: [{ name: 'JSON', extensions: ['json'] }],
+        filters: [
+          { name: '字玩工程', extensions: ['fp', 'json'] },
+          { name: 'JSON', extensions: ['json'] },
+        ],
         multiple: false,
       })
 
@@ -130,11 +160,18 @@ export class FileHandler {
         throw new Error('No file path available')
       }
 
-      const { readTextFile } = await import('@tauri-apps/plugin-fs')
-      const content = await readTextFile(filePath)
-      const data = JSON.parse(content)
+      const { readFile } = await import('@tauri-apps/plugin-fs')
+      const bytes = await readFile(filePath)
+      const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
 
-      const projectFile = await projectLoader.loadProject(data)
+      let projectFile: IFile
+      if (isFpProjectFile(buf)) {
+        projectFile = await projectLoader.loadProjectFromFpArrayBuffer(buf)
+      } else {
+        const text = new TextDecoder('utf-8').decode(bytes)
+        const data = JSON.parse(text)
+        projectFile = await projectLoader.loadProject(data)
+      }
       
       // 确保 loading 状态已清除
       await new Promise(resolve => {
@@ -192,18 +229,15 @@ export class FileHandler {
     store.loading = true
 
     try {
-      const projectData = await this.serializeProjectData(file, (index) => {
+      const buf = await this.encodeCurrentProjectToFpBuffer(file, (index) => {
         store.loadingProgress = index
       })
-      
-      // 2. 创建下载链接
-      const json = JSON.stringify(projectData, null, 2)
-      const blob = new Blob([json], { type: 'application/json' })
+      const blob = new Blob([buf], { type: 'application/octet-stream' })
       const url = URL.createObjectURL(blob)
-      
+
       const a = document.createElement('a')
       a.href = url
-      a.download = `${file.name}.json`
+      a.download = `${file.name}.fp`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -237,31 +271,17 @@ export class FileHandler {
     }
 
     try {
-      // 1. 收集所有数据
-      const projectData = await this.serializeProjectData(file)
-      const json = JSON.stringify(projectData, null, 2)
-
-      // 2. 使用 Tauri 对话框选择保存位置
       const { save } = await import('@tauri-apps/plugin-dialog')
       const filePath = await save({
-        defaultPath: `${file.name}.json`,
-        filters: [
-          {
-            name: 'JSON',
-            extensions: ['json'],
-          },
-        ],
+        defaultPath: `${file.name}.fp`,
+        filters: [{ name: '字玩工程', extensions: ['fp'] }],
       })
 
       if (!filePath) {
         throw new Error('No file path selected')
       }
 
-      // 3. 写入文件
-      const { writeTextFile } = await import('@tauri-apps/plugin-fs')
-      await writeTextFile(filePath, json)
-
-      // 4. 标记为已保存
+      await this.writeProjectFpFile(file, filePath)
       this.projectStore.markFileSaved(file.uuid)
     } catch (error) {
       console.error('Failed to save file:', error)
@@ -291,16 +311,15 @@ export class FileHandler {
       // 还没有保存路径，弹出对话框让用户选择
       const { save } = await import('@tauri-apps/plugin-dialog')
       const result = await save({
-        defaultPath: `${file.name}.json`,
-        filters: [{ name: 'JSON', extensions: ['json'] }],
+        defaultPath: `${file.name}.fp`,
+        filters: [{ name: '字玩工程', extensions: ['fp'] }],
       })
       if (!result) return // 用户取消
       filePath = result
       this.lastSavedPath = filePath
     }
 
-    // 流式写入，避免大工程 JSON.stringify 导致 OOM 崩溃
-    await this.writeProjectStream(file, filePath)
+    await this.writeProjectFpFile(file, filePath)
     this.projectStore.markFileSaved(file.uuid)
   }
 
@@ -322,15 +341,14 @@ export class FileHandler {
 
     const { save } = await import('@tauri-apps/plugin-dialog')
     const filePath = await save({
-      defaultPath: `${file.name}.json`,
-      filters: [{ name: 'JSON', extensions: ['json'] }],
+      defaultPath: `${file.name}.fp`,
+      filters: [{ name: '字玩工程', extensions: ['fp'] }],
     })
     if (!filePath) return // 用户取消
 
     this.lastSavedPath = filePath
 
-    // 流式写入，避免大工程 JSON.stringify 导致 OOM 崩溃
-    await this.writeProjectStream(file, filePath)
+    await this.writeProjectFpFile(file, filePath)
     this.projectStore.markFileSaved(file.uuid)
   }
 
@@ -362,13 +380,13 @@ export class FileHandler {
     store.loading = true
 
     try {
-      const projectData = await this.serializeProjectData(file, (index) => {
+      const buf = await this.encodeCurrentProjectToFpBuffer(file, (index) => {
         store.loadingProgress = index
       })
-      // 使用 JSON 字符串而不是原始对象，避免 IndexedDB 克隆失败（DataCloneError）
-      const json = JSON.stringify(projectData)
-      await localForage.setItem('project_cache_v2', json)
-      await localForage.setItem('project_cache_v2_timestamp', Date.now())
+      await localForage.setItem(PROJECT_CACHE_FP_KEY, buf)
+      await localForage.setItem(PROJECT_CACHE_TS_KEY, Date.now())
+      await localForage.removeItem(LEGACY_PROJECT_CACHE_JSON_KEY)
+      await localForage.removeItem(LEGACY_PROJECT_CACHE_TS_KEY)
     } finally {
       store.loading = false
       try {
@@ -384,8 +402,10 @@ export class FileHandler {
    * 清空工程缓存（Web）
    */
   async clearProjectCache(): Promise<void> {
-    await localForage.removeItem('project_cache_v2')
-    await localForage.removeItem('project_cache_v2_timestamp')
+    await localForage.removeItem(PROJECT_CACHE_FP_KEY)
+    await localForage.removeItem(PROJECT_CACHE_TS_KEY)
+    await localForage.removeItem(LEGACY_PROJECT_CACHE_JSON_KEY)
+    await localForage.removeItem(LEGACY_PROJECT_CACHE_TS_KEY)
   }
 
   /**
@@ -396,13 +416,18 @@ export class FileHandler {
       throw new Error('当前已存在打开的工程，请先关闭工程再同步缓存。')
     }
 
-    const json = await localForage.getItem<string | null>('project_cache_v2')
-    if (!json) {
-      throw new Error('暂无可用的工程缓存。')
+    const fpBuf = await localForage.getItem<ArrayBuffer | null>(PROJECT_CACHE_FP_KEY)
+    let file: IFile
+    if (fpBuf && fpBuf.byteLength > 0) {
+      file = await projectLoader.loadProjectFromFpArrayBuffer(fpBuf)
+    } else {
+      const json = await localForage.getItem<string | null>(LEGACY_PROJECT_CACHE_JSON_KEY)
+      if (!json) {
+        throw new Error('暂无可用的工程缓存。')
+      }
+      const data = JSON.parse(json)
+      file = await projectLoader.loadProject(data)
     }
-
-    const data = JSON.parse(json)
-    const file = await projectLoader.loadProject(data)
     const success = this.projectStore.addFile(file)
     if (success) {
       this.projectStore.selectFile(file.uuid)
@@ -427,13 +452,12 @@ export class FileHandler {
     if (isTauri()) {
       const { save } = await import('@tauri-apps/plugin-dialog')
       const filePath = await save({
-        defaultPath: `${file.name}.json`,
-        filters: [{ name: 'JSON', extensions: ['json'] }],
+        defaultPath: `${file.name}.fp`,
+        filters: [{ name: '字玩工程', extensions: ['fp'] }],
       })
       if (!filePath) return
-      await this.writeProjectStream(file, filePath)
+      await this.writeProjectFpFile(file, filePath)
     } else {
-      // Web 环境：全量序列化后触发浏览器下载（带进度条）
       const store = this.projectStore
       const total = file.characterList?.length || 0
       store.loadingMessage = '正在导出工程...'
@@ -442,23 +466,14 @@ export class FileHandler {
       store.loading = true
 
       try {
-        const projectData = await this.serializeProjectData(file, (index) => {
+        const buf = await this.encodeCurrentProjectToFpBuffer(file, (index) => {
           store.loadingProgress = index
         })
-        this.logProjectDataSummary(projectData)
-        let json: string
-        try {
-          json = JSON.stringify(projectData)
-        } catch (error) {
-          console.error('[FileHandler.exportProject] JSON.stringify failed:', error)
-          this.logProjectDataDetails(projectData)
-          throw error
-        }
-        const blob = new Blob([json], { type: 'application/json' })
+        const blob = new Blob([buf], { type: 'application/octet-stream' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `${file.name}.json`
+        a.download = `${file.name}.fp`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
@@ -476,7 +491,139 @@ export class FileHandler {
   }
 
   /**
-   * Tauri 专用：流式写入工程文件
+   * 导出为 JSON（流式/全量，备用互通或调试；主「导出工程」使用 `.fp`）
+   */
+  async exportProjectAsJson(): Promise<void> {
+    const file = this.projectStore.selectedFile
+    if (!file) {
+      throw new Error('No file selected')
+    }
+
+    if (!(await this.ensureProjectTagBeforeSave())) return
+
+    if (isTauri()) {
+      const { save } = await import('@tauri-apps/plugin-dialog')
+      const filePath = await save({
+        defaultPath: `${file.name}.json`,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      })
+      if (!filePath) return
+      await this.writeProjectStream(file, filePath)
+    } else {
+      const store = this.projectStore
+      const total = file.characterList?.length || 0
+      store.loadingMessage = '正在导出 JSON...'
+      store.loadingTotal = total
+      store.loadingProgress = 0
+      store.loading = true
+      try {
+        const projectData = await this.serializeProjectData(file, (index) => {
+          store.loadingProgress = index
+        })
+        this.logProjectDataSummary(projectData)
+        const json = JSON.stringify(projectData)
+        const blob = new Blob([json], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${file.name}.json`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      } finally {
+        store.loading = false
+        try {
+          const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
+          characterDataManager.forceCleanupAllCache()
+        } catch (e) {
+          console.warn('[exportProjectAsJson] failed to cleanup character cache:', e)
+        }
+      }
+    }
+  }
+
+  /**
+   * 编码当前工程为 `.fp`（语义裁剪 + gzip 分块 + 尾部字形 gzip）
+   */
+  private async encodeCurrentProjectToFpBuffer(
+    file: IFile,
+    onCharacterProgress?: (index: number) => void,
+  ): Promise<ArrayBuffer> {
+    const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
+    const list = file.characterList || []
+    const fullProjectForHeader: Record<string, unknown> = {
+      version: '2.0',
+      file: {
+        uuid: file.uuid,
+        name: file.name,
+        tag: file.tag ?? '',
+        width: file.width,
+        height: file.height,
+        saved: true,
+        iconsCount: file.iconsCount,
+        fontSettings: file.fontSettings,
+        characterList: list,
+        variants: file.variants,
+      },
+      glyphs: file.glyphs,
+      stroke_glyphs: file.stroke_glyphs,
+      radical_glyphs: file.radical_glyphs,
+      comp_glyphs: file.comp_glyphs,
+      constants: file.constants || [],
+    }
+    const headerProject = buildFpzHeaderProject(fullProjectForHeader)
+    const headerWrap: FpHeaderWrap = {
+      fpVersion: 1,
+      characterCount: list.length,
+      flags: FP_FLAG_SEMANTIC_STRIP,
+      project: headerProject,
+    }
+    const characterChunks: Uint8Array[] = []
+    const tocMeta: EncodeFpTocMeta[] = []
+    for (let i = 0; i < list.length; i++) {
+      const metadata = list[i]!
+      const char = await characterDataManager.loadCharacter(file.uuid, metadata.uuid)
+      const plain = char ? this.plainCharacter(char) : metadata
+      const stripped = stripCharacterForTemplate(plain as Record<string, unknown>)
+      const json = JSON.stringify(stripped)
+      const gz = await gzipCompressBytes(new TextEncoder().encode(json))
+      characterChunks.push(gz)
+      tocMeta.push({
+        uuid: String(stripped.uuid ?? ''),
+        unicode: unicodeToCodePoint(stripped),
+      })
+      if (onCharacterProgress) onCharacterProgress(i + 1)
+    }
+    const glyphBundleJson = JSON.stringify({
+      glyphs: this.cleanupGlyphArray(file.glyphs),
+      stroke_glyphs: this.cleanupGlyphArray(file.stroke_glyphs),
+      radical_glyphs: this.cleanupGlyphArray(file.radical_glyphs),
+      comp_glyphs: this.cleanupGlyphArray(file.comp_glyphs),
+    })
+    return encodeFpFile({ headerWrap, characterChunks, tocMeta, glyphBundleJson })
+  }
+
+  /** Tauri：将 `.fp` 二进制写入磁盘 */
+  private async writeProjectFpFile(file: IFile, filePath: string): Promise<void> {
+    const store = this.projectStore
+    store.loadingMessage = '正在保存工程...'
+    store.loadingProgress = 0
+    store.loadingTotal = file.characterList?.length || 0
+    store.loading = true
+    try {
+      const buf = await this.encodeCurrentProjectToFpBuffer(file, (i) => {
+        store.loadingProgress = i
+      })
+      const { writeFile } = await import('@tauri-apps/plugin-fs')
+      await writeFile(filePath, new Uint8Array(buf))
+    } finally {
+      store.loading = false
+    }
+  }
+
+  /**
+   * Tauri 专用：流式写入工程 JSON
    *
    * 大工程（7000字+）序列化为一个完整 JSON 字符串会消耗数百 MB 内存，
    * 导致 WKWebView 进程 OOM 崩溃。此方法逐字符从 IndexedDB 读取并写入文件，
