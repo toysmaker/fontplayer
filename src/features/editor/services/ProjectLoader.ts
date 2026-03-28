@@ -23,9 +23,13 @@ import {
 import { isTauri } from '@/utils/env'
 import { decompressCharacterAt, parseFpzBuffer, type DecodedFpz } from '@/features/editor/services/compressedTemplate/fpzFormat'
 import { decompressGlyphBundleIfPresent, parseFpBuffer } from '@/features/editor/services/projectArchive/fpProjectFormat'
+import { replaceGlyphScript_custom_1 } from '@/features/temporaryScripts/fileProcessing'
 
 /** 带此 tag 的工程在加载完成后会为字符列表补全部件分解数据（高级编辑「脚本」Tab 亦仅在此 tag 下显示） */
 export const DEFAULT_TEMPLATE_PROJECT_TAG = '字玩默认模板工程'
+
+/** 临时代码：打开 .fp 时对此 tag 同步 `public/templates/custom_1` 笔画脚本（与 loadProject 内 replaceGlyphScript 注释块同类，后续可整段注释） */
+const TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG = '字玩方圆黑体'
 
 export interface LoadProgress {
   loaded: number
@@ -330,6 +334,17 @@ export class ProjectLoader {
       store.loadingProgress = 0
 
       const projectTag = typeof data.file?.tag === 'string' ? data.file.tag : undefined
+
+      // // MARK: 临时代码 — 方圆黑体 .fp：将 stroke_glyphs 内联脚本替换为 public/templates/custom_1 同名 .js（须在 processGlyphs 之前）
+      // if (projectTag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG && data.stroke_glyphs?.length) {
+      //   this.updateProgress(0, '同步笔画模板脚本 (custom_1)…')
+      //   try {
+      //     await replaceGlyphScript_custom_1(data.stroke_glyphs as ICustomGlyph[])
+      //   } catch (e) {
+      //     console.error('[ProjectLoader] replaceGlyphScript_custom_1 failed', e)
+      //   }
+      //   await this.yieldToMainThread()
+      // }
 
       await this.processGlyphs(data)
       const decoded = decodedFp as unknown as DecodedFpz
