@@ -30,7 +30,10 @@ import { isTauri } from '@/utils/env'
 import { decompressCharacterAt, parseFpzBuffer, type DecodedFpz } from '@/features/editor/services/compressedTemplate/fpzFormat'
 import { decompressGlyphBundleIfPresent, parseFpBuffer } from '@/features/editor/services/projectArchive/fpProjectFormat'
 import { hydrateGlyphComponentEnumOptionsFromLibrary } from '@/features/editor/services/glyphParameterHydration'
-import { replaceGlyphScript_custom_1 } from '@/features/temporaryScripts/fileProcessing'
+import {
+  replaceGlyphScript_custom_1,
+  widenFangYuanGlyphNumberParamBoundsInCharacterComponents,
+} from '@/features/temporaryScripts/fileProcessing'
 
 /** 带此 tag 的工程在加载完成后会为字符列表补全部件分解数据（高级编辑「脚本」Tab 亦仅在此 tag 下显示） */
 export const DEFAULT_TEMPLATE_PROJECT_TAG = '字玩默认模板工程'
@@ -61,6 +64,15 @@ export class ProjectLoader {
     this.onProgress = callback
   }
 
+  /** 部分工程 tag 只在根上，补到 file.tag，供字符处理与方圆黑体临时脚本判断 */
+  private normalizeProjectTagOnFile(data: any): void {
+    const f = data?.file
+    if (!f || typeof f !== 'object') return
+    if (typeof f.tag === 'string') return
+    const rt = data?.tag
+    if (typeof rt === 'string') f.tag = rt
+  }
+
   /**
    * 加载工程文件
    */
@@ -81,6 +93,7 @@ export class ProjectLoader {
         data = await projectMigrator.migrate(data)
       }
 
+      this.normalizeProjectTagOnFile(data)
       const projectTag = typeof data.file?.tag === 'string' ? data.file.tag : undefined
 
       // MARK 临时脚本
@@ -232,6 +245,8 @@ export class ProjectLoader {
         data = await projectMigrator.migrate(data)
       }
 
+      this.normalizeProjectTagOnFile(data)
+
       store.loadingTotal = this.calculateTotal(data)
       store.loadingProgress = 0
 
@@ -341,6 +356,8 @@ export class ProjectLoader {
         data = await projectMigrator.migrate(data)
       }
 
+      this.normalizeProjectTagOnFile(data)
+
       store.loadingTotal = this.calculateTotal(data)
       store.loadingProgress = 0
 
@@ -434,6 +451,8 @@ export class ProjectLoader {
     decoded: DecodedFpz,
     glyphLibrary: ICustomGlyph[] = [],
   ): Promise<void> {
+    const fangYuanWiden =
+      typeof file?.tag === 'string' && file.tag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG
     const fontSettings = file.fontSettings
     const fileUUID = file.uuid
     const total = decoded.toc.length
@@ -441,7 +460,12 @@ export class ProjectLoader {
 
     for (let i = 0; i < total; i++) {
       const character = await decompressCharacterAt(decoded, i)
-      const characterLite = await this.convertToCharacterLite(character, fontSettings, glyphLibrary)
+      const characterLite = await this.convertToCharacterLite(
+        character,
+        fontSettings,
+        glyphLibrary,
+        fangYuanWiden,
+      )
 
       const key = `character_${fileUUID}_${characterLite.uuid}`
       await indexedDBManager.set(key, characterLite)
@@ -621,6 +645,8 @@ export class ProjectLoader {
    * 将完整字符数据存储到IndexedDB，只保留元数据在内存中
    */
   private async processCharacters(file: any, glyphLibrary: ICustomGlyph[] = []): Promise<void> {
+    const fangYuanWiden =
+      typeof file?.tag === 'string' && file.tag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG
     const characters = file.characterList || []
     const fontSettings = file.fontSettings
     const fileUUID = file.uuid
@@ -642,6 +668,7 @@ export class ProjectLoader {
         character,
         fontSettings,
         glyphLibrary,
+        fangYuanWiden,
       )
       
       // 保存完整数据（稍后存储到IndexedDB）
@@ -684,11 +711,22 @@ export class ProjectLoader {
     character: any,
     fontSettings?: any,
     glyphLibrary?: ICustomGlyph[],
+    fangYuanWidenParams = false,
   ): Promise<ICharacterFileLite> {
-    let components: IComponent[] = character.components || []
-    if (glyphLibrary?.length && Array.isArray(character.components) && character.components.length > 0) {
-      components = JSON.parse(JSON.stringify(character.components)) as IComponent[]
+    const raw = character.components
+    const hasComponents = Array.isArray(raw) && raw.length > 0
+    const doHydrate = !!glyphLibrary?.length && hasComponents
+
+    let components: IComponent[] = raw || []
+    if (doHydrate) {
+      components = JSON.parse(JSON.stringify(raw)) as IComponent[]
       hydrateGlyphComponentEnumOptionsFromLibrary(components, glyphLibrary)
+    } else if (fangYuanWidenParams && hasComponents) {
+      // 无库也要深拷贝后再放宽，避免改解压缓冲；且保证与「先同步再脚本」顺序一致（此处无 hydrate）
+      components = JSON.parse(JSON.stringify(raw)) as IComponent[]
+    }
+    if (fangYuanWidenParams) {
+      widenFangYuanGlyphNumberParamBoundsInCharacterComponents(components)
     }
 
     const characterLite: ICharacterFileLite = {

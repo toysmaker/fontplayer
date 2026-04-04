@@ -24,7 +24,8 @@ function definitionParameterMap(library: ICustomGlyph[]): Map<string, IParameter
 }
 
 /**
- * 为 components 中 type==='glyph' 的项补全 Enum 的 options（仅当当前缺失且库中同名/同 uuid 参数有 options）。
+ * 为 components 树中 type==='glyph' 的项补全 Enum 的 options（仅当当前缺失且库中同名/同 uuid 参数有 options）。
+ * 递归子字形，保证后续临时脚本（如方圆黑体参数放宽）在整棵树与库同步之后再跑。
  */
 export function hydrateGlyphComponentEnumOptionsFromLibrary(
   components: IComponent[] | undefined,
@@ -32,26 +33,33 @@ export function hydrateGlyphComponentEnumOptionsFromLibrary(
 ): void {
   if (!components?.length || !library.length) return
   const defMap = definitionParameterMap(library)
-  for (const comp of components) {
-    if (!comp || comp.type !== 'glyph' || !comp.value) continue
-    const value = comp.value as ICustomGlyph
-    const instanceParams = value.parameters
-    if (!Array.isArray(instanceParams)) continue
 
-    const defParams =
-      (value.uuid && defMap.get(value.uuid)) ||
-      (value.script_reference ? defMap.get(value.script_reference) : undefined)
-    if (!defParams?.length) continue
-
-    for (const ip of instanceParams as IParameter[]) {
-      if (ip.type !== ParameterType.Enum) continue
-      if (ip.options && ip.options.length > 0) continue
-      const dp =
-        defParams.find((d) => d.uuid === ip.uuid && d.type === ParameterType.Enum) ||
-        defParams.find((d) => d.name === ip.name && d.type === ParameterType.Enum)
-      if (dp?.options?.length) {
-        ip.options = dp.options.map((o) => ({ ...o }))
+  const walk = (list: IComponent[] | undefined): void => {
+    if (!list?.length) return
+    for (const comp of list) {
+      if (!comp || comp.type !== 'glyph' || !comp.value) continue
+      const value = comp.value as ICustomGlyph
+      const instanceParams = value.parameters
+      if (Array.isArray(instanceParams)) {
+        const defParams =
+          (value.uuid && defMap.get(value.uuid)) ||
+          (value.script_reference ? defMap.get(value.script_reference) : undefined)
+        if (defParams?.length) {
+          for (const ip of instanceParams as IParameter[]) {
+            if (ip.type !== ParameterType.Enum) continue
+            if (ip.options && ip.options.length > 0) continue
+            const dp =
+              defParams.find((d) => d.uuid === ip.uuid && d.type === ParameterType.Enum) ||
+              defParams.find((d) => d.name === ip.name && d.type === ParameterType.Enum)
+            if (dp?.options?.length) {
+              ip.options = dp.options.map((o) => ({ ...o }))
+            }
+          }
+        }
       }
+      walk(value.components as IComponent[] | undefined)
     }
   }
+
+  walk(components)
 }

@@ -1,4 +1,5 @@
-import type { ICustomGlyph } from '@/core/types'
+import type { IComponent, ICustomGlyph, IGlyphComponent, IParameter } from '@/core/types'
+import { ParameterType } from '@/core/types'
 
 const templateBodyCache = new Map<string, string>()
 /** custom_1 与 templates2 分离缓存，避免同名笔画互相污染 */
@@ -245,4 +246,69 @@ export async function replaceGlyphScript_custom_1(glyphs: ICustomGlyph[]): Promi
     }
     delete glyph.script_reference
   }
+}
+
+// --- 临时代码：字玩方圆黑体 — 加载后放宽字符内字形组件 Number 参数的 min/max（不修改 stroke_glyphs）---
+
+/** 与 glyphParameterHydration 一致 */
+function parametersArrayFromGlyphValue(g: ICustomGlyph): IParameter[] | undefined {
+  const raw = g.parameters as unknown
+  if (Array.isArray(raw)) return raw as IParameter[]
+  if (raw && typeof raw === 'object' && Array.isArray((raw as { parameters?: IParameter[] }).parameters)) {
+    return (raw as { parameters: IParameter[] }).parameters
+  }
+  return undefined
+}
+
+function toFiniteNumber(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v)
+    return Number.isFinite(n) ? n : null
+  }
+  return null
+}
+
+function isNumberParameterType(t: unknown): boolean {
+  if (t === ParameterType.Number || t === 0) return true
+  if (typeof t === 'string') {
+    const s = t.trim().toLowerCase()
+    return s === '0' || s === 'number'
+  }
+  return false
+}
+
+function widenNumberParamsInList(params: IParameter[] | undefined): void {
+  if (!params?.length) return
+  for (const p of params) {
+    if (!p || typeof p !== 'object') continue
+    if (!isNumberParameterType(p.type)) continue
+    const min = toFiniteNumber(p.min)
+    const max = toFiniteNumber(p.max)
+    if (min === null || max === null) continue
+    if (Math.abs(min) > 10 || Math.abs(max) > 10) {
+      p.min = -1000
+      p.max = 1000
+    }
+  }
+}
+
+function widenOnGlyphTree(components: Array<IComponent | IGlyphComponent> | undefined): void {
+  if (!components?.length) return
+  for (const comp of components) {
+    if (!comp || comp.type !== 'glyph' || !comp.value) continue
+    const g = comp.value as ICustomGlyph
+    widenNumberParamsInList(parametersArrayFromGlyphValue(g))
+    const nested = g.components as IGlyphComponent[] | undefined
+    if (nested?.length) widenOnGlyphTree(nested)
+  }
+}
+
+/**
+ * 在 hydrateGlyphComponentEnumOptionsFromLibrary 之后对字符 components 调用；就地修改，不写 stroke_glyphs。
+ */
+export function widenFangYuanGlyphNumberParamBoundsInCharacterComponents(
+  components: IComponent[] | undefined,
+): void {
+  widenOnGlyphTree(components)
 }
