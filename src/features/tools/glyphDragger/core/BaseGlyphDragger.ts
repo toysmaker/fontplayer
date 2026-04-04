@@ -172,6 +172,11 @@ export abstract class BaseGlyphDragger {
   protected shouldCheckJoints(): boolean {
     return this.config.checkJoints ? this.config.checkJoints() : true
   }
+
+  /** 与 Figma 等一致：拖动时按住 Ctrl（Windows）或 ⌘（Mac）临时关闭参考线吸附 */
+  private pointerSnapSuppressed(e: MouseEvent): boolean {
+    return e.ctrlKey || e.metaKey
+  }
   
   /**
    * 由于 dragger 实例（context.component）在某些操作后可能指向“旧引用”的组件对象，
@@ -328,14 +333,33 @@ export abstract class BaseGlyphDragger {
    *   true：整体平移组件，试探位置为 initialOrigin + 指针累积位移（与 handleGlyphDrag 一致）。
    *   false：拖骨架非首点，组件 ox/oy 不变；须先用指针累积位移 raw 更新实例再取 pen 轴对齐线，
    *   否则 reflines 仍是上一帧吸附后的轮廓，与当前 dx/dy 语义不一致，会在吸附线附近剧烈颤动。
+   * @param snapSuppressed 为 true 时不做参考线吸附，并清除吸附锁（按住 Ctrl / ⌘ 拖动）。
    */
   private applySnapDelta(
     dx: number,
     dy: number,
     forWholeGlyphTranslation: boolean,
+    snapSuppressed: boolean = false,
   ): { adjDx: number; adjDy: number } {
     const comp = this.context.component
     if (!comp || comp.type !== 'glyph') {
+      return { adjDx: dx, adjDy: dy }
+    }
+
+    if (snapSuppressed) {
+      this.snapLockHKey = null
+      this.snapLockVKey = null
+      if (!forWholeGlyphTranslation) {
+        const glyph = this.context.glyph
+        const joint = this.draggingJoint
+        if (glyph && joint) {
+          ScriptExecutor.executeDrag(glyph, comp.uuid, {
+            draggingJoint: joint,
+            deltaX: dx,
+            deltaY: dy,
+          })
+        }
+      }
       return { adjDx: dx, adjDy: dy }
     }
 
@@ -520,10 +544,15 @@ export abstract class BaseGlyphDragger {
       (!this.draggingJoint || this.isDraggingFirstJoint)
 
     if (movingWholeComponent) {
-      const { adjDx, adjDy } = this.applySnapDelta(dx, dy, true)
+      const { adjDx, adjDy } = this.applySnapDelta(
+        dx,
+        dy,
+        true,
+        this.pointerSnapSuppressed(e),
+      )
       this.throttledGlyphDrag(adjDx, adjDy)
     } else if (this.draggingJoint && !this.isDraggingFirstJoint && this.context.glyph) {
-      this.applySnapDelta(dx, dy, false)
+      this.applySnapDelta(dx, dy, false, this.pointerSnapSuppressed(e))
       this.config.onRender?.()
       this.throttledSkeletonSync(this.context.glyph, this.context.componentUUID)
     }
@@ -552,7 +581,12 @@ export abstract class BaseGlyphDragger {
       (!this.draggingJoint || this.isDraggingFirstJoint)
 
     if (movingWholeComponent) {
-      const { adjDx, adjDy } = this.applySnapDelta(dx, dy, true)
+      const { adjDx, adjDy } = this.applySnapDelta(
+        dx,
+        dy,
+        true,
+        this.pointerSnapSuppressed(e),
+      )
       if (typeof (this.throttledGlyphDrag as any).cancel === 'function') {
         ;(this.throttledGlyphDrag as any).cancel()
       }
@@ -566,7 +600,12 @@ export abstract class BaseGlyphDragger {
       this.draggingJoint &&
       !this.isDraggingFirstJoint
     ) {
-      const { adjDx, adjDy } = this.applySnapDelta(dx, dy, false)
+      const { adjDx, adjDy } = this.applySnapDelta(
+        dx,
+        dy,
+        false,
+        this.pointerSnapSuppressed(e),
+      )
       if (typeof (this.throttledSkeletonSync as any).cancel === 'function') {
         ;(this.throttledSkeletonSync as any).cancel()
       }
