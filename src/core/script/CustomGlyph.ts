@@ -204,7 +204,7 @@ class CustomGlyph {
 				})
 			}
 		}
-		if (fontRenderStyle.value === 'color' || fill) {
+		if (fontRenderStyle.value === 'black' || fontRenderStyle.value === 'color' || fill) {
 			ctx.fillStyle = '#000'
 			ctx.fill()
 		}

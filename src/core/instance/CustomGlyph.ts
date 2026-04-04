@@ -310,11 +310,28 @@ export class CustomGlyph implements IInstance {
     })
 
     if (!useSkeletonGrid) {
-      this._components.forEach((component: any) => {
-        if (component.render_grid) {
-          component.render_grid(canvas, { offset, scale, grid })
+      if (fontRenderStyle.value === 'black' || fontRenderStyle.value === 'color' || fill) {
+        // In fill modes, suppress ctx.beginPath() inside each component so all component
+        // paths accumulate into one path — mirroring how render() works via component.render().
+        ctx.beginPath()
+        const origBeginPath = ctx.beginPath.bind(ctx)
+        ;(ctx as any).beginPath = () => {}
+        try {
+          this._components.forEach((component: any) => {
+            if (component.render_grid) {
+              component.render_grid(canvas, { offset, scale, grid })
+            }
+          })
+        } finally {
+          ;(ctx as any).beginPath = origBeginPath
         }
-      })
+      } else {
+        this._components.forEach((component: any) => {
+          if (component.render_grid) {
+            component.render_grid(canvas, { offset, scale, grid })
+          }
+        })
+      }
     } else if (this.getSkeleton && this.getComponentsBySkeleton) {
       ctx.beginPath()
       const _skeleton = this.getSkeleton()
@@ -371,11 +388,26 @@ export class CustomGlyph implements IInstance {
     })
 
     if (!useSkeletonGrid) {
-      this._components.forEach((component: any) => {
-        if (component.render_grid) {
-          component.render_grid(canvas, { offset, scale, grid })
+      if (fontRenderStyle.value === 'black' || fontRenderStyle.value === 'color' || fill) {
+        ctx.beginPath()
+        const origBeginPath = ctx.beginPath.bind(ctx)
+        ;(ctx as any).beginPath = () => {}
+        try {
+          this._components.forEach((component: any) => {
+            if (component.render_grid) {
+              component.render_grid(canvas, { offset, scale, grid })
+            }
+          })
+        } finally {
+          ;(ctx as any).beginPath = origBeginPath
         }
-      })
+      } else {
+        this._components.forEach((component: any) => {
+          if (component.render_grid) {
+            component.render_grid(canvas, { offset, scale, grid })
+          }
+        })
+      }
     } else if (this.getSkeleton && this.getComponentsBySkeleton) {
       ctx.beginPath()
       const _skeleton = this.getSkeleton()
