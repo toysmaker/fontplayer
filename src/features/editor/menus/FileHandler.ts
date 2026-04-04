@@ -585,7 +585,9 @@ export class FileHandler {
       const metadata = list[i]!
       const char = await characterDataManager.loadCharacter(file.uuid, metadata.uuid)
       const plain = char ? this.plainCharacter(char) : metadata
-      const stripped = stripCharacterForTemplate(plain as Record<string, unknown>)
+      const stripped = stripCharacterForTemplate(plain as Record<string, unknown>, {
+        stripGlyphParameterEnumOptions: false,
+      })
       const json = JSON.stringify(stripped)
       const gz = await gzipCompressBytes(new TextEncoder().encode(json))
       characterChunks.push(gz)

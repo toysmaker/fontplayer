@@ -3,9 +3,19 @@
  * Mirrors pack script and must stay in sync with scripts/pack-default-template.mts.
  */
 
-export function stripGlyphValueForTemplate(value: Record<string, unknown>): void {
+/** 默认模板 / pack 脚本为减小体积会去掉 enum 的 options；用户 .fp 工程须保留 options，否则右侧面板无法显示下拉项。 */
+export type StripCharacterOptions = {
+  /** 默认 true。为 false 时保留字形组件参数上的 enum.options（用户工程 .fp） */
+  stripGlyphParameterEnumOptions?: boolean
+}
+
+export function stripGlyphValueForTemplate(
+  value: Record<string, unknown>,
+  stripEnumOptions: boolean = true,
+): void {
   if (!value || typeof value !== 'object') return
   delete value.objData
+  if (!stripEnumOptions) return
   const params = value.parameters as unknown[] | undefined
   if (Array.isArray(params)) {
     for (const p of params) {
@@ -16,7 +26,11 @@ export function stripGlyphValueForTemplate(value: Record<string, unknown>): void
   }
 }
 
-export function stripCharacterForTemplate<T extends Record<string, unknown>>(character: T): T {
+export function stripCharacterForTemplate<T extends Record<string, unknown>>(
+  character: T,
+  options?: StripCharacterOptions,
+): T {
+  const stripEnumOpts = options?.stripGlyphParameterEnumOptions !== false
   const c = JSON.parse(JSON.stringify(character)) as T
   const script = c.script
   if (typeof script === 'string' && script.includes('Todo something')) {
@@ -31,7 +45,7 @@ export function stripCharacterForTemplate<T extends Record<string, unknown>>(cha
         (comp as { type?: string }).type === 'glyph' &&
         (comp as { value?: Record<string, unknown> }).value
       ) {
-        stripGlyphValueForTemplate((comp as { value: Record<string, unknown> }).value)
+        stripGlyphValueForTemplate((comp as { value: Record<string, unknown> }).value, stripEnumOpts)
       }
     }
   }

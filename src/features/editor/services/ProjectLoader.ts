@@ -3,8 +3,14 @@
  * 负责加载和解析工程文件，支持7000+字符的大型工程
  */
 
-import type { IFile, ICharacterFileLite, ICharacterFileMetadata, ICustomGlyph, IParameter, IFontSettings } from '@/core/types'
-import { ParameterType } from '@/core/types'
+import type {
+  IFile,
+  ICharacterFileLite,
+  ICharacterFileMetadata,
+  IComponent,
+  ICustomGlyph,
+  IFontSettings,
+} from '@/core/types'
 import { indexedDBManager, IndexedDBManager } from '@/core/storage/IndexedDBManager'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import { useProjectStore } from '@/stores/project'
@@ -23,6 +29,7 @@ import {
 import { isTauri } from '@/utils/env'
 import { decompressCharacterAt, parseFpzBuffer, type DecodedFpz } from '@/features/editor/services/compressedTemplate/fpzFormat'
 import { decompressGlyphBundleIfPresent, parseFpBuffer } from '@/features/editor/services/projectArchive/fpProjectFormat'
+import { hydrateGlyphComponentEnumOptionsFromLibrary } from '@/features/editor/services/glyphParameterHydration'
 import { replaceGlyphScript_custom_1 } from '@/features/temporaryScripts/fileProcessing'
 
 /** 带此 tag 的工程在加载完成后会为字符列表补全部件分解数据（高级编辑「脚本」Tab 亦仅在此 tag 下显示） */
@@ -104,7 +111,7 @@ export class ProjectLoader {
       await this.processGlyphs(data)
       
       // 2. 处理字符数据
-      await this.processCharacters(data.file)
+      await this.processCharacters(data.file, this.collectGlyphLibraryFromProjectData(data))
 
       // 2b. 默认模板工程：字符已入 IDB 后补全 decomposition（仅此时增加 loadingTotal）
       const fileForDecomp = data.file
@@ -231,7 +238,11 @@ export class ProjectLoader {
       const projectTag = typeof data.file?.tag === 'string' ? data.file.tag : undefined
 
       await this.processGlyphs(data)
-      await this.processCharactersFromFpz(data.file, decoded)
+      await this.processCharactersFromFpz(
+        data.file,
+        decoded,
+        this.collectGlyphLibraryFromProjectData(data),
+      )
 
       const fileForDecomp = data.file
       const metaListAfterChars = (fileForDecomp.characterList || []) as ICharacterFileMetadata[]
@@ -348,7 +359,11 @@ export class ProjectLoader {
 
       await this.processGlyphs(data)
       const decoded = decodedFp as unknown as DecodedFpz
-      await this.processCharactersFromFpz(data.file, decoded)
+      await this.processCharactersFromFpz(
+        data.file,
+        decoded,
+        this.collectGlyphLibraryFromProjectData(data),
+      )
 
       const fileForDecomp = data.file
       const metaListAfterChars = (fileForDecomp.characterList || []) as ICharacterFileMetadata[]
@@ -414,7 +429,11 @@ export class ProjectLoader {
   /**
    * 逐块从 .fpz 读取字符并写入 IndexedDB（不经由完整 characterList 数组）
    */
-  private async processCharactersFromFpz(file: any, decoded: DecodedFpz): Promise<void> {
+  private async processCharactersFromFpz(
+    file: any,
+    decoded: DecodedFpz,
+    glyphLibrary: ICustomGlyph[] = [],
+  ): Promise<void> {
     const fontSettings = file.fontSettings
     const fileUUID = file.uuid
     const total = decoded.toc.length
@@ -422,7 +441,7 @@ export class ProjectLoader {
 
     for (let i = 0; i < total; i++) {
       const character = await decompressCharacterAt(decoded, i)
-      const characterLite = await this.convertToCharacterLite(character, fontSettings)
+      const characterLite = await this.convertToCharacterLite(character, fontSettings, glyphLibrary)
 
       const key = `character_${fileUUID}_${characterLite.uuid}`
       await indexedDBManager.set(key, characterLite)
@@ -601,7 +620,7 @@ export class ProjectLoader {
    * 处理字符数据
    * 将完整字符数据存储到IndexedDB，只保留元数据在内存中
    */
-  private async processCharacters(file: any): Promise<void> {
+  private async processCharacters(file: any, glyphLibrary: ICustomGlyph[] = []): Promise<void> {
     const characters = file.characterList || []
     const fontSettings = file.fontSettings
     const fileUUID = file.uuid
@@ -619,7 +638,11 @@ export class ProjectLoader {
       
       // 转换为轻量版字符文件
       // 注意：工程文件中不包含 contour/preview，需要后续按需计算
-      const characterLite: ICharacterFileLite = await this.convertToCharacterLite(character, fontSettings)
+      const characterLite: ICharacterFileLite = await this.convertToCharacterLite(
+        character,
+        fontSettings,
+        glyphLibrary,
+      )
       
       // 保存完整数据（稍后存储到IndexedDB）
       fullCharacters.push(characterLite)
@@ -657,12 +680,22 @@ export class ProjectLoader {
    * 转换为轻量版字符文件
    * 注意：工程文件中不包含 contour/preview 数据（导出时已删除），需要重新计算
    */
-  private async convertToCharacterLite(character: any, fontSettings?: any): Promise<ICharacterFileLite> {
+  private async convertToCharacterLite(
+    character: any,
+    fontSettings?: any,
+    glyphLibrary?: ICustomGlyph[],
+  ): Promise<ICharacterFileLite> {
+    let components: IComponent[] = character.components || []
+    if (glyphLibrary?.length && Array.isArray(character.components) && character.components.length > 0) {
+      components = JSON.parse(JSON.stringify(character.components)) as IComponent[]
+      hydrateGlyphComponentEnumOptionsFromLibrary(components, glyphLibrary)
+    }
+
     const characterLite: ICharacterFileLite = {
       uuid: character.uuid,
       type: character.type,
       character: character.character,
-      components: character.components || [],
+      components,
       groups: character.groups || [],
       orderedList: character.orderedList || [],
       view: character.view || { zoom: 100, translateX: 0, translateY: 0 },
@@ -717,6 +750,16 @@ export class ProjectLoader {
     // - 渲染时，如果组件没有 contour/preview，会触发计算（需要实现计算逻辑）
 
     return characterLite
+  }
+
+  /** 合并工程内各类字形表，供从库定义补全字符上字形组件的 enum.options */
+  private collectGlyphLibraryFromProjectData(data: any): ICustomGlyph[] {
+    return [
+      ...(data.glyphs || []),
+      ...(data.stroke_glyphs || []),
+      ...(data.radical_glyphs || []),
+      ...(data.comp_glyphs || []),
+    ]
   }
 
   /**
