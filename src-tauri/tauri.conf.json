@@ -24,8 +24,32 @@
     }
   },
   "bundle": {
+    "macOS":{
+      "dmg": {
+        "appPosition": {
+          "x": 180,
+          "y": 170
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 170
+        },
+        "windowSize": {
+          "height": 400,
+          "width": 660
+        }
+      },
+      "files": {},
+      "hardenedRuntime": true,
+      "minimumSystemVersion": "10.13"
+    },
     "active": true,
     "targets": "all",
-    "resources": ["resources/default-template.fpz"]
+    "resources": ["resources/default-template.fpz"],
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png",
+      "icons/icon.icns"
+    ]
   }
 }
