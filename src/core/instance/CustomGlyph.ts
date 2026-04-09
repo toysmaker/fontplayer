@@ -14,6 +14,7 @@ import { getGlobalConstantsMap } from '../script/ParametersMap'
 import { renderCanvas } from '../canvas/EditorCanvasRenderer'
 import { fontRenderStyle } from '../script/globals'
 import { computeCoords, type ILayoutTransformGrid } from '../utils/grid'
+import { precisionFromParamMax, roundToPrecision } from '@/utils/number'
 
 // TODO: 需要从原代码迁移 Component 类型
 // type Component = PenComponent | PolygonComponent | EllipseComponent | RectangleComponent
@@ -650,15 +651,15 @@ export class CustomGlyph implements IInstance {
     
     const param = this._glyph.parameters.find((p: IParameter) => p.name === name)
     if (param) {
-      // 限制值在 min/max 范围内
+      let next: number
       if (param.min !== undefined && value < param.min) {
-        param.value = param.min
+        next = param.min as number
       } else if (param.max !== undefined && value > param.max) {
-        param.value = param.max
+        next = param.max as number
       } else {
-        param.value = value
+        next = value
       }
-      // 如果原来是 Constant 类型，设置为 Number 类型
+      param.value = roundToPrecision(next, precisionFromParamMax(param.max))
       if (param.type === ParameterType.Constant) {
         param.type = ParameterType.Number
       }

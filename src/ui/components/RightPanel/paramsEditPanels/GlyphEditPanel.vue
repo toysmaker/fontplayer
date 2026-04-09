@@ -34,7 +34,7 @@ import { EditStatus, ParameterType, IParameter, ICustomGlyph, IConstant } from '
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { expandGlyphComponent } from '@/features/editor/services/FormatGlyphService'
-import { roundToPrecision } from '@/utils/number'
+import { precisionFromParamMax, roundToPrecision } from '@/utils/number'
 import { genUUID } from '@/utils/uuid'
 import {
   collectCharacterComponentHits,
@@ -338,7 +338,7 @@ function buildNewConstantFromParam(param: IParameter, name: string, uuid: string
   const trimmed = name.trim()
   if (!trimmed) return null
   if (param.type === ParameterType.Number) {
-    const precision = param.max && param.max <= 10 ? 2 : 0
+    const precision = precisionFromParamMax(param.max)
     return {
       uuid,
       name: trimmed,
@@ -641,6 +641,17 @@ const getConstantValue = (param: IParameter): number | string => {
   return param.value
 }
 
+/** n-input-number / n-slider 展示用：与 precision 规则一致，兼容旧工程里的浮点噪声 */
+function displayGlyphNumberParamValue(parameter: IParameter): number {
+  return roundToPrecision(Number(parameter.value), precisionFromParamMax(parameter.max))
+}
+
+function displayConstantNumberParamValue(parameter: IParameter): number {
+  const meta = getConstantMeta(String(parameter.value))
+  const max = meta?.max ?? parameter.max
+  return roundToPrecision(Number(getConstantValue(parameter)), precisionFromParamMax(max))
+}
+
 // 处理参数值修改
 const handleChangeParameter = async (parameter: IParameter, value: number | string) => {
   if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') {
@@ -655,17 +666,18 @@ const handleChangeParameter = async (parameter: IParameter, value: number | stri
   // 如果是数值类型，限制精度
   let processedValue: number | string = value
   if (typeof value === 'number' && parameter.type === ParameterType.Number) {
-    // 根据参数的最大值决定精度：如果 max <= 10，使用2位小数，否则使用0位小数
-    const precision = parameter.max && parameter.max <= 10 ? 2 : 0
-    processedValue = roundToPrecision(value, precision)
+    processedValue = roundToPrecision(value, precisionFromParamMax(parameter.max))
   }
-  
+
   // 如果是 Constant 类型，更新工作副本中的常量（仅「编辑全局变量」模式下；提交前不写 file.constants）
   if (parameter.type === ParameterType.Constant) {
     const constantUUID = String(parameter.value)
     const numericValue = typeof processedValue === 'number' ? processedValue : Number(processedValue)
-    const precision = parameter.max && parameter.max <= 10 ? 2 : 0
-    const roundedValue = roundToPrecision(numericValue, precision)
+    const meta = getConstantMeta(constantUUID)
+    const roundedValue = roundToPrecision(
+      numericValue,
+      precisionFromParamMax(meta?.max ?? parameter.max),
+    )
 
     if (editorConstantsSession.active) {
       if (!editorConstantsSession.isEditingGlobal(constantUUID)) return
@@ -811,14 +823,14 @@ const handleFormatGlyphComponent = () => {
         <n-form label-placement="left" label-width="80px">
           <n-form-item :label="t('panels.paramsPanel.transform.x')">
             <n-input-number
-              :value="selectedComponent.ox"
+              :value="selectedComponent.ox != null ? roundToPrecision(selectedComponent.ox, 1) : undefined"
               :precision="1"
               @update:value="handleChangeOX"
             />
           </n-form-item>
           <n-form-item :label="t('panels.paramsPanel.transform.y')">
             <n-input-number
-              :value="selectedComponent.oy"
+              :value="selectedComponent.oy != null ? roundToPrecision(selectedComponent.oy, 1) : undefined"
               :precision="1"
               @update:value="handleChangeOY"
             />
@@ -859,19 +871,19 @@ const handleFormatGlyphComponent = () => {
               <div class="glyph-param-block">
                 <div class="param-inputs-grow">
                   <n-input-number
-                    :value="parameter.value as number"
+                    :value="displayGlyphNumberParamValue(parameter)"
                     :step="parameter.max && parameter.max <= 10 ? 0.01 : 1"
                     :min="parameter.min"
                     :max="parameter.max"
-                    :precision="parameter.max && parameter.max <= 10 ? 2 : 0"
+                    :precision="precisionFromParamMax(parameter.max)"
                     @update:value="(v) => handleChangeParameter(parameter, v ?? 0)"
                   />
                   <n-slider
-                    :value="parameter.value as number"
+                    :value="displayGlyphNumberParamValue(parameter)"
                     :step="parameter.max && parameter.max <= 10 ? 0.01 : 1"
                     :min="parameter.min ?? 0"
                     :max="parameter.max ?? 100"
-                    :precision="parameter.max && parameter.max <= 10 ? 2 : 0"
+                    :precision="precisionFromParamMax(parameter.max)"
                     @update:value="(v) => handleChangeParameter(parameter, v)"
                     style="width: 100%; margin-top: 8px;"
                   />
@@ -944,21 +956,21 @@ const handleFormatGlyphComponent = () => {
                 </template>
                 <template v-else>
                   <n-input-number
-                    :value="getConstantValue(parameter) as number"
+                    :value="displayConstantNumberParamValue(parameter)"
                     :disabled="isConstantControlsLocked(parameter)"
                     :step="(getConstantMeta(String(parameter.value))?.max ?? parameter.max) && (getConstantMeta(String(parameter.value))?.max ?? parameter.max) <= 10 ? 0.01 : 1"
                     :min="getConstantMeta(String(parameter.value))?.min ?? parameter.min"
                     :max="getConstantMeta(String(parameter.value))?.max ?? parameter.max"
-                    :precision="(getConstantMeta(String(parameter.value))?.max ?? parameter.max) && (getConstantMeta(String(parameter.value))?.max ?? parameter.max) <= 10 ? 2 : 0"
+                    :precision="precisionFromParamMax(getConstantMeta(String(parameter.value))?.max ?? parameter.max)"
                     @update:value="(v) => handleChangeParameter(parameter, v ?? 0)"
                   />
                   <n-slider
-                    :value="getConstantValue(parameter) as number"
+                    :value="displayConstantNumberParamValue(parameter)"
                     :disabled="isConstantControlsLocked(parameter)"
                     :step="(getConstantMeta(String(parameter.value))?.max ?? parameter.max) && (getConstantMeta(String(parameter.value))?.max ?? parameter.max) <= 10 ? 0.01 : 1"
                     :min="getConstantMeta(String(parameter.value))?.min ?? (parameter.min ?? 0)"
                     :max="getConstantMeta(String(parameter.value))?.max ?? (parameter.max ?? 100)"
-                    :precision="(getConstantMeta(String(parameter.value))?.max ?? parameter.max) && (getConstantMeta(String(parameter.value))?.max ?? parameter.max) <= 10 ? 2 : 0"
+                    :precision="precisionFromParamMax(getConstantMeta(String(parameter.value))?.max ?? parameter.max)"
                     @update:value="(v) => handleChangeParameter(parameter, v)"
                     style="width: 100%; margin-top: 8px;"
                   />

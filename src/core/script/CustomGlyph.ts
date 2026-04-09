@@ -11,6 +11,7 @@ import { EllipseComponent } from './EllipseComponent'
 import { RectangleComponent } from './RectangleComponent'
 import { Joint } from './Joint'
 import { orderedListWithItemsForGlyph } from '../utils/glyph'
+import { precisionFromParamMax, roundToPrecision } from '@/utils/number'
 
 // renderGridCanvas 占位符函数（暂时使用 renderCanvas）
 const renderGridCanvas = renderCanvas
@@ -449,13 +450,15 @@ class CustomGlyph {
 		const param = this._glyph.parameters.find((p: any) => p.name === name)
 		if (param) {
 			// 限制值在 min/max 范围内
+			let next: number
 			if (param.min !== undefined && value < param.min) {
-				param.value = param.min
+				next = param.min as number
 			} else if (param.max !== undefined && value > param.max) {
-				param.value = param.max
+				next = param.max as number
 			} else {
-				param.value = value
+				next = value
 			}
+			param.value = roundToPrecision(next, precisionFromParamMax(param.max))
 			// 如果原来是 Constant 类型，设置为 Number 类型
 			if (param.type === ParameterType.Constant) {
 				param.type = ParameterType.Number

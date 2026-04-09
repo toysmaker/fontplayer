@@ -16,6 +16,7 @@ export function getGlobalConstantsMap(): ConstantsMap | null {
 }
 
 import { ConstantsMap } from './ConstantsMap'
+import { precisionFromParamMax, roundToPrecision } from '@/utils/number'
 
 class ParametersMap {
 	public parameters: Array<IParameter>
@@ -47,13 +48,15 @@ class ParametersMap {
 		for (let i = 0; i < this.parameters.length; i++) {
 			const param = this.parameters[i]
 			if (param.name === name) {
+				let next: number
 				if (value < param.min) {
-					param.value = param.min
+					next = param.min
 				} else if (value > param.max) {
-					param.value = param.max
+					next = param.max
 				} else {
-					param.value = value
+					next = value
 				}
+				param.value = roundToPrecision(next, precisionFromParamMax(param.max))
 				if (param.type === ParameterType.Constant) {
 					param.type = ParameterType.Number
 				}
