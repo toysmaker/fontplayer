@@ -14,6 +14,7 @@ import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import {
   collectStraightAxisLinesFromPenComponents,
+  collectStraightAxisLinesFromGlyphComponents,
   evaluateSnapReflineSticky,
   mergeSnapAxisLines,
   type SnapAxisLine,
@@ -279,7 +280,13 @@ export abstract class BaseGlyphDragger {
       executeGlyphScript(gv, comp.uuid)
     }
 
-    return collectStraightAxisLinesFromPenComponents(instance._components, ox, oy)
+    const lines = collectStraightAxisLinesFromPenComponents(instance._components, ox, oy)
+    // 骨架字形：_components 永远为空（executeGlyphScript 走 strokeFn 分支后 early-return）；
+    // 实际几何在 _glyph.components（type='pen'，由 applySkeletonTransformation 原地更新）。
+    if (lines.length === 0 && instance._glyph?.components?.length) {
+      return collectStraightAxisLinesFromGlyphComponents(instance._glyph.components as any[], ox, oy)
+    }
+    return lines
   }
 
   /**
@@ -401,11 +408,19 @@ export abstract class BaseGlyphDragger {
       () => new CustomGlyph(glyph),
       'glyph',
     ) as CustomGlyph
-    const reflines = collectStraightAxisLinesFromPenComponents(
+    let reflines = collectStraightAxisLinesFromPenComponents(
       snapInstance._components,
       this.initialOx,
       this.initialOy,
     )
+    // 骨架字形：_components 永远为空；回退到 _glyph.components（type='pen'）
+    if (reflines.length === 0 && snapInstance._glyph?.components?.length) {
+      reflines = collectStraightAxisLinesFromGlyphComponents(
+        snapInstance._glyph.components as any[],
+        this.initialOx,
+        this.initialOy,
+      )
+    }
 
     const keylines = this.getAutoSnapKeyLines()
     const ev = evaluateSnapReflineSticky(

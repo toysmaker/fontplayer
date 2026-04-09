@@ -6,6 +6,8 @@
 export type SnapAxisLine = { type: 'horizontal' | 'vertical'; coord: number }
 
 const EPSILON = 1e-6
+/** 骨架形变后的点可能有微小的轴偏差；对 _glyph.components（type='pen'）使用宽松容差 */
+const SKELETON_AXIS_EPSILON = 0.5
 
 function pushSegmentAxisLines(
   reflines: SnapAxisLine[],
@@ -17,19 +19,20 @@ function pushSegmentAxisLines(
   control2Y: number,
   endX: number,
   endY: number,
+  eps: number = EPSILON,
 ) {
   const isControl1AtStart =
-    Math.abs(control1X - startX) < EPSILON && Math.abs(control1Y - startY) < EPSILON
+    Math.abs(control1X - startX) < eps && Math.abs(control1Y - startY) < eps
   const isControl2AtEnd =
-    Math.abs(control2X - endX) < EPSILON && Math.abs(control2Y - endY) < EPSILON
+    Math.abs(control2X - endX) < eps && Math.abs(control2Y - endY) < eps
 
   if (!isControl1AtStart || !isControl2AtEnd) return
 
-  if (Math.abs(startY - endY) < EPSILON) {
-    reflines.push({ type: 'horizontal', coord: startY })
+  if (Math.abs(startY - endY) < eps) {
+    reflines.push({ type: 'horizontal', coord: (startY + endY) / 2 })
   }
-  if (Math.abs(startX - endX) < EPSILON) {
-    reflines.push({ type: 'vertical', coord: startX })
+  if (Math.abs(startX - endX) < eps) {
+    reflines.push({ type: 'vertical', coord: (startX + endX) / 2 })
   }
 }
 
@@ -76,6 +79,58 @@ export function collectStraightAxisLinesFromPenComponents(
         control2Y,
         endX,
         endY,
+      )
+    }
+  }
+
+  return dedupeSnapAxisLines(reflines)
+}
+
+/**
+ * 从骨架字形的 _glyph.components（type='pen'）中提取轴对齐直线段参考线。
+ *
+ * 骨架字形在 executeGlyphScript 中走 strokeFn 分支后 early-return，_components 永远为空。
+ * 实际渲染几何存储在 _glyph.components[n].value.points，由 applySkeletonTransformation 原地更新。
+ * 由于骨架形变引入微小浮点偏差，使用宽松容差 SKELETON_AXIS_EPSILON 检测轴对齐。
+ */
+export function collectStraightAxisLinesFromGlyphComponents(
+  glyphComponents: any[] | undefined,
+  offsetX: number,
+  offsetY: number,
+): SnapAxisLine[] {
+  const reflines: SnapAxisLine[] = []
+  if (!glyphComponents?.length) return dedupeSnapAxisLines(reflines)
+
+  for (const comp of glyphComponents) {
+    if (comp?.type !== 'pen') continue
+    if (comp?.usedInCharacter === false) continue
+    const points = (comp.value as any)?.points as Array<{ x: number; y: number }> | undefined
+    if (!points || points.length < 4) continue
+
+    for (let i = 1; i < points.length; i += 3) {
+      if (i + 2 >= points.length) break
+
+      const startPoint = points[i - 1]
+      const control1 = points[i]
+      const control2 = points[i + 1]
+      const endPoint = points[i + 2]
+
+      const startX = startPoint.x + offsetX
+      const startY = startPoint.y + offsetY
+      const control1X = control1.x + offsetX
+      const control1Y = control1.y + offsetY
+      const control2X = control2.x + offsetX
+      const control2Y = control2.y + offsetY
+      const endX = endPoint.x + offsetX
+      const endY = endPoint.y + offsetY
+
+      pushSegmentAxisLines(
+        reflines,
+        startX, startY,
+        control1X, control1Y,
+        control2X, control2Y,
+        endX, endY,
+        SKELETON_AXIS_EPSILON,
       )
     }
   }
