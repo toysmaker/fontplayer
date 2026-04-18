@@ -134,6 +134,34 @@ describe('reflineSnap', () => {
       const r2 = evaluateSnapReflineSticky(key, refOut, 20, 24, 100, null)
       expect(r2.lockHNext).toBeNull()
     })
+
+    it('with jointWorld, prefers horizontal ref whose y is closest to joint', () => {
+      const key = [{ type: 'horizontal' as const, coord: 100 }]
+      const refs = [
+        { type: 'horizontal' as const, coord: 92 },
+        { type: 'horizontal' as const, coord: 95 },
+      ]
+      const r = evaluateSnapReflineSticky(key, refs, 20, 24, null, null, {
+        x: 0,
+        y: 94,
+      })
+      expect(r.dy).toBe(5)
+      expect(r.lockHNext).toBe(100)
+    })
+
+    it('with jointWorld, prefers vertical ref whose x is closest to joint', () => {
+      const key = [{ type: 'vertical' as const, coord: 200 }]
+      const refs = [
+        { type: 'vertical' as const, coord: 188 },
+        { type: 'vertical' as const, coord: 192 },
+      ]
+      const r = evaluateSnapReflineSticky(key, refs, 20, 24, null, null, {
+        x: 191,
+        y: 0,
+      })
+      expect(r.dx).toBe(8)
+      expect(r.lockVNext).toBe(200)
+    })
   })
 
   describe('mergeSnapAxisLines', () => {

@@ -336,6 +336,33 @@ export abstract class BaseGlyphDragger {
   }
 
   /**
+   * 临时实例上当前拖拽关节的世界坐标（局部 + initialOx/initialOy），与 collectStraightAxisLines* 一致。
+   * 在第一次 executeDrag(raw) 之后调用。
+   */
+  private getDraggingJointWorldFromInstance(
+    instance: CustomGlyph,
+    draggingJoint: IJoint,
+  ): { x: number; y: number } | null {
+    const joints = instance.getJoints()
+    const match = joints.find(
+      (j: { uuid?: string; name?: string }) =>
+        (draggingJoint.uuid != null && j.uuid === draggingJoint.uuid) ||
+        j.name === draggingJoint.name,
+    )
+    if (!match) {
+      return null
+    }
+    const lx =
+      typeof match.x === 'function' ? match.x() : (match.x ?? match._x ?? 0)
+    const ly =
+      typeof match.y === 'function' ? match.y() : (match.y ?? match._y ?? 0)
+    return {
+      x: lx + this.initialOx,
+      y: ly + this.initialOy,
+    }
+  }
+
+  /**
    * @param forWholeGlyphTranslation
    *   true：整体平移组件，试探位置为 initialOrigin + 指针累积位移（与 handleGlyphDrag 一致）。
    *   false：拖骨架非首点，组件 ox/oy 不变；须先用指针累积位移 raw 更新实例再取 pen 轴对齐线，
@@ -423,6 +450,7 @@ export abstract class BaseGlyphDragger {
     }
 
     const keylines = this.getAutoSnapKeyLines()
+    const jointWorld = this.getDraggingJointWorldFromInstance(snapInstance, joint)
     const ev = evaluateSnapReflineSticky(
       keylines,
       reflines,
@@ -430,6 +458,7 @@ export abstract class BaseGlyphDragger {
       SNAP_OUT,
       this.snapLockHKey,
       this.snapLockVKey,
+      jointWorld,
     )
     this.snapLockHKey = ev.lockHNext
     this.snapLockVKey = ev.lockVNext
