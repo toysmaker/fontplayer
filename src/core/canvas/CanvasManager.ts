@@ -443,9 +443,17 @@ export class CanvasManager {
    * 清理不可见的渲染缓存（只清理内存缓存，保留 IndexedDB）
    */
   static cleanupRenderCache(visibleUUIDs: Set<string>): void {
+    // 除了调用方传入的 visibleUUIDs，还要保护 canvas 仍在 DOM 中的 UUID（可能属于弹窗等其他列表）
+    const connectedUUIDs = new Set(visibleUUIDs)
+    for (const [uuid, canvas] of this.canvasMap.entries()) {
+      if (canvas && canvas.isConnected) {
+        connectedUUIDs.add(uuid)
+      }
+    }
+
     const toRemove: string[] = []
     for (const uuid of this.renderCache.keys()) {
-      if (!visibleUUIDs.has(uuid)) {
+      if (!connectedUUIDs.has(uuid)) {
         toRemove.push(uuid)
       }
     }
@@ -481,24 +489,45 @@ export class CanvasManager {
    * 强制清理所有缓存（用于内存压力大时）
    */
   static forceCleanupAllCache(): void {
-    // 清理所有 ImageData
-    for (const cached of this.renderCache.values()) {
+    // 收集仍在 DOM 中的 canvas 对应的 UUID，保留它们的缓存，
+    // 避免清空弹窗或其他可见列表中刚渲染好的内容
+    const connectedUUIDs = new Set<string>()
+    for (const [uuid, canvas] of this.canvasMap.entries()) {
+      if (canvas && canvas.isConnected) {
+        connectedUUIDs.add(uuid)
+      }
+    }
+
+    // 清理 ImageData（跳过仍在 DOM 中的）
+    for (const [uuid, cached] of this.renderCache.entries()) {
+      if (connectedUUIDs.has(uuid)) continue
       if (cached && cached.imageData) {
         cached.imageData = null as any
       }
+      this.renderCache.delete(uuid)
     }
-    this.renderCache.clear()
-    this.contentVersions.clear()
-    
-    // 清空所有 Canvas 内容（释放像素数据）
-    for (const canvas of this.canvasMap.values()) {
-      this.clearCanvasContent(canvas)
+    // 清理 contentVersions（跳过仍在 DOM 中的）
+    for (const uuid of this.contentVersions.keys()) {
+      if (!connectedUUIDs.has(uuid)) {
+        this.contentVersions.delete(uuid)
+      }
     }
-    
+
+    // 清空不在 DOM 中的 Canvas 内容（释放像素数据），保留在 DOM 中的
+    for (const [uuid, canvas] of this.canvasMap.entries()) {
+      if (canvas && !canvas.isConnected) {
+        this.clearCanvasContent(canvas)
+      }
+    }
+
     // 清理 Canvas 映射（但保留 DOM 中的 Canvas 元素）
     // 注意：不清空 canvasMap，因为 Canvas 元素还在 DOM 中，下次访问时会重新注册
-    // 但清空访问时间，让它们可以被 LRU 清理
-    this.canvasAccessTime.clear()
+    // 但清空离线 canvas 的访问时间，让它们可以被 LRU 清理
+    for (const uuid of this.canvasAccessTime.keys()) {
+      if (!connectedUUIDs.has(uuid)) {
+        this.canvasAccessTime.delete(uuid)
+      }
+    }
   }
   
   /**

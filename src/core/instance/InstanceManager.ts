@@ -13,6 +13,7 @@
  * - 画布渲染（EditorCanvasRenderer）：字形组件通过 acquireTemporaryInstance 获取实例，不主动 release，由池子与 LRU 管理。
  * - 导出（ImportExportSvgService）：仅 getInstance / getOrCreateGlyphInstance，不释放。
  * - 轮廓转换（ContourConverter）/ 字体预览（GlyphRenderer）：使用临时实例，用完后立即 releaseTemporaryInstance，避免递归时超过池容量导致 LRU 误删仍在用的实例。
+ * - executeGlyphScript 嵌套 acquire 时须 pinTemporaryFromLRUEviction：否则池满时 LRU 可能驱逐「正在执行脚本」的临时实例并 cleanup()，清空 _components（表现为脚本已跑完但预览 components 为 0）。
  *
  * 复杂字符：若单字符包含大量字形组件，池容量可能不足，可调用 setMaxPoolSize 增大（或接受部分实例被 LRU 回收后按需重建）。
  */
@@ -42,6 +43,28 @@ export class InstanceManager {
   private maxPoolSize: number = 10
   private editingUUIDs: Set<string> = new Set()
   private temporaryInstances: Set<string> = new Set() // 临时实例集合（用于脚本执行等）
+  /** 防止 cleanupPool LRU 驱逐：executeGlyphScript 等持有临时实例期间递增，finally 递减 */
+  private evictionPinCount: Map<string, number> = new Map()
+
+  /**
+   * 脚本执行路径：防止池满时 LRU 驱逐本 key 对应实例并 cleanup 清空 _components（与 release 无关，须在 finally 成对 unpin）
+   */
+  pinTemporaryFromLRUEviction(uuid: string): void {
+    this.evictionPinCount.set(uuid, (this.evictionPinCount.get(uuid) || 0) + 1)
+  }
+
+  unpinTemporaryFromLRUEviction(uuid: string): void {
+    const n = (this.evictionPinCount.get(uuid) || 0) - 1
+    if (n <= 0) {
+      this.evictionPinCount.delete(uuid)
+    } else {
+      this.evictionPinCount.set(uuid, n)
+    }
+  }
+
+  private isEvictionPinned(uuid: string): boolean {
+    return (this.evictionPinCount.get(uuid) || 0) > 0
+  }
 
   /**
    * 设置最大实例池大小
@@ -166,6 +189,16 @@ export class InstanceManager {
   }
 
   /**
+   * 返回池中已有实例（不创建）。
+   * executeGlyphScript 与调用方须共用同一 instanceManager 单例；若调用方曾用动态 import 拿到另一副本，
+   * 本地 acquire 得到的引用可能与脚本实际写入的实例不一致，应用此方法按 key 取当前池内对象。
+   */
+  getPooledInstance<T extends IInstance = IInstance>(uuid: string): T | undefined {
+    const inst = this.instancePool.get(uuid)
+    return inst as T | undefined
+  }
+
+  /**
    * 释放实例
    */
   releaseInstance(uuid: string) {
@@ -199,7 +232,11 @@ export class InstanceManager {
       if (this.isEditing(uuid)) {
         continue
       }
-      
+      // 正在 executeGlyphScript（等）中持有的 key：不可 LRU 驱逐，否则 cleanup() 会清空脚本刚写入的 _components
+      if (this.isEvictionPinned(uuid)) {
+        continue
+      }
+
       if (this.isTemporary(uuid)) {
         // 临时实例候选（不在编辑状态）
         temporaryCandidates.push({

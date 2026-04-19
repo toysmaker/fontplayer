@@ -35,6 +35,23 @@ import {
 } from '@/ui/components/VirtualList/virtualGridLayout'
 import { isTauri } from '@/utils/env'
 
+/**
+ * DEV：[GlyphSel] 详细日志范围 — 'off' 关闭；'last' 仅当前可见切片最后一项；'all' 每项都打印（量大）
+ */
+const GLYPH_SEL_DEBUG_MODE: 'off' | 'last' | 'all' = 'last'
+
+/** 弹窗内缩略图不走 CanvasManager 内存 putImageData 快路径 + 按上开关控制 [GlyphSel] 日志 */
+function glyphSelRenderOptions(sliceIndex: number, sliceLength: number) {
+  const glyphSelVerbose =
+    import.meta.env.DEV &&
+    (GLYPH_SEL_DEBUG_MODE === 'all' ||
+      (GLYPH_SEL_DEBUG_MODE === 'last' && sliceLength > 0 && sliceIndex === sliceLength - 1))
+  return {
+    bypassImageDataCache: true as const,
+    glyphSelVerbose,
+  }
+}
+
 const projectStore = useProjectStore()
 
 const props = defineProps<{
@@ -160,46 +177,156 @@ function getCanvasInItemWrapper(uuid: string): HTMLCanvasElement | null {
 /** 滚动/可见范围快速变化时取消过期的异步渲染，避免旧批次覆盖新可见格 */
 let previewGeneration = 0
 
+/** 合并布局抖动 / 滚动惯性导致的连续 watch，避免几乎全部「cancelled after RAF」、末屏永远不跑完 WK 合成 */
+let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null
+const PREVIEW_DEBOUNCE_MS = 48
+
+function scheduleRenderVisiblePreviews() {
+  if (previewDebounceTimer != null) clearTimeout(previewDebounceTimer)
+  previewDebounceTimer = setTimeout(() => {
+    previewDebounceTimer = null
+    void renderVisiblePreviews()
+  }, PREVIEW_DEBOUNCE_MS)
+}
+
+function cancelPreviewDebounce() {
+  if (previewDebounceTimer != null) {
+    clearTimeout(previewDebounceTimer)
+    previewDebounceTimer = null
+  }
+}
+
+/**
+ * Tauri/WK：父级 translateY 下异步 draw 后像素可能不合成到屏上。
+ * 不能用 gen===previewGeneration 守卫：await renderPreview 间隙里 generation 会递增，整块刷新被跳过，日志仍显示 painted>0 但界面全白。
+ * 仅对本批仍挂在 DOM 且 data-uuid 未变的 canvas 做强制合成。
+ */
+async function tauriRefreshPaintedCanvases(
+  painted: ReadonlyArray<{ canvas: HTMLCanvasElement; uuid: string }>,
+  itemsInRange: readonly ICustomGlyph[],
+  fontSettings: Parameters<typeof GlyphRenderer.renderPreview>[2],
+): Promise<void> {
+  if (!isTauri() || painted.length === 0) return
+
+  const alive = painted.filter((e) => {
+    const c = e.canvas
+    return c.isConnected && (c.getAttribute('data-uuid') ?? '') === e.uuid
+  })
+  if (alive.length === 0) return
+
+  await new Promise<void>((r) => requestAnimationFrame(() => r()))
+  for (const { canvas: c } of alive) {
+    c.style.opacity = '0.99'
+  }
+  void gridContentRef.value?.offsetHeight
+  await new Promise<void>((r) =>
+    requestAnimationFrame(() => {
+      for (const { canvas: c } of alive) {
+        c.style.opacity = ''
+      }
+      r()
+    }),
+  )
+
+  await new Promise<void>((r) => setTimeout(r, 50))
+  if (!projectStore.selectedFile || !fontSettings) return
+
+  const needRetry = itemsInRange.filter((g) => {
+    const c = getCanvasInItemWrapper(g.uuid)
+    return c && !CanvasManager.hasContent(c)
+  })
+  if (needRetry.length === 0) return
+
+  for (let ri = 0; ri < needRetry.length; ri++) {
+    const g = needRetry[ri]!
+    const canvas = getCanvasInItemWrapper(g.uuid)
+    if (!canvas) continue
+    if ((canvas.getAttribute('data-uuid') ?? '') !== g.uuid) continue
+    CanvasManager.invalidateCache(g.uuid)
+    CanvasManager.clearCanvasMark(canvas)
+    CanvasManager.registerCanvas(g.uuid, canvas)
+    await GlyphRenderer.renderPreview(canvas, g, fontSettings, glyphSelRenderOptions(ri, needRetry.length))
+    canvas.style.opacity = '0.99'
+    void canvas.offsetHeight
+    canvas.style.opacity = ''
+  }
+}
+
 async function renderVisiblePreviews() {
-  if (props.visible === false) return
+  if (props.visible === false) {
+    if (import.meta.env.DEV) console.log('[GlyphSel] renderVisiblePreviews: skip (visible=false)')
+    return
+  }
+  /** 与迭代一致：在同步阶段从 glyphList 切片，避免 await 后 visibleItems 被下一轮 watch 改掉导致 done total:0 等假象 */
+  const rangeSnapshot = { ...visibleRange.value }
+  const itemsToRender = glyphList.value.slice(rangeSnapshot.start, rangeSnapshot.end)
   const gen = ++previewGeneration
   const fontSettings = projectStore.selectedFile?.fontSettings
-  if (!projectStore.selectedFile) return
+  if (!projectStore.selectedFile) {
+    if (import.meta.env.DEV) console.log('[GlyphSel] renderVisiblePreviews: skip (no selectedFile)')
+    return
+  }
+
+  if (import.meta.env.DEV) {
+    console.log('[GlyphSel] renderVisiblePreviews: start', {
+      gen,
+      sliceLength: itemsToRender.length,
+      rangeSnapshot,
+      listLength: glyphList.value.length,
+      scrollTop: scrollTop.value,
+      containerHeight: containerHeight.value,
+      colsPerRow: colsPerRow.value,
+      effectiveTrackWidth: effectiveTrackWidth.value,
+    })
+  }
 
   await nextTick()
   await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))
-  if (gen !== previewGeneration) return
-
-  for (const g of visibleItems.value) {
-    if (gen !== previewGeneration) return
-    const uuid = g.uuid
-    const canvas = getCanvasInItemWrapper(uuid)
-    if (!canvas) continue
-    CanvasManager.registerCanvas(uuid, canvas)
-    const hasPixels = CanvasManager.hasContent(canvas)
-    const skip = CanvasManager.canSkipRender(canvas, uuid) && hasPixels
-    if (skip) continue
-    await GlyphRenderer.renderPreview(canvas, g, fontSettings)
+  if (gen !== previewGeneration) {
+    if (import.meta.env.DEV) console.log(`[GlyphSel] renderVisiblePreviews: cancelled after RAF (gen=${gen}, current=${previewGeneration})`)
+    return
   }
 
-  // Tauri/WKWebView：偶发首帧 draw 未合成到缩略图，对仍空白的格强制重画一次
-  if (isTauri() && gen === previewGeneration) {
-    await new Promise<void>((r) => setTimeout(r, 50))
-    if (gen !== previewGeneration) return
-    const needRetry = visibleItems.value.filter((g) => {
-      const c = getCanvasInItemWrapper(g.uuid)
-      return c && !CanvasManager.hasContent(c)
-    })
-    if (needRetry.length === 0) return
-    for (const g of needRetry) {
-      if (gen !== previewGeneration) return
-      const canvas = getCanvasInItemWrapper(g.uuid)
-      if (!canvas) continue
-      CanvasManager.invalidateCache(g.uuid)
-      CanvasManager.clearCanvasMark(canvas)
-      CanvasManager.registerCanvas(g.uuid, canvas)
-      await GlyphRenderer.renderPreview(canvas, g, fontSettings)
+  const paintedPass: { canvas: HTMLCanvasElement; uuid: string }[] = []
+  const renderedDetail: { indexInFile: number; name: string; uuid: string }[] = []
+
+  let missCount = 0
+  for (let i = 0; i < itemsToRender.length; i++) {
+    if (gen !== previewGeneration) {
+      if (import.meta.env.DEV) console.log(`[GlyphSel] renderVisiblePreviews: cancelled in loop (gen=${gen}, current=${previewGeneration})`)
+      return
     }
+    const g = itemsToRender[i]!
+    const uuid = g.uuid
+    const canvas = getCanvasInItemWrapper(uuid)
+    if (!canvas) {
+      missCount++
+      continue
+    }
+    CanvasManager.registerCanvas(uuid, canvas)
+    await GlyphRenderer.renderPreview(canvas, g, fontSettings, glyphSelRenderOptions(i, itemsToRender.length))
+    paintedPass.push({ canvas, uuid })
+    if (import.meta.env.DEV) {
+      renderedDetail.push({
+        indexInFile: rangeSnapshot.start + i,
+        name: g.name,
+        uuid,
+      })
+    }
+  }
+  if (import.meta.env.DEV) {
+    console.log(`[GlyphSel] renderVisiblePreviews: done`, {
+      range: rangeSnapshot,
+      totalInSlice: itemsToRender.length,
+      painted: paintedPass.length,
+      missed: missCount,
+      /** 实际执行了 GlyphRenderer.renderPreview 的项（indexInFile 为在 glyph 列表中的下标） */
+      paintedItems: renderedDetail,
+    })
+  }
+
+  if (paintedPass.length > 0) {
+    await tauriRefreshPaintedCanvases(paintedPass, itemsToRender, fontSettings)
   }
 }
 
@@ -217,10 +344,10 @@ function measureLayout() {
 
 watch(
   () => [visibleRange.value.start, visibleRange.value.end, glyphList.value.length, props.visible] as const,
-  async () => {
+  () => {
     const { start, end } = visibleRange.value
     visibleItems.value = glyphList.value.slice(start, end)
-    void renderVisiblePreviews()
+    scheduleRenderVisiblePreviews()
   },
   { immediate: true },
 )
@@ -234,6 +361,7 @@ watch(
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             measureLayout()
+            cancelPreviewDebounce()
             void renderVisiblePreviews()
           })
         })
@@ -271,6 +399,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  cancelPreviewDebounce()
   window.removeEventListener('resize', measureLayout)
   resizeObserver?.disconnect()
   resizeObserver = null
@@ -310,6 +439,8 @@ watch(
   column-gap: 8px;
   padding: 8px 12px 8px 12px;
   box-sizing: border-box;
+  will-change: transform;
+  contain: layout;
 }
 .glyph-item {
   cursor: pointer;

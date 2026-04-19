@@ -54,7 +54,9 @@ function readU64(dv: DataView, o: number): bigint {
 
 export async function gzipCompressBytes(input: Uint8Array): Promise<Uint8Array> {
   const Ctor = (globalThis as unknown as { CompressionStream?: new (f: string) => object }).CompressionStream
-  const blob = typeof Blob !== 'undefined' ? new Blob([input]) : null
+  // lib.dom 的 BlobPart 将 Uint8Array 收窄为 ArrayBuffer backing；运行时 Blob 接受任意 TypedArray
+  const blob =
+    typeof Blob !== 'undefined' ? new Blob([input as unknown as BlobPart]) : null
   if (Ctor && blob && typeof blob.stream === 'function') {
     const cs = new Ctor('gzip') as TransformStream<Uint8Array, Uint8Array>
     const stream = blob.stream().pipeThrough(cs)

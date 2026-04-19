@@ -27,6 +27,7 @@ vi.mock('@/core/canvas/CanvasManager', () => ({
     restoreFromCache: vi.fn(() => false),
     markCanvasRendered: vi.fn(),
     setRenderCache: vi.fn().mockResolvedValue(undefined),
+    hasContent: vi.fn(() => true),
   },
 }))
 
@@ -46,6 +47,7 @@ vi.mock('@/core/script/ScriptExecutor', () => ({
 vi.mock('@/core/instance/InstanceManager', () => ({
   instanceManager: {
     acquireTemporaryInstance: vi.fn((key, factory) => factory()),
+    getPooledInstance: vi.fn(() => undefined),
     releaseTemporaryInstance: vi.fn(),
     getOrCreateGlyphInstance: vi.fn((glyph, factory) => factory()),
     isTemporary: vi.fn(() => false),

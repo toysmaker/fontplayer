@@ -52,6 +52,21 @@ function getScript(glyph: ICustomGlyph, projectStore?: ReturnType<typeof useProj
 export type ExecuteGlyphScriptOptions = {
   /** 同一调用树内防止组件环导致无限递归；由内部递归传入，外部勿手动复用同一 Set */
   recursionGuard?: Set<string>
+  /**
+   * 为 true 时忽略「tempData 存在则直接 return」守卫。
+   * 笔画模板脚本会在中途设置 glyph.tempData；与缩略图预览共用实例池时可能残留，导致列表预览恒为 0 组件空白。
+   * 仅应由 GlyphRenderer 等只读预览路径传入。
+   */
+  ignoreTempDataGuard?: boolean
+  /**
+   * 字形选择弹窗等预览路径：输出 [GlyphSel] script_* 阶段日志（与 GlyphRenderer glyphSelVerbose 一致）
+   */
+  glyphSelVerbose?: boolean
+}
+
+function logGlyphSelScript(verbose: boolean | undefined, payload: Record<string, unknown>): void {
+  if (!import.meta.env.DEV || !verbose) return
+  console.log('[GlyphSel] script', payload)
 }
 
 /**
@@ -69,6 +84,12 @@ export function executeGlyphScript(
   const key = instanceKey || targetGlyph.uuid
   const guard = options?.recursionGuard ?? new Set<string>()
   if (guard.has(key)) {
+    logGlyphSelScript(options?.glyphSelVerbose, {
+      phase: 'earlyExit_guard_instanceKey',
+      key,
+      glyphUuid: targetGlyph.uuid,
+      name: targetGlyph.name,
+    })
     if (import.meta.env.DEV) {
       console.warn('[executeGlyphScript] Skipping: component already in call stack:', key, targetGlyph.name)
     }
@@ -78,6 +99,13 @@ export function executeGlyphScript(
   // 仍应阻止递归，否则会产生指数级展开（A→B→A 通过不同 component.uuid 绕过 key 检测）
   const glyphUuidGuardKey = 'glyph:' + targetGlyph.uuid
   if (guard.has(glyphUuidGuardKey)) {
+    logGlyphSelScript(options?.glyphSelVerbose, {
+      phase: 'earlyExit_guard_glyphUuid',
+      key,
+      glyphUuidGuardKey,
+      glyphUuid: targetGlyph.uuid,
+      name: targetGlyph.name,
+    })
     if (import.meta.env.DEV) {
       console.warn('[executeGlyphScript] Skipping: glyph type already in call stack:', targetGlyph.uuid, targetGlyph.name)
     }
@@ -85,6 +113,7 @@ export function executeGlyphScript(
   }
   guard.add(key)
   guard.add(glyphUuidGuardKey)
+  instanceManager.pinTemporaryFromLRUEviction(key)
 
   try {
     if (import.meta.env.DEV) {
@@ -158,7 +187,14 @@ export function executeGlyphScript(
       })
     }
     
-    if (existingInstance.tempData) {
+    if (existingInstance.tempData && !options?.ignoreTempDataGuard) {
+      logGlyphSelScript(options?.glyphSelVerbose, {
+        phase: 'earlyExit_tempData',
+        key,
+        glyphUuid: targetGlyph.uuid,
+        name: targetGlyph.name,
+        tempDataKeys: Object.keys(existingInstance.tempData),
+      })
       return
     }
 
@@ -169,6 +205,8 @@ export function executeGlyphScript(
         if (component.type === 'glyph') {
           executeGlyphScript(component.value as ICustomGlyph, component.uuid, {
             recursionGuard: guard,
+            ignoreTempDataGuard: options?.ignoreTempDataGuard,
+            glyphSelVerbose: options?.glyphSelVerbose,
           })
         }
       }
@@ -205,6 +243,15 @@ export function executeGlyphScript(
         // 不在此处调用 glyphSkeletonBind：多组件共存时会对共享的 glyph 写入 skeletonBindData，导致实例混乱、无法移动。
         // 骨架绑定字形的预览在 GlyphRenderer 中单独处理（有 bindData 时才 apply）。
         updateSkeletonTransformation(glyphInstance)
+        logGlyphSelScript(options?.glyphSelVerbose, {
+          phase: 'return_after_skeleton_strokeFn',
+          key,
+          glyphUuid: targetGlyph.uuid,
+          name: targetGlyph.name,
+          skeletonType: type,
+          _componentsLenAfter: glyphInstance._components?.length ?? 0,
+          note: '主脚本 script 未执行（此 return 在 getScript 之前）',
+        })
         return
       }
     }
@@ -240,6 +287,16 @@ export function executeGlyphScript(
 
       // 执行主脚本
       const script = getScript(targetGlyph, projectStore)
+      logGlyphSelScript(options?.glyphSelVerbose, {
+        phase: 'after_getScript',
+        key,
+        glyphUuid: targetGlyph.uuid,
+        name: targetGlyph.name,
+        hasInlineScript: !!targetGlyph.script,
+        script_reference: targetGlyph.script_reference ?? null,
+        scriptLen: script ? script.length : 0,
+        getScriptReturnedNull: !script,
+      })
       if (script) {
         const scriptFunctionName = `script_${targetGlyph.uuid.replaceAll('-', '_')}`
         const scriptCode = `${script}\n${scriptFunctionName}(glyph, constantsMap, FP)`
@@ -251,6 +308,14 @@ export function executeGlyphScript(
         try {
           const fn = new Function(scriptCode)
           fn()
+          logGlyphSelScript(options?.glyphSelVerbose, {
+            phase: 'after_main_script_fn',
+            key,
+            glyphUuid: targetGlyph.uuid,
+            name: targetGlyph.name,
+            _componentsLen: glyphInstance._components?.length ?? 0,
+            _componentTypes: (glyphInstance._components || []).map((c: any) => c?.type ?? typeof c),
+          })
         } catch (scriptError) {
           console.error(`[ScriptExecutor] Error executing script for ${targetGlyph.uuid}:`, scriptError)
           throw scriptError
@@ -311,7 +376,15 @@ export function executeGlyphScript(
       if (originalSelectedFile !== undefined) {
         selectedFile.value = originalSelectedFile
       }
-      
+
+      logGlyphSelScript(options?.glyphSelVerbose, {
+        phase: 'inner_try_done_before_release',
+        key,
+        glyphUuid: targetGlyph.uuid,
+        name: targetGlyph.name,
+        _componentsLen: glyphInstance._components?.length ?? 0,
+        _componentTypes: (glyphInstance._components || []).map((c: any) => c?.type ?? typeof c),
+      })
       
       // 注意：不在这里释放临时实例，因为转换轮廓时还需要访问实例的 _components
       // 实例会在转换完成后由调用者释放，或者由实例池的 LRU 策略管理
@@ -325,9 +398,17 @@ export function executeGlyphScript(
       throw innerError
     }
   } catch (e) {
+    logGlyphSelScript(options?.glyphSelVerbose, {
+      phase: 'outer_catch',
+      key,
+      glyphUuid: targetGlyph.uuid,
+      name: targetGlyph.name,
+      error: e instanceof Error ? e.message : String(e),
+    })
     console.error('Error executing glyph script:', e)
     instanceManager.releaseTemporaryInstance(key)
   } finally {
+    instanceManager.unpinTemporaryFromLRUEviction(key)
     guard.delete(key)
     guard.delete(glyphUuidGuardKey)
   }
