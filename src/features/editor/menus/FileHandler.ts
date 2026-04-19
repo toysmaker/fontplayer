@@ -13,11 +13,14 @@ import type { IFile } from '@/core/types'
 import {
   encodeFpFile,
   gzipCompressBytes,
+  buildFpTocEntries,
+  encodeFpHeaderTocPrefix,
   isFpProjectFile,
   FP_FLAG_SEMANTIC_STRIP,
   type FpHeaderWrap,
   type EncodeFpTocMeta,
 } from '@/features/editor/services/projectArchive/fpProjectFormat'
+import { genUUID } from '@/utils/uuid'
 import {
   buildFpzHeaderProject,
   stripCharacterForTemplate,
@@ -543,14 +546,8 @@ export class FileHandler {
     }
   }
 
-  /**
-   * 编码当前工程为 `.fp`（语义裁剪 + gzip 分块 + 尾部字形 gzip）
-   */
-  private async encodeCurrentProjectToFpBuffer(
-    file: IFile,
-    onCharacterProgress?: (index: number) => void,
-  ): Promise<ArrayBuffer> {
-    const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
+  /** 与 encodeFpFile / 流式保存共用的工程头（buildFpzHeaderProject） */
+  private buildFpHeaderWrapForSave(file: IFile): FpHeaderWrap {
     const list = file.characterList || []
     const fullProjectForHeader: Record<string, unknown> = {
       version: '2.0',
@@ -573,12 +570,34 @@ export class FileHandler {
       constants: file.constants || [],
     }
     const headerProject = buildFpzHeaderProject(fullProjectForHeader)
-    const headerWrap: FpHeaderWrap = {
+    return {
       fpVersion: 1,
       characterCount: list.length,
       flags: FP_FLAG_SEMANTIC_STRIP,
       project: headerProject,
     }
+  }
+
+  private createGlyphBundleJsonForSave(file: IFile): string {
+    return JSON.stringify({
+      glyphs: this.cleanupGlyphArray(file.glyphs),
+      stroke_glyphs: this.cleanupGlyphArray(file.stroke_glyphs),
+      radical_glyphs: this.cleanupGlyphArray(file.radical_glyphs),
+      comp_glyphs: this.cleanupGlyphArray(file.comp_glyphs),
+    })
+  }
+
+  /**
+   * 编码当前工程为 `.fp`（语义裁剪 + gzip 分块 + 尾部字形 gzip）
+   * Web / 导出下载等：仍整包进内存；Tauri 主保存请用 writeProjectFpFileToPathStreaming。
+   */
+  private async encodeCurrentProjectToFpBuffer(
+    file: IFile,
+    onCharacterProgress?: (index: number) => void,
+  ): Promise<ArrayBuffer> {
+    const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
+    const list = file.characterList || []
+    const headerWrap = this.buildFpHeaderWrapForSave(file)
     const characterChunks: Uint8Array[] = []
     const tocMeta: EncodeFpTocMeta[] = []
     for (let i = 0; i < list.length; i++) {
@@ -597,13 +616,119 @@ export class FileHandler {
       })
       if (onCharacterProgress) onCharacterProgress(i + 1)
     }
-    const glyphBundleJson = JSON.stringify({
-      glyphs: this.cleanupGlyphArray(file.glyphs),
-      stroke_glyphs: this.cleanupGlyphArray(file.stroke_glyphs),
-      radical_glyphs: this.cleanupGlyphArray(file.radical_glyphs),
-      comp_glyphs: this.cleanupGlyphArray(file.comp_glyphs),
-    })
+    const glyphBundleJson = this.createGlyphBundleJsonForSave(file)
     return encodeFpFile({ headerWrap, characterChunks, tocMeta, glyphBundleJson })
+  }
+
+  /**
+   * Tauri：流式写入 `.fp`——逐字 gzip 写入临时载荷文件，再拼头/TOC 与尾部 glyph gzip，
+   * 避免在 JS 中持有全部 gzip 分块 + 与整文件等长的单块 ArrayBuffer。
+   */
+  private async writeProjectFpFileToPathStreaming(
+    file: IFile,
+    filePath: string,
+    onCharacterProgress?: (index: number) => void,
+  ): Promise<void> {
+    const { open, remove, writeFile, mkdir } = await import('@tauri-apps/plugin-fs')
+    const { join, appLocalDataDir } = await import('@tauri-apps/api/path')
+    const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
+
+    const headerWrap = this.buildFpHeaderWrapForSave(file)
+    const glyphBundleJson = this.createGlyphBundleJsonForSave(file)
+    const list = file.characterList || []
+
+    if (list.length === 0) {
+      const toc = buildFpTocEntries([], [])
+      const prefix = encodeFpHeaderTocPrefix(headerWrap, toc)
+      const glyphGzip = await gzipCompressBytes(new TextEncoder().encode(glyphBundleJson))
+      const out = new Uint8Array(prefix.length + glyphGzip.length)
+      out.set(prefix, 0)
+      out.set(glyphGzip, prefix.length)
+      await writeFile(filePath, out)
+      return
+    }
+
+    // 必须与保存路径同卷的逻辑去掉：同目录往往在 Downloads 等位置，Tauri `$DOWNLOAD` 与真实绝对路径不一致会导致 fs:scope 拒绝 `open`。
+    // 放到 AppLocalData（$APPDATA）下，与 capabilities 中的 `$APPDATA/**` 一致。
+    const appData = await appLocalDataDir()
+    const payloadDir = await join(appData, 'fp-save-payload')
+    await mkdir(payloadDir, { recursive: true })
+    const payloadTempPath = await join(payloadDir, `payload-${genUUID()}.tmp`)
+
+    let payloadOut: Awaited<ReturnType<typeof open>> | null = null
+    try {
+      payloadOut = await open(payloadTempPath, { write: true, create: true, truncate: true })
+      const compressedLengths: number[] = []
+      const tocMeta: EncodeFpTocMeta[] = []
+
+      for (let i = 0; i < list.length; i++) {
+        const metadata = list[i]!
+        const char = await characterDataManager.loadCharacter(file.uuid, metadata.uuid)
+        const plain = char ? this.plainCharacter(char) : metadata
+        const stripped = stripCharacterForTemplate(plain as Record<string, unknown>, {
+          stripGlyphParameterEnumOptions: false,
+        })
+        const json = JSON.stringify(stripped)
+        const gz = await gzipCompressBytes(new TextEncoder().encode(json))
+        const written = await payloadOut.write(gz)
+        if (written !== gz.byteLength) {
+          throw new Error(`FP streaming save: short write on payload (${written}/${gz.byteLength})`)
+        }
+        compressedLengths.push(gz.length)
+        tocMeta.push({
+          uuid: String(stripped.uuid ?? ''),
+          unicode: unicodeToCodePoint(stripped),
+        })
+        if (onCharacterProgress) onCharacterProgress(i + 1)
+      }
+      await payloadOut.close()
+      payloadOut = null
+
+      const toc = buildFpTocEntries(tocMeta, compressedLengths)
+      const prefix = encodeFpHeaderTocPrefix(headerWrap, toc)
+      const glyphGzip = await gzipCompressBytes(new TextEncoder().encode(glyphBundleJson))
+
+      const dest = await open(filePath, { read: true, write: true, create: true, truncate: true })
+      try {
+        let w = await dest.write(prefix)
+        if (w !== prefix.byteLength) {
+          throw new Error(`FP streaming save: short write on header (${w}/${prefix.byteLength})`)
+        }
+        const payloadIn = await open(payloadTempPath, { read: true })
+        try {
+          const pumpBuf = new Uint8Array(256 * 1024)
+          while (true) {
+            const n = await payloadIn.read(pumpBuf)
+            if (n === null) break
+            w = await dest.write(pumpBuf.subarray(0, n))
+            if (w !== n) {
+              throw new Error(`FP streaming save: short write pumping payload (${w}/${n})`)
+            }
+          }
+        } finally {
+          await payloadIn.close()
+        }
+        w = await dest.write(glyphGzip)
+        if (w !== glyphGzip.byteLength) {
+          throw new Error(`FP streaming save: short write on glyph tail (${w}/${glyphGzip.byteLength})`)
+        }
+      } finally {
+        await dest.close()
+      }
+    } finally {
+      if (payloadOut) {
+        try {
+          await payloadOut.close()
+        } catch {
+          /* ignore */
+        }
+      }
+      try {
+        await remove(payloadTempPath)
+      } catch {
+        /* ignore: may not exist */
+      }
+    }
   }
 
   /** Tauri：将 `.fp` 二进制写入磁盘 */
@@ -614,11 +739,9 @@ export class FileHandler {
     store.loadingTotal = file.characterList?.length || 0
     store.loading = true
     try {
-      const buf = await this.encodeCurrentProjectToFpBuffer(file, (i) => {
+      await this.writeProjectFpFileToPathStreaming(file, filePath, (i) => {
         store.loadingProgress = i
       })
-      const { writeFile } = await import('@tauri-apps/plugin-fs')
-      await writeFile(filePath, new Uint8Array(buf))
     } finally {
       store.loading = false
     }

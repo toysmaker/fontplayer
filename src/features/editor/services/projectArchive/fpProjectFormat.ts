@@ -159,31 +159,37 @@ export interface EncodeFpProjectParams {
 }
 
 /**
- * Assemble binary .fp file. Does not hold duplicate character JSON strings — only gzip chunks.
+ * Build per-character TOC entries from gzip sizes (same layout as encodeFpFile).
  */
-export async function encodeFpFile(params: EncodeFpProjectParams): Promise<ArrayBuffer> {
-  const { headerWrap, characterChunks, tocMeta, glyphBundleJson } = params
-  if (characterChunks.length !== tocMeta.length) {
-    throw new Error('FP encode: characterChunks and tocMeta length mismatch')
+export function buildFpTocEntries(
+  tocMeta: EncodeFpTocMeta[],
+  compressedLengths: number[],
+): FpzTocEntry[] {
+  if (tocMeta.length !== compressedLengths.length) {
+    throw new Error('FP encode: tocMeta and compressedLengths length mismatch')
   }
-  const headerJson = JSON.stringify(headerWrap)
-  const headerBuf = new TextEncoder().encode(headerJson)
-
   const toc: FpzTocEntry[] = []
   let payloadOffset = 0
-  for (let i = 0; i < characterChunks.length; i++) {
-    const compressed = characterChunks[i]!
+  for (let i = 0; i < compressedLengths.length; i++) {
+    const len = compressedLengths[i]!
     const m = tocMeta[i]!
     toc.push({
       uuid: m.uuid,
       unicode: m.unicode >>> 0,
       payloadOffset,
-      compressedLength: compressed.length,
+      compressedLength: len >>> 0,
     })
-    payloadOffset += compressed.length
+    payloadOffset += len
   }
+  return toc
+}
 
-  const glyphGzip = await gzipCompressBytes(new TextEncoder().encode(glyphBundleJson))
+/**
+ * FP01 … end of TOC (exclusive of character gzip payload). Used by streaming Tauri save.
+ */
+export function encodeFpHeaderTocPrefix(headerWrap: FpHeaderWrap, toc: FpzTocEntry[]): Uint8Array {
+  const headerJson = JSON.stringify(headerWrap)
+  const headerBuf = new TextEncoder().encode(headerJson)
 
   const tocCount = toc.length
   let tocSize = 4
@@ -193,8 +199,8 @@ export async function encodeFpFile(params: EncodeFpProjectParams): Promise<Array
 
   const headerSection = 16 + headerBuf.length
   const payloadStart = headerSection + tocSize
-  const totalLen = payloadStart + payloadOffset + glyphGzip.length
-  const out = new Uint8Array(totalLen)
+
+  const out = new Uint8Array(payloadStart)
   const dv = new DataView(out.buffer)
   let w = 0
   for (let i = 0; i < 4; i++) out[w++] = FP_MAGIC[i]!
@@ -225,14 +231,35 @@ export async function encodeFpFile(params: EncodeFpProjectParams): Promise<Array
     w += 4
   }
   if (w !== payloadStart) throw new Error(`FP: toc size mismatch ${w} vs ${payloadStart}`)
+  return out
+}
 
-  let po = 0
+/**
+ * Assemble binary .fp file. Does not hold duplicate character JSON strings — only gzip chunks.
+ */
+export async function encodeFpFile(params: EncodeFpProjectParams): Promise<ArrayBuffer> {
+  const { headerWrap, characterChunks, tocMeta, glyphBundleJson } = params
+  if (characterChunks.length !== tocMeta.length) {
+    throw new Error('FP encode: characterChunks and tocMeta length mismatch')
+  }
+  const compressedLengths = characterChunks.map((c) => c.length)
+  const toc = buildFpTocEntries(tocMeta, compressedLengths)
+
+  const glyphGzip = await gzipCompressBytes(new TextEncoder().encode(glyphBundleJson))
+
+  let payloadByteLen = 0
+  for (const c of characterChunks) payloadByteLen += c.length
+
+  const prefix = encodeFpHeaderTocPrefix(headerWrap, toc)
+  const totalLen = prefix.length + payloadByteLen + glyphGzip.length
+  const out = new Uint8Array(totalLen)
+  out.set(prefix, 0)
+  let w = prefix.length
   for (let i = 0; i < characterChunks.length; i++) {
     const chunk = characterChunks[i]!
-    out.set(chunk, w + po)
-    po += chunk.length
+    out.set(chunk, w)
+    w += chunk.length
   }
-  w += po
   out.set(glyphGzip, w)
   return out.buffer
 }

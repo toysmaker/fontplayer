@@ -4,6 +4,8 @@ import { Buffer } from 'node:buffer'
 import {
   characterPayloadEnd,
   encodeFpFile,
+  buildFpTocEntries,
+  encodeFpHeaderTocPrefix,
   gzipCompressBytes,
   parseFpBuffer,
   isFpProjectFile,
@@ -81,5 +83,71 @@ describe('fpProjectFormat', () => {
     const tail = new Uint8Array(decoded.buffer, end)
     const bundle = JSON.parse(gunzipSync(Buffer.from(tail)).toString('utf-8')) as { glyphs: { uuid: string }[] }
     expect(bundle.glyphs[0]!.uuid).toBe('g1')
+  })
+
+  it('buildFpTocEntries + encodeFpHeaderTocPrefix + payload + glyph matches encodeFpFile bytes', async () => {
+    const char = {
+      uuid: 'char-1',
+      type: 'text',
+      character: { uuid: 'x', text: '测', unicode: '6d4b' },
+      components: [],
+      groups: [],
+      orderedList: [],
+      selectedComponentsUUIDs: [],
+      script: 'function script() {\n\t//Todo something\n}',
+      view: { zoom: 100, translateX: 0, translateY: 0 },
+      info: {},
+    }
+    const project = {
+      version: '2.0',
+      file: {
+        uuid: 'file-1',
+        name: 'Test',
+        tag: 'test',
+        width: 1000,
+        height: 1000,
+        characterList: [char],
+        fontSettings: { unitsPerEm: 1000, ascender: 800, descender: -200 },
+      },
+      constants: [],
+      glyphs: [{ uuid: 'g1', name: 'a' }],
+      stroke_glyphs: [{ uuid: 'sg1', name: '横' }],
+      radical_glyphs: [],
+      comp_glyphs: [],
+    }
+
+    const headerProject = buildFpzHeaderProject(project as Record<string, unknown>)
+    const stripped = stripCharacterForTemplate(char as Record<string, unknown>)
+    const gz = await gzipCompressBytes(new TextEncoder().encode(JSON.stringify(stripped)))
+    const headerWrap = {
+      fpVersion: 1,
+      characterCount: 1,
+      flags: 1,
+      project: headerProject,
+    }
+    const tocMeta = [{ uuid: String(stripped.uuid), unicode: 0x6d4b }]
+    const glyphBundleJson = JSON.stringify({
+      glyphs: project.glyphs,
+      stroke_glyphs: project.stroke_glyphs,
+      radical_glyphs: project.radical_glyphs,
+      comp_glyphs: project.comp_glyphs,
+    })
+
+    const bufFull = await encodeFpFile({
+      headerWrap,
+      characterChunks: [gz],
+      tocMeta,
+      glyphBundleJson,
+    })
+
+    const toc = buildFpTocEntries(tocMeta, [gz.length])
+    const prefix = encodeFpHeaderTocPrefix(headerWrap, toc)
+    const glyphGzip = await gzipCompressBytes(new TextEncoder().encode(glyphBundleJson))
+    const assembled = new Uint8Array(prefix.length + gz.length + glyphGzip.length)
+    assembled.set(prefix, 0)
+    assembled.set(gz, prefix.length)
+    assembled.set(glyphGzip, prefix.length + gz.length)
+
+    expect(new Uint8Array(bufFull)).toEqual(assembled)
   })
 })
