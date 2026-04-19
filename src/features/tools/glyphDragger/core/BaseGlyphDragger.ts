@@ -186,9 +186,19 @@ export abstract class BaseGlyphDragger {
    * 每次真正触发拖拽（mousedown）前，从 store 按 componentUUID 取最新 selected component，
    * 以保证 bbox 计算完全一致。
    */
+  /**
+   * 画布点击改选组件后调用，使 context 与 store 的 selectedComponent 一致，
+   * 避免下一轮拖拽骨架仍绑定旧 component 引用。
+   */
+  syncContextWithStoreSelection(): void {
+    this.syncContextFromStore()
+  }
+
   private syncContextFromStore() {
     const cfg: any = this.config
     const { mode } = this.context
+
+    const prevUUID = this.context.componentUUID
 
     if (mode === 'character' && cfg.characterStore) {
       const store = cfg.characterStore
@@ -209,6 +219,16 @@ export abstract class BaseGlyphDragger {
         this.context.component = latest
         this.context.glyph = latest.type === 'glyph' ? latest.value : undefined
       }
+    }
+
+    // 选中从 A 切到 B 时须重置拖拽基准。否则 mousedown 写在 initialOx/Oy 上的仍是 A，
+    // 而同一 click 的 mouseup 里（window，晚于 SelectTool）handleGlyphDrag 已指向 B，
+    // 会把 A 的原点误写进 B，表现为叠字点击切选后组件「跳到上一选区附近」。
+    if (this.context.componentUUID !== undefined && this.context.componentUUID !== prevUUID) {
+      const o = this.getOrigin()
+      this.initialOx = o.ox ?? 0
+      this.initialOy = o.oy ?? 0
+      this.origin = o
     }
   }
 

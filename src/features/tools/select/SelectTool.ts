@@ -34,6 +34,11 @@ export class SelectTool extends BaseTool {
   private lastMX: number = -1
   private lastMY: number = -1
 
+  /** 重叠组件：连续同一点点击时轮换选中；坐标为逻辑坐标系 */
+  private overlapPickCoord: { x: number; y: number } | null = null
+  private overlapPickFingerprint = ''
+  private static readonly OVERLAP_PICK_COORD_EPS = 4
+
   // 事件处理器引用（用于解绑）
   private mouseDownHandler: ((e: MouseEvent) => void) | null = null
   private mouseMoveHandler: ((e: MouseEvent) => void) | null = null
@@ -147,6 +152,7 @@ export class SelectTool extends BaseTool {
     this.lastMX = -1
     this.lastMY = -1
     this.initialBBox = null
+    this.resetOverlapPickState()
   }
 
   cleanup(): void {
@@ -420,8 +426,6 @@ export class SelectTool extends BaseTool {
         isInBounds =
           this.glyphComponentContainsPoint(clickPoint, component, 20) ||
           inComponentBound(clickPoint, component, 20)
-
-          console.log('glyphComponentContainsPoint', isInBounds, component.uuid, clickPoint.x, clickPoint.y)
       } else {
         isInBounds = inComponentBound(clickPoint, component, 20)
       }
@@ -792,11 +796,20 @@ export class SelectTool extends BaseTool {
     }
   }
 
+  private resetOverlapPickState(): void {
+    this.overlapPickCoord = null
+    this.overlapPickFingerprint = ''
+  }
+
+  private syncDraggerContextAfterSelection(): void {
+    const dragger = DraggerManager.get(this.canvas)
+    dragger?.syncContextWithStoreSelection?.()
+  }
+
   /**
    * 处理点击选择逻辑
    */
   private handleClickSelection(e: MouseEvent): void {
-    console.log('handleClickSelection')
     const characterStore = useCharacterStore()
     const glyphStore = useGlyphStore()
     const isGlyph = this.config.mode === 'glyph'
@@ -809,33 +822,28 @@ export class SelectTool extends BaseTool {
 
     let offsetX = e.offsetX
     let offsetY = e.offsetY
-    console.log('offsetX, offsetY', offsetX, offsetY)
     if (target !== this.canvas) {
       const rect = this.canvas.getBoundingClientRect()
       offsetX = e.clientX - rect.left
       offsetY = e.clientY - rect.top
     }
-    console.log('clickPoint', offsetX, offsetY)
 
     const clickPoint = {
       x: this.getCoord(offsetX),
       y: this.getCoord(offsetY),
     }
 
-    console.log('clickPoint 2', clickPoint.x, clickPoint.y)
-
-    // 查找点击的组件
-    const orderedList = isGlyph 
-      ? (glyphStore as any).orderedListWithItemsForCurrentGlyph 
+    const orderedList = isGlyph
+      ? (glyphStore as any).orderedListWithItemsForCurrentGlyph
       : (characterStore as any).orderedListWithItemsForCurrentCharacterFile
 
     const currentSelectedUUID = isGlyph
       ? (glyphStore as any).selectedComponentUUID
       : (characterStore as any).selectedComponentUUID
 
-    // 收集所有边界框包含点击点的组件
-    // 重要：当前选中的字形组件若没有精确 bbox（如从对话框添加的字形），只用精确检测加入候选，不用 component.x/y/w/h 的 fallback，否则 (0,0,1000,1000) 会覆盖整画布导致无法点击其他组件切换选择
     const candidateComponents: Array<{ component: IComponent; distance: number }> = []
+    /** 自上而下（先绘制的在上层 / orderedList 末尾更靠前） */
+    const hitsZOrder: IComponent[] = []
 
     for (let i = orderedList.length - 1; i >= 0; i--) {
       const component = orderedList[i]
@@ -845,7 +853,6 @@ export class SelectTool extends BaseTool {
       if (component.type === 'glyph') {
         const isCurrentSelectedGlyph = component.uuid === currentSelectedUUID
         if (isCurrentSelectedGlyph) {
-          // 当前选中的字形：仅当精确 bbox 包含点击时才算在范围内，不使用 inComponentBound 的 fallback
           isInBounds = this.glyphComponentContainsPoint(clickPoint, component, 20)
         } else {
           isInBounds =
@@ -857,6 +864,7 @@ export class SelectTool extends BaseTool {
       }
 
       if (isInBounds) {
+        hitsZOrder.push(component)
         let centerX: number
         let centerY: number
         if (component.type === 'glyph') {
@@ -880,49 +888,73 @@ export class SelectTool extends BaseTool {
       }
     }
 
-    // 如果点击的是已选中的组件，需要特殊处理
-    // 对于字形组件：优先保持选中（不切换），让 glyphDragger 响应关键点拖拽
-    // 对于钢笔组件且处于编辑模式：让 penSelectTool 处理点编辑，不切换选择
-    const currentSelected = currentSelectedUUID
-      ? candidateComponents.find(c => c.component.uuid === currentSelectedUUID)
-      : null
-    if (currentSelected) {
-      if (currentSelected.component.type === 'glyph') {
-        // 字形已在上面只按精确 bbox 加入候选，能进这里说明点击确实在精确 bbox 内，保持选中
+    const nHits = hitsZOrder.length
+
+    // 仅唯一命中：保持原行为（字形不重复切选、钢笔编辑不退出）
+    if (nHits === 1) {
+      const only = hitsZOrder[0]
+      if (only.uuid === currentSelectedUUID && only.type === 'glyph') {
+        this.resetOverlapPickState()
         return
       }
-      if (currentSelected.component.type === 'pen') {
-        const penComponent = currentSelected.component.value as unknown as IPenComponent
-        if (penComponent.editMode && this.penSelectTool && this.penSelectTool.isToolActive()) {
+      if (only.type === 'pen') {
+        const penComponent = only.value as unknown as IPenComponent
+        if (
+          penComponent.editMode &&
+          this.penSelectTool &&
+          this.penSelectTool.isToolActive()
+        ) {
+          this.resetOverlapPickState()
           return
         }
       }
     }
 
-    // 如果有候选组件，选择距离最近的
     if (candidateComponents.length > 0) {
-      // 按距离排序，选择最近的
-      candidateComponents.sort((a, b) => a.distance - b.distance)
-      const closestComponent = candidateComponents[0].component
+      const fp = hitsZOrder.map((c) => c.uuid).join('|')
+      const sameSpot =
+        this.overlapPickCoord !== null &&
+        Math.hypot(
+          clickPoint.x - this.overlapPickCoord.x,
+          clickPoint.y - this.overlapPickCoord.y,
+        ) < SelectTool.OVERLAP_PICK_COORD_EPS
+      const sameFp = fp === this.overlapPickFingerprint
 
-      // 与左侧组件列表保持一致：统一走 setSelection，避免点击画布与点击列表的选择状态不一致
-      if (isGlyph) {
-        (glyphStore as any).setSelection(closestComponent.uuid)
+      let picked: IComponent
+
+      if (candidateComponents.length > 1 && sameSpot && sameFp && currentSelectedUUID) {
+        const idx = hitsZOrder.findIndex((c) => c.uuid === currentSelectedUUID)
+        if (idx !== -1) {
+          picked = hitsZOrder[(idx + 1) % hitsZOrder.length]
+        } else {
+          const sorted = [...candidateComponents].sort((a, b) => a.distance - b.distance)
+          picked = sorted[0].component
+        }
       } else {
-        (characterStore as any).setSelection(closestComponent.uuid)
+        const sorted = [...candidateComponents].sort((a, b) => a.distance - b.distance)
+        picked = sorted[0].component
       }
-      // 选择变更后触发重新渲染（包括控件框和 dragger）
+
+      this.overlapPickCoord = { x: clickPoint.x, y: clickPoint.y }
+      this.overlapPickFingerprint = fp
+
+      if (isGlyph) {
+        ;(glyphStore as any).setSelection(picked.uuid)
+      } else {
+        ;(characterStore as any).setSelection(picked.uuid)
+      }
+      this.syncDraggerContextAfterSelection()
       this.triggerRender()
       return
     }
 
-    // 没有找到任何组件，清除选择
+    this.resetOverlapPickState()
     if (isGlyph) {
-      (glyphStore as any).clearSelection()
+      ;(glyphStore as any).clearSelection()
     } else {
-      (characterStore as any).clearSelection()
+      ;(characterStore as any).clearSelection()
     }
-    // 清除选择后也需要重新渲染，移除控件框
+    this.syncDraggerContextAfterSelection()
     this.triggerRender()
   }
 
@@ -960,8 +992,6 @@ export class SelectTool extends BaseTool {
       }
       return
     }
-
-    console.log('onMouseUp', this.mousemove)
 
     // 如果用户没有移动鼠标，说明是点击操作，需要处理点击选择
     if (!this.mousemove) {
