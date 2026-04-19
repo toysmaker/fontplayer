@@ -5,6 +5,7 @@
       :style="{ height: `${totalHeight}px` }"
     />
     <div
+      ref="gridContentRef"
       class="virtual-list-content"
       :style="{ transform: `translateY(${offsetY}px)` }"
     >
@@ -46,6 +47,11 @@ import { EditStatus } from '@/core/types'
 import { GlyphRenderer } from '@/core/font/GlyphRenderer'
 import { CanvasManager } from '@/core/canvas/CanvasManager'
 import { createDebouncedHandler } from '@/utils/debounce-click'
+import {
+  columnsFromTrackInnerWidth,
+  readGridTrackInnerWidth,
+  fallbackTrackInnerWidthFromScrollContainer,
+} from '@/ui/components/VirtualList/virtualGridLayout'
 
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
@@ -73,14 +79,30 @@ const gap = props.gap || 10 // 网格间距
 const padding = props.padding || 10 // 容器内边距
 const overscan = props.overscan || 2 // 预加载的行数
 
+/** 外层 .virtual-glyph-list 与 .virtual-list-content 水平 padding 之和（与 scoped CSS 一致） */
+const gridScrollPadX = padding * 4
+
 // Refs
 const containerRef = ref<HTMLElement>()
+const gridContentRef = ref<HTMLElement>()
 const itemRefs = new Map<string, HTMLElement>()
 
 // 状态
 const scrollTop = ref(0)
 const containerHeight = ref(0)
 const containerWidth = ref(0)
+/** 与 repeat(auto-fill) 对齐：实测 .virtual-list-content 内 track 宽度 */
+const gridTrackInnerWidth = ref(0)
+
+const effectiveTrackWidth = computed(() => {
+  let w = gridTrackInnerWidth.value
+  if (w <= 0 && containerWidth.value > 0) {
+    w = fallbackTrackInnerWidthFromScrollContainer(containerWidth.value, gridScrollPadX)
+  }
+  if (w <= 0) return 280
+  return w
+})
+
 const lastVisibleStart = ref(0)
 const lastVisibleEnd = ref(0)
 
@@ -102,22 +124,16 @@ const showAddButton = computed(() => {
   return visibleRange.value.end >= glyphList.value.length
 })
 
-// 计算每行字符数（响应式，参考原工程的容错机制）
-const colsPerRow = computed(() => {
-  if (containerWidth.value <= 0) return 1
-  // 可用宽度 = 容器宽度 - 左右内边距
-  const availableWidth = containerWidth.value - padding * 2
-  // 每行字符数 = 可用宽度 / (字符宽度 + 间距)
-  // 使用 Math.ceil 计算理论值，然后减1作为容错（因为 Grid 可能不会完全占满）
-  const theoreticalCols = Math.ceil(availableWidth / (itemWidth + gap))
-  const cols = Math.max(1, theoreticalCols - 1) // 减少1个作为容错，至少1列
-  return cols
-})
+const colsPerRow = computed(() =>
+  columnsFromTrackInnerWidth(effectiveTrackWidth.value, itemWidth, gap)
+)
 
-// 计算总行数
-const totalRows = computed(() => {
-  if (glyphList.value.length === 0) return 0
-  return Math.ceil(glyphList.value.length / colsPerRow.value)
+/** 含末尾「添加字形」占一格时的总行数（用于滚动高度与 endRow 上限） */
+const gridRowCount = computed(() => {
+  const add = projectStore.selectedFile ? 1 : 0
+  const cells = glyphList.value.length + add
+  if (cells <= 0) return 0
+  return Math.ceil(cells / colsPerRow.value)
 })
 
 // 计算行高（包括间距）
@@ -127,14 +143,14 @@ const rowHeight = computed(() => {
 
 // 计算可见范围（考虑网格布局）
 const visibleRange = computed(() => {
-  if (containerHeight.value <= 0 || containerWidth.value <= 0) {
+  if (containerHeight.value <= 0 || effectiveTrackWidth.value <= 0) {
     return { start: 0, end: Math.min(overscan * colsPerRow.value, glyphList.value.length) }
   }
   
   // 计算可见的行范围
   const startRow = Math.max(0, Math.floor(scrollTop.value / rowHeight.value) - overscan)
   const endRow = Math.min(
-    totalRows.value,
+    gridRowCount.value,
     Math.ceil((scrollTop.value + containerHeight.value) / rowHeight.value) + overscan
   )
   
@@ -206,11 +222,10 @@ watch(visibleRange, () => {
   })
 }, { immediate: true })
 
-// 总高度（考虑网格布局）
 const totalHeight = computed(() => {
-  if (totalRows.value === 0) return 0
-  // 总高度 = 行数 * 行高 - 最后一行不需要间距
-  return totalRows.value * rowHeight.value - gap + padding * 2
+  const rows = gridRowCount.value
+  if (rows <= 0) return 0
+  return rows * rowHeight.value - gap + padding * 2
 })
 
 // 偏移量（考虑网格布局）
@@ -314,11 +329,14 @@ const handleAddGlyph = createDebouncedHandler(
   'VirtualGlyphList.addGlyph'
 )
 
-// 更新容器尺寸
+// 更新容器尺寸与网格 track 宽度（须与 CSS auto-fill 一致）
 const updateContainerSize = () => {
   if (containerRef.value) {
     containerHeight.value = containerRef.value.clientHeight
     containerWidth.value = containerRef.value.clientWidth
+  }
+  if (gridContentRef.value) {
+    gridTrackInnerWidth.value = readGridTrackInnerWidth(gridContentRef.value)
   }
 }
 
@@ -383,14 +401,19 @@ const onForceGlyphListRefreshEvent = (ev: Event) => {
 }
 
 onMounted(() => {
-  updateContainerSize()
-  
-  if (containerRef.value && 'ResizeObserver' in window) {
+  if ('ResizeObserver' in window) {
     resizeObserver = new ResizeObserver(() => {
       updateContainerSize()
     })
-    resizeObserver.observe(containerRef.value)
+    if (containerRef.value) resizeObserver.observe(containerRef.value)
   }
+
+  void nextTick(() => {
+    if (resizeObserver && gridContentRef.value) {
+      resizeObserver.observe(gridContentRef.value)
+    }
+    updateContainerSize()
+  })
 
   window.addEventListener('force-glyph-list-refresh', onForceGlyphListRefreshEvent)
   
@@ -584,8 +607,12 @@ const processRenderQueue = async () => {
       }
       
       try {
-        // 使用CanvasManager获取Canvas（支持缓存和复用）
-        const canvas = CanvasManager.getCanvasFromDOM(uuid)
+        // 优先从本列表项 DOM 取 canvas，避免与同 UUID 的其它列表（如字形选择弹窗）串台
+        const wrap = itemRefs.get(uuid)
+        const canvas =
+          (wrap?.querySelector(`canvas[data-uuid="${uuid}"]`) as HTMLCanvasElement | null) ??
+          (wrap?.querySelector('canvas.preview-canvas') as HTMLCanvasElement | null) ??
+          CanvasManager.getCanvasFromDOM(uuid)
         if (!canvas) {
           // Canvas 还没创建，跳过（等待 GlyphItem 挂载）
           continue
@@ -595,7 +622,8 @@ const processRenderQueue = async () => {
         CanvasManager.registerCanvas(uuid, canvas)
         
         // 检查是否可以跳过渲染（缓存存在且Canvas已有内容）
-        const canSkip = CanvasManager.canSkipRender(canvas, uuid)
+        const canSkip =
+          CanvasManager.canSkipRender(canvas, uuid) && CanvasManager.hasContent(canvas)
         if (import.meta.env.DEV) {
           console.log(`[VirtualGlyphList] canSkipRender for ${uuid}:`, canSkip)
         }
@@ -654,19 +682,14 @@ const processRenderQueue = async () => {
   gap: 10px;
   padding: 0 10px; /* 额外的左右内边距，避免 item 紧贴容器左右边缘 */
   box-sizing: border-box;
-  /* 使用 will-change 提示浏览器优化 */
   will-change: transform;
-  /* 使用 contain 隔离渲染，提升性能 */
-  contain: layout style paint;
+  contain: layout;
 }
 
 .glyph-item {
   width: 86px;
   height: 112px; /* 与 itemHeight 保持一致，确保默认“添加”按钮有正确高度 */
-  /* 使用 will-change 提示浏览器优化 */
-  will-change: transform;
-  /* 使用 contain 隔离渲染，提升性能 */
-  contain: layout style paint;
+  contain: layout;
 }
 
 /* “添加字形”按钮样式，参考原工程的 default-character/default-glyph */

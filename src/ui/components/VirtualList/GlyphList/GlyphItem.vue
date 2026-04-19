@@ -43,6 +43,11 @@ const hasRendered = ref(false)
 
 const props = defineProps<{
   glyph: ICustomGlyph
+  /**
+   * 为 true 时不在此组件内执行 onMounted/watch 驱动的缓存恢复与渲染，
+   * 仅注册 canvas，由父列表（如字形选择弹窗）统一调用 GlyphRenderer，避免与父级竞态（Tauri/WKWebView 上尤其明显）。
+   */
+  deferPreviewToParent?: boolean
 }>()
 
 const canvasRef = ref<HTMLCanvasElement>()
@@ -268,6 +273,12 @@ onMounted(() => {
     
     // 注册Canvas到管理器（用于复用）
     CanvasManager.registerCanvas(uuid, canvas)
+
+    if (props.deferPreviewToParent) {
+      isInitialized.value = true
+      hasRendered.value = false
+      return
+    }
     
     // 先尝试从内存缓存恢复（同步，快速）
     if (CanvasManager.restoreFromCache(canvas, uuid)) {
@@ -451,6 +462,8 @@ const startContentCheck = () => {
 
 // 监听字形变化
 watch(() => props.glyph, (newGlyph, oldGlyph) => {
+  if (props.deferPreviewToParent) return
+
   if (!canvasRef.value) return
   
   const canvas = canvasRef.value

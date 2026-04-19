@@ -5,6 +5,7 @@
       :style="{ height: `${totalHeight}px` }"
     />
     <div
+      ref="gridContentRef"
       class="virtual-list-content"
       :style="{ transform: `translateY(${offsetY}px)` }"
     >
@@ -48,6 +49,11 @@ import { CharacterRenderer } from '@/core/font/CharacterRenderer'
 import { CanvasManager } from '@/core/canvas/CanvasManager'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import { createDebouncedHandler } from '@/utils/debounce-click'
+import {
+  columnsFromTrackInnerWidth,
+  readGridTrackInnerWidth,
+  fallbackTrackInnerWidthFromScrollContainer,
+} from '@/ui/components/VirtualList/virtualGridLayout'
 
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
@@ -74,14 +80,29 @@ const gap = props.gap || 10 // 网格间距
 const padding = props.padding || 10 // 容器内边距
 const overscan = props.overscan || 2 // 预加载的行数
 
+/** 外层 .virtual-character-list 与 .virtual-list-content 水平 padding 之和（与 scoped CSS 一致） */
+const gridScrollPadX = padding * 4
+
 // Refs
 const containerRef = ref<HTMLElement>()
+const gridContentRef = ref<HTMLElement>()
 const itemRefs = new Map<string, HTMLElement>()
 
 // 状态
 const scrollTop = ref(0)
 const containerHeight = ref(0)
 const containerWidth = ref(0)
+const gridTrackInnerWidth = ref(0)
+
+const effectiveTrackWidth = computed(() => {
+  let w = gridTrackInnerWidth.value
+  if (w <= 0 && containerWidth.value > 0) {
+    w = fallbackTrackInnerWidthFromScrollContainer(containerWidth.value, gridScrollPadX)
+  }
+  if (w <= 0) return 280
+  return w
+})
+
 const lastVisibleStart = ref(0)
 const lastVisibleEnd = ref(0)
 
@@ -112,22 +133,20 @@ const loadFullCharacter = async (metadata: ICharacterFileMetadata): Promise<ICha
   return await characterDataManager.loadCharacter(fileUUID, metadata.uuid)
 }
 
-// 计算每行字符数（响应式，参考原工程的容错机制）
-const colsPerRow = computed(() => {
-  if (containerWidth.value <= 0) return 1
-  // 可用宽度 = 容器宽度 - 左右内边距
-  const availableWidth = containerWidth.value - padding * 2
-  // 每行字符数 = 可用宽度 / (字符宽度 + 间距)
-  // 使用 Math.ceil 计算理论值，然后减1作为容错（因为 Grid 可能不会完全占满）
-  const theoreticalCols = Math.ceil(availableWidth / (itemWidth + gap))
-  const cols = Math.max(1, theoreticalCols - 1) // 减少1个作为容错，至少1列
-  return cols
+const colsPerRow = computed(() =>
+  columnsFromTrackInnerWidth(effectiveTrackWidth.value, itemWidth, gap)
+)
+
+const addReservedCell = computed(() => {
+  if (!projectStore.selectedFile) return 0
+  if (editorStore.isCharacterSearching && editorStore.characterSearchKeyword) return 0
+  return 1
 })
 
-// 计算总行数
-const totalRows = computed(() => {
-  if (characterList.value.length === 0) return 0
-  return Math.ceil(characterList.value.length / colsPerRow.value)
+const gridRowCount = computed(() => {
+  const cells = characterList.value.length + addReservedCell.value
+  if (cells <= 0) return 0
+  return Math.ceil(cells / colsPerRow.value)
 })
 
 // 计算行高（包括间距）
@@ -137,14 +156,14 @@ const rowHeight = computed(() => {
 
 // 计算可见范围（考虑网格布局）
 const visibleRange = computed(() => {
-  if (containerHeight.value <= 0 || containerWidth.value <= 0) {
+  if (containerHeight.value <= 0 || effectiveTrackWidth.value <= 0) {
     return { start: 0, end: Math.min(overscan * colsPerRow.value, characterList.value.length) }
   }
   
   // 计算可见的行范围
   const startRow = Math.max(0, Math.floor(scrollTop.value / rowHeight.value) - overscan)
   const endRow = Math.min(
-    totalRows.value,
+    gridRowCount.value,
     Math.ceil((scrollTop.value + containerHeight.value) / rowHeight.value) + overscan
   )
   
@@ -259,11 +278,10 @@ watch(visibleRange, () => {
   })
 }, { immediate: true })
 
-// 总高度（考虑网格布局）
 const totalHeight = computed(() => {
-  if (totalRows.value === 0) return 0
-  // 总高度 = 行数 * 行高 - 最后一行不需要间距
-  return totalRows.value * rowHeight.value - gap + padding * 2
+  const rows = gridRowCount.value
+  if (rows <= 0) return 0
+  return rows * rowHeight.value - gap + padding * 2
 })
 
 // 偏移量（考虑网格布局）
@@ -372,11 +390,13 @@ const handleAddCharacter = createDebouncedHandler(
   'VirtualCharacterList.addCharacter'
 )
 
-// 更新容器尺寸
 const updateContainerSize = () => {
   if (containerRef.value) {
     containerHeight.value = containerRef.value.clientHeight
     containerWidth.value = containerRef.value.clientWidth
+  }
+  if (gridContentRef.value) {
+    gridTrackInnerWidth.value = readGridTrackInnerWidth(gridContentRef.value)
   }
 }
 
@@ -468,14 +488,19 @@ const onForceCharacterListRefreshEvent = (ev: Event) => {
 }
 
 onMounted(() => {
-  updateContainerSize()
-
-  if (containerRef.value && 'ResizeObserver' in window) {
+  if ('ResizeObserver' in window) {
     resizeObserver = new ResizeObserver(() => {
       updateContainerSize()
     })
-    resizeObserver.observe(containerRef.value)
+    if (containerRef.value) resizeObserver.observe(containerRef.value)
   }
+
+  void nextTick(() => {
+    if (resizeObserver && gridContentRef.value) {
+      resizeObserver.observe(gridContentRef.value)
+    }
+    updateContainerSize()
+  })
 
   window.addEventListener('force-character-list-refresh', onForceCharacterListRefreshEvent)
 
@@ -758,17 +783,14 @@ const processRenderQueue = async () => {
   box-sizing: border-box;
   /* 使用 will-change 提示浏览器优化 */
   will-change: transform;
-  /* 使用 contain 隔离渲染，提升性能 */
-  contain: layout style paint;
+  /* paint 会在 WKWebView(Tauri) 下与 2D canvas 缩略图组合时偶发整块空白，仅保留 layout */
+  contain: layout;
 }
 
 .character-item {
   width: 86px;
   height: 112px; /* 与 itemHeight 保持一致，确保默认“添加”按钮有正确高度 */
-  /* 使用 will-change 提示浏览器优化 */
-  will-change: transform;
-  /* 使用 contain 隔离渲染，提升性能 */
-  contain: layout style paint;
+  contain: layout;
 }
 
 /* “添加字符”按钮样式，参考原工程的 default-character */
