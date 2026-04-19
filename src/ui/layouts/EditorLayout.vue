@@ -33,13 +33,12 @@ import EditorMain from './EditorMain.vue'
 import LoadingProgress from '@/ui/components/LoadingProgress.vue'
 import { isTauri, getEnv } from '@/utils/env'
 import { initTauriMenu } from '@/utils/tauri-menu'
-import { useProjectStore } from '@/stores/project'
-import { useEditorStore } from '@/stores/editor'
-import { EditStatus } from '@/core/types'
+import { useGlyphStore } from '@/stores/glyph'
+import { useCharacterStore } from '@/stores/character'
 
-const { t, locale } = useI18n()
-const projectStore = useProjectStore()
-const editorStore = useEditorStore()
+const { locale } = useI18n()
+const glyphStore = useGlyphStore()
+const characterStore = useCharacterStore()
 
 const showSidebar = ref(true)
 const sidebarCollapsed = ref(true)
@@ -78,8 +77,26 @@ const handleBeforeUnload = (e: BeforeUnloadEvent) => {
   }
 }
 
-// 键盘事件处理，阻止 Backspace/Delete 触发浏览器后退
+/** 与旧版 Editor.vue 一致：按住 Shift 时组件列表可多选，setSelection 会切换 selectedComponentsUUIDs */
+const setMultiSelectFromShift = (enabled: boolean) => {
+  glyphStore.enableMultiSelect = enabled
+  characterStore.enableMultiSelect = enabled
+}
+
+const onKeyUp = (e: KeyboardEvent) => {
+  if (e.key === 'Shift') {
+    e.preventDefault()
+    setMultiSelectFromShift(false)
+  }
+}
+
+// 键盘事件处理：Shift 多选、阻止 Backspace/Delete 触发浏览器后退
 const onKeyDown = (e: KeyboardEvent) => {
+  if (e.key === 'Shift') {
+    e.preventDefault()
+    setMultiSelectFromShift(true)
+  }
+
   // 处理删除键和退格键，防止触发浏览器后退
   if (e.key === 'Backspace' || e.key === 'Delete') {
     // 检查当前焦点是否在输入框、文本域或其他可编辑元素中
@@ -111,8 +128,8 @@ const handleShowNewProjectDialog = () => {
 onMounted(() => {
   // 监听浏览器关闭/刷新事件
   window.addEventListener('beforeunload', handleBeforeUnload)
-  // 监听键盘事件
   document.addEventListener('keydown', onKeyDown)
+  document.addEventListener('keyup', onKeyUp)
   
   if (isTauri()) {
     initTauriMenu()
@@ -123,6 +140,8 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('beforeunload', handleBeforeUnload)
   document.removeEventListener('keydown', onKeyDown)
+  document.removeEventListener('keyup', onKeyUp)
+  setMultiSelectFromShift(false)
   
   if (isTauri()) {
     window.removeEventListener('show-new-project-dialog', handleShowNewProjectDialog)

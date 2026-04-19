@@ -273,6 +273,10 @@ const toggleUsedInCharacter = createDebouncedHandler(_toggleUsedInCharacter, 'Gl
 
 // 选择组件
 const _selectComponent = (e: MouseEvent, uuid: string) => {
+  // 仅左键：右键会触发 pointerup(button=2)，若走 setSelection 会冲掉多选
+  if (e.button !== 0) {
+    return
+  }
   // 如果点击的是工具图标，不处理选择
   const target = e.target as HTMLElement
   if (target.closest('.tool-wrapper') || target.closest('.tool-icon')) {
