@@ -9,7 +9,7 @@
         @update:value="handleFilterChange"
       />
     </div>
-    <n-scrollbar v-if="glyphPanelCompFilter === 'all'">
+    <n-scrollbar v-if="glyphPanelCompFilter === 'all'" class="component-list-scrollbar">
       <div class="all-components-list" v-if="glyphPanelCompFilter === 'all'">
         <div
           class="component-item-wrapper"
@@ -92,7 +92,7 @@
         </div>
       </div>
     </n-scrollbar>
-    <n-scrollbar v-if="glyphPanelCompFilter === 'font'">
+    <n-scrollbar v-if="glyphPanelCompFilter === 'font'" class="component-list-scrollbar">
       <div class="font-components-list" v-if="glyphPanelCompFilter === 'font'">
         <div
           class="component-item-wrapper"
@@ -499,13 +499,28 @@ const openPopover = (e: MouseEvent, uuid: string) => {
 
 <style scoped>
 .list-wrapper {
-  height: 100%;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.component-list-scrollbar {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.component-list-scrollbar :deep(.n-scrollbar-container) {
+  max-height: 100%;
 }
 
 .all-components-list,
 .font-components-list {
-  height: 100%;
-  margin-top: 5px;
+  padding-top: 5px;
+  padding-bottom: 12px;
+  box-sizing: border-box;
 }
 
 .component-item-wrapper {
@@ -584,6 +599,7 @@ const openPopover = (e: MouseEvent, uuid: string) => {
 }
 
 .filter-header {
+  flex-shrink: 0;
   width: 100%;
   border-bottom: 1px solid var(--dark-4);
   padding: 5px 15px 8px 15px;

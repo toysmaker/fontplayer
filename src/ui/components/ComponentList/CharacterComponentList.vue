@@ -13,7 +13,7 @@
     <div v-if="isDev && !editingCharacter" style="padding: 10px; color: red;">
       {{ t('panels.componentList.warningEditingCharacterEmpty') }}
     </div>
-    <n-scrollbar v-if="editPanelCompFilter === 'all'">
+    <n-scrollbar v-if="editPanelCompFilter === 'all'" class="component-list-scrollbar">
       <div class="all-components-list" v-if="editPanelCompFilter === 'all'">
         <div v-if="orderedListWithItemsForCurrentCharacterFile.length === 0" style="padding: 10px; color: #999;">
           {{ t('panels.componentList.noComponents') }}
@@ -102,7 +102,7 @@
         </div>
       </div>
     </n-scrollbar>
-    <n-scrollbar v-if="editPanelCompFilter === 'font'">
+    <n-scrollbar v-if="editPanelCompFilter === 'font'" class="component-list-scrollbar">
       <div class="font-components-list" v-if="editPanelCompFilter === 'font'">
         <div
           class="component-item-wrapper"
@@ -521,14 +521,31 @@ const openPopover = (e: MouseEvent, uuid: string) => {
 </script>
 
 <style scoped>
+/* 与左侧面板 flex 链配合：占满筛选器下剩余高度并在内部滚动。
+   若仅 height:100% 而不约束 n-scrollbar，滚动区会按内容撑开，被父级 overflow:hidden 裁掉底部若干项。 */
 .list-wrapper {
-  height: 100%;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.component-list-scrollbar {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.component-list-scrollbar :deep(.n-scrollbar-container) {
+  max-height: 100%;
 }
 
 .all-components-list,
 .font-components-list {
-  height: 100%;
-  margin-top: 5px;
+  padding-top: 5px;
+  padding-bottom: 12px;
+  box-sizing: border-box;
 }
 
 .component-item-wrapper {
@@ -607,6 +624,7 @@ const openPopover = (e: MouseEvent, uuid: string) => {
 }
 
 .filter-header {
+  flex-shrink: 0;
   width: 100%;
   border-bottom: 1px solid var(--dark-4);
   padding: 5px 15px 8px 15px;
