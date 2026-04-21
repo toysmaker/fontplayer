@@ -45,6 +45,13 @@ export abstract class BaseGlyphDragger {
   /** 吸附锁定：进入吸附时锁定的水平/垂直 key 线坐标（避免多参考线时每帧重选目标导致颤动） */
   private snapLockHKey: number | null = null
   private snapLockVKey: number | null = null
+
+  /**
+   * 字形拖拽由 glyphDragger 处理，SelectTool 对 glyph 的 mousedown 会提前 return，从不置 mousemove。
+   * mouseup 时若本手势曾有位移，须跳过后续 handleClickSelection（否则误触发重叠组件轮换）。
+   */
+  private glyphDragMovedBeyondTap = false
+  private static readonly GLYPH_DRAG_TAP_SUPPRESS_EPS_SQ = 1
   
   /**
    * 将拖拽中的临时字形实例参数写回组件 value（executeDrag 已在 applySnapDelta 中调用）。
@@ -560,6 +567,7 @@ export abstract class BaseGlyphDragger {
     }
 
     this._isDragging = true
+    this.glyphDragMovedBeyondTap = false
     // 拖拽时清除悬停关键点，避免高亮显示在原位置
     this.hoverJoint = null
     // 将显示坐标转换为坐标尺寸，用于计算拖拽增量
@@ -602,7 +610,14 @@ export abstract class BaseGlyphDragger {
     const coordY = this.convertDisplayToCoord(mouseY, false)
     const dx = coordX - this.lastX
     const dy = coordY - this.lastY
-    
+
+    if (
+      this._isDragging &&
+      dx * dx + dy * dy > BaseGlyphDragger.GLYPH_DRAG_TAP_SUPPRESS_EPS_SQ
+    ) {
+      this.glyphDragMovedBeyondTap = true
+    }
+
     const movingWholeComponent =
       this.context.component?.type === 'glyph' &&
       (!this.draggingJoint || this.isDraggingFirstJoint)
@@ -639,6 +654,13 @@ export abstract class BaseGlyphDragger {
     const coordY = this.convertDisplayToCoord(mouseY, false)
     const dx = coordX - this.lastX
     const dy = coordY - this.lastY
+
+    if (
+      this._isDragging &&
+      dx * dx + dy * dy > BaseGlyphDragger.GLYPH_DRAG_TAP_SUPPRESS_EPS_SQ
+    ) {
+      this.glyphDragMovedBeyondTap = true
+    }
 
     const movingWholeComponent =
       this.context.component?.type === 'glyph' &&
@@ -738,6 +760,7 @@ export abstract class BaseGlyphDragger {
   
   private cleanup() {
     this._isDragging = false
+    this.glyphDragMovedBeyondTap = false
     this.draggingJoint = null
     this.isDraggingFirstJoint = false
     this.hoverJoint = null
@@ -771,6 +794,11 @@ export abstract class BaseGlyphDragger {
   
   isDragging(): boolean {
     return this._isDragging
+  }
+
+  /** 供 SelectTool：本 mouse 手势在字形拖拽中是否已产生位移（用于抑制重叠点击轮换） */
+  shouldSuppressOverlapPickAfterGlyphDrag(): boolean {
+    return this.glyphDragMovedBeyondTap
   }
   
   getMode(): 'character' | 'glyph' {

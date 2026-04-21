@@ -993,8 +993,14 @@ export class SelectTool extends BaseTool {
       return
     }
 
-    // 如果用户没有移动鼠标，说明是点击操作，需要处理点击选择
-    if (!this.mousemove) {
+    // 如果用户没有移动鼠标，说明是点击操作，需要处理点击选择（含重叠组件轮换）
+    // 字形组件：mousedown 已提前 return，mousemove 永远不会置 this.mousemove；须读 glyphDragger 是否曾拖拽位移，否则 mouseup 会误触发 handleClickSelection 导致轮换到下一组件并误变换
+    const dragger = DraggerManager.get(this.canvas)
+    const suppressOverlapPickForGlyphDrag =
+      selectedComponent?.type === 'glyph' &&
+      dragger?.shouldSuppressOverlapPickAfterGlyphDrag() === true
+
+    if (!this.mousemove && !suppressOverlapPickForGlyphDrag) {
       this.handleClickSelection(e)
     }
 
@@ -1005,7 +1011,6 @@ export class SelectTool extends BaseTool {
     // 释放所有临时实例（在 mouseup 时释放，避免内存泄漏）
     // 这样可以确保在 mousedown 和 mouseup 之间实例保持存在，但在 mouseup 后释放
     // 但是，如果 glyphDragger 正在拖拽，不要释放临时实例，让 glyphDragger 自己处理
-    const dragger = DraggerManager.get(this.canvas)
     const isDraggerDragging = dragger && dragger.isDragging()
     
     if (!isDraggerDragging) {
