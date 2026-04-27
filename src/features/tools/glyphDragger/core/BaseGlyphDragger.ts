@@ -508,6 +508,11 @@ export abstract class BaseGlyphDragger {
       return
     }
 
+    // 防止重复进入：若上一次拖拽的 mouseup 尚未触发（如事件顺序异常），忽略新的 mousedown
+    if (this._isDragging) {
+      return
+    }
+
     // 切换到真正开始拖拽之前，先确保 context.component 是 store 的最新对象引用
     this.syncContextFromStore()
     
@@ -644,72 +649,78 @@ export abstract class BaseGlyphDragger {
     if (!this._isDragging) {
       return
     }
-    
-    const rect = this.canvas.getBoundingClientRect()
-    const mouseX = this.getCoord(e.clientX - rect.left)
-    const mouseY = this.getCoord(e.clientY - rect.top)
-    
-    // 将显示坐标转换为坐标尺寸，用于计算拖拽增量
-    const coordX = this.convertDisplayToCoord(mouseX, true)
-    const coordY = this.convertDisplayToCoord(mouseY, false)
-    const dx = coordX - this.lastX
-    const dy = coordY - this.lastY
 
-    if (
-      this._isDragging &&
-      dx * dx + dy * dy > BaseGlyphDragger.GLYPH_DRAG_TAP_SUPPRESS_EPS_SQ
-    ) {
-      this.glyphDragMovedBeyondTap = true
-    }
+    try {
+      const rect = this.canvas.getBoundingClientRect()
+      const mouseX = this.getCoord(e.clientX - rect.left)
+      const mouseY = this.getCoord(e.clientY - rect.top)
 
-    const movingWholeComponent =
-      this.context.component?.type === 'glyph' &&
-      (!this.draggingJoint || this.isDraggingFirstJoint)
+      // 将显示坐标转换为坐标尺寸，用于计算拖拽增量
+      const coordX = this.convertDisplayToCoord(mouseX, true)
+      const coordY = this.convertDisplayToCoord(mouseY, false)
+      const dx = coordX - this.lastX
+      const dy = coordY - this.lastY
 
-    if (movingWholeComponent) {
-      const { adjDx, adjDy } = this.applySnapDelta(
-        dx,
-        dy,
-        true,
-        this.pointerSnapSuppressed(e),
-      )
-      if (typeof (this.throttledGlyphDrag as any).cancel === 'function') {
-        ;(this.throttledGlyphDrag as any).cancel()
+      const hasMoved =
+        dx * dx + dy * dy > BaseGlyphDragger.GLYPH_DRAG_TAP_SUPPRESS_EPS_SQ
+
+      if (hasMoved) {
+        this.glyphDragMovedBeyondTap = true
       }
-      this.handleGlyphDrag(adjDx, adjDy)
-      this.config.onRender?.()
-    }
 
-    // 调用脚本回调（非第一个关键点），delta 与 mousemove 吸附一致
-    if (
-      this.context.glyph &&
-      this.draggingJoint &&
-      !this.isDraggingFirstJoint
-    ) {
-      const { adjDx, adjDy } = this.applySnapDelta(
-        dx,
-        dy,
-        false,
-        this.pointerSnapSuppressed(e),
-      )
-      if (typeof (this.throttledSkeletonSync as any).cancel === 'function') {
-        ;(this.throttledSkeletonSync as any).cancel()
+      const movingWholeComponent =
+        this.context.component?.type === 'glyph' &&
+        (!this.draggingJoint || this.isDraggingFirstJoint)
+
+      if (movingWholeComponent && hasMoved) {
+        const { adjDx, adjDy } = this.applySnapDelta(
+          dx,
+          dy,
+          true,
+          this.pointerSnapSuppressed(e),
+        )
+        if (typeof (this.throttledGlyphDrag as any).cancel === 'function') {
+          ;(this.throttledGlyphDrag as any).cancel()
+        }
+        this.handleGlyphDrag(adjDx, adjDy)
+        this.config.onRender?.()
       }
-      this.syncSkeletonGlyphValueToStore(this.context.glyph, this.context.componentUUID, false)
-      ScriptExecutor.executeDragEnd(
-        this.context.glyph,
-        this.context.componentUUID,
-        {
-          draggingJoint: this.draggingJoint,
-          deltaX: adjDx,
-          deltaY: adjDy,
-        },
-      )
-      this.config.onRender?.()
+
+      // 调用脚本回调（非第一个关键点），delta 与 mousemove 吸附一致
+      if (
+        this.context.glyph &&
+        this.draggingJoint &&
+        !this.isDraggingFirstJoint
+      ) {
+        const { adjDx, adjDy } = this.applySnapDelta(
+          dx,
+          dy,
+          false,
+          this.pointerSnapSuppressed(e),
+        )
+        if (typeof (this.throttledSkeletonSync as any).cancel === 'function') {
+          ;(this.throttledSkeletonSync as any).cancel()
+        }
+        this.syncSkeletonGlyphValueToStore(this.context.glyph, this.context.componentUUID, false)
+        ScriptExecutor.executeDragEnd(
+          this.context.glyph,
+          this.context.componentUUID,
+          {
+            draggingJoint: this.draggingJoint,
+            deltaX: adjDx,
+            deltaY: adjDy,
+          },
+        )
+        this.config.onRender?.()
+      }
+
+      // 仅在确实发生过移动或骨架关节拖拽时才提交变更
+      if (hasMoved || (this.draggingJoint && !this.isDraggingFirstJoint)) {
+        this.handleDragEnd()
+      }
+    } finally {
+      this.cleanup()
     }
-    
-    this.handleDragEnd()
-    this.cleanup()
   }
   
   private updateHoverJoint(e: MouseEvent) {
