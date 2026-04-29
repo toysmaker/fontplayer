@@ -36,6 +36,24 @@ const onWeightSetting = ref(false)
 const weightValue = ref(0.5)
 const brushSize = ref(100)
 
+// --- Skeleton Free Edit State ---
+// 骨架绑定字形组件的钢笔轮廓自由编辑模式
+const skeletonFreeEdit = ref(false)
+const skeletonFreeEditPenUUID = ref('')
+const skeletonFreeEditGlyphUUID = ref('')
+
+function enterSkeletonFreeEdit(penUUID: string, glyphUUID: string) {
+  skeletonFreeEdit.value = true
+  skeletonFreeEditPenUUID.value = penUUID
+  skeletonFreeEditGlyphUUID.value = glyphUUID
+}
+
+function exitSkeletonFreeEdit() {
+  skeletonFreeEdit.value = false
+  skeletonFreeEditPenUUID.value = ''
+  skeletonFreeEditGlyphUUID.value = ''
+}
+
 export {
   editing,
   setEditing,
@@ -51,5 +69,10 @@ export {
   onWeightSetting,
   weightValue,
   brushSize,
+  skeletonFreeEdit,
+  skeletonFreeEditPenUUID,
+  skeletonFreeEditGlyphUUID,
+  enterSkeletonFreeEdit,
+  exitSkeletonFreeEdit,
 }
 

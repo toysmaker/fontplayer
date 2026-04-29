@@ -104,6 +104,8 @@ import { fontRenderStyle } from '@/core/script/globals'
 import { JointManager } from '@/features/tools/glyphDragger/core/JointManager'
 import { reexecuteAllGlyphScriptsInEditingCharacter } from '@/features/editor/globalParam/reexecuteCharacterGlyphScripts'
 import { rebuildCharacterListPreviewAfterExitEdit } from '@/features/editor/listPreview/rebuildListPreviewAfterEditorExit'
+import { skeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
+import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import { discardGlobalConstantsDraftOnLeave } from '@/stores/editorConstantsSession'
 import { mapCanvasX, mapCanvasY } from '@/utils/canvas'
 import { getStrokeWidth } from '@/utils/canvas-utils'
@@ -552,6 +554,11 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  // 清理骨架自由编辑状态，避免退出后再进入时残留状态
+  if (skeletonFreeEdit.value) {
+    exitSkeletonFreeEdit()
+    PenSelectTool.skeletonFreeEditContext = null
+  }
   characterGridEditStore.resetToCurrent()
   // 离开字符编辑时勿保留 metrics/grid，避免 GlyphEditor 等场景 tool 无效
   if (toolStore.tool === 'metrics' || toolStore.tool === 'grid') {
@@ -740,6 +747,36 @@ watch(() => toolStore.tool, async (newTool) => {
     if (import.meta.env.DEV) {
       console.log('[CharacterEditor] watch toolStore.tool: canvas not ready, returning')
     }
+    return
+  }
+
+  // 骨架自由编辑模式下的工具切换警告
+  if (skeletonFreeEdit.value && newTool && newTool !== 'select') {
+    const { useDialog } = await import('naive-ui')
+    const { useI18n } = await import('vue-i18n')
+    const dialog = useDialog()
+    const { t } = useI18n()
+
+    const targetTool = newTool as string
+    dialog.warning({
+      title: t('panels.paramsPanel.skeletonBinding.toolSwitchTitle'),
+      content: t('panels.paramsPanel.skeletonBinding.toolSwitchWarning'),
+      positiveText: t('panels.paramsPanel.skeletonBinding.toolSwitchIgnore'),
+      negativeText: t('panels.paramsPanel.skeletonBinding.toolSwitchStay'),
+      onPositiveClick: () => {
+        exitSkeletonFreeEdit()
+        // 使用 nextTick 避免在 watcher 内部触发递归
+        nextTick(() => {
+          toolManager.switchTool(targetTool as ToolType)
+          renderCanvas()
+        })
+      },
+      onNegativeClick: () => {
+        nextTick(() => {
+          toolStore.setTool('select')
+        })
+      },
+    })
     return
   }
 

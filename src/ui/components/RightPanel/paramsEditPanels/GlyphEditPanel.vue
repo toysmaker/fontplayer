@@ -31,8 +31,16 @@ import { useGlyphStore } from '@/stores/glyph'
 import { useProjectStore } from '@/stores/project'
 import { useCharacterGridEditStore } from '@/stores/characterGridEdit'
 import { EditStatus, ParameterType, IParameter, ICustomGlyph, IConstant } from '@/core/types'
+import type { IGlyphComponent } from '@/core/types'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { instanceManager } from '@/core/instance/InstanceManager'
+import { CustomGlyph } from '@/core/instance/CustomGlyph'
+import { glyphSkeletonBind } from '@/features/glyphSkeletonBind'
+import { orderedListWithItemsForGlyph } from '@/core/utils/glyph'
+import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
+import { skeletonFreeEdit, enterSkeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
+import { toolManager } from '@/features/tools/base/ToolManager'
+import { getGlyphEditCanvasContext } from '@/features/editor/glyphEditCanvas'
 import { expandGlyphComponent } from '@/features/editor/services/FormatGlyphService'
 import { precisionFromParamMax, roundToPrecision } from '@/utils/number'
 import { genUUID } from '@/utils/uuid'
@@ -73,6 +81,124 @@ const handleGlyphInstanceFillColor = (color: string | null) => {
     modifyComponent({ fillColor: trimmed })
   } else {
     modifyComponent({ fillColor: undefined })
+  }
+}
+
+// --- 骨架绑定自由编辑 ---
+
+const showSkeletonBindingSection = computed(() => {
+  if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return false
+  const glyphValue = selectedComponent.value.value as ICustomGlyph
+  return !!(glyphValue && glyphValue.skeleton)
+})
+
+const skeletonFreeEditMode = computed(() => skeletonFreeEdit.value)
+function findInnerPenComponent(glyphValue: ICustomGlyph): IGlyphComponent | null {
+  const components = orderedListWithItemsForGlyph(glyphValue)
+  const pen = components.find(c => c.type === 'pen')
+  return (pen as IGlyphComponent) || null
+}
+
+async function handleEnterFreeEdit() {
+  if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return
+  const glyphValue = selectedComponent.value.value as ICustomGlyph
+  const innerPen = findInnerPenComponent(glyphValue)
+  if (!innerPen) {
+    message.warning(t('panels.paramsPanel.skeletonBinding.noPenComponent'))
+    return
+  }
+
+  const penValue = { ...innerPen.value, editMode: true } as any
+  const updatedComponents = glyphValue.components.map((c: any) =>
+    c.uuid === innerPen.uuid ? { ...c, value: penValue } : c,
+  )
+
+  const updatedGlyphValue = { ...glyphValue, components: updatedComponents }
+  modifyComponent({ value: updatedGlyphValue })
+
+  await nextTick()
+
+  PenSelectTool.skeletonFreeEditContext = {
+    glyphComponent: selectedComponent.value,
+    penComponent: penValue,
+    penUUID: innerPen.uuid,
+  }
+  enterSkeletonFreeEdit(innerPen.uuid, selectedComponent.value.uuid)
+
+  // 自动切换到选择工具，完成后触发画布重绘以显示钢笔轮廓控件
+  await toolManager.switchTool('select')
+  await nextTick()
+  const ctx = getGlyphEditCanvasContext()
+  if (ctx) ctx.onRender()
+}
+
+async function handleRebind() {
+  if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return
+  const glyphValue = selectedComponent.value.value as ICustomGlyph
+  const innerPen = findInnerPenComponent(glyphValue)
+  if (!innerPen) return
+
+  const penValue = innerPen.value as any
+  const instanceKey = selectedComponent.value.uuid
+
+  try {
+    // 在临时克隆上调用 instanceBasicGlyph，仅为了获取 getSkeleton 函数，
+    // 避免在真实实例上触发 updateSkeletonTransformation（会用旧 bindData 覆盖编辑后的点）
+    const clonedForSkeleton = JSON.parse(JSON.stringify(glyphValue))
+    const tempGlyph = new CustomGlyph(clonedForSkeleton)
+    const strokeType = glyphValue.skeleton?.type
+    if (strokeType) {
+      const { strokeFnMap } = await import('@/templates/strokeFnMap')
+      const fn = (strokeFnMap as any)[strokeType]
+      if (fn?.instanceBasicGlyph) {
+        fn.instanceBasicGlyph(clonedForSkeleton, tempGlyph)
+      }
+    }
+
+    // 获取真实实例并同步 _glyph 为编辑后的数据
+    const glyphInstance = instanceManager.acquireTemporaryInstance(
+      instanceKey,
+      () => new CustomGlyph(glyphValue),
+      'glyph',
+    ) as CustomGlyph
+    glyphInstance._glyph = glyphValue
+
+    // 从临时实例复制 getSkeleton（避免在真实实例上调用 instanceBasicGlyph）
+    if ((tempGlyph as any).getSkeleton) {
+      ;(glyphInstance as any).getSkeleton = (tempGlyph as any).getSkeleton
+    }
+
+    // 执行重新绑定：从当前 skeleton 和编辑后的 pen 轮廓重新计算骨骼绑定
+    glyphSkeletonBind(glyphInstance as any)
+
+    const newBindData = (glyphInstance as any)._glyph?.skeleton?.skeletonBindData
+    if (!newBindData) {
+      message.warning(t('panels.paramsPanel.skeletonBinding.rebindFailed'))
+      return
+    }
+
+    // 更新 glyph value：新的 skeletonBindData + 关闭 editMode
+    const updatedSkeleton = { ...glyphValue.skeleton, skeletonBindData: newBindData }
+    const updatedComponents = glyphValue.components.map((c: any) =>
+      c.uuid === innerPen.uuid
+        ? { ...c, value: { ...penValue, editMode: false } }
+        : c,
+    )
+    const updatedGlyphValue = { ...glyphValue, skeleton: updatedSkeleton, components: updatedComponents }
+    modifyComponent({ value: updatedGlyphValue })
+
+    // 清理工具
+    PenSelectTool.skeletonFreeEditContext = null
+    exitSkeletonFreeEdit()
+
+    // 刷新画布并完整初始化实例（此时 bindData 已是新的，updateSkeletonTransformation 为恒等变换）
+    await nextTick()
+    executeGlyphScript(updatedGlyphValue, instanceKey, { ignoreTempDataGuard: true })
+
+    message.success(t('panels.paramsPanel.skeletonBinding.rebindSuccess'))
+  } catch (error) {
+    console.error('[GlyphEditPanel] Rebind failed:', error)
+    message.warning(t('panels.paramsPanel.skeletonBinding.rebindFailed'))
   }
 }
 
@@ -260,6 +386,32 @@ watch(
         uuid: newUuid ?? '',
         tree: getCurrentSelectionTree(),
       }
+      return
+    }
+
+    // 骨架自由编辑模式下的组件切换警告
+    if (skeletonFreeEdit.value && oldUuid && newUuid && newUuid !== oldUuid) {
+      const intended = {
+        uuid: newUuid ?? '',
+        tree: getCurrentSelectionTree(),
+      }
+      const snap = selectionSnapshot.value
+
+      selectionRevertGuard.value = true
+      selectComponentByMode(snap.uuid, snap.tree)
+
+      dialog.warning({
+        title: t('panels.paramsPanel.skeletonBinding.switchComponentTitle'),
+        content: t('panels.paramsPanel.skeletonBinding.switchComponentWarning'),
+        positiveText: t('panels.paramsPanel.skeletonBinding.switchComponentIgnore'),
+        negativeText: t('panels.paramsPanel.skeletonBinding.switchComponentStay'),
+        onPositiveClick: () => {
+          exitSkeletonFreeEdit()
+          PenSelectTool.skeletonFreeEditContext = null
+          selectionRevertGuard.value = true
+          selectComponentByMode(intended.uuid, intended.tree)
+        },
+      })
       return
     }
 
@@ -825,6 +977,7 @@ const handleFormatGlyphComponent = () => {
             <n-input-number
               :value="selectedComponent.ox != null ? roundToPrecision(selectedComponent.ox, 1) : undefined"
               :precision="1"
+              :disabled="skeletonFreeEditMode"
               @update:value="handleChangeOX"
             />
           </n-form-item>
@@ -832,6 +985,7 @@ const handleFormatGlyphComponent = () => {
             <n-input-number
               :value="selectedComponent.oy != null ? roundToPrecision(selectedComponent.oy, 1) : undefined"
               :precision="1"
+              :disabled="skeletonFreeEditMode"
               @update:value="handleChangeOY"
             />
           </n-form-item>
@@ -875,6 +1029,7 @@ const handleFormatGlyphComponent = () => {
                     :step="parameter.max && parameter.max <= 10 ? 0.01 : 1"
                     :min="parameter.min"
                     :max="parameter.max"
+                    :disabled="skeletonFreeEditMode"
                     :precision="precisionFromParamMax(parameter.max)"
                     @update:value="(v) => handleChangeParameter(parameter, v ?? 0)"
                   />
@@ -883,6 +1038,7 @@ const handleFormatGlyphComponent = () => {
                     :step="parameter.max && parameter.max <= 10 ? 0.01 : 1"
                     :min="parameter.min ?? 0"
                     :max="parameter.max ?? 100"
+                    :disabled="skeletonFreeEditMode"
                     :precision="precisionFromParamMax(parameter.max)"
                     @update:value="(v) => handleChangeParameter(parameter, v)"
                     style="width: 100%; margin-top: 8px;"
@@ -1071,8 +1227,28 @@ const handleFormatGlyphComponent = () => {
           {{ t('panels.paramsPanel.formatComponent.button') }}
         </n-button>
       </div>
+
+      <!-- 骨架绑定 -->
+      <div class="section" v-if="showSkeletonBindingSection">
+        <div class="section-title">{{ t('panels.paramsPanel.skeletonBinding.title') }}</div>
+        <n-button
+          v-if="!skeletonFreeEditMode"
+          block
+          @click="handleEnterFreeEdit"
+        >
+          {{ t('panels.paramsPanel.skeletonBinding.freeEditOutline') }}
+        </n-button>
+        <n-button
+          v-else
+          type="primary"
+          block
+          @click="handleRebind"
+        >
+          {{ t('panels.paramsPanel.skeletonBinding.doneRebind') }}
+        </n-button>
+      </div>
     </template>
-    
+
     <div v-else class="empty-state">
       <n-empty :description="t('panels.paramsPanel.params.glyphPanelNoSelection')" />
     </div>
@@ -1209,6 +1385,7 @@ const handleFormatGlyphComponent = () => {
 
 .format-component-wrap {
   margin-top: 24px;
+  margin-bottom: 20px;
 }
 
 .format-button {

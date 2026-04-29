@@ -16,6 +16,8 @@ import { PenSelectTool } from './PenSelectTool'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { DraggerManager } from '../glyphDragger'
 import { roundToPrecision } from '@/utils/number'
+import { skeletonFreeEdit } from '@/stores/skeletonDragger'
+import { orderedListWithItemsForGlyph } from '@/core/utils/glyph'
 
 /**
  * 选择工具单例
@@ -126,6 +128,40 @@ export class SelectTool extends BaseTool {
           this.penSelectTool.activate()
         }
         return
+      }
+    }
+
+    // 骨架自由编辑模式：字形组件内的钢笔轮廓进入编辑模式
+    if (selectedComponent && selectedComponent.type === 'glyph' && skeletonFreeEdit.value) {
+      const glyphValue = selectedComponent.value as ICustomGlyph
+      const orderedComponents = orderedListWithItemsForGlyph(glyphValue)
+      const innerPen = orderedComponents.find(c => c.type === 'pen')
+      if (innerPen) {
+        const penValue = innerPen.value as unknown as IPenComponent
+        if (penValue && penValue.editMode === true) {
+          PenSelectTool.skeletonFreeEditContext = {
+            glyphComponent: selectedComponent,
+            penComponent: penValue,
+            penUUID: innerPen.uuid,
+          }
+          if (!this.penSelectTool.isToolActive()) {
+            this.penSelectTool.resetInitialBounds()
+            this.penSelectTool.activate()
+          }
+          return
+        }
+      }
+    }
+
+    // 清理骨架自由编辑上下文（如果不在骨架编辑模式或editMode已被关闭）
+    if (PenSelectTool.skeletonFreeEditContext && this.penSelectTool.isToolActive()) {
+      const ctx = PenSelectTool.skeletonFreeEditContext
+      if (ctx.penComponent.editMode !== true || !skeletonFreeEdit.value) {
+        if (!this.penSelectTool.isDragging()) {
+          this.penSelectTool.deactivate()
+          PenSelectTool.skeletonFreeEditContext = null
+          this.penSelectTool.resetInitialBounds()
+        }
       }
     }
 
@@ -1087,6 +1123,12 @@ export class SelectTool extends BaseTool {
       return
     }
 
+    // 骨架自由编辑模式：PenSelectTool 渲染内嵌钢笔轮廓
+    if (PenSelectTool.skeletonFreeEditContext && this.penSelectTool && this.penSelectTool.isToolActive()) {
+      this.penSelectTool.render(canvas)
+      return
+    }
+
     // 检查是否是钢笔组件且处于编辑模式
     if (selectedComponent.type === 'pen') {
       const penComponent = selectedComponent.value as unknown as IPenComponent
@@ -1107,9 +1149,9 @@ export class SelectTool extends BaseTool {
         }
       }
     } else {
-      // 不是钢笔组件，停用 penSelectTool（除非正在拖拽）
+      // 不是钢笔组件，停用 penSelectTool（除非正在拖拽或骨架自由编辑中）
       if (this.penSelectTool && this.penSelectTool.isToolActive()) {
-        if (!this.penSelectTool.isDragging()) {
+        if (!this.penSelectTool.isDragging() && !PenSelectTool.skeletonFreeEditContext) {
           this.penSelectTool.deactivate()
         }
       }

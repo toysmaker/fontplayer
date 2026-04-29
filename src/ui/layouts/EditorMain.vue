@@ -67,10 +67,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NEmpty } from 'naive-ui'
+import { NEmpty, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useEditorStore } from '@/stores/editor'
 import { EditStatus } from '@/core/types'
+import { skeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
+import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import VirtualCharacterList from '@/ui/components/VirtualList/CharacterList/VirtualCharacterList.vue'
 import VirtualGlyphList from '@/ui/components/VirtualList/GlyphList/VirtualGlyphList.vue'
 import CharacterEditor from '@/ui/components/Editor/CharacterEditor.vue'
@@ -93,8 +95,25 @@ const isListMode = computed(() => {
          editStatus.value === EditStatus.GlyphList
 })
 
+const dialog = useDialog()
+
 // 处理 tab 切换
 const handleTabChange = (status: EditStatus) => {
+  // 骨架自由编辑模式下，切换到列表前给出提示
+  if (skeletonFreeEdit.value && status !== editStatus.value) {
+    dialog.warning({
+      title: t('panels.paramsPanel.skeletonBinding.toolSwitchTitle'),
+      content: t('panels.paramsPanel.skeletonBinding.toolSwitchWarning'),
+      positiveText: t('panels.paramsPanel.skeletonBinding.toolSwitchIgnore'),
+      negativeText: t('panels.paramsPanel.skeletonBinding.toolSwitchStay'),
+      onPositiveClick: () => {
+        exitSkeletonFreeEdit()
+        PenSelectTool.skeletonFreeEditContext = null
+        editorStore.setEditStatus(status)
+      },
+    })
+    return
+  }
   editorStore.setEditStatus(status)
 }
 </script>

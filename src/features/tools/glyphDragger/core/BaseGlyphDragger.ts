@@ -12,6 +12,7 @@ import { computeGlyphComponentBoundingBox } from '@/core/utils/glyphBounds'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+import { skeletonFreeEdit } from '@/stores/skeletonDragger'
 import {
   collectStraightAxisLinesFromPenComponents,
   collectStraightAxisLinesFromGlyphComponents,
@@ -510,6 +511,11 @@ export abstract class BaseGlyphDragger {
 
     // 防止重复进入：若上一次拖拽的 mouseup 尚未触发（如事件顺序异常），忽略新的 mousedown
     if (this._isDragging) {
+      return
+    }
+
+    // 骨架自由编辑模式下，glyphDragger 不介入拖拽，让 PenSelectTool 处理钢笔轮廓编辑
+    if (skeletonFreeEdit.value) {
       return
     }
 

@@ -93,7 +93,8 @@ import { setGlyphEditCanvasContext, clearGlyphEditCanvasContext } from '@/featur
 import { useToolStore } from '@/stores/tool'
 import { useDialogsStore } from '@/stores/dialogs'
 import { initSkeletonDragger, renderSkeletonSelector, renderBoneAndWeight } from '@/features/tools/skeletonBind'
-import { onSkeletonBind, onSkeletonDragging, onWeightSetting } from '@/stores/skeletonDragger'
+import { onSkeletonBind, onSkeletonDragging, onWeightSetting, skeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
+import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import type { ToolType } from '@/features/tools'
 import { rebuildGlyphListPreviewAfterExitEdit } from '@/features/editor/listPreview/rebuildListPreviewAfterEditorExit'
 import { discardGlobalConstantsDraftOnLeave } from '@/stores/editorConstantsSession'
@@ -551,6 +552,11 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  // 清理骨架自由编辑状态，避免退出后再进入时残留状态
+  if (skeletonFreeEdit.value) {
+    exitSkeletonFreeEdit()
+    PenSelectTool.skeletonFreeEditContext = null
+  }
   clearGlyphEditCanvasContext()
   closeSkeletonDragger && closeSkeletonDragger()
   closeSkeletonDragger = null
@@ -769,6 +775,35 @@ watch([onSkeletonDragging, () => toolStore.tool], async ([dragging, tool]) => {
 // 监听工具切换
 watch(() => toolStore.tool, async (newTool) => {
   if (!canvasRef.value) return
+
+  // 骨架自由编辑模式下的工具切换警告
+  if (skeletonFreeEdit.value && newTool && newTool !== 'select') {
+    const { useDialog } = await import('naive-ui')
+    const { useI18n } = await import('vue-i18n')
+    const dialog = useDialog()
+    const { t } = useI18n()
+
+    const targetTool = newTool as string
+    dialog.warning({
+      title: t('panels.paramsPanel.skeletonBinding.toolSwitchTitle'),
+      content: t('panels.paramsPanel.skeletonBinding.toolSwitchWarning'),
+      positiveText: t('panels.paramsPanel.skeletonBinding.toolSwitchIgnore'),
+      negativeText: t('panels.paramsPanel.skeletonBinding.toolSwitchStay'),
+      onPositiveClick: () => {
+        exitSkeletonFreeEdit()
+        nextTick(() => {
+          toolManager.switchTool(targetTool as ToolType)
+          renderCanvas()
+        })
+      },
+      onNegativeClick: () => {
+        nextTick(() => {
+          toolStore.setTool('select')
+        })
+      },
+    })
+    return
+  }
 
   // 更新当前工具状态
   currentTool.value = (newTool as ToolType | '') || ''

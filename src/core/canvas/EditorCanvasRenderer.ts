@@ -263,7 +263,10 @@ export function renderCanvas(
           () => new CustomGlyph(glyphValue),
           'glyph'
         ) as CustomGlyph
-        
+
+        // 同步实例 _glyph 与 store 中的最新数据（如骨架自由编辑修改了钢笔点）
+        glyphInstance._glyph = glyphValue
+
         if (import.meta.env.DEV) {
           const hasTempData = !!glyphInstance.tempData
           const componentsCount = glyphInstance._components?.length || 0
