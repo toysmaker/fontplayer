@@ -77,6 +77,7 @@ import BottomBar from '@/ui/components/BottomBar/BottomBar.vue'
 import EditFilesBar from '@/ui/components/FilesBar/EditFilesBar.vue'
 import type { ICustomGlyph } from '@/core/types'
 import { render } from '@/core/canvas/EditorCanvasRenderer'
+import { interpolateGlyphOutline, getPreviewDisplayUUIDs } from '@/features/variableInterpolation'
 import { mapCanvasWidth, mapCanvasHeight, mapCanvasX, mapCanvasY } from '@/utils/canvas'
 import { getStrokeWidth } from '@/utils/canvas-utils'
 import type { IBackground, IGrid } from '@/core/canvas/types'
@@ -89,7 +90,7 @@ import { bottomBarToolManager } from '@/features/bottomBar/BottomBarToolManager'
 import { useBottomBarToolStore } from '@/stores/bottomBarTool'
 import { toolManager, SelectTool, PenTool, PolygonTool, EllipseTool, RectangleTool } from '@/features/tools'
 import { getCoord } from '@/features/tools/utils/coord'
-import { setGlyphEditCanvasContext, clearGlyphEditCanvasContext } from '@/features/editor/glyphEditCanvas'
+import { setEditCanvasContext, clearEditCanvasContext } from '@/features/editor/editCanvas'
 import { useToolStore } from '@/stores/tool'
 import { useDialogsStore } from '@/stores/dialogs'
 import { initSkeletonDragger, renderSkeletonSelector, renderBoneAndWeight } from '@/features/tools/skeletonBind'
@@ -122,6 +123,7 @@ const isRenderingFromWatch = ref(false)
 
 // 串行化画布渲染：骨架拖拽时 dragger onRender 与 orderedList deep watch 可能同帧连续触发，避免交错重绘
 let renderCanvasTail: Promise<void> = Promise.resolve()
+let pendingRenderRAF = 0
 
 // Canvas 尺寸（字形编辑界面使用默认尺寸）
 const defaultUnitsPerEm = 1000
@@ -138,11 +140,18 @@ const editorGrid = computed<IGrid>(() => editorPreference.grid)
 
 // 渲染画布（排队执行，禁止并发；内部与 CharacterEditor 一致为同步绘制）
 const renderCanvas = (): void => {
-  renderCanvasTail = renderCanvasTail
-    .then(() => {
-      runRenderCanvasSync()
-    })
-    .catch(() => {})
+  // RAF 节流：同一帧内多次调用只执行最后一次
+  if (pendingRenderRAF) {
+    cancelAnimationFrame(pendingRenderRAF)
+  }
+  pendingRenderRAF = requestAnimationFrame(() => {
+    pendingRenderRAF = 0
+    renderCanvasTail = renderCanvasTail
+      .then(() => {
+        runRenderCanvasSync()
+      })
+      .catch(() => {})
+  })
 }
 
 function runRenderCanvasSync() {
@@ -154,12 +163,60 @@ function runRenderCanvasSync() {
     ctx.clearRect(0, 0, canvasRef.value.width, canvasRef.value.height)
   }
 
-  const components = (glyphStore as any).orderedListWithItemsForCurrentGlyph
-  
+  let components = (glyphStore as any).orderedListWithItemsForCurrentGlyph
+
+  // 图层过滤器：仅渲染当前选中图层的组件
+  const filter = editorStore.glyphPanelCompFilter
+  if (filter && filter.startsWith('layer:')) {
+    const layerName = filter.substring(6)
+    const layerUUIDs = editingGlyph.value?.layers?.[layerName]
+    if (layerUUIDs) {
+      const uuidSet = new Set(layerUUIDs)
+      components = components.filter((c: any) => uuidSet.has(c.uuid))
+    }
+  }
+
+  // 可变参数预览模式：仅渲染差值后的目标图层组件（关键帧图层间插值）
+  if (editorStore.variablePreviewEnabled && editingGlyph.value?.variables?.length) {
+    const glyph = editingGlyph.value
+    const displayUUIDs = getPreviewDisplayUUIDs(glyph)
+
+    // 筛选出显示图层组件
+    components = components.filter((c: any) => displayUUIDs.has(c.uuid))
+
+    // 应用差值 —— 深克隆组件后修改锚点+变换，避免触发响应式 watcher 死循环
+    const result = interpolateGlyphOutline(glyph)
+    if (result.success && result.interpolatedComponents && result.interpolatedComponents.size > 0) {
+      components = components.map((c: any) => {
+        const interp = result.interpolatedComponents!.get(c.uuid)
+        if (!interp || c.type !== 'pen') return c
+        return {
+          ...c,
+          x: interp.x,
+          y: interp.y,
+          w: interp.w,
+          h: interp.h,
+          rotation: interp.rotation,
+          flipX: interp.flipX,
+          flipY: interp.flipY,
+          value: {
+            ...c.value,
+            points: interp.points.map((p, i) => ({
+              ...(c.value?.points?.[i] || {}),
+              x: p.x,
+              y: p.y,
+            })),
+          },
+        }
+      })
+    }
+  }
+
+  // 预览模式下不传 glyph，避免 EditorCanvasRenderer 内部调用 executeGlyphScript 引发 watcher 死循环
   render(canvasRef.value, true, false, {
     mode: 'glyph',
-    glyph: editingGlyph.value,
-    components: components, // 传入组件列表，用于渲染字形内部的组件
+    glyph: editorStore.variablePreviewEnabled ? undefined : editingGlyph.value,
+    components: components,
     background: editorBackground.value,
     grid: editorGrid.value,
   })
@@ -389,7 +446,7 @@ const initTools = async () => {
   }
 
   // Expose glyph editor canvas + coord mapping for params panel/tools
-  setGlyphEditCanvasContext({
+  setEditCanvasContext({
     canvas: canvasRef.value,
     getCoord: toolConfig.getCoord,
     onRender: toolConfig.onRender,
@@ -557,7 +614,7 @@ onUnmounted(() => {
     exitSkeletonFreeEdit()
     PenSelectTool.skeletonFreeEditContext = null
   }
-  clearGlyphEditCanvasContext()
+  clearEditCanvasContext()
   closeSkeletonDragger && closeSkeletonDragger()
   closeSkeletonDragger = null
   // 清理selectControl检查定时器
@@ -665,6 +722,56 @@ watch(() => bottomBarToolStore.currentTool, (newTool) => {
     if (currentTool === 'coordsViewer') {
       bottomBarToolManager.deactivateCoordsViewer()
     }
+  }
+})
+
+// 监听图层过滤器变化，重新渲染
+watch(() => editorStore.glyphPanelCompFilter, async () => {
+  if (isRenderingFromWatch.value) return
+  isRenderingFromWatch.value = true
+  try {
+    renderCanvas()
+  } finally {
+    await nextTick()
+    isRenderingFromWatch.value = false
+    await reinitSelectDraggerIfNeeded()
+  }
+})
+
+// 监听可变参数变化及预览开关，重新渲染
+let lastVariableValues: number[] | undefined
+watch(
+  () => editingGlyph.value?.variables?.map(v => Number(v.value)),
+  async (values) => {
+    if (!editorStore.variablePreviewEnabled) return
+    if (!values) return
+    if (lastVariableValues && lastVariableValues.length === values.length &&
+        lastVariableValues.every((v, i) => v === values[i])) return
+    lastVariableValues = [...values]
+
+    if (isRenderingFromWatch.value) return
+    isRenderingFromWatch.value = true
+    try {
+      renderCanvas()
+    } finally {
+      await nextTick()
+      isRenderingFromWatch.value = false
+      await reinitSelectDraggerIfNeeded()
+    }
+  },
+)
+
+// 监听预览开关
+watch(() => editorStore.variablePreviewEnabled, async () => {
+  lastVariableValues = undefined
+  if (isRenderingFromWatch.value) return
+  isRenderingFromWatch.value = true
+  try {
+    renderCanvas()
+  } finally {
+    await nextTick()
+    isRenderingFromWatch.value = false
+    await reinitSelectDraggerIfNeeded()
   }
 })
 

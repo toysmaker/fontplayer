@@ -30,7 +30,7 @@ import { useCharacterStore } from '@/stores/character'
 import { useGlyphStore } from '@/stores/glyph'
 import { useProjectStore } from '@/stores/project'
 import { useCharacterGridEditStore } from '@/stores/characterGridEdit'
-import { EditStatus, ParameterType, IParameter, ICustomGlyph, IConstant } from '@/core/types'
+import { EditStatus, ParameterType, type IParameter, type ICustomGlyph, type IConstant, type IVariable } from '@/core/types'
 import type { IGlyphComponent } from '@/core/types'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { instanceManager } from '@/core/instance/InstanceManager'
@@ -40,7 +40,7 @@ import { orderedListWithItemsForGlyph } from '@/core/utils/glyph'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import { skeletonFreeEdit, enterSkeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
 import { toolManager } from '@/features/tools/base/ToolManager'
-import { getGlyphEditCanvasContext } from '@/features/editor/glyphEditCanvas'
+import { getEditCanvasContext } from '@/features/editor/editCanvas'
 import { expandGlyphComponent } from '@/features/editor/services/FormatGlyphService'
 import { precisionFromParamMax, roundToPrecision } from '@/utils/number'
 import { genUUID } from '@/utils/uuid'
@@ -128,7 +128,7 @@ async function handleEnterFreeEdit() {
   // 自动切换到选择工具，完成后触发画布重绘以显示钢笔轮廓控件
   await toolManager.switchTool('select')
   await nextTick()
-  const ctx = getGlyphEditCanvasContext()
+  const ctx = getEditCanvasContext()
   if (ctx) ctx.onRender()
 }
 
@@ -760,14 +760,46 @@ const glyphParameters = computed(() => {
   if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') {
     return []
   }
-  
+
   const glyphValue = selectedComponent.value.value as ICustomGlyph
   if (!glyphValue || !Array.isArray(glyphValue.parameters)) {
     return []
   }
-  
+
   return glyphValue.parameters as IParameter[]
 })
+
+// 获取字形组件的可变参数
+const glyphVariables = computed(() => {
+  if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') {
+    return []
+  }
+  const glyphValue = selectedComponent.value.value as ICustomGlyph
+  if (!glyphValue || !Array.isArray(glyphValue.variables)) {
+    return []
+  }
+  return glyphValue.variables
+})
+
+// 处理可变参数值变化
+function handleVariableChange(variable: { uuid: string; value: number }) {
+  if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return
+  const glyphValue = selectedComponent.value.value as ICustomGlyph
+  if (!glyphValue?.variables) return
+
+  const v = glyphValue.variables.find(v => v.uuid === variable.uuid)
+  if (v) {
+    v.value = variable.value
+  }
+
+  // 更新组件数据
+  modifyComponent({
+    value: { ...glyphValue, variables: [...glyphValue.variables] },
+  })
+
+  // 触发 canvas 重绘（字形编辑界面和字符编辑界面都通过统一的 canvas 上下文）
+  getEditCanvasContext()?.onRender()
+}
 
 // 获取常量值（用于 Constant 类型参数）
 const getConstantValue = (param: IParameter): number | string => {
@@ -1007,6 +1039,41 @@ const handleFormatGlyphComponent = () => {
               :value="editorStore.checkRefLines"
               @update:value="(v) => editorStore.checkRefLines = v"
             />
+          </n-form-item>
+        </n-form>
+      </div>
+
+      <!-- 可变参数 -->
+      <div class="section" v-if="glyphVariables.length > 0">
+        <div class="section-title">{{ t('panels.paramsPanel.variablesPanel.title') }}</div>
+        <n-form label-placement="left" label-width="80px">
+          <n-form-item
+            v-for="variable in glyphVariables"
+            :key="variable.uuid"
+            :label="variable.name"
+          >
+            <div class="glyph-param-block">
+              <n-input-number
+                :value="variable.value"
+                :min="variable.min"
+                :max="variable.max"
+                :precision="1"
+                @update:value="(v: number | null) => v !== null && handleVariableChange({ uuid: variable.uuid, value: v })"
+              />
+              <n-slider
+                :value="variable.value"
+                :min="variable.min"
+                :max="variable.max"
+                :step="1"
+                @update:value="(v: number) => handleVariableChange({ uuid: variable.uuid, value: v })"
+                style="width: 100%; margin-top: 8px;"
+              />
+              <div style="font-size: 10px; color: var(--n-text-color-3); margin-top: 4px;">
+                {{ t('panels.paramsPanel.variablesPanel.variableMin') }}: {{ variable.min }} |
+                {{ t('panels.paramsPanel.variablesPanel.variableDefault') }}: {{ variable.default }} |
+                {{ t('panels.paramsPanel.variablesPanel.variableMax') }}: {{ variable.max }}
+              </div>
+            </div>
           </n-form-item>
         </n-form>
       </div>

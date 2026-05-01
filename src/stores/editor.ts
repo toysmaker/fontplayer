@@ -29,13 +29,19 @@ export const useEditorStore = defineStore('editor', () => {
   const isCharacterSearching = ref(false)
   const characterSearchKeyword = ref('')
   
-  // 组件列表过滤器
-  const editPanelCompFilter = ref<'all' | 'font'>('all')
-  const glyphPanelCompFilter = ref<'all' | 'font'>('all')
+  // 组件列表过滤器（支持 all、font 以及 layer 名称）
+  const editPanelCompFilter = ref<string>('all')
+  const glyphPanelCompFilter = ref<string>('all')
 
   // 关键点和辅助线显示状态
   const checkJoints = ref<boolean>(true)
   const checkRefLines = ref<boolean>(true)
+
+  // 可变参数预览模式（仅在字形编辑界面有效）
+  const variablePreviewEnabled = ref<boolean>(false)
+
+  // 用于跨组件触发 canvas 重绘的计数器（GlyphEditPanel 修改后递增，Editor watch 它）
+  const componentRenderTick = ref(0)
 
   // Actions
   /**
@@ -151,15 +157,26 @@ export const useEditorStore = defineStore('editor', () => {
   /**
    * 设置编辑面板组件过滤器
    */
-  function setEditPanelCompFilter(filter: 'all' | 'font') {
+  function setEditPanelCompFilter(filter: string) {
     editPanelCompFilter.value = filter
   }
 
   /**
    * 设置字形面板组件过滤器
    */
-  function setGlyphPanelCompFilter(filter: 'all' | 'font') {
+  function setGlyphPanelCompFilter(filter: string) {
     glyphPanelCompFilter.value = filter
+  }
+
+  /**
+   * 设置可变参数预览模式
+   */
+  function setVariablePreviewEnabled(enabled: boolean) {
+    variablePreviewEnabled.value = enabled
+  }
+
+  function bumpComponentRenderTick() {
+    componentRenderTick.value++
   }
 
   return {
@@ -176,7 +193,9 @@ export const useEditorStore = defineStore('editor', () => {
     glyphPanelCompFilter,
     checkJoints,
     checkRefLines,
-    
+    variablePreviewEnabled,
+    componentRenderTick,
+
     // Actions
     setEditStatus,
     toggleLeftPanel,
@@ -187,5 +206,7 @@ export const useEditorStore = defineStore('editor', () => {
     setIsCharacterSearching,
     setEditPanelCompFilter,
     setGlyphPanelCompFilter,
+    setVariablePreviewEnabled,
+    bumpComponentRenderTick,
   }
 })

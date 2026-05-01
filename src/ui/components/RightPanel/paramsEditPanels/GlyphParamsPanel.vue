@@ -20,16 +20,20 @@ import {
   NInputGroup,
   NSlider,
   NDivider,
+  NTag,
+  useMessage,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useGlyphStore } from '@/stores/glyph'
 import { useEditorStore } from '@/stores/editor'
 import { useProjectStore } from '@/stores/project'
-import { ParameterType, type IParameter } from '@/core/types'
+import { ParameterType, type IParameter, type IVariable } from '@/core/types'
 import { genUUID } from '@/utils/uuid'
+import AddVariableDialog from '@/ui/dialogs/AddVariableDialog.vue'
 import { kai_strokes as strokes } from '@/templates/strokes_1'
 import { strokeFnMap } from '@/templates/strokeFnMap'
 import { calculateGlyphWeight } from '@/features/glyphWeight'
+import { bindSkeletonForVariables } from '@/features/skeletonVariableBind'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import {
@@ -42,10 +46,11 @@ import {
   weightValue,
   brushSize,
 } from '@/stores/skeletonDragger'
-import { getGlyphEditCanvasContext } from '@/features/editor/glyphEditCanvas'
+import { getEditCanvasContext } from '@/features/editor/editCanvas'
 import { initWeightSelector, renderBoneAndWeight } from '@/features/tools/skeletonBind'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { createDebouncedHandler } from '@/utils/debounce-click'
+import { isDefaultScriptTemplate } from '@/features/programming/glyphProgrammingUtils'
 
 const { t } = useI18n()
 const glyphStore = useGlyphStore()
@@ -71,7 +76,7 @@ const handleToggleStyleEdit = createDebouncedHandler(toggleStyleEdit, 'GlyphPara
 
 const onStyleChange = () => {
   // style 变化不一定需要执行脚本，但保持与参数区行为一致：触发一次重渲染
-  const ctx = getGlyphEditCanvasContext()
+  const ctx = getEditCanvasContext()
   ctx?.onRender()
 }
 
@@ -147,7 +152,7 @@ const onChangeSkeleton = (value: string) => {
   g.skeleton.onSkeletonBind = true
   onSkeletonDragging.value = true
 
-  const ctx = getGlyphEditCanvasContext()
+  const ctx = getEditCanvasContext()
   ctx?.onRender()
 }
 const handleAddSkeleton = createDebouncedHandler(() => { onSkeletonSelect.value = true }, 'GlyphParamsPanel.addSkeleton')
@@ -170,6 +175,9 @@ const bindSkeleton = () => {
 
   onSkeletonDragging.value = false
 
+  // 如果字形包含可变参数，为每个关键帧图层绑定骨架
+  bindSkeletonForVariables(g)
+
   g.skeleton.originWeight = calculateGlyphWeight(g)
   // ensure there is a 字重 param to store value (refactor uses array)
   if (!Array.isArray(g.parameters)) g.parameters = []
@@ -178,7 +186,7 @@ const bindSkeleton = () => {
 
   g.skeleton.onSkeletonBind = false
 
-  const ctx = getGlyphEditCanvasContext()
+  const ctx = getEditCanvasContext()
   ctx?.onRender()
 }
 const handleBindSkeleton = createDebouncedHandler(bindSkeleton, 'GlyphParamsPanel.bindSkeleton')
@@ -217,7 +225,7 @@ const removeSkeleton = () => {
     }
   }
 
-  const ctx = getGlyphEditCanvasContext()
+  const ctx = getEditCanvasContext()
   ctx?.onRender()
 }
 const handleRemoveSkeleton = createDebouncedHandler(removeSkeleton, 'GlyphParamsPanel.removeSkeleton')
@@ -235,7 +243,7 @@ const modifySkeleton = () => {
   g.skeleton.onSkeletonBind = true
   onSkeletonDragging.value = true
 
-  const ctx = getGlyphEditCanvasContext()
+  const ctx = getEditCanvasContext()
   ctx?.onRender()
 }
 const handleModifySkeleton = createDebouncedHandler(modifySkeleton, 'GlyphParamsPanel.modifySkeleton')
@@ -256,7 +264,7 @@ const initWeightSetting = () => {
   onWeightSetting.value = true
   onSelectBone.value = true
 
-  const ctx = getGlyphEditCanvasContext()
+  const ctx = getEditCanvasContext()
   if (!ctx) return
 
   closeWeightSelector = initWeightSelector(ctx.canvas, {
@@ -274,7 +282,7 @@ const closeWeightSetting = () => {
   closeWeightSelector && closeWeightSelector()
   closeWeightSelector = null
 
-  const ctx = getGlyphEditCanvasContext()
+  const ctx = getEditCanvasContext()
   ctx?.onRender()
 }
 const handleInitWeightSetting = createDebouncedHandler(initWeightSetting, 'GlyphParamsPanel.initWeightSetting')
@@ -298,7 +306,7 @@ const handleChangeSelectedBone = (value: number) => {
   selectedBone.value = g.skeleton.skeletonBindData.bones[value]
   selectedBone.value.index = value
 
-  const ctx = getGlyphEditCanvasContext()
+  const ctx = getEditCanvasContext()
   if (!ctx) return
   ctx.onRender()
   renderBoneAndWeight(ctx.canvas)
@@ -335,7 +343,7 @@ const rerenderAndExecute = () => {
     // 执行脚本以刷新参数到渲染（与原工程一致的“改参数即生效”体验）
     executeGlyphScript(g, g.uuid)
   }
-  const ctx = getGlyphEditCanvasContext()
+  const ctx = getEditCanvasContext()
   ctx?.onRender()
 }
 
@@ -365,6 +373,93 @@ const handleChangeParameter = (parameter: IParameter, value: number | string | n
   if (!p) return
   p.value = value as any
   rerenderAndExecute()
+}
+
+// -------------------------
+// 可变参数（Variable Interpolation）
+// -------------------------
+const message = useMessage()
+const addVariableDialogVisible = ref(false)
+
+const glyphVariables = computed<IVariable[]>(() => {
+  const g = editGlyph.value
+  if (!g || !Array.isArray(g.variables)) return []
+  return g.variables as IVariable[]
+})
+
+const glyphLayerNames = computed<string[]>(() => {
+  const g = editGlyph.value
+  if (!g?.layers) return []
+  return Object.keys(g.layers)
+})
+
+const hasScript = computed(() => {
+  const g = editGlyph.value
+  if (g?.script_reference) return true
+  if (g?.glyph_script && Object.keys(g.glyph_script).length > 0) return true
+  if (g?.param_script && Object.keys(g.param_script).length > 0) return true
+  if (g?.system_script && Object.keys(g.system_script).length > 0) return true
+  // 有 script 但它是默认空模板（只有注释没有可执行代码），不算真正的脚本
+  if (g?.script && !isDefaultScriptTemplate(g.script)) return true
+  return false
+})
+
+const hasParameters = computed(() => {
+  const g = editGlyph.value
+  return Array.isArray(g?.parameters) && g.parameters.length > 0
+})
+
+const hasSkeleton = computed(() => {
+  return !!editGlyph.value?.skeleton
+})
+
+const addVariableDisabled = computed(() => {
+  return hasScript.value || hasParameters.value || hasSkeleton.value
+})
+
+const addVariableDisabledReason = computed(() => {
+  if (hasSkeleton.value) {
+    return t('panels.paramsPanel.variablesPanel.addVariableDisabledSkeleton')
+  }
+  if (hasScript.value || hasParameters.value) {
+    return t('panels.paramsPanel.variablesPanel.addVariableDisabledScript')
+  }
+  return ''
+})
+
+function handleAddVariable(variable: IVariable) {
+  const g = editGlyph.value
+  if (!g) return
+  if (!Array.isArray(g.variables)) {
+    g.variables = []
+  }
+  g.variables.push(variable)
+  const ctx = getEditCanvasContext()
+  ctx?.onRender()
+}
+
+function handleDeleteVariable(uuid: string) {
+  const g = editGlyph.value
+  if (!g?.variables) return
+  const idx = g.variables.findIndex(v => v.uuid === uuid)
+  if (idx !== -1) {
+    g.variables.splice(idx, 1)
+  }
+  const ctx = getEditCanvasContext()
+  ctx?.onRender()
+}
+
+function handleVariableValueChange(variable: IVariable, value: number | null) {
+  if (value === null) return
+  variable.value = value
+  const ctx = getEditCanvasContext()
+  ctx?.onRender()
+}
+
+function toggleVariablePreview() {
+  editorStore.setVariablePreviewEnabled(!editorStore.variablePreviewEnabled)
+  const ctx = getEditCanvasContext()
+  ctx?.onRender()
 }
 </script>
 
@@ -519,7 +614,85 @@ const handleChangeParameter = (parameter: IParameter, value: number | string | n
         </n-form>
       </div>
     </div>
+
+    <!-- 4) 可变参数（Variable Interpolation） -->
+    <div class="section">
+      <div class="section-title">{{ t('panels.paramsPanel.variablesPanel.title') }}</div>
+      <div class="section-body">
+        <n-button
+          size="small"
+          :disabled="addVariableDisabled"
+          :title="addVariableDisabledReason"
+          @click="addVariableDialogVisible = true"
+          style="width: 100%;"
+        >
+          {{ t('panels.paramsPanel.variablesPanel.addVariable') }}
+        </n-button>
+        <div v-if="addVariableDisabledReason" style="font-size: 11px; color: var(--warning-color, #e6a23c); margin-top: 4px;">
+          {{ addVariableDisabledReason }}
+        </div>
+
+        <!-- 预览按钮：仅在存在可变参数时显示 -->
+        <n-button
+          v-if="glyphVariables.length > 0"
+          size="small"
+          :type="editorStore.variablePreviewEnabled ? 'primary' : 'default'"
+          @click="toggleVariablePreview"
+          style="width: 100%; margin-top: 8px;"
+        >
+          {{ editorStore.variablePreviewEnabled ? t('panels.paramsPanel.variablesPanel.previewOff') : t('panels.paramsPanel.variablesPanel.previewOn') }}
+        </n-button>
+
+        <div v-for="variable in glyphVariables" :key="variable.uuid" class="variable-item" style="margin-top: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-size: 13px; font-weight: 500;">{{ variable.name }}</span>
+            <n-button size="tiny" type="error" @click="handleDeleteVariable(variable.uuid)">
+              {{ t('panels.paramsPanel.variablesPanel.deleteVariable') }}
+            </n-button>
+          </div>
+          <div style="font-size: 11px; color: var(--light-0); margin: 4px 0;">
+            {{ t('panels.paramsPanel.variablesPanel.variableMin') }}: {{ variable.min }} |
+            {{ t('panels.paramsPanel.variablesPanel.variableDefault') }}: {{ variable.default }} |
+            {{ t('panels.paramsPanel.variablesPanel.variableMax') }}: {{ variable.max }}
+          </div>
+          <n-form label-placement="left" label-width="60">
+            <n-form-item :label="t('panels.paramsPanel.variablesPanel.variableValue')">
+              <n-input-number
+                :value="variable.value"
+                :min="variable.min"
+                :max="variable.max"
+                :precision="1"
+                :disabled="!editorStore.variablePreviewEnabled"
+                @update:value="(v) => handleVariableValueChange(variable, v)"
+              />
+            </n-form-item>
+          </n-form>
+          <n-slider
+            :value="variable.value"
+            :min="variable.min"
+            :max="variable.max"
+            :step="1"
+            :disabled="!editorStore.variablePreviewEnabled"
+            @update:value="(v) => handleVariableValueChange(variable, v)"
+          />
+          <div style="margin-top: 4px;">
+            <span style="font-size: 11px; color: var(--light-0);">{{ t('panels.paramsPanel.variablesPanel.keyframes') }}:</span>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px;">
+              <n-tag v-for="kf in variable.keyframes" :key="kf.uuid" size="small" type="info">
+                {{ kf.value }} → {{ kf.layer }}
+              </n-tag>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
+
+  <AddVariableDialog
+    v-model:visible="addVariableDialogVisible"
+    :layer-names="glyphLayerNames"
+    @confirm="handleAddVariable"
+  />
 </template>
 
 <style scoped>

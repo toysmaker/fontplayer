@@ -5,8 +5,9 @@
  * 注意：这个类应该只在编辑时实例化，通过 InstanceManager 管理
  */
 
-import type { ICustomGlyph, IComponent, IParameter } from '../types'
+import type { ICustomGlyph, IComponent, IParameter, IPenComponent } from '../types'
 import { ParameterType } from '../types'
+import { interpolateGlyphOutline, getPreviewDisplayUUIDs } from '@/features/variableInterpolation'
 import { instanceManager, type IInstance } from './InstanceManager'
 import { orderedListWithItemsForGlyph } from '../utils/glyph'
 import { useProjectStore } from '@/stores/project'
@@ -15,6 +16,23 @@ import { renderCanvas } from '../canvas/EditorCanvasRenderer'
 import { fontRenderStyle } from '../script/globals'
 import { computeCoords, type ILayoutTransformGrid } from '../utils/grid'
 import { precisionFromParamMax, roundToPrecision } from '@/utils/number'
+
+// 可变参数差值渲染前浅克隆组件，避免原地修改 reactive 数据触发 Vue deep watcher 死循环
+function cloneGlyphComponentsForVarInterp(comps: any[]): any[] {
+  return comps.map((c: any) => {
+    if (c.type === 'pen') {
+      const pv = c.value
+      return {
+        ...c,
+        value: {
+          ...pv,
+          points: (pv.points || []).map((p: any) => ({ ...p })),
+        },
+      }
+    }
+    return { ...c, value: { ...c.value } }
+  })
+}
 
 // TODO: 需要从原代码迁移 Component 类型
 // type Component = PenComponent | PolygonComponent | EllipseComponent | RectangleComponent
@@ -138,7 +156,50 @@ export class CustomGlyph implements IInstance {
     const displayHeight = parseFloat(computedStyle.height) || 0
     
     // 渲染字形组件列表（components，即字形内部的组件，如 pen, polygon 等）
-    const glyphComponents = orderedListWithItemsForGlyph(this._glyph)
+    // 浅克隆组件避免原地修改 reactive 数据触发 Vue deep watcher 死循环
+    const allGlyphComponents = cloneGlyphComponentsForVarInterp(orderedListWithItemsForGlyph(this._glyph))
+
+    // 可变参数差值：当存在可变参数时，仅渲染显示图层组件并应用差值
+    let glyphComponents = allGlyphComponents
+    if (this._glyph.variables && this._glyph.variables.length > 0) {
+      const displayUUIDs = getPreviewDisplayUUIDs(this._glyph)
+      glyphComponents = allGlyphComponents.filter((c: any) => displayUUIDs.has(c.uuid))
+      if (import.meta.env.DEV) {
+        const vals = this._glyph.variables.map((v: any) => v.value)
+        const layerKeys = this._glyph.layers ? Object.keys(this._glyph.layers) : []
+        const kfLayers = this._glyph.variables[0]?.keyframes?.map((k: any) => k.layer) || []
+        console.log(`[CG.render] glyph="${this._glyph.name}" uuid=${this._glyph.uuid.slice(-8)} vars=${this._glyph.variables.length} vals=[${vals}] layerKeys=[${layerKeys}] kfLayers=[${kfLayers}] displayUUIDs=${displayUUIDs.size} allComps=${allGlyphComponents.length} filtered=${glyphComponents.length}`)
+      }
+
+      const interpolationResult = interpolateGlyphOutline(this._glyph)
+      if (interpolationResult.success && interpolationResult.interpolatedComponents) {
+        for (const comp of glyphComponents) {
+          if (comp.type === 'pen') {
+            const interp = interpolationResult.interpolatedComponents.get(comp.uuid)
+            if (interp) {
+              const penValue = comp.value as IPenComponent
+              if (penValue.points) {
+                penValue.points = interp.points.map((p, i) => ({
+                  ...(Array.isArray(penValue.points) && penValue.points[i] ? penValue.points[i] : {}),
+                  x: p.x,
+                  y: p.y,
+                }))
+                comp.x = interp.x
+                comp.y = interp.y
+                comp.w = interp.w
+                comp.h = interp.h
+                comp.rotation = interp.rotation
+                comp.flipX = interp.flipX
+                comp.flipY = interp.flipY
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // ... rending happens ...
+
     if (import.meta.env.DEV) {
       console.log('[CustomGlyph.render] Rendering glyph:', {
         glyphUUID: this._glyph.uuid,
@@ -149,9 +210,9 @@ export class CustomGlyph implements IInstance {
         has_components: this._components.length > 0,
         canvasActualSize: { width: canvas.width, height: canvas.height },
         canvasDisplaySize: { width: displayWidth, height: displayHeight },
-        canvasSizeRatio: { 
-          widthRatio: canvas.width / (displayWidth || 1), 
-          heightRatio: canvas.height / (displayHeight || 1) 
+        canvasSizeRatio: {
+          widthRatio: canvas.width / (displayWidth || 1),
+          heightRatio: canvas.height / (displayHeight || 1)
         },
         offset: offset,
         scale: scale
@@ -166,7 +227,7 @@ export class CustomGlyph implements IInstance {
         layerTint: fillColor,
       })
     }
-    
+
     // 确保清除renderCanvas可能留下的路径状态
     ctx.beginPath()
     
@@ -250,14 +311,46 @@ export class CustomGlyph implements IInstance {
     if (!ctx) return
     
     // 渲染字形组件列表（强制更新）
-    renderCanvas(orderedListWithItemsForGlyph(this._glyph), canvas, {
+    const allForceComps = cloneGlyphComponentsForVarInterp(orderedListWithItemsForGlyph(this._glyph))
+    let forceComps = allForceComps
+    if (this._glyph.variables && this._glyph.variables.length > 0) {
+      const displayUUIDs = getPreviewDisplayUUIDs(this._glyph)
+      forceComps = allForceComps.filter((c: any) => displayUUIDs.has(c.uuid))
+
+      const interpolationResult = interpolateGlyphOutline(this._glyph)
+      if (interpolationResult.success && interpolationResult.interpolatedComponents) {
+        for (const comp of forceComps) {
+          if (comp.type === 'pen') {
+            const interp = interpolationResult.interpolatedComponents.get(comp.uuid)
+            if (interp) {
+              const penValue = comp.value as IPenComponent
+              if (penValue.points) {
+                penValue.points = interp.points.map((p, i) => ({
+                  ...(Array.isArray(penValue.points) && penValue.points[i] ? penValue.points[i] : {}),
+                  x: p.x,
+                  y: p.y,
+                }))
+                comp.x = interp.x
+                comp.y = interp.y
+                comp.w = interp.w
+                comp.h = interp.h
+                comp.rotation = interp.rotation
+                comp.flipX = interp.flipX
+                comp.flipY = interp.flipY
+              }
+            }
+          }
+        }
+      }
+    }
+    renderCanvas(forceComps, canvas, {
       offset,
       scale: scale,
       fill: false,
       forceUpdate: true,
       layerTint: fillColor,
     })
-    
+
     // 确保清除renderCanvas可能留下的路径状态
     ctx.beginPath()
     
@@ -300,7 +393,34 @@ export class CustomGlyph implements IInstance {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    renderCanvas(orderedListWithItemsForGlyph(this._glyph), canvas, {
+    const allGridComps = cloneGlyphComponentsForVarInterp(orderedListWithItemsForGlyph(this._glyph))
+    let gridComps = allGridComps
+    if (this._glyph.variables && this._glyph.variables.length > 0) {
+      const displayUUIDs = getPreviewDisplayUUIDs(this._glyph)
+      gridComps = allGridComps.filter((c: any) => displayUUIDs.has(c.uuid))
+      const interpRes = interpolateGlyphOutline(this._glyph)
+      if (interpRes.success && interpRes.interpolatedComponents) {
+        for (const comp of gridComps) {
+          if (comp.type === 'pen') {
+            const interp = interpRes.interpolatedComponents.get(comp.uuid)
+            if (interp) {
+              const penValue = comp.value as IPenComponent
+              if (penValue.points) {
+                penValue.points = interp.points.map((p, i) => ({
+                  ...(penValue.points[i] || {}),
+                  x: p.x,
+                  y: p.y,
+                }))
+                comp.x = interp.x; comp.y = interp.y; comp.w = interp.w; comp.h = interp.h
+                comp.rotation = interp.rotation; comp.flipX = interp.flipX; comp.flipY = interp.flipY
+              }
+            }
+          }
+        }
+      }
+    }
+
+    renderCanvas(gridComps, canvas, {
       offset,
       scale,
       fill: false,

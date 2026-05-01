@@ -108,11 +108,18 @@
           />
         </n-icon>
         
-        <!-- 代码编辑器 - 在字符和字形编辑模式显示 -->
-        <n-icon class="tool-icon code-icon" size="40"
+        <!-- 代码编辑器 - 在字符和字形编辑模式显示；可变字形禁用 -->
+        <n-tooltip v-if="editingGlyphHasVariables && editStatus === EditStatus.Glyph" trigger="hover">
+          <template #trigger>
+            <n-icon class="tool-icon code-icon disabled" size="40">
+              <font-awesome-icon :icon="['fas', 'terminal']" />
+            </n-icon>
+          </template>
+          {{ t('panels.paramsPanel.variablesPanel.variableGlyphNoScript') }}
+        </n-tooltip>
+        <n-icon v-else-if="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph" class="tool-icon code-icon" size="40"
           @click="switchTool('code')"
-          @pointerup="switchTool('code')"
-          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
+          @pointerup="switchTool('code')">
           <font-awesome-icon
           :icon="['fas', 'terminal']"
           />
@@ -182,10 +189,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NIcon, useDialog } from 'naive-ui'
+import { NIcon, NTooltip, useDialog } from 'naive-ui'
 import { useEditorStore } from '@/stores/editor'
 import { useToolStore } from '@/stores/tool'
 import { useDialogsStore } from '@/stores/dialogs'
+import { useGlyphStore } from '@/stores/glyph'
 import { EditStatus } from '@/core/types'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import { confirmLeaveGlyphEditIfDirty } from '@/stores/editorConstantsSession'
@@ -200,9 +208,15 @@ const dialog = useDialog()
 const editorStore = useEditorStore()
 const toolStore = useToolStore()
 const dialogsStore = useDialogsStore()
+const glyphStore = useGlyphStore()
 
 const editStatus = computed(() => editorStore.editStatus)
 const tool = computed(() => toolStore.tool)
+
+const editingGlyphHasVariables = computed(() => {
+  const g = glyphStore.editingGlyph
+  return !!(g?.variables && Array.isArray(g.variables) && g.variables.length > 0)
+})
 
 const _openGlyphComponentsDialog = () => {
   dialogsStore.openGlyphComponentsDialog()
@@ -329,6 +343,12 @@ const handleToList = createDebouncedHandler(_handleToList, 'ToolBar.handleToList
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.code-icon.disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 /* 与 AdvancedEditPanel 右上角「字符列表」按钮一致（去掉过大 icon 字号与 label flex 撑开） */

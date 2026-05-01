@@ -206,7 +206,7 @@ const isDev = import.meta.env.DEV
 // 编辑面板组件过滤器
 const editPanelCompFilter = computed({
   get: () => editorStore.editPanelCompFilter,
-  set: (value: 'all' | 'font') => {
+  set: (value: string) => {
     editorStore.setEditPanelCompFilter(value)
   }
 })
@@ -221,7 +221,7 @@ const filterOptions = [
 ]
 
 // 处理过滤器变化
-const handleFilterChange = (value: 'all' | 'font') => {
+const handleFilterChange = (value: string) => {
   editorStore.setEditPanelCompFilter(value)
 }
 

@@ -114,6 +114,7 @@ export interface IComponentBase {
   usedInCharacter: boolean
   opacity?: number
   fillColor?: string
+  layer?: string
 }
 
 /**
@@ -217,6 +218,16 @@ export interface ICustomGlyphComponent {
   uuid: string
   name: string
   components: Array<IGlyphComponent>
+  groups?: Array<any>
+  orderedList?: Array<{ type: string; uuid: string }>
+  parameters?: Array<any>
+  skeleton?: any
+  joints?: Array<IJoint>
+  reflines?: Array<IRefLine>
+  script?: string
+  script_reference?: string
+  variables?: IVariable[]
+  layers?: Record<string, string[]>
   // ... 其他属性
 }
 
@@ -337,6 +348,28 @@ export interface IGlyphScriptCallbacks {
 }
 
 /**
+ * 可变参数关键帧
+ */
+export interface IKeyframe {
+  uuid: string
+  value: number
+  layer: string
+}
+
+/**
+ * 可变参数（用于字形轮廓差值）
+ */
+export interface IVariable {
+  uuid: string
+  name: string
+  min: number
+  max: number
+  default: number
+  value: number
+  keyframes: IKeyframe[]
+}
+
+/**
  * 自定义字形
  */
 export interface ICustomGlyph {
@@ -367,6 +400,10 @@ export interface ICustomGlyph {
     translateY?: number
   }
   style?: string
+  /** 图层：layerName -> component UUIDs */
+  layers?: Record<string, string[]>
+  /** 可变参数（差值轴） */
+  variables?: IVariable[]
   // ... 其他属性
 }
 

@@ -9,11 +9,11 @@
         @update:value="handleFilterChange"
       />
     </div>
-    <n-scrollbar v-if="glyphPanelCompFilter === 'all'" class="component-list-scrollbar">
-      <div class="all-components-list" v-if="glyphPanelCompFilter === 'all'">
+    <n-scrollbar class="component-list-scrollbar">
+      <div class="all-components-list">
         <div
           class="component-item-wrapper"
-          v-for="component in orderedListWithItemsForCurrentGlyph"
+          v-for="component in filteredComponents"
           :key="component.uuid"
         >
           <n-popover
@@ -71,82 +71,9 @@
                       v-else
                     />
                   </n-icon>
-                </span>
-              </div>
-            </template>
-            <div class="component-menu">
-              <div class="component-menu-item" @click="(e: MouseEvent) => clip(component.uuid)" @pointerup="(e: MouseEvent) => clip(component.uuid)">
-                {{ t('panels.componentList.menu.cut') || '剪切' }}
-              </div>
-              <div class="component-menu-item" @click="(e: MouseEvent) => copy(component.uuid)" @pointerup="(e: MouseEvent) => copy(component.uuid)">
-                {{ t('panels.componentList.menu.copy') || '复制' }}
-              </div>
-              <div class="component-menu-item" @click="(e: MouseEvent) => paste(component.uuid)" @pointerup="(e: MouseEvent) => paste(component.uuid)">
-                {{ t('panels.componentList.menu.paste') || '粘贴' }}
-              </div>
-              <div class="component-menu-item" @click="(e: MouseEvent) => remove(component.uuid)" @pointerup="(e: MouseEvent) => remove(component.uuid)">
-                {{ t('panels.componentList.menu.delete') || '删除' }}
-              </div>
-            </div>
-          </n-popover>
-        </div>
-      </div>
-    </n-scrollbar>
-    <n-scrollbar v-if="glyphPanelCompFilter === 'font'" class="component-list-scrollbar">
-      <div class="font-components-list" v-if="glyphPanelCompFilter === 'font'">
-        <div
-          class="component-item-wrapper"
-          v-for="component in usedComponents"
-          :key="component.uuid"
-        >
-          <n-popover
-            placement="right"
-            :width="200"
-            trigger="manual"
-            :show="popoverVisibleMap[component.uuid]"
-          >
-            <template #trigger>
-              <div
-                :class="{
-                  'component': true,
-                  'selected': selectedComponentsUUIDs.indexOf(component.uuid) !== -1,
-                }"
-                @click="(e: MouseEvent) => selectComponent(e, component.uuid)"
-                @pointerup="(e: MouseEvent) => selectComponent(e, component.uuid)"
-                @contextmenu="(e: MouseEvent) => openPopover(e, component.uuid)"
-              >
-                <span class="name">
-                  {{ component.name || component.type }}
-                </span>
-                <span class="tool-wrapper">
-                  <n-icon class="tool-icon used-in-character" @click.stop="(e: MouseEvent) => toggleUsedInCharacter(component.uuid, !component.usedInCharacter, component.type)" @pointerup.stop="(e: MouseEvent) => toggleUsedInCharacter(component.uuid, !component.usedInCharacter, component.type)">
+                  <n-icon class="tool-icon layer-icon" @click.stop="(e: MouseEvent) => openLayerDialog(component.uuid)" @pointerup.stop="(e: MouseEvent) => openLayerDialog(component.uuid)">
                     <font-awesome-icon
-                      :icon="['fas', 'circle-check']"
-                      v-if="component.usedInCharacter"
-                    />
-                    <font-awesome-icon
-                      :icon="['fas', 'circle-xmark']"
-                      v-else
-                    />
-                  </n-icon>
-                  <n-icon class="tool-icon lock" @click.stop="(e: MouseEvent) => toggleLock(component.uuid, !component.lock)" @pointerup.stop="(e: MouseEvent) => toggleLock(component.uuid, !component.lock)">
-                    <font-awesome-icon
-                      :icon="['fas', 'lock']"
-                      v-if="component.lock"
-                    />
-                    <font-awesome-icon
-                      :icon="['fas', 'lock-open']"
-                      v-else
-                    />
-                  </n-icon>
-                  <n-icon class="tool-icon visible" @click.stop="(e: MouseEvent) => toggleVisibility(component.uuid, !component.visible)" @pointerup.stop="(e: MouseEvent) => toggleVisibility(component.uuid, !component.visible)">
-                    <font-awesome-icon
-                      :icon="['fas', 'eye']"
-                      v-if="component.visible"
-                    />
-                    <font-awesome-icon
-                      :icon="['fas', 'eye-slash']"
-                      v-else
+                      :icon="['fas', 'layer-group']"
                     />
                   </n-icon>
                 </span>
@@ -170,12 +97,47 @@
         </div>
       </div>
     </n-scrollbar>
+
+    <!-- Layer Picker Dialog -->
+    <n-modal
+      v-model:show="layerDialogVisible"
+      preset="card"
+      :title="t('panels.paramsPanel.layerPicker.title')"
+      style="width: 420px;"
+    >
+      <div class="layer-dialog-body">
+        <p style="margin-bottom: 8px; font-size: 13px; color: var(--n-text-color-2);">
+          {{ t('dialogs.layerPickerDialog.selectLayer') }}
+        </p>
+        <n-select
+          v-model:value="layerDialogSelectedLayer"
+          :options="layerSelectOptions"
+          :placeholder="t('panels.paramsPanel.layerPicker.selectLayer')"
+          clearable
+          style="margin-bottom: 16px;"
+        />
+        <p style="margin-bottom: 8px; font-size: 13px; color: var(--n-text-color-2);">
+          {{ t('dialogs.layerPickerDialog.orCreateNew') }}
+        </p>
+        <n-input
+          v-model:value="layerDialogNewLayerName"
+          :placeholder="t('dialogs.layerPickerDialog.newLayerPlaceholder')"
+          :disabled="!!layerDialogSelectedLayer"
+        />
+      </div>
+      <template #footer>
+        <div style="display: flex; justify-content: flex-end; gap: 8px;">
+          <n-button @click="layerDialogVisible = false">{{ t('dialogs.layerPickerDialog.cancel') }}</n-button>
+          <n-button type="primary" @click="confirmLayerDialog">{{ t('dialogs.layerPickerDialog.confirm') }}</n-button>
+        </div>
+      </template>
+    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
-import { NScrollbar, NPopover, NSelect, NIcon } from 'naive-ui'
+import { NScrollbar, NPopover, NSelect, NIcon, NModal, NButton, NInput } from 'naive-ui'
 import { useGlyphStore } from '@/stores/glyph'
 import { useToolStore } from '@/stores/tool'
 import { useEditorStore } from '@/stores/editor'
@@ -202,16 +164,134 @@ const glyphPanelCompFilter = computed({
 // 编辑字形（用于条件判断）
 const editingGlyph = computed(() => glyphStore.editingGlyph)
 
-// 过滤器选项
-const filterOptions = [
-  { label: t('panels.filter.all') || '全部', value: 'all' },
-  { label: t('panels.filter.font') || '字体', value: 'font' }
-]
+// 获取所有图层列表
+const layerNames = computed(() => {
+  const layers = editingGlyph.value?.layers
+  if (!layers) return []
+  return Object.keys(layers)
+})
+
+// 过滤器选项（包含图层）
+const filterOptions = computed(() => {
+  const options: Array<{ label: string; value: string }> = [
+    { label: t('panels.filter.all') || '全部', value: 'all' },
+    { label: t('panels.filter.font') || '字体', value: 'font' }
+  ]
+  for (const layerName of layerNames.value) {
+    options.push({
+      label: t('panels.filter.layer', { name: layerName }),
+      value: `layer:${layerName}`
+    })
+  }
+  return options
+})
 
 // 处理过滤器变化
-const handleFilterChange = (value: 'all' | 'font') => {
+const handleFilterChange = (value: string) => {
   editorStore.setGlyphPanelCompFilter(value)
 }
+
+// 当前是否按 layer 筛选
+const currentLayerFilter = computed(() => {
+  const f = glyphPanelCompFilter.value
+  if (f.startsWith('layer:')) {
+    return f.substring(6)
+  }
+  return null
+})
+
+// 筛选后的组件列表
+const filteredComponents = computed(() => {
+  if (glyphPanelCompFilter.value === 'all') {
+    return orderedListWithItemsForCurrentGlyph.value
+  }
+  if (glyphPanelCompFilter.value === 'font') {
+    return usedComponents.value
+  }
+  // layer filter
+  const layerName = currentLayerFilter.value
+  if (layerName) {
+    const layerUUIDs = editingGlyph.value?.layers?.[layerName] || []
+    return orderedListWithItemsForCurrentGlyph.value.filter(c => layerUUIDs.includes(c.uuid))
+  }
+  return orderedListWithItemsForCurrentGlyph.value
+})
+
+// Layer dialog state
+const layerDialogVisible = ref(false)
+const layerDialogComponentUUID = ref('')
+const layerDialogSelectedLayer = ref('')
+const layerDialogNewLayerName = ref('')
+
+const openLayerDialog = (uuid: string) => {
+  layerDialogComponentUUID.value = uuid
+  layerDialogSelectedLayer.value = ''
+  layerDialogNewLayerName.value = ''
+  layerDialogVisible.value = true
+}
+
+const confirmLayerDialog = () => {
+  const uuid = layerDialogComponentUUID.value
+  if (!uuid || !editingGlyph.value) {
+    layerDialogVisible.value = false
+    return
+  }
+
+  let layerName = layerDialogSelectedLayer.value
+  if (!layerName) {
+    layerName = layerDialogNewLayerName.value.trim()
+  }
+
+  if (!layerName) {
+    // 移除 layer 关联
+    glyphStore.modifyComponent(uuid, { layer: undefined } as any)
+    // 从 layers 中移除
+    if (editingGlyph.value.layers) {
+      for (const [name, uuids] of Object.entries(editingGlyph.value.layers)) {
+        const idx = uuids.indexOf(uuid)
+        if (idx !== -1) {
+          uuids.splice(idx, 1)
+          if (uuids.length === 0) {
+            delete editingGlyph.value.layers[name]
+          }
+        }
+      }
+    }
+  } else {
+    // 设置 layer
+    glyphStore.modifyComponent(uuid, { layer: layerName } as any)
+    // 先从所有已有图层中移除此组件（确保一个组件只属于一个图层）
+    if (editingGlyph.value.layers) {
+      for (const [name, uuids] of Object.entries(editingGlyph.value.layers)) {
+        if (name === layerName) continue
+        const idx = uuids.indexOf(uuid)
+        if (idx !== -1) {
+          uuids.splice(idx, 1)
+          if (uuids.length === 0) {
+            delete editingGlyph.value.layers[name]
+          }
+        }
+      }
+    }
+    // 添加到目标图层
+    if (!editingGlyph.value.layers) {
+      editingGlyph.value.layers = {}
+    }
+    if (!editingGlyph.value.layers[layerName]) {
+      editingGlyph.value.layers[layerName] = []
+    }
+    if (!editingGlyph.value.layers[layerName].includes(uuid)) {
+      editingGlyph.value.layers[layerName].push(uuid)
+    }
+  }
+
+  layerDialogVisible.value = false
+}
+
+// Layer select options for dialog
+const layerSelectOptions = computed(() => {
+  return layerNames.value.map(name => ({ label: name, value: name }))
+})
 
 // 右键菜单可见性映射
 const popoverVisibleMap = reactive<Record<string, boolean>>({})
@@ -609,6 +689,11 @@ const openPopover = (e: MouseEvent, uuid: string) => {
 .filter-select {
   width: 100%;
 }
+
+.layer-dialog-body {
+  padding: 16px 0;
+}
+
 </style>
 
 <style>

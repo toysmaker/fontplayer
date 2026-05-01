@@ -107,6 +107,7 @@ import { rebuildCharacterListPreviewAfterExitEdit } from '@/features/editor/list
 import { skeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import { discardGlobalConstantsDraftOnLeave } from '@/stores/editorConstantsSession'
+import { setEditCanvasContext, clearEditCanvasContext } from '@/features/editor/editCanvas'
 import { mapCanvasX, mapCanvasY } from '@/utils/canvas'
 import { getStrokeWidth } from '@/utils/canvas-utils'
 import { bottomBarToolManager } from '@/features/bottomBar/BottomBarToolManager'
@@ -430,6 +431,13 @@ const initTools = async () => {
       renderCanvas()
     },
   }
+
+  // Expose character editor canvas + coord mapping for params panel (same as GlyphEditor)
+  setEditCanvasContext({
+    canvas: canvasRef.value,
+    getCoord: toolConfig.getCoord,
+    onRender: toolConfig.onRender,
+  })
   
   // 创建并注册所有工具
   const selectTool = SelectTool.getInstance(canvasRef.value, toolConfig)
@@ -559,6 +567,7 @@ onUnmounted(() => {
     exitSkeletonFreeEdit()
     PenSelectTool.skeletonFreeEditContext = null
   }
+  clearEditCanvasContext()
   characterGridEditStore.resetToCurrent()
   // 离开字符编辑时勿保留 metrics/grid，避免 GlyphEditor 等场景 tool 无效
   if (toolStore.tool === 'metrics' || toolStore.tool === 'grid') {

@@ -168,6 +168,12 @@ export const useGlyphStore = defineStore('glyph', () => {
       if (!editingGlyph.value.groups) {
         editingGlyph.value.groups = []
       }
+      if (!editingGlyph.value.layers) {
+        editingGlyph.value.layers = {}
+      }
+      if (!editingGlyph.value.variables) {
+        editingGlyph.value.variables = []
+      }
       
       // 如果文件中已经有选中的组件，恢复选中状态
       if (editingGlyph.value.selectedComponentsUUIDs && editingGlyph.value.selectedComponentsUUIDs.length > 0) {
@@ -513,11 +519,29 @@ export const useGlyphStore = defineStore('glyph', () => {
 
   /**
    * 添加组件到当前编辑的字形
+   * 如果组件列表筛选器当前为某个 layer，自动将组件关联到该 layer
    */
   function addComponent(component: IGlyphComponent) {
     if (!editingGlyph.value) return false
 
     const glyph = editingGlyph.value
+
+    // 检查当前 filter 是否为 layer，若是则自动关联
+    const currentFilter = editorStore.glyphPanelCompFilter
+    if (currentFilter && currentFilter.startsWith('layer:')) {
+      const layerName = currentFilter.substring(6)
+      component.layer = layerName
+      if (!glyph.layers) {
+        glyph.layers = {}
+      }
+      if (!glyph.layers[layerName]) {
+        glyph.layers[layerName] = []
+      }
+      if (!glyph.layers[layerName].includes(component.uuid)) {
+        glyph.layers[layerName].push(component.uuid)
+      }
+    }
+
     glyph.components.push(component)
 
     // 添加到 orderedList
