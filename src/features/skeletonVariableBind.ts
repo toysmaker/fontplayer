@@ -5,7 +5,7 @@
  */
 
 import type { ICustomGlyph, IGlyphComponent, IPenComponent } from '@/core/types'
-import { glyphSkeletonBind as _glyphSkeletonBind } from './glyphSkeletonBind'
+import { glyphSkeletonBind as _glyphSkeletonBind, calculatePointBones } from './glyphSkeletonBind'
 import type { CustomGlyph } from '@/core/instance/CustomGlyph'
 
 /**
@@ -61,21 +61,26 @@ export function bindSkeletonForVariables(glyph: ICustomGlyph): void {
   if (!variables || variables.length === 0) return
   if (!glyph.skeleton?.skeletonBindData) return
 
-  // 确保 variableKeyframeBinds 存在
+  const bones = glyph.skeleton.skeletonBindData.bones
+  if (!bones || bones.length === 0) return
+
   if (!glyph.skeleton.variableKeyframeBinds) {
     glyph.skeleton.variableKeyframeBinds = {}
   }
 
-  // 为每个 keyframe 存储该图层的原始锚点
-  // 骨架绑定数据（骨骼映射）在所有图层间共享
+  // 重新绑定时清除旧的 per-layer bindings
+  glyph.skeleton.variableKeyframeBinds = {}
+
   for (const variable of variables) {
     for (const kf of variable.keyframes) {
-      if (!glyph.skeleton.variableKeyframeBinds[kf.uuid]) {
-        const points = getPenPointsFromLayer(glyph, kf.layer)
-        if (points.length > 0) {
-          glyph.skeleton.variableKeyframeBinds[kf.uuid] = {
-            originalPoints: points,
-          }
+      const points = getPenPointsFromLayer(glyph, kf.layer)
+      if (points.length > 0) {
+        const pointsBonesMap = points.map((point, index) =>
+          calculatePointBones(point, bones, index),
+        )
+        glyph.skeleton.variableKeyframeBinds[kf.uuid] = {
+          originalPoints: points,
+          pointsBonesMap,
         }
       }
     }

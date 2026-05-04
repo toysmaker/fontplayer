@@ -797,7 +797,7 @@ function handleVariableChange(variable: { uuid: string; value: number }) {
     value: { ...glyphValue, variables: [...glyphValue.variables] },
   })
 
-  // 触发 canvas 重绘（字形编辑界面和字符编辑界面都通过统一的 canvas 上下文）
+  // 触发 canvas 重绘
   getEditCanvasContext()?.onRender()
 }
 

@@ -495,7 +495,7 @@ function componentsToPoints(penComponent: IGlyphComponent): Array<{ x: number; y
 }
 
 // 阶段二：计算控制点的骨骼绑定
-function calculatePointBones(point: { x: number; y: number }, bones: Bone[], pointIndex: number): PointBinding {
+export function calculatePointBones(point: { x: number; y: number }, bones: Bone[], pointIndex: number): PointBinding {
   const binding: PointBinding = {
     pointIndex,
     bones: []
@@ -841,16 +841,22 @@ function multiplyMatrices(matrix1: number[], matrix2: number[]): number[] {
 }
 
 // 阶段三：变形计算 - 根据骨架变化计算新的控制点位置
-export function calculateTransformedPoints(glyph: CustomGlyph, newSkeleton: any, weightedOriginalPoints?: Array<{ x: number; y: number }>): Array<{ x: number; y: number }> {
+export function calculateTransformedPoints(
+  glyph: CustomGlyph,
+  newSkeleton: any,
+  weightedOriginalPoints?: Array<{ x: number; y: number }>,
+  customPointsBonesMap?: PointBinding[],
+): Array<{ x: number; y: number }> {
   const bindData = (glyph as any)._glyph.skeleton?.skeletonBindData;
-  
+
   if (!bindData) {
     console.warn('No bind data found');
     return [];
   }
-  
-  const { bones, pointsBonesMap, originalPoints: _originalPoints } = bindData;
+
+  const { bones, pointsBonesMap: _pointsBonesMap, originalPoints: _originalPoints } = bindData;
   let originalPoints = weightedOriginalPoints || _originalPoints
+  const pointsBonesMap = customPointsBonesMap || _pointsBonesMap
   
   // 验证绑定数据
   if (!bones || !pointsBonesMap || !originalPoints) {
@@ -1300,11 +1306,83 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
       pc.h = bound.h
     }
   } else {
-    console.warn('Transformed points length mismatch:', 
-      transformedPoints.length, 
+    console.warn('Transformed points length mismatch:',
+      transformedPoints.length,
       (penComponent.value as unknown as IPenComponent).points.length);
   }
-  
+
+  // 对可变参数的关键帧图层也应用同一套骨架变形
+  // 将变形后的锚点存入 variableKeyframeBinds[kfUuid].deformedPoints,
+  // 由 interpolateGlyphOutline 读取以计算图层间差值。
+  // 不原地修改 reactive 数据以避免触发 Vue deep watcher 死循环。
+  const rawGlyph = (glyph as any)._glyph
+  if (rawGlyph?.variables?.length && rawGlyph?.skeleton?.skeletonBindData) {
+    const layers: Record<string, string[]> = rawGlyph.layers || {}
+    const { bones } = rawGlyph.skeleton.skeletonBindData
+    if (!bones?.length) return
+
+    if (!rawGlyph.skeleton.variableKeyframeBinds) {
+      rawGlyph.skeleton.variableKeyframeBinds = {}
+    }
+    const vkb: Record<string, any> = rawGlyph.skeleton.variableKeyframeBinds
+
+    // 先为所有关键帧图层计算并存储 deformedPoints
+    const processedLayers = new Set<string>()
+
+    for (const variable of rawGlyph.variables) {
+      for (const kf of variable.keyframes) {
+        if (!kf.layer || processedLayers.has(kf.layer)) continue
+        processedLayers.add(kf.layer)
+
+        const layerUUIDs = new Set(layers[kf.layer] || [])
+        if (layerUUIDs.size === 0) continue
+
+        // 获取或初始化绑定数据
+        let kfBind = vkb[kf.uuid]
+        if (!kfBind?.originalPoints?.length) {
+          const pts: Array<{ x: number; y: number }> = []
+          for (const item of (rawGlyph.orderedList || [])) {
+            if (item.type !== 'component' || !layerUUIDs.has(item.uuid)) continue
+            const comp = rawGlyph.components?.find((c: any) => c.uuid === item.uuid)
+            if (!comp || comp.type !== 'pen') continue
+            const compPts = (comp.value as any)?.points
+            if (compPts) for (const p of compPts) pts.push({ x: p.x, y: p.y })
+          }
+          if (pts.length === 0) continue
+          kfBind = { originalPoints: pts }
+          vkb[kf.uuid] = kfBind
+        }
+
+        if (!kfBind.pointsBonesMap) {
+          kfBind.pointsBonesMap = kfBind.originalPoints.map((point: any, index: number) =>
+            calculatePointBones(point, bones, index),
+          )
+        }
+
+        // 应用骨架变换，两个条件才更新：
+        // 1. 变换结果与原始锚点有实质差异（骨架确实被拖动了）
+        // 2. 变换结果与已有 deformedPoints 不同（不是重复计算产生的漂移）
+        const dp = calculateTransformedPoints(
+          glyph, newSkeleton, [...kfBind.originalPoints], kfBind.pointsBonesMap,
+        )
+        const changedFromOrig = dp.length === kfBind.originalPoints.length &&
+          dp.some((p: any, i: number) =>
+            skeletonCoordChanged(p.x, kfBind.originalPoints[i].x) ||
+            skeletonCoordChanged(p.y, kfBind.originalPoints[i].y),
+          )
+        const existing = kfBind.deformedPoints as Array<{x:number;y:number}> | undefined
+        const diffFromExisting = !existing || existing.length !== dp.length ||
+          dp.some((p: any, i: number) =>
+            skeletonCoordChanged(p.x, existing[i].x) ||
+            skeletonCoordChanged(p.y, existing[i].y),
+          )
+        if (changedFromOrig && diffFromExisting) {
+          kfBind.deformedPoints = dp
+        }
+      }
+    }
+  }
+
   // 强制触发重新渲染
   // emitter.emit('renderCharacter')
 }
