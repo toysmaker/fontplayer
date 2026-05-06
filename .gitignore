@@ -33,3 +33,6 @@ public/data/*
 .vite
 
 docs
+
+.github
+.claude
