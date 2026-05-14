@@ -232,7 +232,7 @@ function runRenderCanvasSync() {
     // refactor 中 renderSkeletonSelector 只画 hover/drag 高亮，不负责画全部 joints，所以这里必须补上 joints 渲染
     // 绑定完成后骨架也应继续显示（原工程行为）
     const shouldRenderEditingGlyphJoints = hasSkeleton || onSkeletonBind.value || onSkeletonDragging.value || onWeightSetting.value
-    const rootForEditingGlyph = shouldRenderEditingGlyphJoints
+    const rootForEditingGlyph = (shouldRenderEditingGlyphJoints || editorStore.checkJoints || editorStore.checkRefLines)
       ? ({
           type: 'glyph',
           uuid: editingGlyph.value.uuid,
