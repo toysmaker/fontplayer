@@ -137,6 +137,19 @@ export function createExportHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
       })
   }
 
+
+  const handleExportMetricsRef = () => {
+    if (!requireFile()) return
+    ImportExportSvgService.exportMetricsReference()
+      .then(() => {
+        message.success(t('menus.export.metrics_ref') + ' 成功')
+      })
+      .catch((err) => {
+        console.error('Export metrics reference failed:', err)
+        message.error(t('menus.export.metrics_ref') + ' 失败')
+      })
+  }
+
   return {
     'export-font-file': handleExportFont,
     'export-var-font-file': handleExportVarFont,
@@ -145,5 +158,6 @@ export function createExportHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
     'export-jpeg': handleExportJpeg,
     'export-png': handleExportPng,
     'export-svg': handleExportSvg,
+    'export-metrics-ref': handleExportMetricsRef,
   }
 }

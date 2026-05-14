@@ -204,6 +204,13 @@ const getWebMenu = (): Array<IMenu> => {
 					handlers['export-svg']()
 				}
 			},
+			{
+				label: tm('menus.export.metrics_ref'),
+				key: 'export-metrics-ref',
+				click: (handlers: IHandlerMap) => {
+					handlers['export-metrics-ref']()
+				}
+			},
 		]
 	},
 	{

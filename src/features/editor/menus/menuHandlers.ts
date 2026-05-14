@@ -113,6 +113,7 @@ export function createDisabledRules(ctx: {
     'export-jpeg': enableAtEdit,
     'export-png': enableAtEdit,
     'export-svg': enableAtEdit,
+    'export-metrics-ref': enableAtEdit,
 
     // character
     'add-character': enableAtList,

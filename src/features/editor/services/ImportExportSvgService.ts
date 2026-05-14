@@ -8,6 +8,10 @@ import { EditStatus } from '@/core/types'
 import { isTauri } from '@/utils/env'
 import { saveAs } from 'file-saver'
 import { instanceManager } from '@/core/instance/InstanceManager'
+import { renderCanvas } from '@/core/canvas/EditorCanvasRenderer'
+import { renderJoints, renderRefLines } from '@/core/script/Joint'
+import { fontRenderStyle } from '@/core/script/globals'
+import { mapCanvasWidth, mapCanvasHeight } from '@/utils/canvas'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 
@@ -272,6 +276,144 @@ export class ImportExportSvgService {
 
   static async exportCurrentToJpeg(): Promise<void> {
     return this.exportRaster('jpeg')
+  }
+
+  static async exportMetricsReference(): Promise<void> {
+    const editorStore = useEditorStore()
+    const status = editorStore.editStatus
+    const glyphStore = useGlyphStore()
+    const projectStore = useProjectStore()
+    const characterStore = useCharacterStore()
+
+    const file = projectStore.selectedFile
+    if (!file) return
+
+    let baseComponents: IComponent[] = []
+    let internalComponents: any[] = []
+    let filename = 'untitled'
+
+    if (status === EditStatus.Edit) {
+      baseComponents = characterStore.orderedListWithItemsForCurrentCharacterFile as IComponent[]
+      if (!baseComponents || baseComponents.length === 0) return
+      filename = characterStore.editingCharacter?.character.text || 'untitled'
+    } else if (status === EditStatus.Glyph) {
+      const editingGlyph = glyphStore.editingGlyph
+      baseComponents = (glyphStore.orderedListWithItemsForCurrentGlyph || []) as unknown as IComponent[]
+      filename = editingGlyph?.name || 'untitled'
+
+      if (editingGlyph) {
+        const instanceKey = glyphStore.editingGlyphUUID || editingGlyph.uuid
+        executeGlyphScript(editingGlyph, instanceKey)
+
+        let instance: CustomGlyph | null = null
+        if (instanceManager.isEditing(instanceKey) || instanceManager.isTemporary(instanceKey)) {
+          instance = instanceManager.getInstance(
+            instanceKey,
+            () => new CustomGlyph(editingGlyph),
+            'glyph'
+          ) as CustomGlyph | null
+        }
+        if (instance?._components?.length) {
+          internalComponents = instance._components
+        }
+      }
+
+      if (baseComponents.length === 0 && internalComponents.length === 0) return
+    } else {
+      return
+    }
+
+    const canvasW = mapCanvasWidth(file.width)
+    const canvasH = mapCanvasHeight(file.height)
+
+    const canvas = document.createElement('canvas')
+    canvas.width = canvasW
+    canvas.height = canvasH
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvasW, canvasH)
+
+    // 统一开始一条新路径，保持非零环绕规则；各组件 render 内不调用 beginPath
+    ctx.beginPath()
+
+    const savedStyle = fontRenderStyle.value
+    fontRenderStyle.value = 'contour'
+    try {
+      if (baseComponents.length > 0) {
+        await renderCanvas(baseComponents, canvas, {
+          fill: false,
+          offset: { x: 0, y: 0 },
+          scale: 1,
+        })
+      }
+
+      if (internalComponents.length > 0) {
+        for (const comp of internalComponents) {
+          if ((comp as any).render) {
+            ctx.save()
+            ;(comp as any).render(canvas, {
+              offset: { x: 0, y: 0 },
+              scale: 1,
+              fillColor: '#000',
+            })
+            ctx.restore()
+          }
+        }
+      }
+    } finally {
+      fontRenderStyle.value = savedStyle
+    }
+
+    for (const comp of baseComponents) {
+      if (comp.type === 'glyph' && comp.visible !== false) {
+        renderJoints(comp, canvas)
+        renderRefLines(comp, canvas)
+      }
+    }
+
+    if (status === EditStatus.Glyph) {
+      const editingGlyph = glyphStore.editingGlyph
+      if (editingGlyph) {
+        const syntheticRoot = {
+          type: 'glyph',
+          uuid: editingGlyph.uuid,
+          ox: 0,
+          oy: 0,
+          visible: true,
+          value: editingGlyph,
+        } as any
+        renderJoints(syntheticRoot, canvas)
+        renderRefLines(syntheticRoot, canvas)
+      }
+    }
+
+    const exportCanvas = document.createElement('canvas')
+    exportCanvas.width = 1000
+    exportCanvas.height = 1000
+    const exportCtx = exportCanvas.getContext('2d')
+    if (!exportCtx) return
+    exportCtx.drawImage(canvas, 0, 0, 1000, 1000)
+
+    const dataUrl = exportCanvas.toDataURL('image/jpeg', 0.9)
+    const defaultFileName = filename + '_metrics'
+
+    if (isTauri()) {
+      const bytes = await dataUrlToUint8Array(dataUrl)
+      const { save } = await import('@tauri-apps/plugin-dialog')
+      const { writeFile } = await import('@tauri-apps/plugin-fs')
+      const filePath = await save({
+        defaultPath: defaultFileName + '.jpg',
+        filters: [{ name: 'JPEG', extensions: ['jpg'] }],
+      })
+      if (!filePath) return
+      await writeFile(filePath, bytes)
+    } else {
+      const res = await fetch(dataUrl)
+      const blob = await res.blob()
+      saveAs(blob, defaultFileName + '.jpg')
+    }
   }
 }
 

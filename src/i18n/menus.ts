@@ -38,6 +38,7 @@ const menus = {
 			jpeg: '导出JPEG',
 			png: '导出PNG',
 			svg: '导出SVG',
+			metrics_ref: '导出度量参考图',
 		},
 		char: {
 			char: '字符',
@@ -111,6 +112,7 @@ const menus = {
 			jpeg: 'Export JPEG',
 			png: 'Export PNG',
 			svg: 'Export SVG',
+			metrics_ref: 'Export Metrics Reference',
 		},
 		char: {
 			char: 'Char',

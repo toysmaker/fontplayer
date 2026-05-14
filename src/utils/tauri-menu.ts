@@ -117,6 +117,18 @@ export async function initTauriMenu() {
       console.log('File -> Export SVG')
       // TODO: 实现导出 SVG 逻辑
     })
+
+    listen('export-metrics-ref', () => {
+      window.dispatchEvent(new CustomEvent('editor-export-metrics-ref-native'))
+    })
+
+    listen('export-jpeg', () => {
+      window.dispatchEvent(new CustomEvent('editor-export-jpeg-native'))
+    })
+
+    listen('export-png', () => {
+      window.dispatchEvent(new CustomEvent('editor-export-png-native'))
+    })
     
     // 监听编辑菜单事件
     listen('undo', () => {

@@ -281,6 +281,22 @@ const handleEditorRemoveOverlap = () => {
   web_handlers['remove_overlap']?.()
 }
 
+const handleExportMetricsRefNative = async () => {
+  web_handlers['export-metrics-ref']?.()
+}
+
+const handleExportJpegNative = async () => {
+  web_handlers['export-jpeg']?.()
+}
+
+const handleExportPngNative = async () => {
+  web_handlers['export-png']?.()
+}
+
+const handleExportSvgNative = async () => {
+  web_handlers['export-svg']?.()
+}
+
 const handleExportFontNative = async () => {
   const file = projectStore.selectedFile
   if (!file) {
@@ -390,6 +406,10 @@ onMounted(() => {
   window.addEventListener('editor-import-glyphs', () => web_handlers['import-glyphs']?.())
   window.addEventListener('editor-import-pic', handleImportPicNative)
   window.addEventListener('editor-export-glyphs', () => web_handlers['export-glyphs']?.())
+  window.addEventListener('editor-export-metrics-ref-native', handleExportMetricsRefNative)
+  window.addEventListener('editor-export-jpeg-native', handleExportJpegNative)
+  window.addEventListener('editor-export-png-native', handleExportPngNative)
+  window.addEventListener('editor-export-svg-native', handleExportSvgNative)
   window.addEventListener('editor-export-font-native', handleExportFontNative)
   window.addEventListener('editor-export-var-font-native', handleExportVarFontNative)
   window.addEventListener('editor-export-color-font-native', handleExportColorFontNative)
@@ -432,6 +452,10 @@ onUnmounted(() => {
   window.removeEventListener('editor-import-glyphs', () => {})
   window.removeEventListener('editor-import-pic', handleImportPicNative)
   window.removeEventListener('editor-export-glyphs', () => {})
+  window.removeEventListener('editor-export-metrics-ref-native', handleExportMetricsRefNative)
+  window.removeEventListener('editor-export-jpeg-native', handleExportJpegNative)
+  window.removeEventListener('editor-export-png-native', handleExportPngNative)
+  window.removeEventListener('editor-export-svg-native', handleExportSvgNative)
   window.removeEventListener('editor-export-font-native', handleExportFontNative)
   window.removeEventListener('editor-export-var-font-native', handleExportVarFontNative)
   window.removeEventListener('editor-export-color-font-native', handleExportColorFontNative)

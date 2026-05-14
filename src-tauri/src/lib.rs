@@ -62,6 +62,7 @@ struct ExportMenuTexts {
     jpeg: &'static str,
     png: &'static str,
     svg: &'static str,
+    metrics_ref: &'static str,
 }
 
 struct CharMenuTexts {
@@ -135,6 +136,7 @@ fn get_menu_texts(lang: &str) -> MenuTexts {
                 jpeg: "Export JPEG",
                 png: "Export PNG",
                 svg: "Export SVG",
+                metrics_ref: "Export Metrics Reference",
             },
             char: CharMenuTexts {
                 char: "Char",
@@ -202,6 +204,7 @@ fn get_menu_texts(lang: &str) -> MenuTexts {
                 jpeg: "导出JPEG",
                 png: "导出PNG",
                 svg: "导出SVG",
+                metrics_ref: "导出度量参考图",
             },
             char: CharMenuTexts {
                 char: "字符",
@@ -359,6 +362,11 @@ fn export_svg(app: AppHandle) {
 }
 
 #[tauri::command]
+fn export_metrics_ref(app: AppHandle) {
+    app.emit("export-metrics-ref", ()).unwrap();
+}
+
+#[tauri::command]
 fn add_character(app: AppHandle) {
     app.emit("add-character", ()).unwrap();
 }
@@ -500,6 +508,7 @@ fn build_menu_enabled_map() -> HashMap<String, Box<dyn Fn(&str) -> bool>> {
     map.insert("export-jpeg".to_string(), Box::new(enable_at_edit));
     map.insert("export-png".to_string(), Box::new(enable_at_edit));
     map.insert("export-svg".to_string(), Box::new(enable_at_edit));
+    map.insert("export-metrics-ref".to_string(), Box::new(enable_at_edit));
     map.insert("export-var-font-file".to_string(), Box::new(enable));
     map.insert("export-color-font".to_string(), Box::new(enable));
     map.insert("add-character".to_string(), Box::new(enable_at_list));
@@ -637,6 +646,7 @@ fn get_menu_item_text<'a>(id: &str, texts: &'a MenuTexts) -> Option<&'a str> {
         "export-jpeg" => Some(texts.export.jpeg),
         "export-png" => Some(texts.export.png),
         "export-svg" => Some(texts.export.svg),
+        "export-metrics-ref" => Some(texts.export.metrics_ref),
         "add-character" => Some(texts.char.character),
         "add-icon" => Some(texts.char.icon),
         "font-settings" => Some(texts.settings.font),
@@ -854,6 +864,10 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>, texts: &MenuTexts) -> Resul
                         .enabled(false)
                         .build(app)
                         ?,
+                    &MenuItemBuilder::with_id("export-metrics-ref", texts.export.metrics_ref)
+                        .enabled(false)
+                        .build(app)
+                        ?,
                 ],
             )
             ?,
@@ -998,6 +1012,7 @@ pub fn run() {
                     "export-jpeg" => export_jpeg(app.app_handle().clone()),
                     "export-png" => export_png(app.app_handle().clone()),
                     "export-svg" => export_svg(app.app_handle().clone()),
+                    "export-metrics-ref" => export_metrics_ref(app.app_handle().clone()),
                     "add-character" => add_character(app.app_handle().clone()),
                     "add-icon" => add_icon(app.app_handle().clone()),
                     "font-settings" => font_settings(app.app_handle().clone()),
