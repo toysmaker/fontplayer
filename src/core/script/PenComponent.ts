@@ -21,6 +21,7 @@ interface IOption {
 class PenComponent {
 	public points: Array<IPoint>
 	private hasPathBegan: boolean = false
+	public isClosed: boolean = false
 	public type: string = 'glyph-pen'
 	public usedInCharacter: boolean = true
 	public contour: Array<ILine | IQuadraticBezierCurve | ICubicBezierCurve> = []
@@ -41,8 +42,9 @@ class PenComponent {
 
 	public closePath () {
 		this.hasPathBegan = false
+		this.isClosed = true
 		if (import.meta.env.DEV) {
-			console.log(`[PenComponent] closePath called, hasPathBegan=${this.hasPathBegan}, final points.length=${this.points.length}`)
+			console.log(`[PenComponent] closePath called, hasPathBegan=${this.hasPathBegan}, isClosed=${this.isClosed}, final points.length=${this.points.length}`)
 		}
 	}
 
@@ -225,11 +227,15 @@ class PenComponent {
 					mapCanvasX(this.points[i + 2].x) * scale, mapCanvasY(this.points[i + 2].y) * scale,
 				)
 			}
+			if (this.isClosed) {
+				ctx.closePath()
+			}
 			ctx.stroke()
 			if (import.meta.env.DEV) {
 				console.log('[PenComponent.render] Stroke completed:', {
 					strokeStyle: ctx.strokeStyle,
 					lineWidth: ctx.lineWidth,
+					isClosed: this.isClosed,
 				})
 			}
 			ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -265,8 +271,10 @@ class PenComponent {
 					mapCanvasX(end.x) * scale, mapCanvasY(end.y) * scale,
 				)
 			}
+			if (this.isClosed) {
+				ctx.closePath()
+			}
 			ctx.stroke()
-			ctx.closePath()
 			ctx.setTransform(1, 0, 0, 1, 0, 0)
 		}
 	}
@@ -276,6 +284,7 @@ class PenComponent {
 			points: R.clone(this.points),
 			type: this.type,
 			hasPathBegan: this.hasPathBegan,
+			isClosed: this.isClosed,
 			usedInCharacter: this.usedInCharacter,
 			contour: R.clone(this.contour),
 			preview: R.clone(this.preview),
@@ -286,6 +295,7 @@ class PenComponent {
 		this.points = R.clone(data.points)
 		this.type = data.type
 		this.hasPathBegan = data.hasPathBegan
+		this.isClosed = data.isClosed || false
 		this.usedInCharacter = data.usedInCharacter
 		if (data.contour) {
 			this.contour = R.clone(data.contour)
