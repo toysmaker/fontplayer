@@ -533,6 +533,16 @@ export async function importTemplateSymbols(): Promise<void> {
 }
 
 export async function importTemplateTest(): Promise<void> {
+  const 横起笔 = ['横', '横钩', '横撇', '横撇弯钩', '横弯钩', '横折', '横折2', '横折钩', '横折挑', '横折弯', '横折弯钩', '横折折撇', '横折折弯钩']
+  const 转角 = ['横折', '横折2', '横折钩', '横折挑', '横折弯', '横折弯钩', '横折折弯钩', '竖折', '竖折折钩', '二横折', '横弯钩']
+  const 竖起笔 = ['竖', '竖钩', '竖挑', '竖弯', '竖弯钩', '竖折', '竖折折钩', '直竖撇', '直竖捺']
+  const 竖收笔 = ['竖', '横折', '横折2']
+  const 横收笔 = ['横', '竖折']
+  const 直角撇起笔 = ['直角撇']
+  const 直角撇收笔 = ['直角撇', '横撇']
+  const 直角捺起笔 = ['直角捺']
+  const 直角捺收笔 = ['直角捺']
+  const 钩收笔 = ['横钩', '横弯钩', '横折钩', '横折弯钩', '横折折弯钩', '竖钩', '竖弯钩']
   const projectStore = useProjectStore()
   const editorStore = useEditorStore()
   const file = projectStore.selectedFile
@@ -615,7 +625,11 @@ export async function importTemplateTest(): Promise<void> {
         name: '运笔风格',
         type: ParameterType.Enum,
         value: 0,
-        options: [{ value: 0, label: '默认运笔样式' }],
+        options: [
+          { value: 0, label: '默认运笔样式' },
+          { value: 1, label: '提笔变细-圆角' },
+          { value: 2, label: '提笔变细-斜角' },
+        ],
       },
       {
         uuid: genUUID(),
@@ -645,10 +659,6 @@ export async function importTemplateTest(): Promise<void> {
 
     // 按笔画类型补充/调整参数（完全对齐原工程）
     if (name === '横') {
-      const 收笔风格 = parameters.find(p => p.name === '收笔风格')
-      if (收笔风格 && 收笔风格.options) {
-        收笔风格.options.push({ value: 1, label: '燕尾收笔' })
-      }
     } else if (name === '撇' || name === '捺') {
       const 起笔风格 = parameters.find(p => p.name === '起笔风格')
       const 收笔风格 = parameters.find(p => p.name === '收笔风格')
@@ -690,10 +700,14 @@ export async function importTemplateTest(): Promise<void> {
             { value: 1, label: '燕尾收笔' },
             { value: 2, label: '直捺收笔' },
           ]
-        } else {
+        } else if (name === '竖弯钩') {
           收笔风格.options = [
             { value: 0, label: '单圆角收笔' },
             { value: 1, label: '燕尾收笔' },
+          ]
+        } else {
+          收笔风格.options = [
+            { value: 0, label: '单圆角收笔' },
           ]
         }
       }
@@ -807,6 +821,186 @@ export async function importTemplateTest(): Promise<void> {
           max: 200,
         },
       )
+    }
+
+    if (横起笔.includes(name)) {
+      const 起笔风格 = parameters.find(p => p.name === '起笔风格')
+      if (起笔风格 && 起笔风格.options) {
+        起笔风格.options.push(
+          { value: 1, label: '圆切-上' },
+          { value: 2, label: '圆切-下' },
+          { value: 3, label: '斜切-上' },
+          { value: 4, label: '斜切-下' },
+          { value: 5, label: '圆切-圆弧装饰-上' },
+          { value: 6, label: '圆切-圆弧装饰-下' },
+          { value: 7, label: '圆切-棱角装饰-上' },
+          { value: 8, label: '圆切-棱角装饰-下' },
+        )
+      }
+    }
+    if (转角.includes(name)) {
+      const 转角风格 = parameters.find(p => p.name === '转角风格')
+      if (转角风格 && 转角风格.options) {
+        转角风格.options.push(
+          { value: 2, label: '圆切-横' },
+          { value: 3, label: '圆切-竖' },
+          { value: 4, label: '斜切-横' },
+          { value: 5, label: '斜切-竖' },
+          { value: 6, label: '圆切-圆弧装饰-横' },
+          { value: 7, label: '圆切-圆弧装饰-竖' },
+          { value: 8, label: '圆切-棱角装饰-横' },
+          { value: 9, label: '圆切-棱角装饰-竖' },
+          { value: 10, label: '圆切露锋-横' },
+          { value: 11, label: '圆切露锋-竖' },
+        )
+      }
+    }
+    if (竖起笔.includes(name)) {
+      const 起笔风格 = parameters.find(p => p.name === '起笔风格')
+      if (起笔风格 && 起笔风格.options) {
+        起笔风格.options.push(
+          { value: 1, label: '圆切-左' },
+          { value: 2, label: '圆切-右' },
+          { value: 3, label: '斜切-左' },
+          { value: 4, label: '斜切-右' },
+          { value: 5, label: '圆切-圆弧装饰-左' },
+          { value: 6, label: '圆切-圆弧装饰-右' },
+          { value: 7, label: '圆切-棱角装饰-左' },
+          { value: 8, label: '圆切-棱角装饰-右' },
+        )
+      }
+    }
+    if (竖收笔.includes(name)) {
+      const 收笔风格 = parameters.find(p => p.name === '收笔风格')
+      if (收笔风格 && 收笔风格.options) {
+        收笔风格.options.push(
+          { value: 1, label: '圆切-左' },
+          { value: 2, label: '圆切-右' },
+          { value: 3, label: '斜切-左' },
+          { value: 4, label: '斜切-右' },
+          { value: 5, label: '圆切-圆弧装饰-左' },
+          { value: 6, label: '圆切-圆弧装饰-右' },
+          { value: 7, label: '圆切-棱角装饰-左' },
+          { value: 8, label: '圆切-棱角装饰-右' },
+        )
+      }
+    }
+    if (横收笔.includes(name)) {
+      const 收笔风格 = parameters.find(p => p.name === '收笔风格')
+      if (收笔风格 && 收笔风格.options) {
+        收笔风格.options.push(
+          { value: 1, label: '燕尾收笔' },
+          { value: 2, label: '圆切-上' },
+          { value: 3, label: '圆切-下' },
+          { value: 4, label: '斜切-上' },
+          { value: 5, label: '斜切-下' },
+          { value: 6, label: '圆切-圆弧装饰-上' },
+          { value: 7, label: '圆切-圆弧装饰-下' },
+          { value: 8, label: '圆切-棱角装饰-上' },
+          { value: 9, label: '圆切-棱角装饰-下' },
+        )
+      }
+    }
+    if (直角撇起笔.includes(name)) {
+      const 起笔风格 = parameters.find(p => p.name === '起笔风格')
+      if (起笔风格 && 起笔风格.options) {
+        起笔风格.options.push(
+          { value: 2, label: '圆切-左' },
+          { value: 3, label: '圆切-右' },
+          { value: 4, label: '斜切-左' },
+          { value: 5, label: '斜切-右' },
+          { value: 6, label: '圆切-圆弧装饰-左' },
+          { value: 7, label: '圆切-圆弧装饰-右' },
+          { value: 8, label: '圆切-棱角装饰-左' },
+          { value: 9, label: '圆切-棱角装饰-右' },
+        )
+      }
+    }
+    if (直角捺起笔.includes(name)) {
+      const 起笔风格 = parameters.find(p => p.name === '起笔风格')
+      if (起笔风格 && 起笔风格.options) {
+        起笔风格.options.push(
+          { value: 2, label: '圆切-左' },
+          { value: 3, label: '圆切-右' },
+          { value: 4, label: '斜切-左' },
+          { value: 5, label: '斜切-右' },
+          { value: 6, label: '圆切-圆弧装饰-左' },
+          { value: 7, label: '圆切-圆弧装饰-右' },
+          { value: 8, label: '圆切-棱角装饰-左' },
+          { value: 9, label: '圆切-棱角装饰-右' },
+        )
+      }
+    }
+    if (直角撇收笔.includes(name)) {
+      const 收笔风格 = parameters.find(p => p.name === '收笔风格')
+      if (收笔风格 && 收笔风格.options) {
+        收笔风格.options.push(
+          { value: 2, label: '圆切-上' },
+          { value: 3, label: '圆切-下' },
+          { value: 4, label: '斜切-上' },
+          { value: 5, label: '斜切-下' },
+          { value: 6, label: '厚重露锋' },
+          { value: 7, label: '厚重露锋-圆切-上' },
+          { value: 8, label: '厚重露锋-圆切-下' },
+          { value: 9, label: '厚重露锋-斜切-上' },
+          { value: 10, label: '厚重露锋-斜切-下' },
+        )
+      }
+    }
+    if (直角捺收笔.includes(name)) {
+      const 收笔风格 = parameters.find(p => p.name === '收笔风格')
+      if (收笔风格 && 收笔风格.options) {
+        收笔风格.options.push(
+          { value: 2, label: '圆切-上' },
+          { value: 3, label: '圆切-下' },
+          { value: 4, label: '斜切-上' },
+          { value: 5, label: '斜切-下' },
+          { value: 6, label: '厚重露锋' },
+          { value: 7, label: '厚重露锋-圆切-上' },
+          { value: 8, label: '厚重露锋-圆切-下' },
+          { value: 9, label: '厚重露锋-斜切-上' },
+          { value: 10, label: '厚重露锋-斜切-下' },
+        )
+      }
+    }
+    if (name === '竖直单圆角部件' || name === '水平单圆角部件') {
+      const 方头样式 = parameters.find(p => p.name === '转角风格')
+      方头样式.name = '方头样式'
+      if (方头样式 && 方头样式.options) {
+         方头样式.options = [
+          { value: 0, label: '默认样式' },
+          { value: 1, label: '圆切-外' },
+          { value: 2, label: '圆切-内' },
+          { value: 3, label: '斜切-外' },
+          { value: 4, label: '斜切-内' },
+          { value: 5, label: '圆切-圆弧装饰-外' },
+          { value: 6, label: '圆切-圆弧装饰-内' },
+          { value: 7, label: '圆切-棱角装饰-外' },
+          { value: 8, label: '圆切-棱角装饰-内' },
+        ]
+      }
+      parameters.find(p => p.name === '转角数值').name = '方头数值'
+      const 圆头样式 = parameters.find(p => p.name === '收笔风格')
+      圆头样式.name = '圆头样式'
+      if (圆头样式 && 圆头样式.options) {
+        圆头样式.options = [
+          { value: 0, label: '默认样式' },
+          { value: 1, label: '圆切' },
+          { value: 2, label: '斜切' },
+          { value: 3, label: '圆切露锋' },
+        ]
+      }
+      parameters.find(p => p.name === '收笔数值').name = '圆头数值'
+    }
+    if (钩收笔.includes(name)) {
+      const 收笔风格 = parameters.find(p => p.name === '收笔风格')
+      if (收笔风格 && 收笔风格.options) {
+        收笔风格.options.push(...[
+          { value: 3, label: '圆切' },
+          { value: 4, label: '斜切' },
+          { value: 5, label: '圆切露锋' },
+        ])
+      }
     }
 
     // 字重比率
