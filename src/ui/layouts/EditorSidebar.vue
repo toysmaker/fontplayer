@@ -22,6 +22,7 @@
         <div
           v-if="hoveredMenu === menu.key && menu.submenu && menu.submenu.length > 0"
           class="menu-dropdown"
+          :style="dropdownStyle"
           @mouseenter="handleMenuEnter(menu.key)"
           @mouseleave="handleMenuLeave(menu.key)"
         >
@@ -43,6 +44,7 @@
             <div
               v-if="hoveredSubMenu === subMenu.key && subMenu.submenu && subMenu.submenu.length > 0"
               class="menu-dropdown-nested"
+              :style="nestedDropdownStyle"
               @mouseenter="handleSubMenuEnter(subMenu.key)"
               @mouseleave="handleSubMenuLeave(subMenu.key)"
             >
@@ -86,7 +88,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMessage, useDialog } from 'naive-ui'
@@ -147,6 +149,51 @@ const hoveredMenu = ref<string | null>(null)
 const hoveredSubMenu = ref<string | null>(null)
 let menuLeaveTimer: number | null = null
 let subMenuLeaveTimer: number | null = null
+
+const dropdownStyle = ref<Record<string, string>>({})
+const nestedDropdownStyle = ref<Record<string, string>>({})
+
+function adjustDropdown(el: HTMLElement, wrapperSelector: string, styleRef: Ref<Record<string, string>>) {
+  const rect = el.getBoundingClientRect()
+  const viewportHeight = window.innerHeight
+  const overflow = rect.bottom - viewportHeight
+
+  if (overflow <= 0) return
+
+  const wrapper = el.closest(wrapperSelector)
+  const wrapperRect = wrapper?.getBoundingClientRect()
+  const maxShiftUp = wrapperRect ? wrapperRect.top : rect.top
+  const shiftUp = Math.min(overflow, maxShiftUp)
+
+  const style: Record<string, string> = {
+    top: `${-shiftUp}px`,
+  }
+
+  if (rect.height > viewportHeight) {
+    style.maxHeight = `${viewportHeight}px`
+    style.overflowY = 'auto'
+  }
+
+  styleRef.value = style
+}
+
+watch(hoveredMenu, async (newVal) => {
+  dropdownStyle.value = {}
+  if (newVal) {
+    await nextTick()
+    const el = document.querySelector('.menu-dropdown') as HTMLElement | null
+    if (el) adjustDropdown(el, '.menu-item-wrapper', dropdownStyle)
+  }
+})
+
+watch(hoveredSubMenu, async (newVal) => {
+  nestedDropdownStyle.value = {}
+  if (newVal) {
+    await nextTick()
+    const el = document.querySelector('.menu-dropdown-nested') as HTMLElement | null
+    if (el) adjustDropdown(el, '.menu-dropdown-item.has-children', nestedDropdownStyle)
+  }
+})
 
 // 图标映射（FontAwesome）
 const web_menu_icons: Record<string, any> = {
