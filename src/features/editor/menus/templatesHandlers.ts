@@ -533,8 +533,8 @@ export async function importTemplateSymbols(): Promise<void> {
 }
 
 export async function importTemplateTest(): Promise<void> {
-  const 横起笔 = ['横', '横钩', '横撇', '横撇弯钩', '横弯钩', '横折', '横折2', '横折钩', '横折挑', '横折弯', '横折弯钩', '横折折撇', '横折折弯钩']
-  const 转角 = ['横折', '横折2', '横折钩', '横折挑', '横折弯', '横折弯钩', '横折折弯钩', '竖折', '竖折折钩', '二横折', '横弯钩']
+  const 横起笔 = ['横', '横钩', '横撇', '横撇弯钩', '横弯钩', '横折', '横折2', '横折钩', '横折挑', '横折弯', '横折弯钩', '横折折撇', '横折折弯钩', '二横折']
+  const 转角 = ['横折', '横折2', '横折钩', '横折挑', '横折弯钩', '横折折弯钩', '竖折', '竖折折钩', '二横折', '横弯钩']
   const 竖起笔 = ['竖', '竖钩', '竖挑', '竖弯', '竖弯钩', '竖折', '竖折折钩', '直竖撇', '直竖捺']
   const 竖收笔 = ['竖', '横折', '横折2']
   const 横收笔 = ['横', '竖折']
@@ -542,7 +542,7 @@ export async function importTemplateTest(): Promise<void> {
   const 直角撇收笔 = ['直角撇', '横撇']
   const 直角捺起笔 = ['直角捺']
   const 直角捺收笔 = ['直角捺']
-  const 钩收笔 = ['横钩', '横弯钩', '横折钩', '横折弯钩', '横折折弯钩', '竖钩', '竖弯钩']
+  const 钩收笔 = ['横弯钩', '横折钩', '横折弯钩', '横折折弯钩', '竖钩', '竖弯钩', '竖折折钩']
   const projectStore = useProjectStore()
   const editorStore = useEditorStore()
   const file = projectStore.selectedFile
