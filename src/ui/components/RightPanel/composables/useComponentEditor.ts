@@ -36,18 +36,68 @@ export function useComponentEditor() {
     return ''
   })
   
+  const selectedComponentsUUIDs = computed(() => {
+    if (editorStore.editStatus === EditStatus.Edit) {
+      return characterStore.selectedComponentsUUIDs
+    } else if (editorStore.editStatus === EditStatus.Glyph) {
+      return glyphStore.selectedComponentsUUIDs
+    }
+    return []
+  })
+
   const modifyComponent = (updates: Partial<IComponent>) => {
     if (!selectedComponentUUID.value) return
+
+    const allUUIDs = selectedComponentsUUIDs.value
+
+    // 分离 value 与其他属性：
+    // - 简单属性（x, y, w, h, rotation 等）对所有选中组件生效
+    // - value 对象（字形参数、钢笔路径等类型相关数据）只对主选中组件生效，
+    //   因为编辑面板会基于主选中组件构造完整的 value 对象，直接应用到其他
+    //   组件会覆盖掉它们独有的类型数据（如 glyph 的 script/skeleton/components）
+    const { value: valueUpdate, ...commonUpdates } = updates as any
+    const hasCommonUpdates = Object.keys(commonUpdates).length > 0
+    const hasValueUpdate = valueUpdate !== undefined
+
+    // 对简单属性做裁剪
+    if (typeof commonUpdates.w === 'number' && commonUpdates.w < 0) commonUpdates.w = 0
+    if (typeof commonUpdates.h === 'number' && commonUpdates.h < 0) commonUpdates.h = 0
+
     if (editorStore.editStatus === EditStatus.Edit) {
-      characterStore.modifyComponent(selectedComponentUUID.value, updates)
+      if (hasCommonUpdates) {
+        for (const uuid of allUUIDs) {
+          characterStore.modifyComponent(uuid, commonUpdates)
+        }
+      }
+      if (hasValueUpdate) {
+        characterStore.modifyComponent(selectedComponentUUID.value, { value: valueUpdate })
+      }
     } else if (editorStore.editStatus === EditStatus.Glyph) {
-      glyphStore.modifyComponent(selectedComponentUUID.value, updates)
+      if (hasCommonUpdates) {
+        for (const uuid of allUUIDs) {
+          glyphStore.modifyComponent(uuid, commonUpdates)
+        }
+      }
+      if (hasValueUpdate) {
+        glyphStore.modifyComponent(selectedComponentUUID.value, { value: valueUpdate })
+      }
     }
   }
-  
+
+  const selectedComponents = computed(() => {
+    if (editorStore.editStatus === EditStatus.Edit) {
+      return characterStore.selectedComponents
+    } else if (editorStore.editStatus === EditStatus.Glyph) {
+      return glyphStore.selectedComponents
+    }
+    return []
+  })
+
   return {
     selectedComponent,
     selectedComponentUUID,
+    selectedComponentsUUIDs,
+    selectedComponents,
     modifyComponent,
     editStatus: computed(() => editorStore.editStatus)
   }

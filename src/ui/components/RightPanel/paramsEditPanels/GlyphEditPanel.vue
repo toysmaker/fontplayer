@@ -59,7 +59,7 @@ const { t } = useI18n()
 const dialog = useDialog()
 const message = useMessage()
 
-const { selectedComponent, selectedComponentUUID, modifyComponent, editStatus } = useComponentEditor()
+const { selectedComponent, selectedComponentUUID, selectedComponents, modifyComponent, editStatus } = useComponentEditor()
 
 const showSetAsModal = ref(false)
 const showSelectModal = ref(false)
@@ -782,20 +782,32 @@ const glyphVariables = computed(() => {
 })
 
 // 处理可变参数值变化
-function handleVariableChange(variable: { uuid: string; value: number }) {
+function handleVariableChange(variable: { uuid: string; name: string; value: number }) {
   if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return
-  const glyphValue = selectedComponent.value.value as ICustomGlyph
-  if (!glyphValue?.variables) return
 
-  const v = glyphValue.variables.find(v => v.uuid === variable.uuid)
-  if (v) {
-    v.value = variable.value
+  const glyphComponents = selectedComponents.value.filter(c => c.type === 'glyph')
+
+  for (const comp of glyphComponents) {
+    const glyphValue = comp.value as ICustomGlyph
+    if (!glyphValue?.variables) continue
+
+    // 按名称匹配变量
+    const v = glyphValue.variables.find(v => v.name === variable.name)
+    if (!v) continue
+
+    let clamped = variable.value
+    if (v.min !== undefined && clamped < v.min) clamped = v.min
+    if (v.max !== undefined && clamped > v.max) clamped = v.max
+    v.value = clamped
+
+    const updatedGlyphValue = { ...glyphValue, variables: [...glyphValue.variables] }
+
+    if (editStatus.value === EditStatus.Edit) {
+      characterStore.modifyComponent(comp.uuid, { value: updatedGlyphValue })
+    } else {
+      glyphStore.modifyComponent(comp.uuid, { value: updatedGlyphValue })
+    }
   }
-
-  // 更新组件数据
-  modifyComponent({
-    value: { ...glyphValue, variables: [...glyphValue.variables] },
-  })
 
   // 触发 canvas 重绘
   getEditCanvasContext()?.onRender()
@@ -841,27 +853,20 @@ const handleChangeParameter = async (parameter: IParameter, value: number | stri
   if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') {
     return
   }
-  
-  const glyphValue = selectedComponent.value.value as ICustomGlyph
-  if (!glyphValue || !Array.isArray(glyphValue.parameters)) {
-    return
-  }
-  
-  // 如果是数值类型，限制精度
-  let processedValue: number | string = value
-  if (typeof value === 'number' && parameter.type === ParameterType.Number) {
-    processedValue = roundToPrecision(value, precisionFromParamMax(parameter.max))
-  }
 
-  // 如果是 Constant 类型，更新工作副本中的常量（仅「编辑全局变量」模式下；提交前不写 file.constants）
+  // 多选场景下所有 glyph 类型的选中组件
+  const glyphComponents = selectedComponents.value.filter(c => c.type === 'glyph')
+
+  // === Constant 类型：全局常量只更新一次，然后重建所有选中组件的 value 并执行脚本 ===
   if (parameter.type === ParameterType.Constant) {
     const constantUUID = String(parameter.value)
-    const numericValue = typeof processedValue === 'number' ? processedValue : Number(processedValue)
+    let numericValue = typeof value === 'number' ? value : Number(value)
     const meta = getConstantMeta(constantUUID)
-    const roundedValue = roundToPrecision(
-      numericValue,
-      precisionFromParamMax(meta?.max ?? parameter.max),
-    )
+    const min = meta?.min ?? parameter.min
+    const max = meta?.max ?? parameter.max
+    if (min !== undefined && numericValue < min) numericValue = min
+    if (max !== undefined && numericValue > max) numericValue = max
+    const roundedValue = roundToPrecision(numericValue, precisionFromParamMax(max))
 
     if (editorConstantsSession.active) {
       if (!editorConstantsSession.isEditingGlobal(constantUUID)) return
@@ -878,39 +883,68 @@ const handleChangeParameter = async (parameter: IParameter, value: number | stri
         }
       }
     }
-  } else {
-    // 对于非 Constant 类型，更新参数值
-    const param = glyphValue.parameters.find(p => p.uuid === parameter.uuid)
-    if (!param) {
-      return
-    }
-    
-    param.value = processedValue
-  }
-  
-  // 更新组件数据（触发响应式更新）
-  // 注意：这里需要深拷贝 glyphValue，确保 Vue 能检测到变化
-  const updatedGlyphValue = {
-    ...glyphValue,
-    parameters: [...glyphValue.parameters], // 创建新数组以触发响应式更新
-  }
-  
-  modifyComponent({
-    value: updatedGlyphValue,
-  })
 
-  try {
-    if (parameter.type === ParameterType.Constant) {
-      const constantUUID = String(parameter.value)
-      const ranAll = runGlyphScriptsOnAllConstantUsagesInEditingScope(constantUUID)
-      if (!ranAll) {
-        executeGlyphScript(updatedGlyphValue, selectedComponent.value.uuid)
+    // 重建每个选中 glyph 组件的 value（常量值由 constantsMap 在渲染时读取）
+    for (const comp of glyphComponents) {
+      const gv = comp.value as ICustomGlyph
+      if (!gv?.parameters) continue
+      const updated = { ...gv, parameters: [...gv.parameters] }
+      if (editStatus.value === EditStatus.Edit) {
+        characterStore.modifyComponent(comp.uuid, { value: updated })
+      } else {
+        glyphStore.modifyComponent(comp.uuid, { value: updated })
       }
-    } else {
-      executeGlyphScript(updatedGlyphValue, selectedComponent.value.uuid)
     }
-  } catch (error) {
-    console.error('Error executing glyph script after parameter change:', error)
+
+    try {
+      const ranAll = runGlyphScriptsOnAllConstantUsagesInEditingScope(constantUUID)
+      if (!ranAll && selectedComponent.value) {
+        const gv = selectedComponent.value.value as ICustomGlyph
+        if (gv) executeGlyphScript({ ...gv, parameters: [...(gv.parameters || [])] }, selectedComponent.value.uuid)
+      }
+    } catch (error) {
+      console.error('Error executing glyph script after constant change:', error)
+    }
+    return
+  }
+
+  // === Number / Enum 类型：按参数名称匹配，遍历所有选中 glyph 组件 ===
+  for (const comp of glyphComponents) {
+    const glyphValue = comp.value as ICustomGlyph
+    if (!glyphValue || !Array.isArray(glyphValue.parameters)) continue
+
+    // 按名称匹配参数（不同组件的同一参数有不同 UUID）
+    const param = glyphValue.parameters.find(p => p.name === parameter.name)
+    if (!param) continue
+
+    // 使用当前组件参数自身的 min/max 做裁剪
+    let processedValue: number | string = value
+    if (typeof value === 'number' && param.type === ParameterType.Number) {
+      let clamped = value
+      if (param.min !== undefined && clamped < param.min) clamped = param.min
+      if (param.max !== undefined && clamped > param.max) clamped = param.max
+      processedValue = roundToPrecision(clamped, precisionFromParamMax(param.max))
+    }
+
+    param.value = processedValue
+
+    const updatedGlyphValue = {
+      ...glyphValue,
+      parameters: [...glyphValue.parameters],
+    }
+
+    // 通过 store 直接修改（绕过 composable 的 value-仅主组件限制）
+    if (editStatus.value === EditStatus.Edit) {
+      characterStore.modifyComponent(comp.uuid, { value: updatedGlyphValue })
+    } else {
+      glyphStore.modifyComponent(comp.uuid, { value: updatedGlyphValue })
+    }
+
+    try {
+      executeGlyphScript(updatedGlyphValue, comp.uuid)
+    } catch (error) {
+      console.error('Error executing glyph script after parameter change:', error)
+    }
   }
 }
 
@@ -1058,14 +1092,14 @@ const handleFormatGlyphComponent = () => {
                 :min="variable.min"
                 :max="variable.max"
                 :precision="1"
-                @update:value="(v: number | null) => v !== null && handleVariableChange({ uuid: variable.uuid, value: v })"
+                @update:value="(v: number | null) => v !== null && handleVariableChange({ uuid: variable.uuid, name: variable.name, value: v })"
               />
               <n-slider
                 :value="variable.value"
                 :min="variable.min"
                 :max="variable.max"
                 :step="1"
-                @update:value="(v: number) => handleVariableChange({ uuid: variable.uuid, value: v })"
+                @update:value="(v: number) => handleVariableChange({ uuid: variable.uuid, name: variable.name, value: v })"
                 style="width: 100%; margin-top: 8px;"
               />
               <div style="font-size: 10px; color: var(--n-text-color-3); margin-top: 4px;">
