@@ -49,8 +49,8 @@
     <template #action>
       <div class="dialog-footer">
         <n-button @click="openMore">{{ t('dialogs.fontSettingsDialog.moreSettings') }}</n-button>
-        <n-button @click="handleCancel">{{ t('dialogs.fontSettingsDialog.cancel') }}</n-button>
-        <n-button type="primary" @click="handleConfirm">{{ t('dialogs.fontSettingsDialog.confirm') }}</n-button>
+        <n-button @click="handleCancel" @pointerup="handleCancel">{{ t('dialogs.fontSettingsDialog.cancel') }}</n-button>
+        <n-button type="primary" @click="handleConfirm" @pointerup="handleConfirm">{{ t('dialogs.fontSettingsDialog.confirm') }}</n-button>
       </div>
     </template>
   </n-modal>
@@ -61,6 +61,7 @@ import { ref, computed, watch } from 'vue'
 import { NModal, NForm, NFormItem, NInput, NInputNumber, NButton } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useProjectStore } from '@/stores/project'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t, tm } = useI18n()
 const projectStore = useProjectStore()
@@ -132,11 +133,13 @@ function openMore() {
   visible.value = false
 }
 
-function handleCancel() {
+function _handleCancel() {
   visible.value = false
 }
 
-function handleConfirm() {
+const handleCancel = createDebouncedHandler(_handleCancel, 'FontSettingsDialog.cancel')
+
+function _handleConfirm() {
   const file = selectedFile.value
   if (!file) return
   projectStore.updateFile(file.uuid, {
@@ -150,6 +153,8 @@ function handleConfirm() {
   })
   visible.value = false
 }
+
+const handleConfirm = createDebouncedHandler(_handleConfirm, 'FontSettingsDialog.confirm')
 </script>
 
 <style scoped>

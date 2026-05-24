@@ -29,8 +29,8 @@
     </n-config-provider>
     <template #action>
       <div class="dialog-footer">
-        <n-button @click="handleCancel">{{ t('dialogs.fontSettingsDialog.cancel') }}</n-button>
-        <n-button type="primary" @click="handleConfirm">{{ t('dialogs.fontSettingsDialog.confirm') }}</n-button>
+        <n-button @click="handleCancel" @pointerup="handleCancel">{{ t('dialogs.fontSettingsDialog.cancel') }}</n-button>
+        <n-button type="primary" @click="handleConfirm" @pointerup="handleConfirm">{{ t('dialogs.fontSettingsDialog.confirm') }}</n-button>
       </div>
     </template>
   </n-modal>
@@ -41,6 +41,7 @@ import { ref, computed, watch } from 'vue'
 import { NConfigProvider, NModal, NTabs, NTabPane, NButton } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { getCSSVariable } from '@/utils/theme'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 import { useProjectStore } from '@/stores/project'
 import * as R from 'ramda'
 import HeadTab from './fontSettings/HeadTab.vue'
@@ -129,11 +130,13 @@ watch(
   { immediate: true }
 )
 
-function handleCancel() {
+function _handleCancel() {
   visible.value = false
 }
 
-function handleConfirm() {
+const handleCancel = createDebouncedHandler(_handleCancel, 'FontSettingsMoreDialog.cancel')
+
+function _handleConfirm() {
   const file = selectedFile.value
   if (!file) return
   const current = file.fontSettings || {}
@@ -154,6 +157,8 @@ function handleConfirm() {
   })
   visible.value = false
 }
+
+const handleConfirm = createDebouncedHandler(_handleConfirm, 'FontSettingsMoreDialog.confirm')
 </script>
 
 <style scoped>

@@ -18,8 +18,8 @@
     </n-form>
     <template #action>
       <div class="dialog-footer">
-        <n-button @click="handleCancel">{{ t('dialogs.languageSettingsDialog.cancel') }}</n-button>
-        <n-button type="primary" @click="handleConfirm">{{ t('dialogs.languageSettingsDialog.confirm') }}</n-button>
+        <n-button @click="handleCancel" @pointerup="handleCancel">{{ t('dialogs.languageSettingsDialog.cancel') }}</n-button>
+        <n-button type="primary" @click="handleConfirm" @pointerup="handleConfirm">{{ t('dialogs.languageSettingsDialog.confirm') }}</n-button>
       </div>
     </template>
   </n-modal>
@@ -30,6 +30,7 @@ import { ref, computed, watch } from 'vue'
 import { NModal, NForm, NFormItem, NRadioGroup, NRadio, NButton } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { isTauri } from '@/utils/env'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t, tm, locale } = useI18n()
 
@@ -57,11 +58,13 @@ watch(
   }
 )
 
-function handleCancel() {
+function _handleCancel() {
   visible.value = false
 }
 
-async function handleConfirm() {
+const handleCancel = createDebouncedHandler(_handleCancel, 'LanguageSettingsDialog.cancel')
+
+async function _handleConfirm() {
   locale.value = language.value
   if (isTauri()) {
     try {
@@ -73,6 +76,8 @@ async function handleConfirm() {
   }
   visible.value = false
 }
+
+const handleConfirm = createDebouncedHandler(_handleConfirm, 'LanguageSettingsDialog.confirm')
 </script>
 
 <style scoped>

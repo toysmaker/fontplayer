@@ -14,6 +14,7 @@ import {
 import { useI18n } from 'vue-i18n'
 import { genUUID } from '@/utils/uuid'
 import type { IVariable, IKeyframe } from '@/core/types'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -50,7 +51,7 @@ function removeKeyframe(index: number) {
   keyframes.value.splice(index, 1)
 }
 
-function handleConfirm() {
+function _handleConfirm() {
   if (!name.value.trim()) {
     message.warning(t('panels.paramsPanel.variablesPanel.addVariable') + ': ' + t('dialogs.addVariableDialog.nameRequired'))
     return
@@ -77,7 +78,6 @@ function handleConfirm() {
       return
     }
   }
-  // Check for duplicate keyframe values
   const values = keyframes.value.map(k => k.value)
   if (new Set(values).size !== values.length) {
     message.warning(t('dialogs.addVariableDialog.duplicateKeyframeValue'))
@@ -103,10 +103,14 @@ function handleConfirm() {
   resetForm()
 }
 
-function handleCancel() {
+const handleConfirm = createDebouncedHandler(_handleConfirm, 'AddVariableDialog.confirm')
+
+function _handleCancel() {
   emit('update:visible', false)
   resetForm()
 }
+
+const handleCancel = createDebouncedHandler(_handleCancel, 'AddVariableDialog.cancel')
 
 function resetForm() {
   name.value = ''
@@ -181,8 +185,8 @@ function resetForm() {
 
     <template #footer>
       <div class="dialog-footer">
-        <n-button @click="handleCancel">{{ t('dialogs.addVariableDialog.cancel') }}</n-button>
-        <n-button type="primary" @click="handleConfirm">{{ t('dialogs.addVariableDialog.confirm') }}</n-button>
+        <n-button @click="handleCancel" @pointerup="handleCancel">{{ t('dialogs.addVariableDialog.cancel') }}</n-button>
+        <n-button type="primary" @click="handleConfirm" @pointerup="handleConfirm">{{ t('dialogs.addVariableDialog.confirm') }}</n-button>
       </div>
     </template>
   </n-modal>

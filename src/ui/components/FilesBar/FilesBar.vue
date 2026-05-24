@@ -116,8 +116,8 @@
         @keyup.enter="confirmSearch"
       />
       <template #action>
-        <n-button @click="cancelSearch">{{ t('dialogs.tipsDialog.cancel') }}</n-button>
-        <n-button type="primary" @click="confirmSearch">{{ t('panels.filesBar.search') }}</n-button>
+        <n-button @click="cancelSearch" @pointerup="cancelSearch">{{ t('dialogs.tipsDialog.cancel') }}</n-button>
+        <n-button type="primary" @click="confirmSearch" @pointerup="confirmSearch">{{ t('panels.filesBar.search') }}</n-button>
       </template>
     </n-modal>
   </div>
@@ -271,34 +271,33 @@ const searchFile = async () => {
   searchCharacterDialogVisible.value = true
 }
 
-// 确认搜索
-const confirmSearch = () => {
+const _confirmSearch = () => {
   const keyword = searchInput.value.trim()
-  
-  // 验证输入：1-100个字符
+
   if (keyword.length === 0) {
     message.warning(t('panels.filesBar.searchWarning'))
     return
   }
-  
+
   if (keyword.length > 100) {
     message.warning(t('panels.filesBar.searchWarningTooLong'))
     return
   }
 
-  // 设置搜索关键词和搜索状态
   editorStore.setCharacterSearchKeyword(keyword)
   editorStore.setIsCharacterSearching(true)
-  
-  // 关闭对话框
+
   searchCharacterDialogVisible.value = false
 }
 
-// 取消搜索对话框
-const cancelSearch = () => {
+const confirmSearch = createDebouncedHandler(_confirmSearch, 'FilesBar.confirmSearch')
+
+const _cancelSearch = () => {
   searchCharacterDialogVisible.value = false
   searchInput.value = ''
 }
+
+const cancelSearch = createDebouncedHandler(_cancelSearch, 'FilesBar.cancelSearch')
 </script>
 
 <style scoped>

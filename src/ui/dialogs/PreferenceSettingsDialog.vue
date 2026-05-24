@@ -60,8 +60,8 @@
     </div>
     <template #action>
       <div class="dialog-footer">
-        <n-button @click="handleCancel">{{ t('dialogs.preferenceDialog.cancel') }}</n-button>
-        <n-button type="primary" @click="handleConfirm">{{ t('dialogs.preferenceDialog.confirm') }}</n-button>
+        <n-button @click="handleCancel" @pointerup="handleCancel">{{ t('dialogs.preferenceDialog.cancel') }}</n-button>
+        <n-button type="primary" @click="handleConfirm" @pointerup="handleConfirm">{{ t('dialogs.preferenceDialog.confirm') }}</n-button>
       </div>
     </template>
   </n-modal>
@@ -74,6 +74,7 @@ import { useI18n } from 'vue-i18n'
 import { useEditorPreferenceStore } from '@/stores/editorPreference'
 import { fontRenderStyle } from '@/core/script/globals'
 import { BackgroundType, GridType } from '@/core/canvas/types'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t, tm } = useI18n()
 const preferenceStore = useEditorPreferenceStore()
@@ -111,11 +112,13 @@ watch(
   }
 )
 
-function handleCancel() {
+function _handleCancel() {
   visible.value = false
 }
 
-function handleConfirm() {
+const handleCancel = createDebouncedHandler(_handleCancel, 'PreferenceSettingsDialog.cancel')
+
+function _handleConfirm() {
   preferenceStore.setBackgroundType(backgroundStyle.value === 'color' ? BackgroundType.Color : BackgroundType.Transparent)
   preferenceStore.setBackgroundColor(backgroundColor.value)
   preferenceStore.setGridType(
@@ -127,6 +130,8 @@ function handleConfirm() {
   fontRenderStyle.value = renderStyle.value
   visible.value = false
 }
+
+const handleConfirm = createDebouncedHandler(_handleConfirm, 'PreferenceSettingsDialog.confirm')
 </script>
 
 <style scoped>
