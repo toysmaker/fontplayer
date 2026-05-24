@@ -10,7 +10,7 @@
       />
     </div>
     <n-scrollbar class="component-list-scrollbar">
-      <div class="all-components-list">
+      <div class="all-components-list" @dragenter.prevent @dragover.prevent @drop="onContainerDrop">
         <div
           class="component-item-wrapper"
           v-for="component in filteredComponents"
@@ -389,14 +389,25 @@ const selectComponent = createDebouncedHandler(_selectComponent, 'GlyphComponent
 
 // 拖拽开始
 const onDragStart = (e: DragEvent, uuid: string) => {
+  if (import.meta.env.DEV) {
+    console.log('[DnD] dragstart', { uuid, dataTransfer: !!e.dataTransfer })
+  }
   draggedItem = uuid
+  if (e.dataTransfer) {
+    e.dataTransfer.setData('text/plain', uuid)
+    e.dataTransfer.effectAllowed = 'move'
+  }
 }
 
 // 拖拽悬停
+let _dragoverLogCounter = 0
 const onDragOver = (e: DragEvent, uuid: string) => {
   e.preventDefault()
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'move'
+  }
   const list = glyphStore.orderedListForCurrentGlyph
-  
+
   for (let i = 0; i < list.length; i++) {
     if (draggedItem === list[i].uuid) {
       fromIndex = i
@@ -405,17 +416,29 @@ const onDragOver = (e: DragEvent, uuid: string) => {
       toIndex = i
     }
   }
-  
-  const target = e.target as HTMLElement
-  if (e.offsetY < target.offsetHeight / 2) {
+
+  const currentTarget = e.currentTarget as HTMLElement
+  const rect = currentTarget.getBoundingClientRect()
+  const y = e.clientY - rect.top
+  if (y < rect.height / 2) {
     insertIndex = toIndex
-  } else if (e.offsetY > target.offsetHeight / 2) {
+  } else {
     insertIndex = toIndex + 1
+  }
+
+  if (_dragoverLogCounter++ % 20 === 0 && import.meta.env.DEV) {
+    console.log('[DnD] dragover (component)', {
+      draggedItem, uuid, fromIndex, toIndex, insertIndex,
+      targetTag: (e.target as HTMLElement)?.tagName,
+    })
   }
 }
 
 // 拖拽结束
 const onDragEnd = (e: DragEvent, uuid: string) => {
+  if (import.meta.env.DEV) {
+    console.log('[DnD] dragend', { uuid, draggedItem, fromIndex, toIndex, insertIndex })
+  }
   draggedItem = ''
   fromIndex = -1
   toIndex = -1
@@ -424,9 +447,19 @@ const onDragEnd = (e: DragEvent, uuid: string) => {
 
 // 拖拽放置
 const onDrop = (e: DragEvent, uuid: string) => {
+  if (import.meta.env.DEV) {
+    console.log('[DnD] drop (component)', { uuid, draggedItem, fromIndex, toIndex, insertIndex })
+  }
+  e.preventDefault()
+  e.stopPropagation()
   const list = R.clone(glyphStore.orderedListForCurrentGlyph)
-  if (fromIndex === toIndex) return
-  
+  if (fromIndex === toIndex) {
+    if (import.meta.env.DEV) {
+      console.log('[DnD] drop skipped: fromIndex === toIndex')
+    }
+    return
+  }
+
   list.splice(fromIndex, 1)
   if (fromIndex <= insertIndex) {
     insertIndex -= 1
@@ -435,7 +468,98 @@ const onDrop = (e: DragEvent, uuid: string) => {
     type: 'component',
     uuid: draggedItem,
   })
-  
+
+  if (import.meta.env.DEV) {
+    console.log('[DnD] drop after reorder, calling setOrderedList')
+  }
+  glyphStore.setOrderedList(list)
+}
+
+// 容器拖拽放置（处理拖到 item 间隙的情况，WKWebView 兼容）
+const onContainerDrop = (e: DragEvent) => {
+  if (import.meta.env.DEV) {
+    console.log('[DnD] drop (container)', { draggedItem, clientX: e.clientX, clientY: e.clientY })
+  }
+  e.preventDefault()
+  e.stopPropagation()
+
+  if (!draggedItem) {
+    if (import.meta.env.DEV) {
+      console.log('[DnD] container drop skipped: no draggedItem')
+    }
+    return
+  }
+
+  const list = R.clone(glyphStore.orderedListForCurrentGlyph)
+
+  let from = -1
+  for (let i = 0; i < list.length; i++) {
+    if (draggedItem === list[i].uuid) {
+      from = i
+      break
+    }
+  }
+  if (from < 0) {
+    if (import.meta.env.DEV) {
+      console.log('[DnD] container drop skipped: from < 0')
+    }
+    return
+  }
+
+  const container = e.currentTarget as HTMLElement
+  const allDivs = container.querySelectorAll<HTMLElement>('.component')
+  let closest: HTMLElement | null = null
+  let minDist = Infinity
+
+  allDivs.forEach((el) => {
+    const rect = el.getBoundingClientRect()
+    const dist = Math.abs(e.clientY - (rect.top + rect.height / 2))
+    if (dist < minDist) {
+      minDist = dist
+      closest = el
+    }
+  })
+
+  if (!closest) {
+    if (import.meta.env.DEV) {
+      console.log('[DnD] container drop skipped: no closest .component found')
+    }
+    return
+  }
+
+  const uuid = closest.dataset.uuid
+  if (!uuid) {
+    if (import.meta.env.DEV) {
+      console.log('[DnD] container drop skipped: closest has no data-uuid')
+    }
+    return
+  }
+
+  let to = -1
+  for (let i = 0; i < list.length; i++) {
+    if (uuid === list[i].uuid) {
+      to = i
+      break
+    }
+  }
+  if (to < 0 || from === to) {
+    if (import.meta.env.DEV) {
+      console.log('[DnD] container drop skipped', { to, from })
+    }
+    return
+  }
+
+  const rect = closest.getBoundingClientRect()
+  let insert = e.clientY < rect.top + rect.height / 2 ? to : to + 1
+
+  if (import.meta.env.DEV) {
+    console.log('[DnD] container drop reorder', { from, to, insert, listLen: list.length })
+  }
+
+  list.splice(from, 1)
+  if (from <= insert) insert -= 1
+  list.splice(insert, 0, { type: 'component', uuid: draggedItem })
+
   glyphStore.setOrderedList(list)
 }
 
