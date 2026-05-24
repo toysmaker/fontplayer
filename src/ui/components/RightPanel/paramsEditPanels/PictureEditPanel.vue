@@ -170,24 +170,26 @@ const handleChangeOpacity = (opacity: number | null) => {
         <div class="section-title">{{ t('panels.paramsPanel.opacity.title') }}</div>
         <n-form label-placement="left" label-width="80px">
           <n-form-item :label="t('panels.paramsPanel.opacity.opacity')">
-            <n-input-number
-              :value="selectedComponent.opacity"
-              :min="0.0"
-              :max="1.0"
-              :step="0.05"
-              :precision="2"
-              @update:value="handleChangeOpacity"
-              style="width: 150px; margin-right: 10px;"
-            />
-            <n-slider
-              :value="selectedComponent.opacity || 1"
-              :min="0.0"
-              :max="1.0"
-              :step="0.05"
-              :precision="2"
-              @update:value="handleChangeOpacity"
-              style="width: 150px;"
-            />
+            <div style="width: 100%;">
+              <n-input-number
+                :value="selectedComponent.opacity"
+                :min="0.0"
+                :max="1.0"
+                :step="0.05"
+                :precision="2"
+                @update:value="handleChangeOpacity"
+                style="width: 100%;"
+              />
+              <n-slider
+                :value="selectedComponent.opacity || 1"
+                :min="0.0"
+                :max="1.0"
+                :step="0.05"
+                :precision="2"
+                @update:value="handleChangeOpacity"
+                style="width: 100%; margin-top: 8px;"
+              />
+            </div>
           </n-form-item>
         </n-form>
       </div>

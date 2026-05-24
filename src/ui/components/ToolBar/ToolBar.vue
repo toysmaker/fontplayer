@@ -194,7 +194,11 @@ import { useEditorStore } from '@/stores/editor'
 import { useToolStore } from '@/stores/tool'
 import { useDialogsStore } from '@/stores/dialogs'
 import { useGlyphStore } from '@/stores/glyph'
+import { useCharacterStore } from '@/stores/character'
+import { useProjectStore } from '@/stores/project'
 import { EditStatus } from '@/core/types'
+import { isTauri } from '@/utils/env'
+import { genPictureComponent } from '@/features/tools/picture'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import { confirmLeaveGlyphEditIfDirty } from '@/stores/editorConstantsSession'
 import {
@@ -209,6 +213,8 @@ const editorStore = useEditorStore()
 const toolStore = useToolStore()
 const dialogsStore = useDialogsStore()
 const glyphStore = useGlyphStore()
+const characterStore = useCharacterStore()
+const projectStore = useProjectStore()
 
 const editStatus = computed(() => editorStore.editStatus)
 const tool = computed(() => toolStore.tool)
@@ -227,7 +233,7 @@ const openGlyphComponentsDialog = createDebouncedHandler(
 )
 
 // 切换工具
-const _switchTool = (toolName: string) => {
+const _switchTool = async (toolName: string) => {
   if (import.meta.env.DEV) {
     console.log('[ToolBar] switchTool:', toolName)
   }
@@ -235,8 +241,89 @@ const _switchTool = (toolName: string) => {
     void openProgrammingWindow()
     return
   }
+  if (toolName === 'picture') {
+    await handlePictureTool()
+    return
+  }
   toolStore.setTool(toolName)
   // 工具切换逻辑在 Editor 中通过 watch toolStore.tool 实现
+}
+
+const handlePictureTool = async () => {
+  const file = projectStore.selectedFile
+  if (!file) return
+  const maxWidth = file.width
+  const maxHeight = file.height
+
+  let dataUrl: string | null = null
+
+  if (isTauri()) {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const { readFile } = await import('@tauri-apps/plugin-fs')
+    const picked = await open({
+      multiple: false,
+      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'bmp'] }],
+    })
+    if (!picked) return
+    const filePath =
+      typeof picked === 'string'
+        ? picked
+        : Array.isArray(picked)
+          ? picked[0] ?? null
+          : (picked as { path?: string }).path ?? null
+    if (!filePath) return
+    const bytes = await readFile(filePath)
+    const lower = filePath.toLowerCase()
+    const ext = lower.endsWith('.png') ? 'png' : lower.endsWith('.bmp') ? 'bmp' : 'jpeg'
+    let binary = ''
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]!)
+    }
+    dataUrl = `data:image/${ext};base64,${btoa(binary)}`
+  } else {
+    dataUrl = await new Promise<string | null>((resolve) => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = 'image/jpeg,image/png,image/bmp'
+      input.style.display = 'none'
+      const cleanup = () => {
+        if (input.parentNode) document.body.removeChild(input)
+      }
+      input.onchange = () => {
+        const f = input.files?.[0]
+        if (!f) {
+          cleanup()
+          resolve(null)
+          return
+        }
+        const reader = new FileReader()
+        reader.onload = () => {
+          cleanup()
+          resolve(reader.result as string)
+        }
+        reader.onerror = () => {
+          cleanup()
+          resolve(null)
+        }
+        reader.readAsDataURL(f)
+      }
+      document.body.appendChild(input)
+      input.click()
+    })
+  }
+
+  if (!dataUrl) return
+
+  try {
+    const component = await genPictureComponent(dataUrl, maxWidth, maxHeight)
+    if (editorStore.editStatus === EditStatus.Edit) {
+      characterStore.addComponent(component)
+    } else if (editorStore.editStatus === EditStatus.Glyph) {
+      glyphStore.addComponent(component as any)
+    }
+  } catch (e) {
+    console.error('[ToolBar] Failed to generate picture component:', e)
+  }
 }
 const switchTool = createDebouncedHandler(_switchTool, 'ToolBar.switchTool', (args) => args[0])
 
