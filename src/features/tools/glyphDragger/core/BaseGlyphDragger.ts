@@ -622,6 +622,11 @@ export abstract class BaseGlyphDragger {
     const dx = coordX - this.lastX
     const dy = coordY - this.lastY
 
+    // 抑制零位移触发的吸附：某些平台（如 Tauri WebView）可能在 mousedown/mouseup
+    // 之间合成 mousemove 事件，即使指针没有实际移动。此时 dx/dy 为零，不应触发
+    // applySnapDelta —— 否则组件当前参考线已处于 snapIn 范围内时会"吸附跳动"。
+    if (dx === 0 && dy === 0) return
+
     if (
       this._isDragging &&
       dx * dx + dy * dy > BaseGlyphDragger.GLYPH_DRAG_TAP_SUPPRESS_EPS_SQ
