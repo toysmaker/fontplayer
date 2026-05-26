@@ -9,7 +9,8 @@ import { useProjectStore } from '@/stores/project'
 import { isTauri } from '@/utils/env'
 import type { ProjectConfig } from '../services/ProjectCreator'
 import localForage from 'localforage'
-import type { IFile } from '@/core/types'
+import type { IFile, ICustomGlyph, IGlyphComponent } from '@/core/types'
+import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import {
   encodeFpFile,
   gzipCompressBytes,
@@ -32,6 +33,44 @@ const PROJECT_CACHE_FP_KEY = 'project_cache_v3_fp'
 const PROJECT_CACHE_TS_KEY = 'project_cache_v3_timestamp'
 const LEGACY_PROJECT_CACHE_JSON_KEY = 'project_cache_v2'
 const LEGACY_PROJECT_CACHE_TS_KEY = 'project_cache_v2_timestamp'
+
+// 临时调试：扫描字符列表中包含指定笔画组件的字符
+async function scanProblemGlyphs(file: IFile) {
+  const PROBLEM_NAMES = new Set(['竖撇', '挑捺', '斜钩', '横钩', '横弯钩'])
+  const charList = file.characterList ?? []
+  if (!charList.length) return
+  if (import.meta.env.DEV) console.log(`[scanProblemGlyphs] 开始扫描 ${charList.length} 个字符...`)
+  const results: Array<{ charText: string; charUuid: string; glyphNames: string[] }> = []
+  let lastYield = performance.now()
+  for (let i = 0; i < charList.length; i++) {
+    const meta = charList[i]
+    const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
+    if (!ch) continue
+    const found: string[] = []
+    for (const comp of ch.components) {
+      if (comp.type !== 'glyph') continue
+      const gc = comp as IGlyphComponent
+      const glyph = gc.value as ICustomGlyph
+      if (glyph.style !== '字玩标准黑体') continue
+      if (PROBLEM_NAMES.has(glyph.name)) found.push(glyph.name)
+    }
+    if (found.length) {
+      results.push({ charText: meta.character.text, charUuid: meta.uuid, glyphNames: found })
+      if (import.meta.env.DEV) console.log(`[scanProblemGlyphs] [${i + 1}/${charList.length}] 找到: "${meta.character.text}" -> ${found.join(', ')}`)
+    }
+    const now = performance.now()
+    if (now - lastYield >= 16) {
+      await new Promise<void>((r) => setTimeout(r, 0))
+      lastYield = performance.now()
+    }
+  }
+  if (import.meta.env.DEV) {
+    console.log(`[scanProblemGlyphs] 扫描完成，共 ${charList.length} 个字符，找到 ${results.length} 个包含问题笔画的字符:`)
+    for (const r of results) {
+      console.log(`  字符: "${r.charText}" (${r.charUuid}) -> 笔画: ${r.glyphNames.join(', ')}`)
+    }
+  }
+}
 
 export class FileHandler {
   /** 记住上一次保存路径（Tauri 环境） */
@@ -109,6 +148,12 @@ export class FileHandler {
               })
               
               this.projectStore.selectFile(projectFile.uuid)
+
+              // 临时调试：扫描哪些字符包含了问题笔画组件
+              if (import.meta.env.DEV) {
+                scanProblemGlyphs(projectFile).catch(console.error)
+              }
+
               resolve()
             } else {
               reject(new Error('Failed to add file'))

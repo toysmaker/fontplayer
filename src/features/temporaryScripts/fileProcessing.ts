@@ -312,3 +312,252 @@ export function widenFangYuanGlyphNumberParamBoundsInCharacterComponents(
 ): void {
   widenOnGlyphTree(components)
 }
+
+// MARK: 临时代码 — 字玩方圆黑体：扩展风格标签为"字玩方圆黑体"的字形组件 Enum 参数 options
+// 仅 dev 模式生效；后续需整段移除
+
+const FANG_YUAN_STYLE_TAGS = new Set(['字玩方圆黑体', '测试笔画模板'])
+
+const 横起笔 = ['横', '横钩', '横撇', '横撇弯钩', '横弯钩', '横折', '横折2', '横折钩', '横折挑', '横折弯', '横折弯钩', '横折折撇', '横折折弯钩', '二横折']
+const 转角 = ['横折', '横折2', '横折钩', '横折挑', '横折弯钩', '横折折弯钩', '竖折', '竖折折钩', '二横折', '横弯钩']
+const 竖起笔 = ['竖', '竖钩', '竖挑', '竖弯', '竖弯钩', '竖折', '竖折折钩', '直竖撇', '直竖捺']
+const 竖收笔 = ['竖', '横折', '横折2']
+const 横收笔 = ['横', '竖折']
+const 直角撇起笔 = ['直角撇']
+const 直角撇收笔 = ['直角撇', '横撇']
+const 直角捺起笔 = ['直角捺']
+const 直角捺收笔 = ['直角捺']
+const 钩收笔 = ['横弯钩', '横折钩', '横折弯钩', '横折折弯钩', '竖钩', '竖弯钩', '竖折折钩']
+
+function expandEnumOptionsForFangYuanGlyph(glyph: ICustomGlyph): void {
+  const name = glyph.name
+  if (!glyph.parameters || !Array.isArray(glyph.parameters)) return
+  const parameters = glyph.parameters as IParameter[]
+
+  if (横起笔.includes(name)) {
+    const p = parameters.find(p => p.name === '起笔风格')
+    if (p?.options) p.options.push(
+      { value: 1, label: '圆切-上' },
+      { value: 2, label: '圆切-下' },
+      { value: 3, label: '斜切-上' },
+      { value: 4, label: '斜切-下' },
+      { value: 5, label: '圆切-圆弧装饰-上' },
+      { value: 6, label: '圆切-圆弧装饰-下' },
+      { value: 7, label: '圆切-棱角装饰-上' },
+      { value: 8, label: '圆切-棱角装饰-下' },
+    )
+  }
+  if (转角.includes(name)) {
+    const p = parameters.find(p => p.name === '转角风格')
+    if (p?.options) p.options.push(
+      { value: 2, label: '圆切-横' },
+      { value: 3, label: '圆切-竖' },
+      { value: 4, label: '斜切-横' },
+      { value: 5, label: '斜切-竖' },
+      { value: 6, label: '圆切-圆弧装饰-横' },
+      { value: 7, label: '圆切-圆弧装饰-竖' },
+      { value: 8, label: '圆切-棱角装饰-横' },
+      { value: 9, label: '圆切-棱角装饰-竖' },
+      { value: 10, label: '圆切露锋-横' },
+      { value: 11, label: '圆切露锋-竖' },
+    )
+  }
+  if (竖起笔.includes(name)) {
+    const p = parameters.find(p => p.name === '起笔风格')
+    if (p?.options) p.options.push(
+      { value: 1, label: '圆切-左' },
+      { value: 2, label: '圆切-右' },
+      { value: 3, label: '斜切-左' },
+      { value: 4, label: '斜切-右' },
+      { value: 5, label: '圆切-圆弧装饰-左' },
+      { value: 6, label: '圆切-圆弧装饰-右' },
+      { value: 7, label: '圆切-棱角装饰-左' },
+      { value: 8, label: '圆切-棱角装饰-右' },
+    )
+  }
+  if (竖收笔.includes(name)) {
+    const p = parameters.find(p => p.name === '收笔风格')
+    if (p?.options) p.options.push(
+      { value: 1, label: '圆切-左' },
+      { value: 2, label: '圆切-右' },
+      { value: 3, label: '斜切-左' },
+      { value: 4, label: '斜切-右' },
+      { value: 5, label: '圆切-圆弧装饰-左' },
+      { value: 6, label: '圆切-圆弧装饰-右' },
+      { value: 7, label: '圆切-棱角装饰-左' },
+      { value: 8, label: '圆切-棱角装饰-右' },
+    )
+  }
+  if (横收笔.includes(name)) {
+    const p = parameters.find(p => p.name === '收笔风格')
+    if (p?.options) p.options.push(
+      { value: 1, label: '燕尾收笔' },
+      { value: 2, label: '圆切-上' },
+      { value: 3, label: '圆切-下' },
+      { value: 4, label: '斜切-上' },
+      { value: 5, label: '斜切-下' },
+      { value: 6, label: '圆切-圆弧装饰-上' },
+      { value: 7, label: '圆切-圆弧装饰-下' },
+      { value: 8, label: '圆切-棱角装饰-上' },
+      { value: 9, label: '圆切-棱角装饰-下' },
+    )
+  }
+  if (直角撇起笔.includes(name)) {
+    const p = parameters.find(p => p.name === '起笔风格')
+    if (p?.options) p.options.push(
+      { value: 2, label: '圆切-左' },
+      { value: 3, label: '圆切-右' },
+      { value: 4, label: '斜切-左' },
+      { value: 5, label: '斜切-右' },
+      { value: 6, label: '圆切-圆弧装饰-左' },
+      { value: 7, label: '圆切-圆弧装饰-右' },
+      { value: 8, label: '圆切-棱角装饰-左' },
+      { value: 9, label: '圆切-棱角装饰-右' },
+    )
+  }
+  if (直角捺起笔.includes(name)) {
+    const p = parameters.find(p => p.name === '起笔风格')
+    if (p?.options) p.options.push(
+      { value: 2, label: '圆切-左' },
+      { value: 3, label: '圆切-右' },
+      { value: 4, label: '斜切-左' },
+      { value: 5, label: '斜切-右' },
+      { value: 6, label: '圆切-圆弧装饰-左' },
+      { value: 7, label: '圆切-圆弧装饰-右' },
+      { value: 8, label: '圆切-棱角装饰-左' },
+      { value: 9, label: '圆切-棱角装饰-右' },
+    )
+  }
+  if (直角撇收笔.includes(name)) {
+    const p = parameters.find(p => p.name === '收笔风格')
+    if (p?.options) p.options.push(
+      { value: 2, label: '圆切-上' },
+      { value: 3, label: '圆切-下' },
+      { value: 4, label: '斜切-上' },
+      { value: 5, label: '斜切-下' },
+      { value: 6, label: '厚重露锋' },
+      { value: 7, label: '厚重露锋-圆切-上' },
+      { value: 8, label: '厚重露锋-圆切-下' },
+      { value: 9, label: '厚重露锋-斜切-上' },
+      { value: 10, label: '厚重露锋-斜切-下' },
+    )
+  }
+  if (直角捺收笔.includes(name)) {
+    const p = parameters.find(p => p.name === '收笔风格')
+    if (p?.options) p.options.push(
+      { value: 2, label: '圆切-上' },
+      { value: 3, label: '圆切-下' },
+      { value: 4, label: '斜切-上' },
+      { value: 5, label: '斜切-下' },
+      { value: 6, label: '厚重露锋' },
+      { value: 7, label: '厚重露锋-圆切-上' },
+      { value: 8, label: '厚重露锋-圆切-下' },
+      { value: 9, label: '厚重露锋-斜切-上' },
+      { value: 10, label: '厚重露锋-斜切-下' },
+    )
+  }
+  if (name === '竖直单圆角部件' || name === '水平单圆角部件') {
+    const 方头样式 = parameters.find(p => p.name === '转角风格')
+    if (方头样式) {
+      方头样式.name = '方头样式'
+      if (方头样式.options) {
+        方头样式.options = [
+          { value: 0, label: '默认样式' },
+          { value: 1, label: '圆切-外' },
+          { value: 2, label: '圆切-内' },
+          { value: 3, label: '斜切-外' },
+          { value: 4, label: '斜切-内' },
+          { value: 5, label: '圆切-圆弧装饰-外' },
+          { value: 6, label: '圆切-圆弧装饰-内' },
+          { value: 7, label: '圆切-棱角装饰-外' },
+          { value: 8, label: '圆切-棱角装饰-内' },
+        ]
+      }
+    }
+    const 方头数值 = parameters.find(p => p.name === '转角数值')
+    if (方头数值) 方头数值.name = '方头数值'
+    const 圆头样式 = parameters.find(p => p.name === '收笔风格')
+    if (圆头样式) {
+      圆头样式.name = '圆头样式'
+      if (圆头样式.options) {
+        圆头样式.options = [
+          { value: 0, label: '默认样式' },
+          { value: 1, label: '圆切' },
+          { value: 2, label: '斜切' },
+          { value: 3, label: '圆切露锋' },
+        ]
+      }
+    }
+    const 圆头数值 = parameters.find(p => p.name === '收笔数值')
+    if (圆头数值) 圆头数值.name = '圆头数值'
+  }
+  if (钩收笔.includes(name)) {
+    const p = parameters.find(p => p.name === '收笔风格')
+    if (p?.options) p.options.push(
+      { value: 3, label: '圆切' },
+      { value: 4, label: '斜切' },
+      { value: 5, label: '圆切露锋' },
+    )
+  }
+}
+
+function expandFangYuanGlyphTree(components: IComponent[] | undefined): void {
+  if (!components?.length) return
+  for (const comp of components) {
+    if (!comp || comp.type !== 'glyph' || !comp.value) continue
+    const g = comp.value as ICustomGlyph
+    if (g.style && FANG_YUAN_STYLE_TAGS.has(g.style)) {
+      expandEnumOptionsForFangYuanGlyph(g)
+    }
+    const nested = g.components as IGlyphComponent[] | undefined
+    if (nested?.length) expandFangYuanGlyphTree(nested)
+  }
+}
+
+export function expandFangYuanGlyphEnumOptionsInCharacterComponents(
+  components: IComponent[] | undefined,
+): void {
+  expandFangYuanGlyphTree(components)
+}
+
+/** 直接对 ICustomGlyph 数组（如 stroke_glyphs）中风格为"字玩方圆黑体"的字形扩展 Enum options */
+export function expandFangYuanGlyphEnumOptionsForGlyphs(
+  glyphs: ICustomGlyph[],
+): void {
+  for (const g of glyphs) {
+    if (g.style && FANG_YUAN_STYLE_TAGS.has(g.style)) {
+      expandEnumOptionsForFangYuanGlyph(g)
+    }
+  }
+}
+
+/** 将字形列表中风格"测试笔画模板"重命名为"字玩方圆黑体" */
+export function renameTestStrokeTemplateToFangYuan(glyphs: ICustomGlyph[]): void {
+  for (const g of glyphs) {
+    if (g.style === '测试笔画模板') {
+      g.style = '字玩方圆黑体'
+    }
+  }
+}
+
+/** 递归遍历字符组件树，将风格"测试笔画模板"重命名为"字玩方圆黑体" */
+function renameFangYuanStyleInTree(components: IComponent[] | undefined): void {
+  if (!components?.length) return
+  for (const comp of components) {
+    if (!comp || comp.type !== 'glyph' || !comp.value) continue
+    const g = comp.value as ICustomGlyph
+    if (g.style === '测试笔画模板') {
+      g.style = '字玩方圆黑体'
+    }
+    const nested = g.components as IGlyphComponent[] | undefined
+    if (nested?.length) renameFangYuanStyleInTree(nested)
+  }
+}
+
+export function renameFangYuanStyleInCharacterComponents(
+  components: IComponent[] | undefined,
+): void {
+  renameFangYuanStyleInTree(components)
+}
+
+// END 临时代码

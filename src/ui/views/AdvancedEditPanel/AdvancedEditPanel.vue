@@ -12,6 +12,7 @@ import ConditionFilterPanel from './ConditionFilterPanel.vue'
 import ScriptsPanel from './ScriptsPanel.vue'
 import StrokeReplacePanel from './StrokeReplacePanel.vue'
 import StyleSwitchPanel from './StyleSwitchPanel.vue'
+import FangYuanStylePanel from './FangYuanStylePanel.vue'
 
 const advancedEdit = useAdvancedEditStore()
 const projectStore = useProjectStore()
@@ -20,10 +21,25 @@ const showScriptTab = computed(
   () => projectStore.selectedFile?.tag === DEFAULT_TEMPLATE_PROJECT_TAG,
 )
 
+const FANG_YUAN_TAG = '字玩方圆黑体'
+const showFangYuanTab = computed(
+  () => projectStore.selectedFile?.tag === FANG_YUAN_TAG,
+)
+
 watch(
   showScriptTab,
   (show) => {
     if (!show && advancedEdit.activePanel === PanelType.Script) {
+      advancedEdit.setActivePanel(PanelType.GlobalVariables)
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  showFangYuanTab,
+  (show) => {
+    if (!show && advancedEdit.activePanel === PanelType.FangYuanStyleDesign) {
       advancedEdit.setActivePanel(PanelType.GlobalVariables)
     }
   },
@@ -84,6 +100,17 @@ onUnmounted(() => {
           条件筛选
         </n-button>
         <n-button
+          v-if="showFangYuanTab"
+          size="small"
+          :type="advancedEdit.activePanel === PanelType.FangYuanStyleDesign ? 'primary' : 'default'"
+          @pointerdown="() => advancedEdit.setActivePanel(PanelType.FangYuanStyleDesign)"
+        >
+          <template #icon>
+            <font-awesome-icon :icon="['fas', 'wrench']" />
+          </template>
+          字玩方圆黑体专属设计通道
+        </n-button>
+        <n-button
           v-if="showScriptTab"
           size="small"
           :type="advancedEdit.activePanel === PanelType.Script ? 'primary' : 'default'"
@@ -103,6 +130,7 @@ onUnmounted(() => {
     <main class="advanced-edit-panel-main">
       <GlobalParamsPanel v-if="advancedEdit.activePanel === PanelType.GlobalVariables" />
       <ConditionFilterPanel v-else-if="advancedEdit.activePanel === PanelType.ConditionFilter" />
+      <FangYuanStylePanel v-else-if="showFangYuanTab && advancedEdit.activePanel === PanelType.FangYuanStyleDesign" />
       <ScriptsPanel v-else-if="showScriptTab && advancedEdit.activePanel === PanelType.Script" />
       <StrokeReplacePanel v-else-if="advancedEdit.activePanel === PanelType.StrokeReplace" />
       <StyleSwitchPanel v-else-if="advancedEdit.activePanel === PanelType.StyleSwitch" />

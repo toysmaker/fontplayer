@@ -33,6 +33,10 @@ import { hydrateGlyphComponentEnumOptionsFromLibrary } from '@/features/editor/s
 import {
   replaceGlyphScript_custom_1,
   widenFangYuanGlyphNumberParamBoundsInCharacterComponents,
+  expandFangYuanGlyphEnumOptionsInCharacterComponents,
+  expandFangYuanGlyphEnumOptionsForGlyphs,
+  renameTestStrokeTemplateToFangYuan,
+  renameFangYuanStyleInCharacterComponents,
 } from '@/features/temporaryScripts/fileProcessing'
 
 /** 带此 tag 的工程在加载完成后会为字符列表补全部件分解数据（高级编辑「脚本」Tab 亦仅在此 tag 下显示） */
@@ -363,16 +367,26 @@ export class ProjectLoader {
 
       const projectTag = typeof data.file?.tag === 'string' ? data.file.tag : undefined
 
-      // // MARK: 临时代码 — 方圆黑体 .fp：将 stroke_glyphs 内联脚本替换为 public/templates/custom_1 同名 .js（须在 processGlyphs 之前）
-      // if (projectTag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG && data.stroke_glyphs?.length) {
-      //   this.updateProgress(0, '同步笔画模板脚本 (custom_1)…')
-      //   try {
-      //     await replaceGlyphScript_custom_1(data.stroke_glyphs as ICustomGlyph[])
-      //   } catch (e) {
-      //     console.error('[ProjectLoader] replaceGlyphScript_custom_1 failed', e)
-      //   }
-      //   await this.yieldToMainThread()
-      // }
+      // MARK: 临时代码 — 方圆黑体 .fp：将风格为"字玩方圆黑体"的笔画字形脚本替换为 public/templates/custom_1 同名 .js
+      // 仅 dev 模式生效；后续需整段移除
+      if (import.meta.env.DEV && projectTag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG && data.stroke_glyphs?.length) {
+        this.updateProgress(0, '同步笔画模板脚本 (custom_1)…')
+        try {
+          // 先重命名"测试笔画模板" → "字玩方圆黑体"
+          renameTestStrokeTemplateToFangYuan(data.stroke_glyphs as ICustomGlyph[])
+          const fangYuanGlyphs = (data.stroke_glyphs as ICustomGlyph[]).filter(
+            (g) => g.style === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG,
+          )
+          if (fangYuanGlyphs.length) {
+            await replaceGlyphScript_custom_1(fangYuanGlyphs)
+            expandFangYuanGlyphEnumOptionsForGlyphs(fangYuanGlyphs)
+          }
+        } catch (e) {
+          console.error('[ProjectLoader] replaceGlyphScript_custom_1 failed', e)
+        }
+        await this.yieldToMainThread()
+      }
+      // END 临时代码
 
       await this.processGlyphs(data)
       const decoded = decodedFp as unknown as DecodedFpz
@@ -727,6 +741,12 @@ export class ProjectLoader {
     }
     if (fangYuanWidenParams) {
       widenFangYuanGlyphNumberParamBoundsInCharacterComponents(components)
+      // MARK: 临时代码 — 重命名风格标签 + 扩展 Enum 参数 options
+      if (import.meta.env.DEV) {
+        renameFangYuanStyleInCharacterComponents(components)
+        expandFangYuanGlyphEnumOptionsInCharacterComponents(components)
+      }
+      // END 临时代码
     }
 
     const characterLite: ICharacterFileLite = {

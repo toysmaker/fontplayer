@@ -36,6 +36,11 @@ import {
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { collectProjectConstantUsageHitsForUuidsAsync } from '@/features/editor/globalParam/traverseConstantUsages'
+import {
+  FANG_YUAN_STYLE_ITEMS,
+  applyStyleToGlyphParameter,
+  type StyleItem,
+} from '../features/advancedEdit/fangYuanStyleConfig'
 
 function dispatchForceListRefresh(eventName: string): Promise<void> {
   return Promise.race([
@@ -58,6 +63,7 @@ export const PanelType = {
   Script: 'script',
   StrokeReplace: 'strokeReplace',
   StyleSwitch: 'styleSwitch',
+  FangYuanStyleDesign: 'fangYuanStyleDesign',
 } as const
 
 export type PanelTypeId = (typeof PanelType)[keyof typeof PanelType]
@@ -988,6 +994,134 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     restoreProjectConstantsMap()
   }
 
+  // ========== 字玩方圆黑体专属设计通道 ==========
+
+  const fangYuanStyleItems = ref<StyleItem[]>(FANG_YUAN_STYLE_ITEMS)
+  const fangYuanStyleSelections = ref<Record<string, number>>({})
+
+  function initFangYuanStyleSelections() {
+    const sel: Record<string, number> = {}
+    for (const item of FANG_YUAN_STYLE_ITEMS) {
+      sel[item.label] = 0
+    }
+    fangYuanStyleSelections.value = sel
+  }
+
+  /**
+   * 仅修改参数数据，不执行脚本。
+   * 用于预览：避免与 ContourConverter 内 executeGlyphScript 重复执行。
+   */
+  function applyFangYuanStylesToCharacterData(char: ICharacterFileLite, charIndex: number) {
+    for (const item of FANG_YUAN_STYLE_ITEMS) {
+      const selectedValue = fangYuanStyleSelections.value[item.label]
+      if (selectedValue === undefined || selectedValue === 0) continue
+      const glyphNameSet = new Set(item.glyphNames)
+      for (const comp of char.components) {
+        if (comp.type !== 'glyph') continue
+        const gc = comp as IGlyphComponent
+        const glyph = gc.value as ICustomGlyph
+        if (!glyphNameSet.has(glyph.name)) continue
+        applyStyleToGlyphParameter(glyph, item.paramName, selectedValue, charIndex)
+      }
+    }
+  }
+
+  /**
+   * 修改参数并执行脚本。
+   * 用于一键更新全库：需要持久化脚本执行结果。
+   */
+  function applyFangYuanStylesToCharacterWithScripts(char: ICharacterFileLite, charIndex: number) {
+    for (const item of FANG_YUAN_STYLE_ITEMS) {
+      const selectedValue = fangYuanStyleSelections.value[item.label]
+      if (selectedValue === undefined || selectedValue === 0) continue
+      const glyphNameSet = new Set(item.glyphNames)
+      for (const comp of char.components) {
+        if (comp.type !== 'glyph') continue
+        const gc = comp as IGlyphComponent
+        const glyph = gc.value as ICustomGlyph
+        if (!glyphNameSet.has(glyph.name)) continue
+        applyStyleToGlyphParameter(glyph, item.paramName, selectedValue, charIndex)
+        executeGlyphScript(glyph, comp.uuid)
+      }
+    }
+  }
+
+  /** 刷新字玩方圆黑体风格预览 */
+  async function refreshFangYuanStylePreviews() {
+    await updateSampleCharactersList()
+    const next: ICharacterFileLite[] = []
+    let idx = 0
+    for (const orig of originSampleCharactersList.value) {
+      const c = R.clone(orig)
+      applyFangYuanStylesToCharacterData(c, idx)
+      rewriteGlyphParamsForAdvancedPreview(c)
+      next.push(c)
+      idx++
+    }
+    sampleCharactersList.value = next
+    await nextTick()
+    await waitForAdvancedEditSampleGridPaint()
+    runWithAdvancedConstantsMap(() => {
+      for (const character of sampleCharactersList.value) {
+        const canvas = document.getElementById(
+          `advanced-edit-preview-canvas-${character.uuid}`,
+        ) as HTMLCanvasElement | null
+        if (!canvas) continue
+        const m = getFontMetrics()
+        const ordered = orderedListWithItemsForCharacterFile(character)
+        const contours = ContourConverter.componentsToContours(
+          ordered,
+          { ...m, preview: true, forceUpdate: true, advancedEdit: true },
+          { x: 0, y: 0 },
+        )
+        const fillColors = ContourConverter.getFillColors(ordered as IComponent[])
+        renderAdvancedEditPreview(canvas, contours, fillColors, projectStore.fontPreviewStyle)
+      }
+    })
+  }
+
+  /** 一键更新全部字库：将当前风格选择写入所有字符 */
+  async function applyFangYuanStylesToEntireProject() {
+    const file = projectStore.selectedFile
+    if (!file) return
+
+    const list = file.characterList ?? []
+    const n = Math.max(1, list.length)
+    projectStore.loading = true
+    projectStore.loadingTotal = n
+    projectStore.loadingProgress = 0
+    projectStore.loadingMessage = '正在应用字玩方圆黑体风格到全部字符…'
+    let lastYield = performance.now()
+    let bulkCompleted = false
+
+    try {
+      for (let i = 0; i < list.length; i++) {
+        const meta = list[i]
+        const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
+        if (!ch) continue
+        applyFangYuanStylesToCharacterWithScripts(ch, i)
+        await characterDataManager.updateCharacter(file.uuid, ch)
+        projectStore.loadingProgress = i + 1
+        const now = performance.now()
+        if (now - lastYield >= 16) {
+          await new Promise<void>((r) => setTimeout(r, 0))
+          lastYield = performance.now()
+        }
+      }
+      projectStore.markFileUnsaved(file.uuid)
+      restoreProjectConstantsMap()
+      await characterStore.invalidateAllCachedCharacterPreviews()
+      await refreshFangYuanStylePreviews()
+      bulkCompleted = true
+    } finally {
+      projectStore.loading = false
+      projectStore.loadingProgress = 0
+      projectStore.loadingTotal = 0
+      projectStore.loadingMessage = ''
+    }
+    if (bulkCompleted) await afterBulkMutateMainList()
+  }
+
   function exitToList() {
     const p = editorStore.prevStatus
     const list =
@@ -1035,5 +1169,10 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     refreshStyleSwitchPreviews,
     applyStyleToEntireProject,
     getGlyphByUUID,
+    fangYuanStyleItems,
+    fangYuanStyleSelections,
+    initFangYuanStyleSelections,
+    refreshFangYuanStylePreviews,
+    applyFangYuanStylesToEntireProject,
   }
 })

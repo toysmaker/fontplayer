@@ -1,0 +1,243 @@
+<script setup lang="ts">
+import { onMounted, watch, nextTick } from 'vue'
+import { storeToRefs } from 'pinia'
+import {
+  NButton,
+  NInput,
+  NScrollbar,
+  NSelect,
+} from 'naive-ui'
+import { useAdvancedEditStore } from '@/stores/advancedEdit'
+
+const advancedEdit = useAdvancedEditStore()
+const { fangYuanStyleItems, fangYuanStyleSelections, sampleCharactersList } =
+  storeToRefs(advancedEdit)
+
+function redrawPreviewsWhenCanvasesReady() {
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      advancedEdit.refreshFangYuanStylePreviews()
+    })
+  })
+}
+
+onMounted(() => {
+  advancedEdit.initFangYuanStyleSelections()
+  if (sampleCharactersList.value.length === 0) {
+    void advancedEdit.updatePreviewList().then(() => redrawPreviewsWhenCanvasesReady())
+  } else {
+    redrawPreviewsWhenCanvasesReady()
+  }
+})
+
+function handleToggleEditSample() {
+  advancedEdit.isEditingSample = !advancedEdit.isEditingSample
+  if (!advancedEdit.isEditingSample) {
+    void advancedEdit.updatePreviewList().then(() => redrawPreviewsWhenCanvasesReady())
+  }
+}
+
+function handleStyleSelectionChange() {
+  redrawPreviewsWhenCanvasesReady()
+}
+
+watch(
+  fangYuanStyleSelections,
+  () => {
+    redrawPreviewsWhenCanvasesReady()
+  },
+  { deep: true },
+)
+
+function getSelectOptions(itemLabel: string) {
+  const item = fangYuanStyleItems.value.find((i) => i.label === itemLabel)
+  if (!item) return []
+  return item.options.map((opt) => ({
+    value: opt.value,
+    label: opt.label,
+  }))
+}
+</script>
+
+<template>
+  <div class="wrap">
+    <div class="fangyuan-style-panel">
+      <div class="left">
+        <div class="sample-characters-section">
+          <h3>样例字符</h3>
+          <n-input
+            v-model:value="advancedEdit.sampleCharacters"
+            type="textarea"
+            :rows="4"
+            :disabled="!advancedEdit.isEditingSample"
+            placeholder="请输入最多20个字符，每个字符不能重复"
+            :maxlength="20"
+            show-count
+          />
+          <n-button
+            block
+            :type="advancedEdit.isEditingSample ? 'success' : 'primary'"
+            class="sample-edit-btn"
+            @click="handleToggleEditSample"
+          >
+            {{ advancedEdit.isEditingSample ? '确认' : '编辑预览样例字符' }}
+          </n-button>
+        </div>
+        <div class="update-section">
+          <n-button
+            type="error"
+            size="large"
+            block
+            @click="void advancedEdit.applyFangYuanStylesToEntireProject()"
+          >
+            一键更新全部字库
+          </n-button>
+        </div>
+      </div>
+      <div class="main">
+        <div class="characters" id="advanced-edit-characters-list">
+          <div
+            v-for="ch in advancedEdit.sampleCharactersList"
+            :key="ch.uuid"
+            class="character-preview char-preview"
+          >
+            <canvas
+              :id="`advanced-edit-preview-canvas-${ch.uuid}`"
+              width="100"
+              height="100"
+            />
+          </div>
+        </div>
+      </div>
+      <div class="right">
+        <n-scrollbar style="max-height: 100%">
+          <div class="style-config-wrap">
+            <div class="title">风格样式参数</div>
+            <div class="style-list">
+              <div
+                v-for="item in fangYuanStyleItems"
+                :key="item.label"
+                class="style-item"
+              >
+                <div class="style-item-label">{{ item.label }}</div>
+                <n-select
+                  :value="fangYuanStyleSelections[item.label] ?? 0"
+                  :options="getSelectOptions(item.label)"
+                  class="style-item-select"
+                  @update:value="
+                    (val: number) => {
+                      fangYuanStyleSelections[item.label] = val
+                      handleStyleSelectionChange()
+                    }
+                  "
+                />
+              </div>
+            </div>
+          </div>
+        </n-scrollbar>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.wrap {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: var(--dark-3);
+}
+.fangyuan-style-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: row;
+}
+.left {
+  border-right: 1px solid var(--light-5);
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  box-sizing: border-box;
+  height: 100%;
+}
+.sample-characters-section h3 {
+  margin: 0 0 12px 0;
+  color: var(--light-0);
+  font-size: 16px;
+}
+.sample-edit-btn {
+  margin: 12px 0;
+}
+.update-section {
+  margin-top: auto;
+  text-align: center;
+}
+.main {
+  flex: auto;
+  min-width: 0;
+  overflow: auto;
+}
+.characters {
+  flex: 0 0 450px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 10px;
+  padding: 10px;
+  box-sizing: border-box;
+}
+.character-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 100px;
+  width: 100px;
+  height: 100px;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.right {
+  flex: 0 0 280px;
+  border-left: 1px solid var(--light-5);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.style-config-wrap {
+  width: 100%;
+}
+.title {
+  width: 100%;
+  height: 36px;
+  line-height: 36px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--light-5);
+  background-color: var(--primary-0);
+  color: var(--light-0);
+}
+.style-list {
+  padding: 10px;
+  padding-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.style-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.style-item-label {
+  font-size: 13px;
+  color: var(--light-0);
+  line-height: 1.4;
+}
+.style-item-select {
+  width: 100%;
+}
+</style>
