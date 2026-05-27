@@ -248,6 +248,75 @@ export async function replaceGlyphScript_custom_1(glyphs: ICustomGlyph[]): Promi
   }
 }
 
+// MARK: 临时代码 — 将风格为"字玩标准黑体"的 stroke_glyphs 脚本替换为 public/templates/templates2/${name}.js
+// 仅 dev 模式生效；后续需整段移除
+
+const templates2TemplateBodyCache = new Map<string, string>()
+
+function strokeTemplateUrl_templates2(strokeName: string): string {
+  const base = import.meta.env.BASE_URL || '/'
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`
+  return `${normalizedBase}templates/templates2/${encodeURIComponent(strokeName)}.js`
+}
+
+async function fetchStrokeTemplateBody_templates2(strokeName: string): Promise<string | null> {
+  const cached = templates2TemplateBodyCache.get(strokeName)
+  if (cached !== undefined) return cached.length > 0 ? cached : null
+
+  if (typeof fetch !== 'function') {
+    console.warn('[replaceGlyphScript_templates2] fetch unavailable, skip template:', strokeName)
+    templates2TemplateBodyCache.set(strokeName, '')
+    return null
+  }
+
+  const url = strokeTemplateUrl_templates2(strokeName)
+  try {
+    const res = await fetch(url)
+    if (!res.ok) {
+      console.warn('[replaceGlyphScript_templates2] template not found:', strokeName, res.status, url)
+      templates2TemplateBodyCache.set(strokeName, '')
+      return null
+    }
+    const text = (await res.text()).replace(/\r\n/g, '\n').trimEnd()
+    templates2TemplateBodyCache.set(strokeName, text)
+    return text
+  } catch (e) {
+    console.warn('[replaceGlyphScript_templates2] fetch failed:', strokeName, e)
+    templates2TemplateBodyCache.set(strokeName, '')
+    return null
+  }
+}
+
+export async function replaceGlyphScript_templates2(glyphs: ICustomGlyph[]): Promise<void> {
+  for (const glyph of glyphs) {
+    const name = glyph.name?.trim()
+    if (!name) continue
+
+    const templateBody = await fetchStrokeTemplateBody_templates2(name)
+    if (!templateBody) continue
+
+    const existing = typeof glyph.script === 'string' ? glyph.script.trim() : ''
+    if (existing) {
+      const next = replaceScriptBodyKeepingHeader(existing, templateBody)
+      if (next) {
+        glyph.script = next
+      } else {
+        console.warn(
+          '[replaceGlyphScript_templates2] could not parse script wrapper, rewrite with default shell:',
+          glyph.name,
+          glyph.uuid,
+        )
+        glyph.script = wrapTemplateBodyForGlyph(glyph, templateBody)
+      }
+    } else {
+      glyph.script = wrapTemplateBodyForGlyph(glyph, templateBody)
+    }
+    delete glyph.script_reference
+  }
+}
+
+// END 临时代码
+
 // --- 临时代码：字玩方圆黑体 — 加载后放宽字符内字形组件 Number 参数的 min/max（不修改 stroke_glyphs）---
 
 /** 与 glyphParameterHydration 一致 */

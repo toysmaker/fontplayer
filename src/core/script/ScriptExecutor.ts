@@ -317,7 +317,7 @@ export function executeGlyphScript(
             _componentTypes: (glyphInstance._components || []).map((c: any) => c?.type ?? typeof c),
           })
         } catch (scriptError) {
-          console.error(`[ScriptExecutor] Error executing script for ${targetGlyph.uuid}:`, scriptError)
+          console.error(`[ScriptExecutor] Error executing script for "${targetGlyph.name}" (${targetGlyph.uuid}):`, scriptError)
           throw scriptError
         }
       }
@@ -405,7 +405,7 @@ export function executeGlyphScript(
       name: targetGlyph.name,
       error: e instanceof Error ? e.message : String(e),
     })
-    console.error('Error executing glyph script:', e)
+    console.error(`Error executing glyph script for "${targetGlyph.name}" (${targetGlyph.uuid}):`, e)
     instanceManager.releaseTemporaryInstance(key)
   } finally {
     instanceManager.unpinTemporaryFromLRUEviction(key)

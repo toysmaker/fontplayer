@@ -32,6 +32,7 @@ import { decompressGlyphBundleIfPresent, parseFpBuffer } from '@/features/editor
 import { hydrateGlyphComponentEnumOptionsFromLibrary } from '@/features/editor/services/glyphParameterHydration'
 import {
   replaceGlyphScript_custom_1,
+  replaceGlyphScript_templates2,
   widenFangYuanGlyphNumberParamBoundsInCharacterComponents,
   expandFangYuanGlyphEnumOptionsInCharacterComponents,
   expandFangYuanGlyphEnumOptionsForGlyphs,
@@ -383,6 +384,24 @@ export class ProjectLoader {
           }
         } catch (e) {
           console.error('[ProjectLoader] replaceGlyphScript_custom_1 failed', e)
+        }
+        await this.yieldToMainThread()
+      }
+      // END 临时代码
+
+      // MARK: 临时代码 — 将风格为"字玩标准黑体"的 stroke_glyphs 脚本替换为 public/templates/templates2/${name}.js
+      // 仅 dev 模式生效；后续需整段移除
+      if (import.meta.env.DEV && projectTag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG && data.stroke_glyphs?.length) {
+        this.updateProgress(0, '同步笔画模板脚本 (templates2)…')
+        try {
+          const heitiGlyphs = (data.stroke_glyphs as ICustomGlyph[]).filter(
+            (g) => g.style === '字玩标准黑体',
+          )
+          if (heitiGlyphs.length) {
+            await replaceGlyphScript_templates2(heitiGlyphs)
+          }
+        } catch (e) {
+          console.error('[ProjectLoader] replaceGlyphScript_templates2 failed', e)
         }
         await this.yieldToMainThread()
       }
