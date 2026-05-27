@@ -755,6 +755,7 @@ export function render(
         fill: false,
         offset: { x: 0, y: 0 },
         scale: 1, // scale 保持为 1，坐标映射由 mapCanvasX/Y 处理
+        needsBeginPath: true,
       })
       
       // 2. 然后渲染内部组件（字形实例的 _components，即脚本生成的组件）
