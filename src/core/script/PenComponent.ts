@@ -258,7 +258,9 @@ class PenComponent {
 			const ctx = canvas.getContext('2d') as CanvasRenderingContext2D
 			ctx.strokeStyle = '#000'
 			ctx.lineWidth = getStrokeWidth()
-			ctx.beginPath()
+			if (fontRenderStyle.value === 'color') {
+				ctx.beginPath()
+			}
 			const start = computeCoords(options.grid, translate(this.points[0]))
 			ctx.moveTo(mapCanvasX(start.x) * scale, mapCanvasY(start.y) * scale)
 			for (let i = 1; i < this.points.length; i += 3) {

@@ -25,6 +25,7 @@ export interface IBackground {
 }
 
 export interface IRenderOptions {
+  needsBeginPath?: boolean
   fill?: boolean
   offset?: {
     x: number

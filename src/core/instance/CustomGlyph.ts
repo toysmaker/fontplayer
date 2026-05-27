@@ -145,10 +145,14 @@ export class CustomGlyph implements IInstance {
     offset: { x: number; y: number } = { x: 0, y: 0 },
     fill: boolean = false,
     scale: number = 1,
-    fillColor: string = '#000'
+    fillColor: string = '#000',
+    needsBeginPath: boolean = false,
   ): void {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+    if (import.meta.env.DEV) {
+      console.log(`[CG.render] ENTER glyph="${this._glyph.name}" fill=${fill} fontRenderStyle="${fontRenderStyle.value}" _components=${this._components.length}`)
+    }
     
     // 获取 Canvas 的显示尺寸（CSS style）
     const computedStyle = window.getComputedStyle(canvas)
@@ -220,6 +224,7 @@ export class CustomGlyph implements IInstance {
     }
     if (glyphComponents.length > 0) {
       renderCanvas(glyphComponents, canvas, {
+        needsBeginPath: needsBeginPath,
         offset,
         scale: scale,
         fill: false,
@@ -229,7 +234,9 @@ export class CustomGlyph implements IInstance {
     }
 
     // 确保清除renderCanvas可能留下的路径状态
-    ctx.beginPath()
+    if (fontRenderStyle.value === 'color') {
+      ctx.beginPath()
+    }
     
     // 渲染脚本生成的组件（_components，即脚本生成的 glyph-pen, glyph-ellipse 等）
     if (import.meta.env.DEV) {
@@ -280,9 +287,20 @@ export class CustomGlyph implements IInstance {
         }
       }
     })
-    
+
     // 根据渲染样式填充
     if (fontRenderStyle.value === 'black' || fill) {
+      if (import.meta.env.DEV) {
+        console.log(`[CustomGlyph.render] fill("nonzero") for "${this._glyph.name}", _components: ${this._components.length}`)
+        this._components.forEach((c: any, i: number) => {
+          const pts = c.points || []
+          if (pts.length >= 4) {
+            const x1 = pts[1].x - pts[0].x, y1 = pts[1].y - pts[0].y
+            const x2 = pts[2].x - pts[1].x, y2 = pts[2].y - pts[1].y
+            console.log(`  [${i}] pts=${pts.length} (${pts[0].x.toFixed(0)},${pts[0].y.toFixed(0)})→(${pts[1].x.toFixed(0)},${pts[1].y.toFixed(0)})→(${pts[2].x.toFixed(0)},${pts[2].y.toFixed(0)}) ${x1*y2 - y1*x2 > 0 ? 'CW' : 'CCW'}`)
+          }
+        })
+      }
       ctx.fillStyle = '#000'
       ctx.fill("nonzero")
       ctx.closePath()
@@ -305,10 +323,14 @@ export class CustomGlyph implements IInstance {
     offset: { x: number; y: number } = { x: 0, y: 0 },
     fill: boolean = false,
     scale: number = 1,
-    fillColor: string = '#000'
+    fillColor: string = '#000',
+    needsBeginPath: boolean = false,
   ): void {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+    if (import.meta.env.DEV) {
+      console.log(`[CG.render_forceUpdate] ENTER glyph="${this._glyph.name}" fill=${fill} fontRenderStyle="${fontRenderStyle.value}" _components=${this._components.length}`)
+    }
     
     // 渲染字形组件列表（强制更新）
     const allForceComps = cloneGlyphComponentsForVarInterp(orderedListWithItemsForGlyph(this._glyph))
@@ -344,6 +366,7 @@ export class CustomGlyph implements IInstance {
       }
     }
     renderCanvas(forceComps, canvas, {
+      needsBeginPath: needsBeginPath,
       offset,
       scale: scale,
       fill: false,
@@ -352,7 +375,9 @@ export class CustomGlyph implements IInstance {
     })
 
     // 确保清除renderCanvas可能留下的路径状态
-    ctx.beginPath()
+    if (fontRenderStyle.value === 'color') {
+      ctx.beginPath()
+    }
     
     // 渲染脚本生成的组件（_components）
     this._components.forEach((component: any) => {
@@ -389,6 +414,7 @@ export class CustomGlyph implements IInstance {
     grid: ILayoutTransformGrid,
     useSkeletonGrid: boolean = false,
     fillColor: string = '#000',
+    needsBeginPath: boolean = false,
   ): void {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
@@ -420,7 +446,11 @@ export class CustomGlyph implements IInstance {
       }
     }
 
+    if (import.meta.env.DEV) {
+      console.log(`[CG.render_grid] "${this._glyph.name}" gridComps=${gridComps.length} types=[${gridComps.map(c => c.type).join(',')}] useSkeletonGrid=${useSkeletonGrid}`)
+    }
     renderCanvas(gridComps, canvas, {
+      needsBeginPath: needsBeginPath,
       offset,
       scale,
       fill: false,
@@ -432,20 +462,18 @@ export class CustomGlyph implements IInstance {
 
     if (!useSkeletonGrid) {
       if (fontRenderStyle.value === 'black' || fontRenderStyle.value === 'color' || fill) {
-        // In fill modes, suppress ctx.beginPath() inside each component so all component
-        // paths accumulate into one path — mirroring how render() works via component.render().
-        ctx.beginPath()
-        const origBeginPath = ctx.beginPath.bind(ctx)
-        ;(ctx as any).beginPath = () => {}
-        try {
-          this._components.forEach((component: any) => {
-            if (component.render_grid) {
-              component.render_grid(canvas, { offset, scale, grid })
-            }
-          })
-        } finally {
-          ;(ctx as any).beginPath = origBeginPath
+        // Start fresh path after renderCanvas, then use component.render()
+        // (same as script/CustomGlyph) to avoid grid coord transforms breaking non-zero winding.
+        // component.render() does NOT call beginPath internally, so all sub-paths accumulate naturally.
+        if (fontRenderStyle.value === 'color') {
+          ctx.beginPath()
         }
+        const fillColorForComps = fontRenderStyle.value === 'black' ? '#000' : (fillColor || '#000')
+        this._components.forEach((component: any) => {
+          if (component.render) {
+            component.render(canvas, { offset, scale, fillColor: fillColorForComps })
+          }
+        })
       } else {
         this._components.forEach((component: any) => {
           if (component.render_grid) {
@@ -454,7 +482,9 @@ export class CustomGlyph implements IInstance {
         })
       }
     } else if (this.getSkeleton && this.getComponentsBySkeleton) {
-      ctx.beginPath()
+			if (fontRenderStyle.value === 'color') {
+				ctx.beginPath()
+			}
       const _skeleton = this.getSkeleton()
       const skeleton: Record<string, { x: number; y: number }> = {}
       const keys = Object.keys(_skeleton)
@@ -473,9 +503,22 @@ export class CustomGlyph implements IInstance {
     }
 
     if (fontRenderStyle.value === 'black' || fill) {
-      ctx.fillStyle = '#000'
-      ctx.fill('nonzero')
-      ctx.closePath()
+      if (import.meta.env.DEV) {
+        console.log(`[CG.render_grid] fill("nonzero") for "${this._glyph.name}", _components=${this._components.length}`)
+        this._components.forEach((c: any, i: number) => {
+          const pts = c.points || []
+          if (pts.length >= 4) {
+            const x1 = pts[1].x - pts[0].x, y1 = pts[1].y - pts[0].y
+            const x2 = pts[2].x - pts[1].x, y2 = pts[2].y - pts[1].y
+            console.log(`  [${i}] pts=${pts.length} (${pts[0].x.toFixed(0)},${pts[0].y.toFixed(0)})→(${pts[1].x.toFixed(0)},${pts[1].y.toFixed(0)})→(${pts[2].x.toFixed(0)},${pts[2].y.toFixed(0)}) ${x1*y2 - y1*x2 > 0 ? 'CW' : 'CCW'}`)
+          } else {
+            console.log(`  [${i}] type=${c.type || c.constructor?.name} pts=${pts.length}`)
+          }
+        })
+      }
+      //ctx.fillStyle = '#000'
+      //ctx.fill('nonzero')
+      //ctx.closePath()
     } else if (fontRenderStyle.value === 'color') {
       ctx.fillStyle = fillColor || '#000'
       ctx.fill('nonzero')
@@ -494,11 +537,13 @@ export class CustomGlyph implements IInstance {
     grid: ILayoutTransformGrid,
     useSkeletonGrid: boolean = false,
     fillColor: string = '#000',
+    needsBeginPath: boolean = false,
   ): void {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
     renderCanvas(orderedListWithItemsForGlyph(this._glyph), canvas, {
+      needsBeginPath: needsBeginPath,
       offset,
       scale,
       fill: false,
@@ -510,18 +555,14 @@ export class CustomGlyph implements IInstance {
 
     if (!useSkeletonGrid) {
       if (fontRenderStyle.value === 'black' || fontRenderStyle.value === 'color' || fill) {
-        ctx.beginPath()
-        const origBeginPath = ctx.beginPath.bind(ctx)
-        ;(ctx as any).beginPath = () => {}
-        try {
-          this._components.forEach((component: any) => {
-            if (component.render_grid) {
-              component.render_grid(canvas, { offset, scale, grid })
-            }
-          })
-        } finally {
-          ;(ctx as any).beginPath = origBeginPath
+        if (fontRenderStyle.value === 'color') {
+          ctx.beginPath()
         }
+        this._components.forEach((component: any) => {
+          if (component.render_grid) {
+            component.render_grid(canvas, { offset, scale, grid })
+          }
+        })
       } else {
         this._components.forEach((component: any) => {
           if (component.render_grid) {
@@ -530,7 +571,9 @@ export class CustomGlyph implements IInstance {
         })
       }
     } else if (this.getSkeleton && this.getComponentsBySkeleton) {
-      ctx.beginPath()
+      if (fontRenderStyle.value === 'color') {
+        ctx.beginPath()
+      }
       const _skeleton = this.getSkeleton()
       const skeleton: Record<string, { x: number; y: number }> = {}
       const keys = Object.keys(_skeleton)

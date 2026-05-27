@@ -124,6 +124,7 @@ export function renderCanvas(
     offset: { x: 0, y: 0 },
     scale: 1,
     forceUpdate: false,
+    needsBeginPath: true,
   }
 ): Promise<void> {
   const scale = options.scale || 1
@@ -131,7 +132,15 @@ export function renderCanvas(
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return
   
+  if (import.meta.env.DEV && components.length > 0) {
+    const types = components.map(c => c?.type || 'nil').join(',')
+    console.log(`[EditorCanvas.renderCanvas] ENTER components=${components.length} types=[${types}] fill=${options.fill} fontRenderStyle="${fontRenderStyle.value}"`)
+  }
   let currentPathStarted = false
+
+  if (fontRenderStyle.value !== 'color' && options.needsBeginPath) {
+    ctx.beginPath()
+  }
   
   if (import.meta.env.DEV) {
     console.log('[EditorCanvasRenderer.renderCanvas] Starting render:', {
@@ -358,13 +367,17 @@ export function renderCanvas(
       const oy = (options.offset?.y || 0) + (component as IGlyphComponent).oy
       if (hasLayoutTransform) {
         if (options.forceUpdate) {
+          if (import.meta.env.DEV) console.log(`[EditorCanvas] calling render_grid_forceUpdate for "${glyphValue.name}"`)
           glyphInstance.render_grid_forceUpdate(canvas, true, { x: ox, y: oy }, false, scale, g, useSk, glyphTint)
         } else {
+          if (import.meta.env.DEV) console.log(`[EditorCanvas] calling render_grid for "${glyphValue.name}"`)
           glyphInstance.render_grid(canvas, true, { x: ox, y: oy }, false, scale, g, useSk, glyphTint)
         }
       } else if (options.forceUpdate) {
+        if (import.meta.env.DEV) console.log(`[EditorCanvas] calling render_forceUpdate for "${glyphValue.name}"`)
         glyphInstance.render_forceUpdate(canvas, true, { x: ox, y: oy }, false, scale, glyphTint)
       } else {
+        if (import.meta.env.DEV) console.log(`[EditorCanvas] calling render for "${glyphValue.name}", hasLayoutTransform=${hasLayoutTransform} forceUpdate=${options.forceUpdate}`)
         glyphInstance.render(canvas, true, { x: ox, y: oy }, false, scale, glyphTint)
       }
       continue
@@ -605,9 +618,18 @@ export function renderCanvas(
     ctx.closePath()
     ctx.strokeStyle = '#000'
     if (fontRenderStyle.value === 'black' || options.fill) {
+      if (import.meta.env.DEV) {
+        console.log(`[EditorCanvas.renderCanvas] compound fill("nonzero") — fontRenderStyle="${fontRenderStyle.value}" fill=${options.fill}`)
+      }
       ctx.fillStyle = '#000'
       ctx.fill('nonzero')
     }
+  }
+
+  if (fontRenderStyle.value === 'black' && options.needsBeginPath) {
+    ctx.fillStyle = '#000'
+    ctx.fill('nonzero')
+    ctx.closePath()
   }
 }
 
@@ -711,6 +733,7 @@ export function render(
         grid: layoutBundle,
         useSkeletonGrid,
         skipPrimitivesForSkeletonPreview: false,
+        needsBeginPath: true,
       })
     } else {
       if (import.meta.env.DEV) {
