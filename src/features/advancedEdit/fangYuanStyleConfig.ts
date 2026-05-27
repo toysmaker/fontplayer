@@ -267,6 +267,38 @@ export const FANG_YUAN_STYLE_ITEMS: StyleItem[] = [
   },
 ]
 
+/** 风格参数名 → 对应数值参数名 */
+export function getValueParamName(styleParamName: string): string {
+  return styleParamName.replace('风格', '数值').replace('样式', '数值')
+}
+
+/** 数值参数的默认值及范围（与 templatesHandlers importTemplateTest 保持一致） */
+export const VALUE_PARAM_DEFAULTS: Record<string, { value: number; min: number; max: number }> = {
+  '起笔数值': { value: 1, min: 0, max: 2 },
+  '收笔数值': { value: 2, min: 1, max: 3 },
+  '转角数值': { value: 1.5, min: 1, max: 2 },
+  '方头数值': { value: 1.5, min: 1, max: 2 },
+  '圆头数值': { value: 2, min: 1, max: 3 },
+}
+
+/**
+ * 修改字形组件上的数值参数（Number 类型）
+ */
+export function applyNumericValueToGlyph(
+  glyph: { name: string; parameters?: unknown },
+  valueParamName: string,
+  newValue: number,
+): boolean {
+  const params = getGlyphParamArray(glyph)
+  if (!params) return false
+  for (const param of params) {
+    if (param.name !== valueParamName) continue
+    param.value = newValue
+    return true
+  }
+  return false
+}
+
 /**
  * 从 ICustomGlyph 中提取参数数组（兼容两种存储格式）
  */

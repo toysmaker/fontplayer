@@ -4,16 +4,19 @@ import { storeToRefs } from 'pinia'
 import {
   NButton,
   NInput,
+  NInputNumber,
   NScrollbar,
   NSelect,
+  NSlider,
 } from 'naive-ui'
 import { useAdvancedEditStore } from '@/stores/advancedEdit'
+import { getValueParamName, VALUE_PARAM_DEFAULTS } from '@/features/advancedEdit/fangYuanStyleConfig'
 
 const advancedEdit = useAdvancedEditStore()
-const { fangYuanStyleItems, fangYuanStyleSelections, sampleCharactersList } =
+const { fangYuanStyleItems, fangYuanStyleSelections, fangYuanStyleNumericValues, sampleCharactersList } =
   storeToRefs(advancedEdit)
 
-function redrawPreviewsWhenCanvasesReady() {
+function fullRefresh() {
   nextTick(() => {
     requestAnimationFrame(() => {
       advancedEdit.refreshFangYuanStylePreviews()
@@ -24,27 +27,52 @@ function redrawPreviewsWhenCanvasesReady() {
 onMounted(() => {
   advancedEdit.initFangYuanStyleSelections()
   if (sampleCharactersList.value.length === 0) {
-    void advancedEdit.updatePreviewList().then(() => redrawPreviewsWhenCanvasesReady())
+    void advancedEdit.updatePreviewList().then(() => fullRefresh())
   } else {
-    redrawPreviewsWhenCanvasesReady()
+    fullRefresh()
   }
 })
 
 function handleToggleEditSample() {
   advancedEdit.isEditingSample = !advancedEdit.isEditingSample
   if (!advancedEdit.isEditingSample) {
-    void advancedEdit.updatePreviewList().then(() => redrawPreviewsWhenCanvasesReady())
+    void advancedEdit.updatePreviewList().then(() => fullRefresh())
   }
 }
 
 function handleStyleSelectionChange() {
-  redrawPreviewsWhenCanvasesReady()
+  fullRefresh()
+}
+
+let numericThrottleTimer: ReturnType<typeof setTimeout> | null = null
+let numericThrottlePending = false
+function handleNumericValueChange() {
+  advancedEdit.quickRefreshFangYuanStylePreviews()
+  if (numericThrottleTimer) {
+    numericThrottlePending = true
+    return
+  }
+  numericThrottleTimer = setTimeout(() => {
+    numericThrottleTimer = null
+    if (numericThrottlePending) {
+      numericThrottlePending = false
+      advancedEdit.quickRefreshFangYuanStylePreviews()
+    }
+  }, 30)
 }
 
 watch(
   fangYuanStyleSelections,
   () => {
-    redrawPreviewsWhenCanvasesReady()
+    fullRefresh()
+  },
+  { deep: true },
+)
+
+watch(
+  fangYuanStyleNumericValues,
+  () => {
+    handleNumericValueChange()
   },
   { deep: true },
 )
@@ -56,6 +84,18 @@ function getSelectOptions(itemLabel: string) {
     value: opt.value,
     label: opt.label,
   }))
+}
+
+function getNumericConfig(itemLabel: string) {
+  const item = fangYuanStyleItems.value.find((i) => i.label === itemLabel)
+  if (!item) return { min: 0, max: 2, step: 0.01 }
+  const valueParamName = getValueParamName(item.paramName)
+  const def = VALUE_PARAM_DEFAULTS[valueParamName]
+  return {
+    min: def?.min ?? 0,
+    max: def?.max ?? 2,
+    step: (def?.max ?? 2) <= 10 ? 0.01 : 1,
+  }
 }
 </script>
 
@@ -131,6 +171,37 @@ function getSelectOptions(itemLabel: string) {
                     }
                   "
                 />
+                <div class="numeric-row">
+                  <n-input-number
+                    :value="fangYuanStyleNumericValues[item.label] ?? 1"
+                    :min="getNumericConfig(item.label).min"
+                    :max="getNumericConfig(item.label).max"
+                    :step="getNumericConfig(item.label).step"
+                    size="small"
+                    class="numeric-input"
+                    @update:value="
+                      (val: number | null) => {
+                        if (val != null) {
+                          fangYuanStyleNumericValues[item.label] = val
+                          handleNumericValueChange()
+                        }
+                      }
+                    "
+                  />
+                  <n-slider
+                    :value="fangYuanStyleNumericValues[item.label] ?? 1"
+                    :min="getNumericConfig(item.label).min"
+                    :max="getNumericConfig(item.label).max"
+                    :step="getNumericConfig(item.label).step"
+                    class="numeric-slider"
+                    @update:value="
+                      (val: number) => {
+                        fangYuanStyleNumericValues[item.label] = val
+                        handleNumericValueChange()
+                      }
+                    "
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -238,6 +309,17 @@ function getSelectOptions(itemLabel: string) {
   line-height: 1.4;
 }
 .style-item-select {
+  width: 100%;
+}
+.numeric-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.numeric-input {
+  width: 100%;
+}
+.numeric-slider {
   width: 100%;
 }
 </style>

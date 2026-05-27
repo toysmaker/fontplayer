@@ -39,6 +39,9 @@ import { collectProjectConstantUsageHitsForUuidsAsync } from '@/features/editor/
 import {
   FANG_YUAN_STYLE_ITEMS,
   applyStyleToGlyphParameter,
+  getValueParamName,
+  VALUE_PARAM_DEFAULTS,
+  applyNumericValueToGlyph,
   type StyleItem,
 } from '../features/advancedEdit/fangYuanStyleConfig'
 
@@ -998,13 +1001,18 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
 
   const fangYuanStyleItems = ref<StyleItem[]>(FANG_YUAN_STYLE_ITEMS)
   const fangYuanStyleSelections = ref<Record<string, number>>({})
+  const fangYuanStyleNumericValues = ref<Record<string, number>>({})
 
   function initFangYuanStyleSelections() {
     const sel: Record<string, number> = {}
+    const num: Record<string, number> = {}
     for (const item of FANG_YUAN_STYLE_ITEMS) {
       sel[item.label] = 0
+      const valueParamName = getValueParamName(item.paramName)
+      num[item.label] = VALUE_PARAM_DEFAULTS[valueParamName]?.value ?? 1
     }
     fangYuanStyleSelections.value = sel
+    fangYuanStyleNumericValues.value = num
   }
 
   /**
@@ -1014,14 +1022,19 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
   function applyFangYuanStylesToCharacterData(char: ICharacterFileLite, charIndex: number) {
     for (const item of FANG_YUAN_STYLE_ITEMS) {
       const selectedValue = fangYuanStyleSelections.value[item.label]
+      const numericValue = fangYuanStyleNumericValues.value[item.label]
       if (selectedValue === undefined || selectedValue === 0) continue
       const glyphNameSet = new Set(item.glyphNames)
+      const valueParamName = getValueParamName(item.paramName)
       for (const comp of char.components) {
         if (comp.type !== 'glyph') continue
         const gc = comp as IGlyphComponent
         const glyph = gc.value as ICustomGlyph
         if (!glyphNameSet.has(glyph.name)) continue
         applyStyleToGlyphParameter(glyph, item.paramName, selectedValue, charIndex)
+        if (numericValue !== undefined) {
+          applyNumericValueToGlyph(glyph, valueParamName, numericValue)
+        }
       }
     }
   }
@@ -1033,22 +1046,26 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
   function applyFangYuanStylesToCharacterWithScripts(char: ICharacterFileLite, charIndex: number) {
     for (const item of FANG_YUAN_STYLE_ITEMS) {
       const selectedValue = fangYuanStyleSelections.value[item.label]
+      const numericValue = fangYuanStyleNumericValues.value[item.label]
       if (selectedValue === undefined || selectedValue === 0) continue
       const glyphNameSet = new Set(item.glyphNames)
+      const valueParamName = getValueParamName(item.paramName)
       for (const comp of char.components) {
         if (comp.type !== 'glyph') continue
         const gc = comp as IGlyphComponent
         const glyph = gc.value as ICustomGlyph
         if (!glyphNameSet.has(glyph.name)) continue
         applyStyleToGlyphParameter(glyph, item.paramName, selectedValue, charIndex)
+        if (numericValue !== undefined) {
+          applyNumericValueToGlyph(glyph, valueParamName, numericValue)
+        }
         executeGlyphScript(glyph, comp.uuid)
       }
     }
   }
 
-  /** 刷新字玩方圆黑体风格预览 */
-  async function refreshFangYuanStylePreviews() {
-    await updateSampleCharactersList()
+  /** 从 originSampleCharactersList 克隆并应用样式 */
+  function applyFangYuanStylesToClones() {
     const next: ICharacterFileLite[] = []
     let idx = 0
     for (const orig of originSampleCharactersList.value) {
@@ -1059,8 +1076,10 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
       idx++
     }
     sampleCharactersList.value = next
-    await nextTick()
-    await waitForAdvancedEditSampleGridPaint()
+  }
+
+  /** 将 sampleCharactersList 渲染到 canvas */
+  function renderFangYuanPreviews() {
     runWithAdvancedConstantsMap(() => {
       for (const character of sampleCharactersList.value) {
         const canvas = document.getElementById(
@@ -1078,6 +1097,21 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
         renderAdvancedEditPreview(canvas, contours, fillColors, projectStore.fontPreviewStyle)
       }
     })
+  }
+
+  /** 刷新字玩方圆黑体风格预览（完整：从 DB 加载） */
+  async function refreshFangYuanStylePreviews() {
+    await updateSampleCharactersList()
+    applyFangYuanStylesToClones()
+    await nextTick()
+    await waitForAdvancedEditSampleGridPaint()
+    renderFangYuanPreviews()
+  }
+
+  /** 快速刷新预览（跳过 DB 加载，用于 slider 等高频交互） */
+  function quickRefreshFangYuanStylePreviews() {
+    applyFangYuanStylesToClones()
+    renderFangYuanPreviews()
   }
 
   /** 一键更新全部字库：将当前风格选择写入所有字符 */
@@ -1171,8 +1205,10 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     getGlyphByUUID,
     fangYuanStyleItems,
     fangYuanStyleSelections,
+    fangYuanStyleNumericValues,
     initFangYuanStyleSelections,
     refreshFangYuanStylePreviews,
+    quickRefreshFangYuanStylePreviews,
     applyFangYuanStylesToEntireProject,
   }
 })
