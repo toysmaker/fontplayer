@@ -44,6 +44,11 @@ import {
   applyNumericValueToGlyph,
   type StyleItem,
 } from '../features/advancedEdit/fangYuanStyleConfig'
+import {
+  collectCharacterJointData,
+  initFangYuanRules,
+} from '../features/advancedEdit/fangYuanRules'
+import type { FangYuanRuleExtra } from '../features/advancedEdit/fangYuanRules'
 
 function dispatchForceListRefresh(eventName: string): Promise<void> {
   return Promise.race([
@@ -999,6 +1004,9 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
 
   // ========== 字玩方圆黑体专属设计通道 ==========
 
+  // 注册风格规则（在 store 初始化时调用一次）
+  initFangYuanRules()
+
   const fangYuanStyleItems = ref<StyleItem[]>(FANG_YUAN_STYLE_ITEMS)
   const fangYuanStyleSelections = ref<Record<string, number>>({})
   const fangYuanStyleNumericValues = ref<Record<string, number>>({})
@@ -1016,10 +1024,32 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
   }
 
   /**
+   * 构建规则检查所需的上下文数据（预执行脚本采集关节/辅助线 + 当前组件定位）
+   */
+  function buildFangYuanRuleExtra(
+    allJointData: ReturnType<typeof collectCharacterJointData>,
+    compUuid: string,
+  ): FangYuanRuleExtra {
+    return {
+      allComponents: allJointData,
+      currentComponent: allJointData.find((d) => d.uuid === compUuid)!,
+      verticalThreshold: 20,
+    }
+  }
+
+  /**
    * 仅修改参数数据，不执行脚本。
    * 用于预览：避免与 ContourConverter 内 executeGlyphScript 重复执行。
+   *
+   * 注：规则检查需要关节/辅助线数据，因此会临时执行一次脚本。
+   * ContourConverter 后续渲染时会清除实例并重新执行，不会冲突。
    */
   function applyFangYuanStylesToCharacterData(char: ICharacterFileLite, charIndex: number) {
+    if (import.meta.env.DEV) {
+      console.log(`[FangYuanStore] applyFangYuanStylesToCharacterData charIndex=${charIndex}, collecting joint data...`)
+    }
+    const allJointData = collectCharacterJointData(char)
+
     for (const item of FANG_YUAN_STYLE_ITEMS) {
       const selectedValue = fangYuanStyleSelections.value[item.label]
       const numericValue = fangYuanStyleNumericValues.value[item.label]
@@ -1031,7 +1061,8 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
         const gc = comp as IGlyphComponent
         const glyph = gc.value as ICustomGlyph
         if (!glyphNameSet.has(glyph.name)) continue
-        applyStyleToGlyphParameter(glyph, item.paramName, selectedValue, charIndex)
+        const extra = buildFangYuanRuleExtra(allJointData, gc.uuid)
+        applyStyleToGlyphParameter(glyph, item.paramName, selectedValue, charIndex, extra as any)
         if (numericValue !== undefined) {
           applyNumericValueToGlyph(glyph, valueParamName, numericValue)
         }
@@ -1042,8 +1073,13 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
   /**
    * 修改参数并执行脚本。
    * 用于一键更新全库：需要持久化脚本执行结果。
+   *
+   * 注：规则检查需要关节/辅助线数据，因此在修改参数前先执行一次脚本采集数据。
+   * 修改参数后会再次执行脚本以应用新参数值。
    */
   function applyFangYuanStylesToCharacterWithScripts(char: ICharacterFileLite, charIndex: number) {
+    const allJointData = collectCharacterJointData(char)
+
     for (const item of FANG_YUAN_STYLE_ITEMS) {
       const selectedValue = fangYuanStyleSelections.value[item.label]
       const numericValue = fangYuanStyleNumericValues.value[item.label]
@@ -1055,7 +1091,8 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
         const gc = comp as IGlyphComponent
         const glyph = gc.value as ICustomGlyph
         if (!glyphNameSet.has(glyph.name)) continue
-        applyStyleToGlyphParameter(glyph, item.paramName, selectedValue, charIndex)
+        const extra = buildFangYuanRuleExtra(allJointData, gc.uuid)
+        applyStyleToGlyphParameter(glyph, item.paramName, selectedValue, charIndex, extra as any)
         if (numericValue !== undefined) {
           applyNumericValueToGlyph(glyph, valueParamName, numericValue)
         }

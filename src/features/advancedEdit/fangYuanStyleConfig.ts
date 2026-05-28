@@ -57,7 +57,11 @@ export interface StyleRuleContext {
   extra?: Record<string, unknown>
 }
 
-/** 规则注册表（当前为空，后续添加规则时在此注册） */
+/**
+ * 规则注册表
+ * 规则通过 fangYuanRules.initFangYuanRules() 动态注册，避免循环依赖。
+ * applyStyleToGlyphParameter 会自动遍历此数组检查规则。
+ */
 export const fangYuanStyleRules: StyleRule[] = []
 
 export const FANG_YUAN_STYLE_ITEMS: StyleItem[] = [
@@ -322,6 +326,7 @@ export function applyStyleToGlyphParameter(
   paramName: string,
   newValue: number,
   characterIndex: number,
+  extra?: Record<string, unknown>,
 ): boolean {
   const params = getGlyphParamArray(glyph)
   if (!params) return false
@@ -329,13 +334,13 @@ export function applyStyleToGlyphParameter(
   for (const param of params) {
     if (param.name !== paramName) continue
 
-    // 检查是否有规则阻止修改
     const context: StyleRuleContext = {
       characterIndex,
       glyphName: glyph.name,
       paramName,
       oldValue: param.value as number,
       newValue,
+      extra,
     }
     const blocked = fangYuanStyleRules.some(
       (rule) =>
@@ -343,7 +348,15 @@ export function applyStyleToGlyphParameter(
         rule.paramName === paramName &&
         rule.shouldApply?.(context) === false,
     )
-    if (blocked) return false
+    if (blocked) {
+      if (import.meta.env.DEV) {
+        console.log(
+          `[FangYuanStyle] BLOCKED glyph="${glyph.name}" param="${paramName}" ` +
+          `oldValue=${context.oldValue} → newValue=${newValue} (rule prevented modification)`,
+        )
+      }
+      return false
+    }
 
     param.value = newValue
 
