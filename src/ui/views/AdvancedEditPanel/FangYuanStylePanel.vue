@@ -44,21 +44,13 @@ function handleStyleSelectionChange() {
   fullRefresh()
 }
 
-let numericThrottleTimer: ReturnType<typeof setTimeout> | null = null
-let numericThrottlePending = false
+let numericRafId: number | null = null
 function handleNumericValueChange() {
-  advancedEdit.quickRefreshFangYuanStylePreviews()
-  if (numericThrottleTimer) {
-    numericThrottlePending = true
-    return
-  }
-  numericThrottleTimer = setTimeout(() => {
-    numericThrottleTimer = null
-    if (numericThrottlePending) {
-      numericThrottlePending = false
-      advancedEdit.quickRefreshFangYuanStylePreviews()
-    }
-  }, 30)
+  if (numericRafId !== null) return
+  numericRafId = requestAnimationFrame(() => {
+    numericRafId = null
+    advancedEdit.quickRefreshFangYuanStylePreviews()
+  })
 }
 
 watch(

@@ -1011,6 +1011,13 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
   const fangYuanStyleSelections = ref<Record<string, number>>({})
   const fangYuanStyleNumericValues = ref<Record<string, number>>({})
 
+  /**
+   * 关节/辅助线数据缓存。
+   * 数值 slider 变化时关节位置不变，复用缓存避免重复执行脚本。
+   * 风格选择变化时（refreshFangYuanStylePreviews）清空缓存。
+   */
+  const fangYuanJointDataCache = new Map<string, ReturnType<typeof collectCharacterJointData>>()
+
   function initFangYuanStyleSelections() {
     const sel: Record<string, number> = {}
     const num: Record<string, number> = {}
@@ -1041,14 +1048,27 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
    * 仅修改参数数据，不执行脚本。
    * 用于预览：避免与 ContourConverter 内 executeGlyphScript 重复执行。
    *
-   * 注：规则检查需要关节/辅助线数据，因此会临时执行一次脚本。
-   * ContourConverter 后续渲染时会清除实例并重新执行，不会冲突。
+   * 规则检查需要关节/辅助线数据，首次执行时会调用 collectCharacterJointData
+   * 并缓存结果。后续 numeric slider 变化时跳过采集，直接复用缓存。
    */
-  function applyFangYuanStylesToCharacterData(char: ICharacterFileLite, charIndex: number) {
-    if (import.meta.env.DEV) {
-      console.log(`[FangYuanStore] applyFangYuanStylesToCharacterData charIndex=${charIndex}, collecting joint data...`)
+  function applyFangYuanStylesToCharacterData(
+    char: ICharacterFileLite,
+    charIndex: number,
+    options?: { skipJointCollection?: boolean },
+  ) {
+    const cacheKey = char.uuid
+    const skipCollection = options?.skipJointCollection && fangYuanJointDataCache.has(cacheKey)
+
+    let allJointData: ReturnType<typeof collectCharacterJointData>
+    if (skipCollection) {
+      allJointData = fangYuanJointDataCache.get(cacheKey)!
+    } else {
+      if (import.meta.env.DEV) {
+        console.log(`[FangYuanStore] collectJointData for charIndex=${charIndex}`)
+      }
+      allJointData = collectCharacterJointData(char)
+      fangYuanJointDataCache.set(cacheKey, allJointData)
     }
-    const allJointData = collectCharacterJointData(char)
 
     for (const item of FANG_YUAN_STYLE_ITEMS) {
       const selectedValue = fangYuanStyleSelections.value[item.label]
@@ -1102,12 +1122,12 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
   }
 
   /** 从 originSampleCharactersList 克隆并应用样式 */
-  function applyFangYuanStylesToClones() {
+  function applyFangYuanStylesToClones(options?: { skipJointCollection?: boolean }) {
     const next: ICharacterFileLite[] = []
     let idx = 0
     for (const orig of originSampleCharactersList.value) {
       const c = R.clone(orig)
-      applyFangYuanStylesToCharacterData(c, idx)
+      applyFangYuanStylesToCharacterData(c, idx, options)
       rewriteGlyphParamsForAdvancedPreview(c)
       next.push(c)
       idx++
@@ -1136,8 +1156,9 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     })
   }
 
-  /** 刷新字玩方圆黑体风格预览（完整：从 DB 加载） */
+  /** 刷新字玩方圆黑体风格预览（完整：从 DB 加载，清空关节数据缓存） */
   async function refreshFangYuanStylePreviews() {
+    fangYuanJointDataCache.clear()
     await updateSampleCharactersList()
     applyFangYuanStylesToClones()
     await nextTick()
@@ -1145,9 +1166,9 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     renderFangYuanPreviews()
   }
 
-  /** 快速刷新预览（跳过 DB 加载，用于 slider 等高频交互） */
+  /** 快速刷新预览（跳过 DB 加载和关节采集，用于 slider 等高频交互） */
   function quickRefreshFangYuanStylePreviews() {
-    applyFangYuanStylesToClones()
+    applyFangYuanStylesToClones({ skipJointCollection: true })
     renderFangYuanPreviews()
   }
 
