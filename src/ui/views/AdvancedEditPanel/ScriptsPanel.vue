@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, nextTick } from 'vue'
+import CharacterZoomPreview from './CharacterZoomPreview.vue'
 import {
   NButton,
   NFormItem,
@@ -54,6 +55,7 @@ const activeTypeOptions = [
 ]
 
 const activeScript = ref('')
+const zoomedIndex = ref<number | null>(null)
 const parameters = ref<
   Array<{ name: string; value: number; min: number; max: number; type: ParameterType; options?: any[] }>
 >([])
@@ -333,11 +335,19 @@ async function applyScriptToEntireProject() {
         </div>
       </div>
       <div class="main">
-        <div class="characters" id="advanced-edit-characters-list">
+        <CharacterZoomPreview
+          v-if="zoomedIndex !== null"
+          :characters="advancedEdit.sampleCharactersList"
+          :model-value="zoomedIndex"
+          @update:model-value="zoomedIndex = $event"
+          @close="zoomedIndex = null"
+        />
+        <div v-else class="characters" id="advanced-edit-characters-list">
           <div
-            v-for="ch in advancedEdit.sampleCharactersList"
+            v-for="(ch, index) in advancedEdit.sampleCharactersList"
             :key="ch.uuid"
             class="character-preview char-preview"
+            @click="zoomedIndex = index"
           >
             <canvas
               :id="`advanced-edit-preview-canvas-${ch.uuid}`"
@@ -459,6 +469,7 @@ async function applyScriptToEntireProject() {
   width: 100px;
   height: 100px;
   box-sizing: border-box;
+  cursor: pointer;
 }
 .right {
   flex: 0 0 260px;

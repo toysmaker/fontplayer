@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, watch, nextTick } from 'vue'
+import { onMounted, watch, nextTick, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   NButton,
@@ -12,9 +12,11 @@ import {
 } from 'naive-ui'
 import { useAdvancedEditStore } from '@/stores/advancedEdit'
 import { ParameterType } from '@/core/types'
+import CharacterZoomPreview from './CharacterZoomPreview.vue'
 
 const advancedEdit = useAdvancedEditStore()
 const { constants, sampleCharactersList } = storeToRefs(advancedEdit)
+const zoomedIndex = ref<number | null>(null)
 
 /** v-if 切回本 Tab 时会新建 canvas，必须等 DOM 就绪后再画，否则会一直黑屏 */
 function redrawPreviewsWhenCanvasesReady() {
@@ -80,11 +82,19 @@ watch(
         </div>
       </div>
       <div class="main">
-        <div class="characters" id="advanced-edit-characters-list">
+        <CharacterZoomPreview
+          v-if="zoomedIndex !== null"
+          :characters="advancedEdit.sampleCharactersList"
+          :model-value="zoomedIndex"
+          @update:model-value="zoomedIndex = $event"
+          @close="zoomedIndex = null"
+        />
+        <div v-else class="characters" id="advanced-edit-characters-list">
           <div
-            v-for="ch in advancedEdit.sampleCharactersList"
+            v-for="(ch, index) in advancedEdit.sampleCharactersList"
             :key="ch.uuid"
             class="character-preview char-preview"
+            @click="zoomedIndex = index"
           >
             <canvas
               :id="`advanced-edit-preview-canvas-${ch.uuid}`"

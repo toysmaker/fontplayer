@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { NButton, NInput, NScrollbar } from 'naive-ui'
 import { useAdvancedEditStore } from '@/stores/advancedEdit'
+import CharacterZoomPreview from './CharacterZoomPreview.vue'
 
 const advancedEdit = useAdvancedEditStore()
+const zoomedIndex = ref<number | null>(null)
 
 onMounted(() => {
   advancedEdit.initStyleSwitchTemplates()
@@ -61,11 +63,19 @@ function handleSelectStyle(style: (typeof advancedEdit.styles)[0]) {
         </div>
       </div>
       <div class="main">
-        <div class="characters" id="advanced-edit-characters-list">
+        <CharacterZoomPreview
+          v-if="zoomedIndex !== null"
+          :characters="advancedEdit.sampleCharactersList"
+          :model-value="zoomedIndex"
+          @update:model-value="zoomedIndex = $event"
+          @close="zoomedIndex = null"
+        />
+        <div v-else class="characters" id="advanced-edit-characters-list">
           <div
-            v-for="ch in advancedEdit.sampleCharactersList"
+            v-for="(ch, index) in advancedEdit.sampleCharactersList"
             :key="ch.uuid"
             class="character-preview char-preview"
+            @click="zoomedIndex = index"
           >
             <canvas
               :id="`advanced-edit-preview-canvas-${ch.uuid}`"
@@ -161,6 +171,7 @@ function handleSelectStyle(style: (typeof advancedEdit.styles)[0]) {
   width: 100px;
   height: 100px;
   box-sizing: border-box;
+  cursor: pointer;
 }
 .right {
   flex: 0 0 260px;

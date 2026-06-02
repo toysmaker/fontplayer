@@ -23,7 +23,7 @@ import { ConstantsMap } from '@/core/script/ConstantsMap'
 import { getGlobalConstantsMap, setGlobalConstantsMap } from '@/core/script/ParametersMap'
 import { orderedListWithItemsForCharacterFile } from '@/features/editor/services/FormatGlyphService'
 import { ContourConverter } from '@/core/font/converter'
-import { renderAdvancedEditPreview } from '@/core/canvas/advancedEditPreview'
+import { renderAdvancedEditPreview, renderZoomedCharacterPreview as renderZoomedPreviewCanvas } from '@/core/canvas/advancedEditPreview'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { orderedListWithItemsForGlyph, parameterRowsForGlyph } from '@/core/utils/glyph'
@@ -304,6 +304,24 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
         fillColors,
         projectStore.fontPreviewStyle,
       )
+    })
+  }
+
+  function renderZoomedCharacterPreview(char: ICharacterFileLite, canvas: HTMLCanvasElement) {
+    const m = getFontMetrics()
+    runWithAdvancedConstantsMap(() => {
+      const ordered = orderedListWithItemsForCharacterFile(char)
+      const contours = ContourConverter.componentsToContours(
+        ordered,
+        {
+          ...m,
+          preview: false,
+          forceUpdate: true,
+          advancedEdit: true,
+        },
+        { x: 0, y: 0 },
+      )
+      renderZoomedPreviewCanvas(canvas, contours, m.unitsPerEm, m.descender)
     })
   }
 
@@ -1238,6 +1256,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     updatePreviewList,
     updateCharactersAndPreview,
     renderCharacterPreview,
+    renderZoomedCharacterPreview,
     applyConstantsToEntireProject,
     enterPanel,
     exitPanel,
