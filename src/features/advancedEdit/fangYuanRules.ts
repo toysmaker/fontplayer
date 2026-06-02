@@ -190,7 +190,7 @@ export const hengStartVerticalConnectionRule: StyleRule = {
   name: '横起笔-纵向相连检查',
   glyphNames: [
     '横', '横钩', '横撇', '横撇弯钩', '横弯钩', '横折', '横折2',
-    '横折钩', '横折挑', '横折弯', '横折弯钩', '横折折撇', '横折折弯钩', '二横折',
+    '横折钩', '横折弯', '横折弯钩', '横折折撇', '横折折弯钩', '二横折',
   ],
   paramName: '起笔风格',
 

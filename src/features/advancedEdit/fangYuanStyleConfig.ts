@@ -70,7 +70,7 @@ export const FANG_YUAN_STYLE_ITEMS: StyleItem[] = [
     paramName: '起笔风格',
     glyphNames: [
       '横', '横钩', '横撇', '横撇弯钩', '横弯钩', '横折', '横折2',
-      '横折钩', '横折挑', '横折弯', '横折弯钩', '横折折撇', '横折折弯钩', '二横折',
+      '横折钩', '横折弯', '横折弯钩', '横折折撇', '横折折弯钩', '二横折',
     ],
     options: [
       { value: 0, label: '默认风格' },
@@ -140,7 +140,7 @@ export const FANG_YUAN_STYLE_ITEMS: StyleItem[] = [
     label: '转角风格',
     paramName: '转角风格',
     glyphNames: [
-      '横折', '横折2', '横折钩', '横折挑', '横折弯钩', '横折折弯钩',
+      '横折', '横折2', '横折钩', '横折弯钩', '横折折弯钩',
       '竖折', '竖折折钩', '二横折', '横弯钩',
     ],
     options: [
