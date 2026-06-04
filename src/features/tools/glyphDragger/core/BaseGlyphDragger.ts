@@ -37,6 +37,9 @@ export abstract class BaseGlyphDragger {
   private _isDragging = false
   private lastX = 0
   private lastY = 0
+  /** 缓存 mousedown 时的 getBoundingClientRect，避免 Tauri webview 在 blur/focus
+   *  切换后 mousemove/mouseup 中返回不同的 rect 导致坐标漂移产生误拖拽。 */
+  private _cachedRect: DOMRect | null = null
   private origin: { ox: number; oy: number } = { ox: 0, oy: 0 }
   private initialOx = 0  // 记录拖拽开始时的初始 ox
   private initialOy = 0  // 记录拖拽开始时的初始 oy
@@ -522,10 +525,10 @@ export abstract class BaseGlyphDragger {
     // 切换到真正开始拖拽之前，先确保 context.component 是 store 的最新对象引用
     this.syncContextFromStore()
     
-    const rect = this.canvas.getBoundingClientRect()
-    const mouseX = this.getCoord(e.clientX - rect.left)
-    const mouseY = this.getCoord(e.clientY - rect.top)
-    
+    this._cachedRect = this.canvas.getBoundingClientRect()
+    const mouseX = this.getCoord(e.clientX - this._cachedRect.left)
+    const mouseY = this.getCoord(e.clientY - this._cachedRect.top)
+
     // 将鼠标坐标从显示尺寸转换为坐标尺寸
     const coordX = this.convertDisplayToCoord(mouseX, true)
     const coordY = this.convertDisplayToCoord(mouseY, false)
@@ -593,16 +596,27 @@ export abstract class BaseGlyphDragger {
 
     this.primeSnapInstancesForPeerSnapping()
     
-    // 在 window 上监听 mousemove；暂停 canvas 上的 mousemove，避免同一事件冒泡导致处理两次
+    // 在 window 上监听 mousemove/mouseup；暂停 canvas 上的 mousemove，避免同一事件冒泡导致处理两次
     if (!this.canvasMouseMoveSuspended) {
       this.canvas.removeEventListener('mousemove', this.onMouseMove)
       this.canvasMouseMoveSuspended = true
     }
     window.addEventListener('mousemove', this.onMouseMove)
     window.addEventListener('mouseup', this.onMouseUp)
+    // canvas 级 mouseup 作为兜底：Tauri 的 focus 切换可能吞掉 window 级 mouseup
+    //（如 input 未 blur 时点击 canvas），导致 cleanup 永不被调用，后续 mousemove
+    // 被误认为拖拽。canvas 级 listener 在冒泡路径上更早触发，不会被 focus 影响。
+    this.canvas.addEventListener('mouseup', this.onMouseUp)
   }
   
   protected onMouseMove = (e: MouseEvent) => {
+    // Tauri focus 切换可能吞掉 mouseup，导致 cleanup 永不被调用。
+    // 若此时鼠标按键已松开（buttons 不含左键），则自动收尾拖拽状态。
+    if (this._isDragging && !(e.buttons & 1)) {
+      this.cleanup()
+      return
+    }
+
     if (!this._isDragging) {
       // 更新悬停关键点（只在 canvas 上时更新）
       if (e.target === this.canvas || this.canvas.contains(e.target as Node)) {
@@ -610,9 +624,11 @@ export abstract class BaseGlyphDragger {
       }
       return
     }
-    
-    // 计算鼠标相对于 canvas 的位置（即使事件不在 canvas 上触发）
-    const rect = this.canvas.getBoundingClientRect()
+
+    // 使用 mousedown 时缓存的 rect，避免 Tauri webview 在 blur 后
+    // getBoundingClientRect 返回值漂移导致误判为拖拽位移
+    const rect = this._cachedRect
+    if (!rect) return
     const mouseX = this.getCoord(e.clientX - rect.left)
     const mouseY = this.getCoord(e.clientY - rect.top)
     
@@ -622,15 +638,13 @@ export abstract class BaseGlyphDragger {
     const dx = coordX - this.lastX
     const dy = coordY - this.lastY
 
-    // 抑制零位移触发的吸附：某些平台（如 Tauri WebView）可能在 mousedown/mouseup
-    // 之间合成 mousemove 事件，即使指针没有实际移动。此时 dx/dy 为零，不应触发
-    // applySnapDelta —— 否则组件当前参考线已处于 snapIn 范围内时会"吸附跳动"。
-    if (dx === 0 && dy === 0) return
-
-    if (
-      this._isDragging &&
-      dx * dx + dy * dy > BaseGlyphDragger.GLYPH_DRAG_TAP_SUPPRESS_EPS_SQ
-    ) {
+    // 抑制微小位移：某些平台（如 Tauri WebView）可能在 mousedown/mouseup
+    // 之间合成 mousemove 事件，即使指针没有实际移动。与 GLYPH_DRAG_TAP_SUPPRESS_EPS_SQ
+    // 共用同一阈值，避免 1~2px 的合成事件导致组件漂移。
+    if (dx * dx + dy * dy <= BaseGlyphDragger.GLYPH_DRAG_TAP_SUPPRESS_EPS_SQ) {
+      // 完全零位移时直接返回，非零但低于阈值的合成事件仅跳过拖拽动作
+      if (dx === 0 && dy === 0) return
+    } else {
       this.glyphDragMovedBeyondTap = true
     }
 
@@ -638,7 +652,7 @@ export abstract class BaseGlyphDragger {
       this.context.component?.type === 'glyph' &&
       (!this.draggingJoint || this.isDraggingFirstJoint)
 
-    if (movingWholeComponent) {
+    if (movingWholeComponent && this.glyphDragMovedBeyondTap) {
       const { adjDx, adjDy } = this.applySnapDelta(
         dx,
         dy,
@@ -662,7 +676,8 @@ export abstract class BaseGlyphDragger {
     }
 
     try {
-      const rect = this.canvas.getBoundingClientRect()
+      const rect = this._cachedRect
+      if (!rect) return
       const mouseX = this.getCoord(e.clientX - rect.left)
       const mouseY = this.getCoord(e.clientY - rect.top)
 
@@ -683,7 +698,10 @@ export abstract class BaseGlyphDragger {
         this.context.component?.type === 'glyph' &&
         (!this.draggingJoint || this.isDraggingFirstJoint)
 
-      if (movingWholeComponent && hasMoved) {
+      // 仅当 mousemove 阶段曾产生有效位移时才在 mouseup 执行拖拽落点。
+      // Tauri 合成 mousemove 的微小偏移已在 onMouseMove 中被阈值过滤，
+      // 若 glyphDragMovedBeyondTap 未置位说明是纯 click，跳过落点防止误拖拽。
+      if (movingWholeComponent && this.glyphDragMovedBeyondTap) {
         const { adjDx, adjDy } = this.applySnapDelta(
           dx,
           dy,
@@ -790,8 +808,12 @@ export abstract class BaseGlyphDragger {
     this.snapLockVKey = null
     this.lastX = 0
     this.lastY = 0
+    this._cachedRect = null
     window.removeEventListener('mouseup', this.onMouseUp)
     window.removeEventListener('mousemove', this.onMouseMove)
+    if (this.canvas) {
+      this.canvas.removeEventListener('mouseup', this.onMouseUp)
+    }
     if (this.canvasMouseMoveSuspended && this.canvas) {
       this.canvas.addEventListener('mousemove', this.onMouseMove)
       this.canvasMouseMoveSuspended = false
