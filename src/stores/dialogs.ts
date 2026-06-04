@@ -40,8 +40,6 @@ export const useDialogsStore = defineStore('dialogs', () => {
   function closeGlyphComponentsDialog() {
     glyphComponentsDialogVisible.value = false
     glyphComponentsStrokeReplaceHandler.value = null
-    // 保持与原工程一致：关闭后清空多选与已选
-    glyphComponentsMultiSelect.value = false
     glyphComponentsSelectedPicks.value = []
   }
 
