@@ -990,6 +990,9 @@ export function render(
             } else {
               ctx.closePath()
             }
+            // 清除复合路径，避免路径残留到下次渲染（renderJoints/renderRefLines
+            // 中的 beginPath 原本隐式清除了这里累积的路径，关闭显示后该清理缺失导致残影）
+            ctx.beginPath()
           }
         } else {
           if (import.meta.env.DEV) {

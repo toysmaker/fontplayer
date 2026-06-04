@@ -312,6 +312,16 @@ function runRenderCanvasSync() {
       renderBoneAndWeight(canvasRef.value)
     }
   }
+
+  // 清除上下文残留的复合路径。外部组件渲染与脚本内置组件渲染均会将
+  // 路径累积到 context 上做 compound fill，fill/closePath 后路径不会
+  // 自动清除。renderJoints/renderRefLines 中 renderJoint/renderRefLine
+  // 的 beginPath 原本隐式清理了这些路径；关闭显示后路径残留，导致下次
+  // 渲染时新旧路径叠加，产生轮廓残影。
+  const cleanCtx = canvasRef.value?.getContext('2d')
+  if (cleanCtx) {
+    cleanCtx.beginPath()
+  }
 }
 
 // 初始化拖拽器
