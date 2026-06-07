@@ -1167,6 +1167,36 @@ const custom_strokes_1 = [
         max: 200,
       },
     ]
+  },
+  {
+    name: '倒直角撇',
+    uuid: genUUID(),
+    params: [
+      {
+        name: '竖直延伸',
+        default: 200,
+        min: 0,
+        max: 1000,
+      },
+      {
+        name: '水平延伸',
+        default: 200,
+        min: 0,
+        max: 1000,
+      },
+      {
+        name: '弯曲度',
+        default: 1.5,
+        min: 1,
+        max: 2,
+      },
+      {
+        name: '字重',
+        default: 50,
+        min: 0,
+        max: 200,
+      },
+    ]
   }
 ]
 
