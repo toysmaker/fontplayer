@@ -1,6 +1,8 @@
 import { getBound } from "../utils/math";
 import { CustomGlyph } from "@/core/instance/CustomGlyph";
-import type { IPenComponent, IGlyphComponent } from "@/core/types";
+import { instanceManager } from "@/core/instance/InstanceManager";
+import { executeGlyphScript } from "@/core/script/ScriptExecutor";
+import type { IPenComponent, IGlyphComponent, ICustomGlyph, IRefLine, IJoint } from "@/core/types";
 
 // 导入所有笔画的skeletonToBones函数
 import { skeletonToBones_heng } from "@/templates/kai/横"
@@ -81,32 +83,53 @@ const glyphSkeletonBind = (glyph: CustomGlyph) => {
   const skeleton = glyph.getSkeleton();
   const components = glyph.components;
 
-  // 只处理Pen类型的组件
+  // 处理所有Pen类型的组件
   const penComponents = components.filter(comp => comp.type === 'pen') as IGlyphComponent[];
   if (penComponents.length === 0) {
     console.warn('No pen components found');
     return;
   }
 
-  const penComponent = penComponents[0]; // 假设只有一个Pen组件
-  
   // 阶段一：骨架分析
   const bones = skeletonToBones(skeleton);
-  
-  // 阶段二：控制点绑定与权重分配
-  const points = componentsToPoints(penComponent);
-  
-  const pointsBonesMap = points.map((point, index) => {
+
+  // 阶段二：收集所有笔组件的控制点，记录每个组件的点范围
+  const allPoints: Array<{ x: number; y: number }> = [];
+  const componentPointRanges: Array<{ componentUUID: string; start: number; end: number }> = [];
+
+  for (const comp of penComponents) {
+    const compPoints = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>;
+    if (!compPoints || compPoints.length === 0) continue;
+    const start = allPoints.length;
+    for (const p of compPoints) {
+      allPoints.push({ x: p.x, y: p.y });
+    }
+    componentPointRanges.push({
+      componentUUID: comp.uuid,
+      start,
+      end: allPoints.length,
+    });
+  }
+
+  if (allPoints.length === 0) {
+    console.warn('No pen component points found');
+    return;
+  }
+
+  const pointsBonesMap = allPoints.map((point, index) => {
     const binding = calculatePointBones(point, bones, index);
     return binding;
   });
+
+  const originalPoints = allPoints.map(p => ({ x: p.x, y: p.y }));
 
   // 存储绑定信息到glyph对象中，供后续变形使用
   (glyph as any).skeletonBindData = {
     bones,
     pointsBonesMap,
-    originalPoints: points.map(p => ({ x: p.x, y: p.y })),
-    skeletonType: detectSkeletonType(skeleton)
+    originalPoints,
+    skeletonType: detectSkeletonType(skeleton),
+    componentPointRanges,
   };
 
   // 存储绑定信息到glyph对象中，供后续变形使用
@@ -114,8 +137,9 @@ const glyphSkeletonBind = (glyph: CustomGlyph) => {
     (glyph as any)._glyph.skeleton.skeletonBindData = {
       bones,
       pointsBonesMap,
-      originalPoints: points.map(p => ({ x: p.x, y: p.y })),
-      skeletonType: detectSkeletonType(skeleton)
+      originalPoints,
+      skeletonType: detectSkeletonType(skeleton),
+      componentPointRanges,
     };
   }
 
@@ -1233,16 +1257,16 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
     console.warn('No pen components found in applySkeletonTransformation');
     return;
   }
-  
-  const penComponent = penComponents[0];
 
-  const { originalPoints } = (glyph as any)._glyph?.skeleton?.skeletonBindData || {}
-  if (!originalPoints || !Array.isArray(originalPoints) || originalPoints.length === 0) {
+  const bindData = (glyph as any)._glyph?.skeleton?.skeletonBindData
+  if (!bindData?.originalPoints || !Array.isArray(bindData.originalPoints) || bindData.originalPoints.length === 0) {
     if (import.meta.env.DEV) {
       console.warn('applySkeletonTransformation: no skeletonBindData.originalPoints, skip transformation')
     }
     return
   }
+
+  const { originalPoints, componentPointRanges } = bindData
   const weightedOriginalPoints = R.clone(originalPoints)
 
   // 更新字重
@@ -1271,44 +1295,92 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
       };
     }
   }
-  
+
   let transformedPoints = calculateTransformedPoints(glyph, newSkeleton, weightedOriginalPoints);
-  
-  if (transformedPoints.length === (penComponent.value as unknown as IPenComponent).points.length) {
-    const pts = (penComponent.value as unknown as IPenComponent).points
+
+  // Build a lookup of pen components by UUID for fast access
+  const componentMap = new Map<string, IGlyphComponent>()
+  for (const comp of penComponents) {
+    componentMap.set(comp.uuid, comp)
+  }
+
+  // If we have componentPointRanges, write back to each component individually
+  const ranges: Array<{ componentUUID: string; start: number; end: number }> = componentPointRanges
+  if (ranges && ranges.length > 0) {
     let anyPointChanged = false
-    for (let index = 0; index < pts.length; index++) {
-      const point = pts[index]
-      const newPoint = transformedPoints[index]
-      if (skeletonCoordChanged(point.x, newPoint.x) || skeletonCoordChanged(point.y, newPoint.y)) {
-        point.x = newPoint.x
-        point.y = newPoint.y
-        anyPointChanged = true
+    for (const range of ranges) {
+      const comp = componentMap.get(range.componentUUID)
+      if (!comp) continue
+      const pts = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>
+      if (!pts || range.end - range.start !== pts.length) continue
+
+      for (let i = 0; i < pts.length; i++) {
+        const point = pts[i]
+        const newPoint = transformedPoints[range.start + i]
+        if (!newPoint) continue
+        if (skeletonCoordChanged(point.x, newPoint.x) || skeletonCoordChanged(point.y, newPoint.y)) {
+          point.x = newPoint.x
+          point.y = newPoint.y
+          anyPointChanged = true
+        }
+      }
+
+      const bound = getBound(pts)
+      const pc = comp as any
+      if (
+        skeletonCoordChanged(pc.x ?? 0, bound.x) ||
+        skeletonCoordChanged(pc.y ?? 0, bound.y) ||
+        skeletonCoordChanged(pc.w ?? 0, bound.w) ||
+        skeletonCoordChanged(pc.h ?? 0, bound.h)
+      ) {
+        pc.x = bound.x
+        pc.y = bound.y
+        pc.w = bound.w
+        pc.h = bound.h
       }
     }
 
-    // 无实质变化则不要写回 Pinia（否则会触发 orderedList deep watch → 画布重绘 → 再次 apply → 死循环）
     if (!anyPointChanged) {
       return
     }
-
-    const bound = getBound(pts)
-    const pc = penComponent as any
-    if (
-      skeletonCoordChanged(pc.x ?? 0, bound.x) ||
-      skeletonCoordChanged(pc.y ?? 0, bound.y) ||
-      skeletonCoordChanged(pc.w ?? 0, bound.w) ||
-      skeletonCoordChanged(pc.h ?? 0, bound.h)
-    ) {
-      pc.x = bound.x
-      pc.y = bound.y
-      pc.w = bound.w
-      pc.h = bound.h
-    }
   } else {
-    console.warn('Transformed points length mismatch:',
-      transformedPoints.length,
-      (penComponent.value as unknown as IPenComponent).points.length);
+    // Fallback: no componentPointRanges, treat all points as belonging to first pen component (backward compat)
+    const penComponent = penComponents[0]
+    if (transformedPoints.length === (penComponent.value as unknown as IPenComponent).points.length) {
+      const pts = (penComponent.value as unknown as IPenComponent).points
+      let anyPointChanged = false
+      for (let index = 0; index < pts.length; index++) {
+        const point = pts[index]
+        const newPoint = transformedPoints[index]
+        if (skeletonCoordChanged(point.x, newPoint.x) || skeletonCoordChanged(point.y, newPoint.y)) {
+          point.x = newPoint.x
+          point.y = newPoint.y
+          anyPointChanged = true
+        }
+      }
+
+      if (!anyPointChanged) {
+        return
+      }
+
+      const bound = getBound(pts)
+      const pc = penComponent as any
+      if (
+        skeletonCoordChanged(pc.x ?? 0, bound.x) ||
+        skeletonCoordChanged(pc.y ?? 0, bound.y) ||
+        skeletonCoordChanged(pc.w ?? 0, bound.w) ||
+        skeletonCoordChanged(pc.h ?? 0, bound.h)
+      ) {
+        pc.x = bound.x
+        pc.y = bound.y
+        pc.w = bound.w
+        pc.h = bound.h
+      }
+    } else {
+      console.warn('Transformed points length mismatch:',
+        transformedPoints.length,
+        (penComponent.value as unknown as IPenComponent).points.length);
+    }
   }
 
   // 对可变参数的关键帧图层也应用同一套骨架变形
@@ -1385,6 +1457,322 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
 
   // 强制触发重新渲染
   // emitter.emit('renderCharacter')
+}
+
+// ==================== glyphSkeleton：从参考字形辅助线生成骨骼并绑定 ====================
+
+const DEFAULT_BONE_SEGMENTS = 5
+
+/**
+ * 将一根参考线按固定段数拆分为 Bone 数组
+ * 每条 refline 都是直线，等分为 segments 段
+ */
+function refLineToBones(
+  startCoord: { x: number; y: number },
+  endCoord: { x: number; y: number },
+  segments: number,
+  idPrefix: string,
+): Bone[] {
+  const bones: Bone[] = []
+  for (let i = 0; i < segments; i++) {
+    const t1 = i / segments
+    const t2 = (i + 1) / segments
+    const p1 = {
+      x: startCoord.x + (endCoord.x - startCoord.x) * t1,
+      y: startCoord.y + (endCoord.y - startCoord.y) * t1,
+    }
+    const p2 = {
+      x: startCoord.x + (endCoord.x - startCoord.x) * t2,
+      y: startCoord.y + (endCoord.y - startCoord.y) * t2,
+    }
+    const length = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
+    const bone: Bone = {
+      id: `${idPrefix}_${i}`,
+      start: p1,
+      end: p2,
+      length,
+      bindLength: length,
+      uAxis: normalize({ x: p2.x - p1.x, y: p2.y - p1.y }),
+      vAxis: normalize({ x: -(p2.y - p1.y), y: p2.x - p1.x }),
+      children: [],
+      bindMatrix: createIdentityMatrix(),
+      currentMatrix: createIdentityMatrix(),
+    }
+    if (i > 0) {
+      bone.parent = `${idPrefix}_${i - 1}`
+      bones[i - 1].children.push(bone.id)
+    }
+    bones.push(bone)
+  }
+  return bones
+}
+
+/**
+ * 将所有参考线转换为扁平的 Bone 数组
+ * 参考线通过 name 引用关节，需要从 joints 中解析坐标
+ */
+function reflinesToBones(
+  reflines: IRefLine[],
+  joints: IJoint[],
+  segmentsPerRefLine: number = DEFAULT_BONE_SEGMENTS,
+): Bone[] {
+  const allBones: Bone[] = []
+  const jointsByName = new Map<string, IJoint>()
+  for (const j of joints) {
+    if (j.name) jointsByName.set(j.name, j)
+  }
+
+  for (let i = 0; i < reflines.length; i++) {
+    const rl = reflines[i]
+    const startJoint = jointsByName.get(rl.start)
+    const endJoint = jointsByName.get(rl.end)
+    if (!startJoint || !endJoint) continue
+
+    const sx = typeof startJoint.x === 'function' ? startJoint.x() : startJoint.x
+    const sy = typeof startJoint.y === 'function' ? startJoint.y() : startJoint.y
+    const ex = typeof endJoint.x === 'function' ? endJoint.x() : endJoint.x
+    const ey = typeof endJoint.y === 'function' ? endJoint.y() : endJoint.y
+
+    const bones = refLineToBones(
+      { x: Number(sx), y: Number(sy) },
+      { x: Number(ex), y: Number(ey) },
+      segmentsPerRefLine,
+      `rl${i}`,
+    )
+    allBones.push(...bones)
+  }
+  return allBones
+}
+
+/**
+ * 字形骨架绑定：直接从实例的辅助线生成骨骼并绑定所有普通钢笔组件
+ * 调用前须确保脚本已在实例上执行完毕（instance 中有 reflines 和 joints）
+ * 返回 true 表示成功，false 表示失败
+ */
+export function glyphSkeletonBindFromRefGlyph(
+  glyphInstance: CustomGlyph,
+  _refData?: any,
+  boneSegments: number = DEFAULT_BONE_SEGMENTS,
+): boolean {
+  const rawGlyph = glyphInstance._glyph
+
+  // 1. 从实例获取脚本生成的辅助线和关节
+  const reflines = glyphInstance.getRefLines()
+  const joints = glyphInstance.getJoints()
+
+  if (!reflines || reflines.length === 0) {
+    console.warn('[glyphSkeleton] No reflines on instance')
+    return false
+  }
+
+  // 2. 拆分 reflines 为骨骼
+  const bones = reflinesToBones(reflines, joints, boneSegments)
+  if (bones.length === 0) {
+    console.warn('[glyphSkeleton] Failed to create bones from reflines')
+    return false
+  }
+
+  // 设置骨骼的 bindMatrix（绑定姿态矩阵），后续变形用 currentMatrix * inv(bindMatrix) 计算增量
+  bones.forEach((bone: Bone) => {
+    if (typeof bone.bindLength !== 'number') {
+      bone.bindLength = bone.length
+    }
+    bone.bindMatrix = calculateBoneMatrix(bone)
+    bone.currentMatrix = [...bone.bindMatrix]
+  })
+
+  // 3. 收集当前字形所有普通钢笔组件的控制点
+  const penComponents = rawGlyph.components?.filter((c: any) => c.type === 'pen') as IGlyphComponent[] || []
+  if (penComponents.length === 0) {
+    console.warn('[glyphSkeleton] No pen components in current glyph')
+    return false
+  }
+
+  const allPoints: Array<{ x: number; y: number }> = []
+  const componentPointRanges: Array<{ componentUUID: string; start: number; end: number }> = []
+
+  for (const comp of penComponents) {
+    const compPoints = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>
+    if (!compPoints || compPoints.length === 0) continue
+    const start = allPoints.length
+    for (const p of compPoints) {
+      allPoints.push({ x: p.x, y: p.y })
+    }
+    componentPointRanges.push({
+      componentUUID: comp.uuid,
+      start,
+      end: allPoints.length,
+    })
+  }
+
+  if (allPoints.length === 0) {
+    console.warn('[glyphSkeleton] No pen component points found')
+    return false
+  }
+
+  // 4. 计算每个控制点的骨骼绑定
+  const pointsBonesMap: PointBinding[] = allPoints.map((point, index) =>
+    calculatePointBones(point, bones, index),
+  )
+
+  // 5. 存储绑定数据到 skeleton.glyphSkeletonBindData
+  if (!rawGlyph.skeleton) {
+    rawGlyph.skeleton = {} as any
+  }
+
+  const skeleton = rawGlyph.skeleton as any
+  skeleton.glyphSkeletonBindData = {
+    bones,
+    pointsBonesMap,
+    originalPoints: allPoints.map(p => ({ x: p.x, y: p.y })),
+    componentPointRanges,
+  }
+  skeleton.cachedRefLines = reflines
+
+  // 6. 应用初始变形到钢笔组件
+  applyGlyphSkeletonTransformation(glyphInstance)
+
+  return true
+}
+
+/**
+ * 应用 glyphSkeleton 变形到所有绑定的钢笔组件
+ * 使用 glyphSkeletonBindData 中的原始点和当前骨骼计算新位置
+ */
+function applyGlyphSkeletonTransformation(glyphInstance: CustomGlyph): void {
+  const skeleton = (glyphInstance._glyph as any)?.skeleton
+  if (!skeleton?.glyphSkeletonBindData) return
+
+  const { bones, pointsBonesMap, originalPoints, componentPointRanges } = skeleton.glyphSkeletonBindData
+  if (!originalPoints?.length || !bones?.length) return
+
+  // 更新骨骼的 currentMatrix: current * inv(bind)，即从绑定姿态到当前姿态的增量变换
+  let anyBoneChanged = false
+  bones.forEach((bone: Bone) => {
+    const newMatrix = calculateBoneMatrix(bone)
+    const invBind = invertMatrix(bone.bindMatrix)
+    bone.currentMatrix = multiplyMatrices(newMatrix, invBind)
+    // 检查是否有骨骼发生了实际变化
+    if (!anyBoneChanged) {
+      const [a, b, c, d, tx, ty] = bone.currentMatrix
+      if (Math.abs(a - 1) > 0.001 || Math.abs(b) > 0.001 || Math.abs(c) > 0.001 ||
+          Math.abs(d - 1) > 0.001 || Math.abs(tx) > 0.1 || Math.abs(ty) > 0.1) {
+        anyBoneChanged = true
+      }
+    }
+  })
+  if (import.meta.env.DEV) {
+    console.log('[applyGlyphSkeletonTransformation]', {
+      bonesCount: bones.length,
+      anyBoneChanged,
+      firstBoneMatrix: bones[0]?.currentMatrix,
+    })
+  }
+
+  // 计算变换后的点：用增量矩阵变换原始世界坐标点
+  const transformedPoints = originalPoints.map((point: { x: number; y: number }, index: number) => {
+    const binding = pointsBonesMap?.[index]
+    if (!binding?.bones?.length) return { x: point.x, y: point.y }
+
+    let newX = 0, newY = 0
+    binding.bones.forEach(({ boneIndex, weight }: { boneIndex: number; weight: number }) => {
+      const bone = bones[boneIndex]
+      if (!bone?.currentMatrix) return
+      const tp = transformPointToWorld(point, bone.currentMatrix)
+      newX += weight * tp.x
+      newY += weight * tp.y
+    })
+    return { x: newX, y: newY }
+  })
+
+  // 写回各组件
+  const rawGlyph = glyphInstance._glyph
+  const penComponents = rawGlyph.components?.filter((c: any) => c.type === 'pen') as IGlyphComponent[] || []
+  const componentMap = new Map<string, IGlyphComponent>()
+  for (const comp of penComponents) {
+    componentMap.set(comp.uuid, comp)
+  }
+
+  const ranges: Array<{ componentUUID: string; start: number; end: number }> = componentPointRanges
+  if (ranges) {
+    for (const range of ranges) {
+      const comp = componentMap.get(range.componentUUID)
+      if (!comp) continue
+      const pts = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>
+      if (!pts || range.end - range.start !== pts.length) continue
+
+      let anyPointChanged = false
+      for (let i = 0; i < pts.length; i++) {
+        const newPoint = transformedPoints[range.start + i]
+        if (!newPoint) continue
+        if (skeletonCoordChanged(pts[i].x, newPoint.x) || skeletonCoordChanged(pts[i].y, newPoint.y)) {
+          pts[i].x = newPoint.x
+          pts[i].y = newPoint.y
+          anyPointChanged = true
+        }
+      }
+
+      if (anyPointChanged) {
+        const bound = getBound(pts)
+        const pc = comp as any
+        pc.x = bound.x
+        pc.y = bound.y
+        pc.w = bound.w
+        pc.h = bound.h
+      }
+    }
+  }
+}
+
+/**
+ * 字形骨架重新绑定：从实例当前辅助线重新生成骨骼并刷新所有笔组件
+ * 在拖拽骨架或修改参数后调用
+ */
+export function glyphSkeletonRebind(glyphInstance: CustomGlyph): void {
+  const skeleton = (glyphInstance._glyph as any)?.skeleton
+  if (!skeleton?.glyphSkeletonBindData) {
+    if (import.meta.env.DEV) console.warn('[glyphSkeletonRebind] No glyphSkeletonBindData, skipping')
+    return
+  }
+
+  const boneSegments = (skeleton as any).boneSegmentsPerRefLine || DEFAULT_BONE_SEGMENTS
+
+  // 从实例获取当前辅助线
+  const reflines = glyphInstance.getRefLines()
+  const joints = glyphInstance.getJoints()
+
+  if (!reflines || reflines.length === 0) {
+    if (import.meta.env.DEV) console.warn('[glyphSkeletonRebind] No reflines, skipping')
+    return
+  }
+
+  // 重新生成骨骼
+  const newBones = reflinesToBones(reflines, joints, boneSegments)
+  if (newBones.length === 0) return
+
+  const bindData = skeleton.glyphSkeletonBindData
+  const oldBones = bindData.bones
+
+  // 将旧骨骼的 bindMatrix 复制到新骨骼（保持绑定姿态不变）
+  for (let i = 0; i < newBones.length && i < oldBones.length; i++) {
+    newBones[i].bindMatrix = oldBones[i].bindMatrix
+    newBones[i].bindLength = oldBones[i].bindLength
+  }
+
+  bindData.bones = newBones
+
+  // 重新计算每个控制点的骨骼绑定
+  const { originalPoints } = bindData
+  if (originalPoints?.length) {
+    bindData.pointsBonesMap = originalPoints.map((point: { x: number; y: number }, index: number) =>
+      calculatePointBones(point, newBones, index),
+    )
+  }
+
+  skeleton.cachedRefLines = reflines
+
+  // 应用变形
+  applyGlyphSkeletonTransformation(glyphInstance)
 }
 
 export { glyphSkeletonBind };

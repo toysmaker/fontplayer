@@ -4,6 +4,7 @@ import { getStrokeWidth } from '@/utils/canvas-utils'
 import type { IGlyphComponent } from '../types'
 import { instanceManager } from '../instance/InstanceManager'
 import { CustomGlyph } from '../instance/CustomGlyph'
+import { executeGlyphScript } from '../script/ScriptExecutor'
 
 export interface IJoint {
   name: string
@@ -156,8 +157,29 @@ const renderJoints = (rootComponent, canvas) => {
 			})
 		}
 		if (!joints || joints.length === 0) {
-			if (import.meta.env.DEV) {
-				console.log('[renderJoints] No joints found for component:', _component.uuid)
+			// glyphSkeleton：首次渲染时脚本可能未执行，尝试执行一次生成关节
+			const skeletonObj = (_component.value?.skeleton as any)
+			if (skeletonObj?.type === 'glyphSkeleton' && skeletonObj?.referenceGlyphData?.adaptedScript) {
+				const savedScript = _component.value.script
+				_component.value.script = skeletonObj.referenceGlyphData.adaptedScript
+				_component.value.script_reference = undefined
+				try {
+					executeGlyphScript(_component.value, instanceKey, { ignoreTempDataGuard: true })
+					if (instanceManager.isTemporary(instanceKey)) {
+						glyphInstance = instanceManager.acquireTemporaryInstance(instanceKey, () => new CustomGlyph(_component.value), 'glyph') as CustomGlyph
+					} else {
+						glyphInstance = instanceManager.getOrCreateGlyphInstance(_component.value, () => new CustomGlyph(_component.value)) as CustomGlyph
+					}
+					const retryJoints = glyphInstance?.getJoints?.()
+					if (retryJoints && retryJoints.length > 0) {
+						renderJoints(_component, canvas)
+						return
+					}
+				} catch (e) {
+					console.warn('[renderJoints] glyphSkeleton script execution failed:', e)
+				} finally {
+					_component.value.script = savedScript
+				}
 			}
 			return
 		}

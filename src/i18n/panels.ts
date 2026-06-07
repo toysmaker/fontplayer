@@ -161,6 +161,10 @@ const panels = {
 				weight: '权重',
 				brushSize: '笔刷大小',
 				finishWeightSetting: '完成设置',
+					skeletonTypeGlyph: '字形骨架',
+					skeletonRefGlyph: '参考字形',
+					skeletonNoRefLines: '参考字形未生成辅助线，请选择其他字形',
+					skeletonParamSectionTitle: '参考字形参数 — {name}',
 			},
 			layoutGridPanel: {
 				saveLayoutState: '保存布局状态',
@@ -498,6 +502,10 @@ const panels = {
 				weight: 'Weight',
 				brushSize: 'Brush Size',
 				finishWeightSetting: 'Finish',
+					skeletonTypeGlyph: 'Glyph Skeleton',
+					skeletonRefGlyph: 'Reference Glyph',
+					skeletonNoRefLines: 'No reflines generated, pick another glyph',
+					skeletonParamSectionTitle: 'Reference Glyph Params — {name}',
 			},
 			layoutGridPanel: {
 				saveLayoutState: 'Save layout state',

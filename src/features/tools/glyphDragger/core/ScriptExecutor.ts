@@ -9,6 +9,7 @@ import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import type { ICustomGlyph } from '@/core/types'
 import type { IDragEvent, IJoint } from './types'
 import { updateSkeletonTransformation } from '@/templates/strokeFnMap'
+import { glyphSkeletonRebind } from '@/features/glyphSkeletonBind'
 
 export class ScriptExecutor {
   /**
@@ -141,6 +142,18 @@ export class ScriptExecutor {
     if (glyphInstance.onSkeletonDrag) {
       try {
         glyphInstance.onSkeletonDrag(event)
+        // glyphSkeleton: 脚本重新生成关节后重新应用 ox/oy 偏移
+        const skel = (glyphInstance._glyph as any)?.skeleton
+        if (skel?.type === 'glyphSkeleton') {
+          const ox = skel.ox || 0, oy = skel.oy || 0
+          if (ox !== 0 || oy !== 0) {
+            const joints = glyphInstance.getJoints()
+            for (const j of joints) {
+              if ((j as any)._x !== undefined) { (j as any)._x += ox; (j as any)._y += oy }
+              else if (typeof (j as any).x !== 'function' && (j as any).x !== undefined) { (j as any).x += ox; (j as any).y += oy }
+            }
+          }
+        }
         // 将骨架变化应用到笔形轮廓，使拖拽骨架时形状随动（before_bind 模板内未调用 updateSkeletonTransformation）
         try {
           updateSkeletonTransformation(glyphInstance)
@@ -148,6 +161,10 @@ export class ScriptExecutor {
           if (import.meta.env.DEV) {
             console.warn('[ScriptExecutor.executeDrag] updateSkeletonTransformation failed:', err)
           }
+        }
+        // glyphSkeleton 已绑定则应用 LBS 变形
+        if (skel?.glyphSkeletonBindData) {
+          glyphSkeletonRebind(glyphInstance)
         }
         
         if (import.meta.env.DEV) {
@@ -198,6 +215,18 @@ export class ScriptExecutor {
       try {
         const paramsBefore = glyphInstance._glyph.parameters?.map((p: any) => ({ name: p.name, value: p.value })) || []
         glyphInstance.onSkeletonDragEnd(event)
+        // glyphSkeleton: 脚本重新生成关节后重新应用 ox/oy 偏移
+        const skel = (glyphInstance._glyph as any)?.skeleton
+        if (skel?.type === 'glyphSkeleton') {
+          const ox = skel.ox || 0, oy = skel.oy || 0
+          if (ox !== 0 || oy !== 0) {
+            const joints = glyphInstance.getJoints()
+            for (const j of joints) {
+              if ((j as any)._x !== undefined) { (j as any)._x += ox; (j as any)._y += oy }
+              else if (typeof (j as any).x !== 'function' && (j as any).x !== undefined) { (j as any).x += ox; (j as any).y += oy }
+            }
+          }
+        }
         // 确保轮廓与骨架一致（before_bind 模板内 onSkeletonDragEnd 未调用 updateSkeletonTransformation）
         try {
           updateSkeletonTransformation(glyphInstance)
@@ -205,6 +234,10 @@ export class ScriptExecutor {
           if (import.meta.env.DEV) {
             console.warn('[ScriptExecutor.executeDragEnd] updateSkeletonTransformation failed:', err)
           }
+        }
+        // glyphSkeleton 已绑定则应用 LBS 变形
+        if (skel?.glyphSkeletonBindData) {
+          glyphSkeletonRebind(glyphInstance)
         }
 
         // 拖拽结束后清理 tempData，避免后续 executeGlyphScript 因 tempData 而跳过（导致参数修改不生效）。

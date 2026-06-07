@@ -239,12 +239,16 @@ export class CustomGlyph implements IInstance {
     }
     
     // 渲染脚本生成的组件（_components，即脚本生成的 glyph-pen, glyph-ellipse 等）
+    // glyphSkeleton 类型不渲染脚本组件（骨架仅用于变形绑定笔组件）
+    const isGlyphSkeleton = this._glyph.skeleton?.type === 'glyphSkeleton'
     if (import.meta.env.DEV) {
       console.log('[CustomGlyph.render] Rendering _components:', {
         _componentsCount: this._components.length,
-        componentTypes: this._components.map((c: any) => c.type || 'unknown')
+        componentTypes: this._components.map((c: any) => c.type || 'unknown'),
+        isGlyphSkeleton,
       })
     }
+    if (!isGlyphSkeleton) {
     this._components.forEach((component: any, index: number) => {
       if (component.render) {
         if (import.meta.env.DEV) {
@@ -287,6 +291,7 @@ export class CustomGlyph implements IInstance {
         }
       }
     })
+    } // !isGlyphSkeleton
 
     // 根据渲染样式填充
     if (fontRenderStyle.value === 'black' || fill) {
@@ -380,6 +385,7 @@ export class CustomGlyph implements IInstance {
     }
     
     // 渲染脚本生成的组件（_components）
+    if (this._glyph.skeleton?.type !== 'glyphSkeleton') {
     this._components.forEach((component: any) => {
       if (component.render) {
         component.render(canvas, {
@@ -389,7 +395,8 @@ export class CustomGlyph implements IInstance {
         })
       }
     })
-    
+    }
+
     // 根据渲染样式填充
     if (fontRenderStyle.value === 'black' || fill) {
       ctx.fillStyle = '#000'
@@ -461,6 +468,8 @@ export class CustomGlyph implements IInstance {
     })
 
     if (!useSkeletonGrid) {
+      // glyphSkeleton 类型跳过脚本组件渲染（骨架仅用于变形绑定笔组件）
+      if (this._glyph.skeleton?.type !== 'glyphSkeleton') {
       if (fontRenderStyle.value === 'black' || fontRenderStyle.value === 'color' || fill) {
         // Start fresh path after renderCanvas, then use component.render()
         // (same as script/CustomGlyph) to avoid grid coord transforms breaking non-zero winding.
@@ -481,6 +490,7 @@ export class CustomGlyph implements IInstance {
           }
         })
       }
+      } // !glyphSkeleton
     } else if (this.getSkeleton && this.getComponentsBySkeleton) {
 			if (fontRenderStyle.value === 'color') {
 				ctx.beginPath()
@@ -554,6 +564,8 @@ export class CustomGlyph implements IInstance {
     })
 
     if (!useSkeletonGrid) {
+      // glyphSkeleton 类型跳过脚本组件渲染
+      if (this._glyph.skeleton?.type !== 'glyphSkeleton') {
       if (fontRenderStyle.value === 'black' || fontRenderStyle.value === 'color' || fill) {
         if (fontRenderStyle.value === 'color') {
           ctx.beginPath()
@@ -570,6 +582,7 @@ export class CustomGlyph implements IInstance {
           }
         })
       }
+      } // !glyphSkeleton
     } else if (this.getSkeleton && this.getComponentsBySkeleton) {
       if (fontRenderStyle.value === 'color') {
         ctx.beginPath()

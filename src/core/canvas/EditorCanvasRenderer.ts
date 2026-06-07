@@ -313,6 +313,12 @@ export function renderCanvas(
       // 可能触发 store/视图更新 → 死循环卡死。
       if (hasSkeleton && !options.forceUpdate) {
         needsScriptExecution = false
+        // glyphSkeleton 例外：需要执行一次脚本来生成关节/辅助线
+        if (((glyphValue as ICustomGlyph).skeleton as any)?.type === 'glyphSkeleton') {
+          if (glyphInstance.getJoints?.()?.length === 0) {
+            needsScriptExecution = true
+          }
+        }
       }
 
       if (import.meta.env.DEV) {
@@ -828,6 +834,12 @@ export function render(
         // 同时避免因为 “no components” 导致每次 render 都重复执行脚本（clear -> 重建）的循环。
         if (hasSkeleton) {
           needsScriptExecution = false
+          // glyphSkeleton 例外：需要执行一次脚本来生成关节/辅助线（脚本不通过 strokeFnMap 执行）
+          if ((options.glyph?.skeleton as any)?.type === 'glyphSkeleton') {
+            if (!existingInstance || existingInstance.getJoints?.()?.length === 0) {
+              needsScriptExecution = true
+            }
+          }
         }
 
         // 无脚本且无骨架的字形（如只有钢笔组件）：executeGlyphScript 只会 clear() _components 而不会重新填充，
@@ -938,7 +950,9 @@ export function render(
         }
         
         // 渲染内部组件（_components）
-        if (glyphInstance && glyphInstance._components && glyphInstance._components.length > 0) {
+        // glyphSkeleton 类型不渲染脚本组件
+        const isGlyphSkeleton = (options.glyph?.skeleton as any)?.type === 'glyphSkeleton'
+        if (!isGlyphSkeleton && glyphInstance && glyphInstance._components && glyphInstance._components.length > 0) {
           if (import.meta.env.DEV) {
             console.log('[EditorCanvasRenderer] Rendering internal components (_components):', {
               instanceKey,

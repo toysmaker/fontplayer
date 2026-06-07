@@ -33,6 +33,20 @@ export const useDialogsStore = defineStore('dialogs', () => {
     glyphComponentsStrokeReplaceHandler.value = null
   }
 
+  /** 字形骨架：选择参考字形后回调完整字形数据 */
+  const glyphSkeletonPickHandler = ref<((glyph: any) => void) | null>(null)
+
+  function openGlyphComponentsDialogForSkeletonPick(onPicked: (glyph: any) => void) {
+    glyphSkeletonPickHandler.value = onPicked
+    glyphComponentsMultiSelect.value = false
+    glyphComponentsSelectedPicks.value = []
+    glyphComponentsDialogVisible.value = true
+  }
+
+  function clearGlyphSkeletonPickHandler() {
+    glyphSkeletonPickHandler.value = null
+  }
+
   function openGlyphComponentsDialog() {
     glyphComponentsDialogVisible.value = true
   }
@@ -40,6 +54,7 @@ export const useDialogsStore = defineStore('dialogs', () => {
   function closeGlyphComponentsDialog() {
     glyphComponentsDialogVisible.value = false
     glyphComponentsStrokeReplaceHandler.value = null
+    glyphSkeletonPickHandler.value = null
     glyphComponentsSelectedPicks.value = []
   }
 
@@ -135,6 +150,9 @@ export const useDialogsStore = defineStore('dialogs', () => {
     glyphComponentsStrokeReplaceHandler,
     openGlyphComponentsDialogForStrokeReplace,
     clearGlyphComponentsStrokeReplaceHandler,
+    glyphSkeletonPickHandler,
+    openGlyphComponentsDialogForSkeletonPick,
+    clearGlyphSkeletonPickHandler,
     openGlyphComponentsDialog,
     closeGlyphComponentsDialog,
     setGlyphComponentsActiveTab,

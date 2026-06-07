@@ -231,28 +231,32 @@ export function executeGlyphScript(
     // 关键点/辅助线不是通过 script 生成的，而是通过 strokeFnMap 的 instanceBasicGlyph 生成。
     // 注意：必须放在 clear() 之后，否则会被脚本执行前的 clear 清掉。
     if (targetGlyph.skeleton) {
-      const type = (targetGlyph.skeleton as any).type
-      const strokeFn: any = (strokeFnMap as any)[type]
-      if (strokeFn) {
-        strokeFn.instanceBasicGlyph(targetGlyph, glyphInstance)
-        if ((targetGlyph.skeleton as any).onSkeletonBind) {
-          strokeFn.updateSkeletonListenerBeforeBind(glyphInstance)
-        } else {
-          strokeFn.updateSkeletonListenerAfterBind(glyphInstance)
+      const skeletonObj = (targetGlyph.skeleton as any)
+      const type = skeletonObj.type
+
+      // glyphSkeleton：骨架完全由脚本中的 addJoint/addRefLine 生成，不走 strokeFnMap
+      // 直接跳过此分支，让脚本正常执行
+      if (type !== 'glyphSkeleton') {
+        const strokeFn: any = (strokeFnMap as any)[type]
+        if (strokeFn) {
+          strokeFn.instanceBasicGlyph(targetGlyph, glyphInstance)
+          if (skeletonObj.onSkeletonBind) {
+            strokeFn.updateSkeletonListenerBeforeBind(glyphInstance)
+          } else {
+            strokeFn.updateSkeletonListenerAfterBind(glyphInstance)
+          }
+          updateSkeletonTransformation(glyphInstance)
+          logGlyphSelScript(options?.glyphSelVerbose, {
+            phase: 'return_after_skeleton_strokeFn',
+            key,
+            glyphUuid: targetGlyph.uuid,
+            name: targetGlyph.name,
+            skeletonType: type,
+            _componentsLenAfter: glyphInstance._components?.length ?? 0,
+            note: '主脚本 script 未执行（此 return 在 getScript 之前）',
+          })
+          return
         }
-        // 不在此处调用 glyphSkeletonBind：多组件共存时会对共享的 glyph 写入 skeletonBindData，导致实例混乱、无法移动。
-        // 骨架绑定字形的预览在 GlyphRenderer 中单独处理（有 bindData 时才 apply）。
-        updateSkeletonTransformation(glyphInstance)
-        logGlyphSelScript(options?.glyphSelVerbose, {
-          phase: 'return_after_skeleton_strokeFn',
-          key,
-          glyphUuid: targetGlyph.uuid,
-          name: targetGlyph.name,
-          skeletonType: type,
-          _componentsLenAfter: glyphInstance._components?.length ?? 0,
-          note: '主脚本 script 未执行（此 return 在 getScript 之前）',
-        })
-        return
       }
     }
 
@@ -308,6 +312,9 @@ export function executeGlyphScript(
         try {
           const fn = new Function(scriptCode)
           fn()
+          if (import.meta.env.DEV && (targetGlyph.skeleton as any)?.type === 'glyphSkeleton') {
+            console.log('[ScriptExecutor] glyphSkeleton script executed, reflines:', glyphInstance.getRefLines()?.length, 'joints:', glyphInstance.getJoints()?.length)
+          }
           logGlyphSelScript(options?.glyphSelVerbose, {
             phase: 'after_main_script_fn',
             key,
@@ -319,6 +326,20 @@ export function executeGlyphScript(
         } catch (scriptError) {
           console.error(`[ScriptExecutor] Error executing script for "${targetGlyph.name}" (${targetGlyph.uuid}):`, scriptError)
           throw scriptError
+        }
+      }
+
+      // glyphSkeleton：脚本不认 skeleton.ox/oy（custom_1 等模板使用硬编码坐标），需手动加回偏移
+      if ((targetGlyph.skeleton as any)?.type === 'glyphSkeleton') {
+        const skel = targetGlyph.skeleton as any
+        const ox = skel.ox || 0
+        const oy = skel.oy || 0
+        if (ox !== 0 || oy !== 0) {
+          const joints = glyphInstance.getJoints()
+          for (const j of joints) {
+            if ((j as any)._x !== undefined) { (j as any)._x += ox; (j as any)._y += oy }
+            else if (typeof (j as any).x !== 'function' && (j as any).x !== undefined) { (j as any).x += ox; (j as any).y += oy }
+          }
         }
       }
 

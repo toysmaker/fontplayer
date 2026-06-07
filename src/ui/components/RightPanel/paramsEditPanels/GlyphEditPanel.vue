@@ -35,7 +35,7 @@ import type { IGlyphComponent } from '@/core/types'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
-import { glyphSkeletonBind } from '@/features/glyphSkeletonBind'
+import { glyphSkeletonBind, glyphSkeletonRebind } from '@/features/glyphSkeletonBind'
 import { orderedListWithItemsForGlyph } from '@/core/utils/glyph'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import { skeletonFreeEdit, enterSkeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
@@ -762,7 +762,18 @@ const glyphParameters = computed(() => {
   }
 
   const glyphValue = selectedComponent.value.value as ICustomGlyph
-  if (!glyphValue || !Array.isArray(glyphValue.parameters)) {
+  if (!glyphValue) return []
+
+  // glyphSkeleton：显示参考字形的参数
+  if ((glyphValue as any).skeleton?.type === 'glyphSkeleton') {
+    const refData = (glyphValue as any).skeleton.referenceGlyphData
+    if (refData?.parameters && Array.isArray(refData.parameters)) {
+      return refData.parameters as IParameter[]
+    }
+    return []
+  }
+
+  if (!Array.isArray(glyphValue.parameters)) {
     return []
   }
 
@@ -848,9 +859,95 @@ function displayConstantNumberParamValue(parameter: IParameter): number {
   return roundToPrecision(Number(getConstantValue(parameter)), precisionFromParamMax(max))
 }
 
+// glyphSkeleton 组件的参数修改：更新参考字形参数 → 执行脚本 → 重新绑定
+function handleGlyphSkeletonComponentParamChange(
+  comp: any,
+  parameter: IParameter,
+  value: number | string,
+): void {
+  const glyphValue = comp.value as any
+  const skeleton = glyphValue?.skeleton
+  if (!skeleton?.referenceGlyphData) return
+
+  const refData = skeleton.referenceGlyphData
+  const targetParam = (refData.parameters as IParameter[])?.find(
+    (p: IParameter) => p.name === parameter.name,
+  )
+  if (!targetParam) return
+
+  let processed: number | string = value
+  if (typeof value === 'number') {
+    if (targetParam.min !== undefined && value < targetParam.min) processed = targetParam.min
+    if (targetParam.max !== undefined && value > targetParam.max) processed = targetParam.max
+  }
+  targetParam.value = processed
+
+  // 同步参数到 glyphValue.parameters（脚本执行时 getParam 从此读取）
+  if (!Array.isArray(glyphValue.parameters)) glyphValue.parameters = []
+  const gParam = (glyphValue.parameters as any[]).find((p: any) => p.name === targetParam.name)
+  if (gParam) { gParam.value = processed }
+  else { (glyphValue.parameters as any[]).push({ ...targetParam }) }
+
+  // 使用存储的适配脚本（函数名已匹配当前字形 UUID）
+  const savedScript = glyphValue.script
+  if (refData.adaptedScript) {
+    glyphValue.script = refData.adaptedScript
+    glyphValue.script_reference = undefined
+  }
+
+  try {
+    executeGlyphScript(glyphValue as ICustomGlyph, comp.uuid, { ignoreTempDataGuard: true })
+  } finally {
+    glyphValue.script = savedScript
+  }
+
+  // 应用 ox/oy 偏移
+  const inst = instanceManager.getInstance(
+    comp.uuid,
+    () => new CustomGlyph(glyphValue as any),
+    'glyph',
+  ) as any
+  if (inst) {
+    inst._components = []
+    if (skeleton.glyphSkeletonBindData) {
+      glyphSkeletonRebind(inst)
+    }
+  }
+
+  // 写回 store
+  const updatedValue = { ...glyphValue, skeleton: { ...skeleton, referenceGlyphData: { ...refData } } }
+  if (editStatus.value === EditStatus.Edit) {
+    characterStore.modifyComponent(comp.uuid, { value: updatedValue })
+  } else {
+    glyphStore.modifyComponent(comp.uuid, { value: updatedValue })
+  }
+
+  const ctx = getEditCanvasContext()
+  ctx?.onRender()
+}
+
+function applyOxOyToInstance(inst: any) {
+  const skel = inst?._glyph?.skeleton
+  if (!skel || (!skel.ox && !skel.oy)) return
+  const ox = skel.ox || 0; const oy = skel.oy || 0
+  if (ox === 0 && oy === 0) return
+  const joints = inst.getJoints?.() || []
+  for (const j of joints) {
+    if (j._x !== undefined) { j._x += ox; j._y += oy }
+    else if (typeof j.x !== 'function' && j.x !== undefined) { j.x += ox; j.y += oy }
+  }
+}
+
 // 处理参数值修改
 const handleChangeParameter = async (parameter: IParameter, value: number | string) => {
   if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') {
+    return
+  }
+
+  // === glyphSkeleton：更新参考字形参数并重新绑定 ===
+  const glyphValue = selectedComponent.value.value as ICustomGlyph
+  if ((glyphValue as any)?.skeleton?.type === 'glyphSkeleton') {
+    handleGlyphSkeletonComponentParamChange(selectedComponent.value, parameter, value)
     return
   }
 
@@ -1114,7 +1211,13 @@ const handleFormatGlyphComponent = () => {
 
       <!-- 参数列表 -->
       <div class="section" v-if="glyphParameters.length > 0">
-        <div class="section-title">{{ t('panels.paramsPanel.params.title') }}</div>
+        <div class="section-title">
+          {{ t('panels.paramsPanel.params.title') }}
+          <span v-if="selectedComponent?.type === 'glyph' && (selectedComponent.value as any)?.skeleton?.type === 'glyphSkeleton'"
+                style="font-size: 11px; color: var(--primary-color); margin-left: 8px;">
+            ({{ t('panels.paramsPanel.glyphParamsPanel.skeletonRefGlyph') }}: {{ (selectedComponent.value as any)?.skeleton?.referenceGlyphData?.name || '—' }})
+          </span>
+        </div>
         <n-form label-placement="left" label-width="80px">
           <n-form-item
             v-for="parameter in glyphParameters"

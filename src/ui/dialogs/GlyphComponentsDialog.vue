@@ -180,7 +180,12 @@ function addGlyphToCurrentContainer(glyph: ICustomGlyph, nameNonce = 0) {
 function handleSelect(glyph: ICustomGlyph) {
   const strokeCb = dialogs.glyphComponentsStrokeReplaceHandler
   if (strokeCb) {
-    strokeCb(glyph.uuid)
+    try {
+      strokeCb(glyph.uuid)
+    } catch (e) {
+      console.error('[GlyphComponentsDialog] strokeReplaceHandler error:', e)
+      message.warning('操作失败: ' + (e instanceof Error ? e.message : String(e)))
+    }
     dialogs.clearGlyphComponentsStrokeReplaceHandler()
     dialogs.closeGlyphComponentsDialog()
     visible.value = false

@@ -243,10 +243,15 @@ export const expandGlyphComponent = (
 
   const glyphGeneratedComponents: any[] = (glyphInstance as any)._components || []
 
+  // glyphSkeleton 类型：脚本组件仅供骨架生成，不参与渲染/导出
+  const isGlyphSkeleton = glyph.skeleton?.type === 'glyphSkeleton'
+
   // 同原工程：脚本生成的组件 + 字形内非 glyph 普通组件，一并展开
-  const convertedComponents = glyphGeneratedComponents.map((comp: any) =>
-    convertGeneratedComponent(comp, glyphComponent),
-  )
+  const convertedComponents = isGlyphSkeleton
+    ? []
+    : glyphGeneratedComponents.map((comp: any) =>
+        convertGeneratedComponent(comp, glyphComponent),
+      )
 
   const glyphNormalComponents: IComponent[] = (glyph.components || [])
     .filter((c: any) => c && c.type !== ComponentType.CustomGlyph) as any

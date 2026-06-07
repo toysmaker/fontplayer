@@ -7,7 +7,7 @@
  * 不是任何组件（selectedComponent）的参数。
  */
 
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import {
   NButton,
   NSelect,
@@ -24,9 +24,11 @@ import {
   useMessage,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
+import * as R from 'ramda'
 import { useGlyphStore } from '@/stores/glyph'
 import { useEditorStore } from '@/stores/editor'
 import { useProjectStore } from '@/stores/project'
+import { useDialogsStore } from '@/stores/dialogs'
 import { ParameterType, type IParameter, type IVariable } from '@/core/types'
 import { genUUID } from '@/utils/uuid'
 import AddVariableDialog from '@/ui/dialogs/AddVariableDialog.vue'
@@ -51,11 +53,17 @@ import { initWeightSelector, renderBoneAndWeight } from '@/features/tools/skelet
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import { isDefaultScriptTemplate } from '@/features/programming/glyphProgrammingUtils'
+import { glyphSkeletonBindFromRefGlyph, glyphSkeletonRebind } from '@/features/glyphSkeletonBind'
+import { GlyphSkeletonDragger } from '@/features/glyphSkeletonDragger'
 
 const { t } = useI18n()
 const glyphStore = useGlyphStore()
 const editorStore = useEditorStore()
 const projectStore = useProjectStore()
+const dialogsStore = useDialogsStore()
+
+// 字形骨架拖拽器
+const skeletonDragger = new GlyphSkeletonDragger()
 
 const editGlyph = computed<any>(() => (glyphStore as any).editingGlyph)
 
@@ -84,7 +92,12 @@ const onStyleChange = () => {
 // 骨架绑定（已实现，保持原逻辑）
 // -------------------------
 const skeletonOptions = computed(() => {
-  return strokes.map((s: any) => ({ label: s.name, value: s.name }))
+  const options = strokes.map((s: any) => ({ label: s.name, value: s.name }))
+  options.push({
+    label: t('panels.paramsPanel.glyphParamsPanel.skeletonTypeGlyph'),
+    value: 'glyphSkeleton',
+  })
+  return options
 })
 
 const skeletonVisible = computed(() => {
@@ -102,6 +115,15 @@ const skeletonVisible = computed(() => {
 const onChangeSkeleton = (value: string) => {
   const g = editGlyph.value
   if (!g) return
+
+  // glyphSkeleton：打开字形选择对话框
+  if (value === 'glyphSkeleton') {
+    onSkeletonSelect.value = false
+    dialogsStore.openGlyphComponentsDialogForStrokeReplace((templateUuid: string) => {
+      handleGlyphSkeletonPick(templateUuid)
+    })
+    return
+  }
 
   const type = value
   const skeleton: any = { type, ox: 0, oy: 0 }
@@ -157,12 +179,270 @@ const onChangeSkeleton = (value: string) => {
 }
 const handleAddSkeleton = createDebouncedHandler(() => { onSkeletonSelect.value = true }, 'GlyphParamsPanel.addSkeleton')
 
+// ============= 字形骨架：选择参考字形 =============
+const handleGlyphSkeletonPick = (templateUuid: string) => {
+  try {
+  const g = editGlyph.value
+  if (!g) return
+
+  const file = projectStore.selectedFile
+  if (!file) return
+
+  // 1. 查找参考字形
+  const allGlyphs: any[] = [
+    ...(file.stroke_glyphs || []),
+    ...(file.radical_glyphs || []),
+    ...(file.glyphs || []),
+    ...(file.comp_glyphs || []),
+  ]
+  const refGlyph = allGlyphs.find((gl: any) => gl.uuid === templateUuid)
+  if (!refGlyph) {
+    message.warning('未找到参考字形')
+    return
+  }
+
+  // 2. Deep clone 参考字形的参数和脚本，存入 skeleton.referenceGlyphData
+  const refData: any = R.clone({
+    name: refGlyph.name,
+    parameters: refGlyph.parameters || [],
+    script: refGlyph.script,
+    script_reference: refGlyph.script_reference,
+    glyph_script: refGlyph.glyph_script,
+    param_script: refGlyph.param_script,
+    system_script: refGlyph.system_script,
+  })
+
+  g.skeleton = {
+    type: 'glyphSkeleton',
+    ox: 0,
+    oy: 0,
+    referenceGlyphUUID: templateUuid,
+    referenceGlyphData: refData,
+    boneSegmentsPerRefLine: 5,
+  }
+
+  // 4. 将参考字形参数复制到当前字形（脚本执行时 getParam 需要）
+  const savedScript = g.script
+  const savedScriptRef = g.script_reference
+  const savedParams = g.parameters
+
+  if (!Array.isArray(g.parameters)) g.parameters = []
+  const existingParamNames = new Set((g.parameters as any[]).map((p: any) => p.name))
+  for (const rp of (refData.parameters || [])) {
+    if (!existingParamNames.has(rp.name)) {
+      (g.parameters as any[]).push(R.clone(rp))
+    }
+  }
+
+  // 5. 适配脚本函数名：参考字形的脚本函数名基于参考 UUID，需要替换为当前字形 UUID
+  let adaptedScript = refData.script
+  if (adaptedScript) {
+    const refFnName = `script_${templateUuid.replaceAll('-', '_')}`
+    const editFnName = `script_${g.uuid.replaceAll('-', '_')}`
+    adaptedScript = adaptedScript.replace(refFnName, editFnName)
+    // 存储适配后的脚本（函数名匹配当前字形 UUID），供组件引用时执行
+    refData.adaptedScript = adaptedScript
+  }
+
+  g.script = adaptedScript || undefined
+  g.script_reference = undefined
+
+  // 6. 直接在编辑实例上执行脚本（生成 joints/reflines + 设置 onSkeletonDrag 回调）
+  const editInst = editGlyphInstance.value as any
+  if (!editInst) {
+    g.skeleton = null
+    message.warning('无法获取编辑实例')
+    return
+  }
+  editInst.tempData = null
+
+  try {
+    executeGlyphScript(g, g.uuid, { ignoreTempDataGuard: true })
+  } catch (e) {
+    console.error('[glyphSkeleton] executeGlyphScript failed:', e)
+    g.script = savedScript
+    g.script_reference = savedScriptRef
+    g.parameters = savedParams
+    g.skeleton = null
+    message.warning('脚本执行失败')
+    return
+  }
+
+  // 7. 恢复原始脚本（参数保留克隆版本），检查辅助线
+  g.script = savedScript
+  g.script_reference = savedScriptRef
+  // 刷新 refData.parameters（脚本可能通过 setParam 修改了参数值）
+  refData.parameters = R.clone(g.parameters)
+
+  const reflines = editInst?.getRefLines?.() || []
+  const joints = editInst?.getJoints?.() || []
+
+  console.log('[glyphSkeleton] After script execution:', {
+    jointsCount: joints.length,
+    reflinesCount: reflines.length,
+    hasDragStart: !!editInst.onSkeletonDragStart,
+    hasDrag: !!editInst.onSkeletonDrag,
+    hasDragEnd: !!editInst.onSkeletonDragEnd,
+  })
+
+  if (reflines.length === 0) {
+    message.warning('参考字形脚本未生成辅助线，无法创建骨架')
+    g.skeleton = null
+    return
+  }
+
+  // 8. 清除脚本生成的视觉组件（glyphSkeleton 只用骨架）
+  editInst._components = []
+  // 清除可能被脚本设置的 getComponentsBySkeleton（我们不想要脚本组件）
+  editInst.getComponentsBySkeleton = null
+
+  // 9. 保存 refData 和缓存的 reflines/joints
+  g.skeleton.referenceGlyphData = refData
+  ;(g.skeleton as any).cachedJoints = R.clone(joints)
+  ;(g.skeleton as any).cachedRefLines = R.clone(reflines)
+
+  // 10. 进入绑定前状态：显示骨架，可拖拽（由脚本的 onSkeletonDrag 回调处理约束）
+  g.skeleton.onSkeletonBind = true
+  onSkeletonDragging.value = true
+  editorStore.checkJoints = true
+  editorStore.checkRefLines = true
+
+  message.success(`已加载骨架：${joints.length} 个关键点，${reflines.length} 条辅助线，请拖拽调整后点击"绑定骨架"`)
+
+  const ctx = getEditCanvasContext()
+  ctx?.onRender()
+  } catch (e) {
+    console.error('[glyphSkeleton] handleGlyphSkeletonPick error:', e)
+    message.warning('字形骨架加载失败: ' + (e instanceof Error ? e.message : String(e)))
+  }
+}
+
+// 修改参考字形参数后重新执行脚本并重新绑定
+const handleChangeGlyphSkeletonRefParam = (param: IParameter, value: number | string | null) => {
+  const g = editGlyph.value
+  if (!g?.skeleton?.referenceGlyphData || value === null) return
+
+  const refData = g.skeleton.referenceGlyphData
+  const targetParam = (refData.parameters as IParameter[])?.find((p: IParameter) => p.uuid === param.uuid)
+  if (!targetParam) return
+
+  let processed: number | string = value
+  if (typeof value === 'number') {
+    if (targetParam.min !== undefined && value < targetParam.min) processed = targetParam.min
+    if (targetParam.max !== undefined && value > targetParam.max) processed = targetParam.max
+  }
+  targetParam.value = processed
+
+  // 同步到 g.parameters
+  const gParam = (g.parameters as any[])?.find((p: any) => p.uuid === param.uuid)
+  if (gParam) gParam.value = processed
+
+  // 使用存储的适配脚本（首次 pick 时已生成，函数名匹配当前字形 UUID）
+  const scriptToRun = refData.adaptedScript || refData.script
+  if (scriptToRun) {
+    const savedScript = g.script
+    g.script = scriptToRun
+    g.script_reference = undefined
+
+    try {
+      executeGlyphScript(g, g.uuid, { ignoreTempDataGuard: true })
+
+      // 在恢复 g.script 之前立即执行 rebind
+      // 重要：直接用 executeGlyphScript 内部使用的 key 获取同一实例，避免实例池不一致
+      const instRebind = instanceManager.getInstance(g.uuid, () => new CustomGlyph(g), 'glyph') as any
+      if (import.meta.env.DEV && instRebind) {
+        console.log('[glyphSkeleton] Before rebind:', {
+          instReflines: instRebind.getRefLines?.()?.length ?? -1,
+          instJoints: instRebind.getJoints?.()?.length ?? -1,
+          hasBindData: !!(g.skeleton as any).glyphSkeletonBindData,
+          onSkeletonBind: g.skeleton.onSkeletonBind,
+        })
+      }
+      if (instRebind) {
+        instRebind._components = []
+        if (!g.skeleton.onSkeletonBind && (g.skeleton as any).glyphSkeletonBindData) {
+          glyphSkeletonRebind(instRebind)
+        }
+      }
+    } finally {
+      g.script = savedScript
+    }
+  }
+
+  const ctx = getEditCanvasContext()
+  ctx?.onRender()
+}
+
+// 将 skeleton.ox/oy 偏移应用到实例上所有关节（custom_1 脚本不认 ox/oy，需手动加回）
+function applySkeletonOffsetToJoints(inst: any) {
+  const skel = inst?._glyph?.skeleton
+  if (!skel || (!skel.ox && !skel.oy)) return
+  const ox = skel.ox || 0
+  const oy = skel.oy || 0
+  if (ox === 0 && oy === 0) return
+  const allJoints = inst.getJoints?.() || []
+  for (const j of allJoints) {
+    if (j._x !== undefined) { j._x += ox; j._y += oy }
+    else if (typeof j.x !== 'function' && j.x !== undefined) { j.x += ox; j.y += oy }
+  }
+}
+
+// 参考字形参数列表（用于 UI 显示）
+const glyphSkeletonRefParams = computed<IParameter[]>(() => {
+  const g = editGlyph.value
+  if (!g?.skeleton?.referenceGlyphData?.parameters) return []
+  return g.skeleton.referenceGlyphData.parameters as IParameter[]
+})
+
+const isGlyphSkeletonType = computed(() => {
+  return editGlyph.value?.skeleton?.type === 'glyphSkeleton'
+})
+
+// ============= 绑定骨架 =============
 const bindSkeleton = () => {
   const g = editGlyph.value
   if (!g) return
 
   if (!g.components?.length) {
     onSkeletonDragging.value = false
+    return
+  }
+
+  // glyphSkeleton：执行多组件绑定
+  if (g.skeleton?.type === 'glyphSkeleton') {
+    const inst = editGlyphInstance.value as any
+    if (!inst) return
+
+    const refData = g.skeleton.referenceGlyphData
+    if (!refData) return
+
+    const ok = glyphSkeletonBindFromRefGlyph(inst, refData, g.skeleton.boneSegmentsPerRefLine || 5)
+    if (!ok) {
+      message.warning(t('panels.paramsPanel.glyphParamsPanel.skeletonNoRefLines'))
+      return
+    }
+
+    onSkeletonDragging.value = false
+    g.skeleton.onSkeletonBind = false
+    // glyphSkeleton 使用 glyphSkeletonBindData，calculateGlyphWeight 依赖 skeletonBindData，跳过
+    // g.skeleton.originWeight 留空，glyphSkeleton 暂不支持动态字重
+
+    if (!Array.isArray(g.parameters)) g.parameters = []
+    // 确保字重参数存在（即使不计算 originWeight）
+    const weightParam = (g.parameters as Array<any>).find((x: any) => x?.name === '字重')
+    if (!weightParam) {
+      (g.parameters as Array<any>).push({
+        uuid: genUUID(),
+        name: '字重',
+        type: ParameterType.Number,
+        value: 40,
+        min: 0,
+        max: 200,
+      })
+    }
+
+    const ctx = getEditCanvasContext()
+    ctx?.onRender()
     return
   }
 
@@ -196,6 +476,31 @@ const removeSkeleton = () => {
   if (!g?.skeleton) return
 
   const { type } = g.skeleton
+
+  if (type === 'glyphSkeleton') {
+    // glyphSkeleton 专用清理
+    const inst = editGlyphInstance.value as any
+    if (inst) {
+      inst.getSkeleton = null
+      inst.onSkeletonDragStart = null
+      inst.onSkeletonDrag = null
+      inst.onSkeletonDragEnd = null
+      inst._joints = []
+      inst._reflines = []
+    }
+    // 清理字重参数
+    if (Array.isArray(g.parameters)) {
+      const idx = (g.parameters as Array<any>).findIndex((p: any) => p?.name === '字重')
+      if (idx !== -1) (g.parameters as Array<any>).splice(idx, 1)
+    }
+    g.skeleton = null
+    skeletonDragger.clearContext()
+
+    const ctx = getEditCanvasContext()
+    ctx?.onRender()
+    return
+  }
+
   g.skeleton = null
 
   const stroke = strokes.find((s: any) => s.name === type)
@@ -235,6 +540,47 @@ const modifySkeleton = () => {
   if (!g?.skeleton) return
 
   const { type } = g.skeleton
+
+  // glyphSkeleton：重新执行脚本并进入拖拽模式
+  if (type === 'glyphSkeleton') {
+    const refData = g.skeleton.referenceGlyphData
+    if (!refData?.script) return
+
+    // 适配脚本函数名
+    let adaptedScript = refData.script
+    const refFnName = `script_${g.skeleton.referenceGlyphUUID.replaceAll('-', '_')}`
+    const editFnName = `script_${g.uuid.replaceAll('-', '_')}`
+    adaptedScript = adaptedScript.replace(refFnName, editFnName)
+
+    const savedScript = g.script
+    g.script = adaptedScript
+    g.script_reference = undefined
+
+    const inst = editGlyphInstance.value as any
+    if (inst) {
+      inst.tempData = null
+      inst._components = []
+    }
+
+    try {
+      executeGlyphScript(g, g.uuid, { ignoreTempDataGuard: true })
+    } finally {
+      g.script = savedScript
+    }
+
+    if (inst) {
+      inst._components = []
+    }
+
+    onSkeletonSelect.value = false
+    g.skeleton.onSkeletonBind = true
+    onSkeletonDragging.value = true
+
+    const ctx = getEditCanvasContext()
+    ctx?.onRender()
+    return
+  }
+
   const strokeFn: any = (strokeFnMap as any)[type]
   strokeFn && strokeFn.instanceBasicGlyph(g)
   strokeFn && strokeFn.updateSkeletonListenerBeforeBind(editGlyphInstance.value)
@@ -350,6 +696,13 @@ const rerenderAndExecute = () => {
 const handleChangeParameter = (parameter: IParameter, value: number | string | null) => {
   const g = editGlyph.value
   if (!g || value === null) return
+
+  // glyphSkeleton：路由到专用处理函数（需要重新执行脚本 + rebind）
+  if (g.skeleton?.type === 'glyphSkeleton') {
+    handleChangeGlyphSkeletonRefParam(parameter, value)
+    return
+  }
+
   if (!Array.isArray(g.parameters)) g.parameters = []
 
   // Constant：修改的是常量值（通过 constantsMap）
@@ -461,6 +814,60 @@ function toggleVariablePreview() {
   const ctx = getEditCanvasContext()
   ctx?.onRender()
 }
+
+// ============= GlyphSkeletonDragger 生命周期 =============
+onMounted(() => {
+  const ctx = getEditCanvasContext()
+  if (ctx?.canvas) {
+    skeletonDragger.setup(ctx.canvas, ctx.getCoord, () => {
+      ctx.onRender()
+    })
+  }
+})
+
+// 监听 onSkeletonDragging 变化，控制拖拽器上下文
+watch([onSkeletonDragging, () => editGlyph.value?.skeleton?.type], ([dragging, skeletonType]) => {
+  if (dragging && skeletonType === 'glyphSkeleton') {
+    // 确保 dragger 已获取 canvas（onMounted 时 ctx 可能为 null）
+    const ctx = getEditCanvasContext()
+    if (ctx?.canvas) {
+      skeletonDragger.setup(ctx.canvas, ctx.getCoord, () => ctx.onRender())
+    }
+    const inst = editGlyphInstance.value as any
+    if (inst) {
+      skeletonDragger.setContext(inst)
+    }
+  } else {
+    skeletonDragger.clearContext()
+  }
+})
+
+onUnmounted(() => {
+  // 如果退出时还未绑定骨架（onSkeletonBind=true），重置骨架数据
+  const g = editGlyph.value
+  if (g?.skeleton?.type === 'glyphSkeleton' && g.skeleton.onSkeletonBind) {
+    const inst = editGlyphInstance.value as any
+    if (inst) {
+      inst.onSkeletonDragStart = null
+      inst.onSkeletonDrag = null
+      inst.onSkeletonDragEnd = null
+      inst.getSkeleton = null
+      inst.getComponentsBySkeleton = null
+      inst._joints = []
+      inst._reflines = []
+      inst._components = []
+      inst.tempData = null
+    }
+    // 清理参数（只保留原始的，移除参考字形参数）
+    if (Array.isArray(g.parameters)) {
+      const refParamNames = new Set((g.skeleton.referenceGlyphData?.parameters as any[] || []).map((p: any) => p.name))
+      g.parameters = (g.parameters as any[]).filter((p: any) => !refParamNames.has(p.name) && p.name !== '字重')
+    }
+    g.skeleton = null
+    onSkeletonDragging.value = false
+  }
+  skeletonDragger.destroy()
+})
 </script>
 
 <template>
@@ -543,6 +950,49 @@ function toggleVariablePreview() {
             <n-button size="small" @click="handleCloseWeightSetting" @pointerup="handleCloseWeightSetting">{{ t('panels.paramsPanel.glyphParamsPanel.finishWeightSetting') }}</n-button>
           </n-form>
         </div>
+      </div>
+    </div>
+
+    <!-- 2.5) 字形骨架：参考字形参数编辑（仅在绑定前显示，绑定后参数合并到下方"参数"区域） -->
+    <div v-if="isGlyphSkeletonType && editGlyph?.skeleton?.onSkeletonBind && editGlyph?.skeleton?.referenceGlyphData" class="section">
+      <div class="section-title">
+        {{ t('panels.paramsPanel.glyphParamsPanel.skeletonParamSectionTitle', { name: editGlyph.skeleton.referenceGlyphData.name || '' }) }}
+      </div>
+      <div class="section-body">
+        <n-form label-placement="left" label-width="90">
+          <n-form-item v-for="param in glyphSkeletonRefParams" :key="param.uuid" :label="param.name">
+            <!-- Number -->
+            <div v-if="param.type === ParameterType.Number" style="width: 100%;">
+              <n-input-number
+                :value="param.value as number"
+                :min="param.min ?? 0"
+                :max="param.max ?? 1000"
+                :step="(param.max ?? 1000) <= 10 ? 0.01 : 1"
+                :precision="(param.max ?? 1000) <= 10 ? 2 : 0"
+                @update:value="(v) => handleChangeGlyphSkeletonRefParam(param, v)"
+              />
+              <n-slider
+                style="margin-top: 8px;"
+                :min="param.min ?? 0"
+                :max="param.max ?? 1000"
+                :step="(param.max ?? 1000) <= 10 ? 0.01 : 1"
+                @update:value="(v) => handleChangeGlyphSkeletonRefParam(param, v)"
+                :value="param.value as number"
+              />
+            </div>
+            <!-- Enum -->
+            <div v-else-if="param.type === ParameterType.Enum" style="width: 100%;">
+              <n-select
+                :value="param.value"
+                :options="param.options || []"
+                @update:value="(v) => handleChangeGlyphSkeletonRefParam(param, v as any)"
+              />
+            </div>
+          </n-form-item>
+          <div v-if="glyphSkeletonRefParams.length === 0" style="font-size: 12px; color: var(--light-0);">
+            {{ t('panels.paramsPanel.glyphParamsPanel.skeletonRefGlyph') }}: {{ editGlyph?.skeleton?.referenceGlyphData?.name || '—' }}
+          </div>
+        </n-form>
       </div>
     </div>
 
