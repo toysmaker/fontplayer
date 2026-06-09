@@ -11,13 +11,19 @@ import {
 
 type GetCoord = (coord: number) => number
 
+/** 获取骨架绑定数据（兼容 glyphSkeletonBindData 和 skeletonBindData） */
+function getSkeletonBindData(glyph: any) {
+  return glyph?.skeleton?.glyphSkeletonBindData || glyph?.skeleton?.skeletonBindData || null
+}
+
 const currentBone = ref<any>(null)
 
 const setWeight = (mouseX: number, mouseY: number) => {
   const glyphStore = useGlyphStore()
   const editGlyph = (glyphStore as any).editingGlyph
-  const { pointsBonesMap, originalPoints, bones: allBones } =
-    editGlyph?.skeleton?.skeletonBindData || {}
+  const bindData = getSkeletonBindData(editGlyph)
+  if (!bindData) return
+  const { pointsBonesMap, originalPoints, bones: allBones } = bindData
   if (!pointsBonesMap) return
 
   for (let i = 0; i < pointsBonesMap.length; i++) {
@@ -75,7 +81,8 @@ export const initWeightSelector = (
 ) => {
   const { getCoord, onRender } = options
   const glyphStore = useGlyphStore()
-  const { bones } = (glyphStore as any).editingGlyph?.skeleton?.skeletonBindData || { bones: [] }
+  const bindData = getSkeletonBindData((glyphStore as any).editingGlyph)
+  const bones = bindData?.bones || []
 
   currentBone.value = null
 
@@ -137,8 +144,9 @@ export const renderBoneAndWeight = (
   if (!bone) return
 
   const glyphStore = useGlyphStore()
-  const { pointsBonesMap, originalPoints } =
-    (glyphStore as any).editingGlyph?.skeleton?.skeletonBindData || {}
+  const bindData = getSkeletonBindData((glyphStore as any).editingGlyph)
+  if (!bindData) return
+  const { pointsBonesMap, originalPoints } = bindData
   if (!pointsBonesMap) return
 
   const _points: Array<any> = []

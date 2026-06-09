@@ -641,15 +641,21 @@ const selectedBoneIndex = computed<number | null>({
   },
 })
 
+function getSkeletonBindBones(g: any) {
+  return g?.skeleton?.glyphSkeletonBindData?.bones || g?.skeleton?.skeletonBindData?.bones || []
+}
+
 const bonesOptions = computed(() => {
-  const bones = editGlyph.value?.skeleton?.skeletonBindData?.bones || []
+  const bones = getSkeletonBindBones(editGlyph.value)
   return bones.map((b: any, idx: number) => ({ label: b.id, value: idx }))
 })
 
 const handleChangeSelectedBone = (value: number) => {
   const g = editGlyph.value
-  if (!g?.skeleton?.skeletonBindData?.bones) return
-  selectedBone.value = g.skeleton.skeletonBindData.bones[value]
+  if (!g) return
+  const bones = getSkeletonBindBones(g)
+  if (!bones.length) return
+  selectedBone.value = bones[value]
   selectedBone.value.index = value
 
   const ctx = getEditCanvasContext()

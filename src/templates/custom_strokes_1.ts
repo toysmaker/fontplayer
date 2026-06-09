@@ -418,7 +418,7 @@ const custom_strokes_1 = [
       },
       {
         name: '钩-水平延伸',
-        default: 100,
+        default: 130,
         min: 0,
         max: 300,
       },
@@ -443,7 +443,7 @@ const custom_strokes_1 = [
       },
       {
         name: '钩-竖直延伸',
-        default: 100,
+        default: 130,
         min: 0,
         max: 300,
       },
@@ -480,7 +480,7 @@ const custom_strokes_1 = [
       },
       {
         name: '钩-竖直延伸',
-        default: 80,
+        default: 130,
         min: 0,
         max: 200,
       },
@@ -518,7 +518,7 @@ const custom_strokes_1 = [
       },
       {
         name: '钩-水平延伸',
-        default: 80,
+        default: 130,
         min: 0,
         max: 300,
       },
@@ -549,7 +549,7 @@ const custom_strokes_1 = [
       },
       {
         name: '钩-水平延伸',
-        default: 80,
+        default: 130,
         min: 0,
         max: 300,
       },
@@ -574,7 +574,7 @@ const custom_strokes_1 = [
       },
       {
         name: '弯-水平延伸',
-        default: 100,
+        default: 200,
         min: 0,
         max: 1000,
       },
@@ -586,7 +586,7 @@ const custom_strokes_1 = [
       },
       {
         name: '钩-竖直延伸',
-        default: 60,
+        default: 130,
         min: 0,
         max: 300,
       },
@@ -635,7 +635,7 @@ const custom_strokes_1 = [
       },
       {
         name: '钩-竖直延伸',
-        default: 60,
+        default: 130,
         min: 0,
         max: 300,
       },
@@ -728,7 +728,7 @@ const custom_strokes_1 = [
       },
       {
         name: '钩-水平延伸',
-        default: 80,
+        default: 130,
         min: 0,
         max: 300,
       },

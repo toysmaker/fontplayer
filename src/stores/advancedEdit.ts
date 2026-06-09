@@ -26,6 +26,7 @@ import { ContourConverter } from '@/core/font/converter'
 import { renderAdvancedEditPreview, renderZoomedCharacterPreview as renderZoomedPreviewCanvas } from '@/core/canvas/advancedEditPreview'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+import { glyphSkeletonBindFromRefGlyph, glyphSkeletonRebind, calculatePointBones, applyGlyphSkeletonTransformation } from '@/features/glyphSkeletonBind'
 import { orderedListWithItemsForGlyph, parameterRowsForGlyph } from '@/core/utils/glyph'
 import {
   applySharedSerifConstantsPatch,
@@ -1146,6 +1147,9 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     for (const orig of originSampleCharactersList.value) {
       const c = R.clone(orig)
       applyFangYuanStylesToCharacterData(c, idx, options)
+      if (strokeStyleTagSelected.value) {
+        replaceGlyphComponentsByStyleTag(c, strokeStyleTagSelected.value)
+      }
       rewriteGlyphParamsForAdvancedPreview(c)
       next.push(c)
       idx++
@@ -1210,6 +1214,9 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
         const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
         if (!ch) continue
         applyFangYuanStylesToCharacterWithScripts(ch, i)
+        if (strokeStyleTagSelected.value) {
+          replaceGlyphComponentsByStyleTag(ch, strokeStyleTagSelected.value)
+        }
         await characterDataManager.updateCharacter(file.uuid, ch)
         projectStore.loadingProgress = i + 1
         const now = performance.now()
@@ -1222,6 +1229,225 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
       restoreProjectConstantsMap()
       await characterStore.invalidateAllCachedCharacterPreviews()
       await refreshFangYuanStylePreviews()
+      bulkCompleted = true
+    } finally {
+      projectStore.loading = false
+      projectStore.loadingProgress = 0
+      projectStore.loadingTotal = 0
+      projectStore.loadingMessage = ''
+    }
+    if (bulkCompleted) await afterBulkMutateMainList()
+  }
+
+  // ============= 笔画风格切换（字形骨架绑定支持） =============
+  const strokeStyleTagSelected = ref<string>('')
+
+  const strokeStyleTagOptions = computed(() => {
+    const file = projectStore.selectedFile
+    if (!file?.stroke_glyphs?.length) return []
+    const tags = new Set<string>()
+    for (const g of file.stroke_glyphs) {
+      if (g.style && g.style.trim()) tags.add(g.style.trim())
+    }
+    return Array.from(tags).sort()
+  })
+
+  /** 用指定风格标签的字形替换字符中的字形组件（预览用，不写回 store） */
+  function replaceGlyphComponentsByStyleTag(characterFile: ICharacterFileLite, styleTag: string): void {
+    if (!styleTag) return
+    const file = projectStore.selectedFile
+    if (!file?.stroke_glyphs?.length) return
+    const styledGlyphs = file.stroke_glyphs.filter((g) => g.style === styleTag)
+    if (!styledGlyphs.length) return
+
+    if (import.meta.env.DEV) console.log('[strokeStyleReplace] replacing with tag:', styleTag, 'styledGlyphs:', styledGlyphs.length)
+
+    for (let i = 0; i < characterFile.components.length; i++) {
+      const comp = characterFile.components[i]
+      if (comp.type !== 'glyph') continue
+      const gc = comp as IGlyphComponent
+      const curGlyph = gc.value as ICustomGlyph
+      const strokeName = curGlyph.name
+      const matched = styledGlyphs.find((g) => g.name === strokeName)
+      if (!matched) continue
+
+      const newGlyph = R.clone(matched) as ICustomGlyph
+      const destParams = parameterRowsForGlyph(newGlyph) ?? []
+      const srcParams = parameterRowsForGlyph(curGlyph) ?? []
+
+      // 复制同名参数值
+      for (const dp of destParams) {
+        const sp = srcParams.find((q: any) => q.name === dp.name)
+        if (!sp) continue
+        if (sp.type === ParameterType.Constant) {
+          dp.type = ParameterType.Constant
+          dp.value = sp.value
+        } else if (dp.type !== ParameterType.Constant) {
+          dp.value = sp.value
+        }
+      }
+
+      // 字形骨架绑定：保留原字形的笔组件和绑定数据，用新风格字形重新生成骨架并变形
+      const isOldGlyphSkeleton = (curGlyph.skeleton as any)?.type === 'glyphSkeleton'
+      const isNewGlyphSkeleton = (newGlyph.skeleton as any)?.type === 'glyphSkeleton'
+
+      if (isOldGlyphSkeleton && isNewGlyphSkeleton) {
+        if (import.meta.env.DEV) console.log('[strokeStyleReplace] glyphSkeleton replace:', strokeName, 'oldParams:', srcParams?.length, 'newParams:', destParams?.length)
+        // 字形骨架切换：复制 ox/oy，保留新风格字形的笔组件（由新骨架变形）
+        if ((newGlyph.skeleton as any) && (curGlyph.skeleton as any)) {
+          ;(newGlyph.skeleton as any).ox = (curGlyph.skeleton as any).ox ?? 0
+          ;(newGlyph.skeleton as any).oy = (curGlyph.skeleton as any).oy ?? 0
+        }
+        // 确保 adaptedScript 函数名匹配
+        const refData = (newGlyph.skeleton as any)?.referenceGlyphData
+        if (refData) {
+          if (!refData.adaptedScript && refData.script) {
+            const refUuid = (newGlyph.skeleton as any).referenceGlyphUUID || ''
+            const editUuid = newGlyph.uuid
+            refData.adaptedScript = refData.script.replace(`script_${refUuid.replaceAll('-', '_')}`, `script_${editUuid.replaceAll('-', '_')}`)
+          } else if (refData.adaptedScript) {
+            const editFnName = `script_${newGlyph.uuid.replaceAll('-', '_')}`
+            if (!refData.adaptedScript.includes(editFnName)) {
+              refData.adaptedScript = refData.adaptedScript.replace(/script_[a-z0-9_]+/g, editFnName)
+            }
+          }
+        }
+      }
+
+      gc.value = newGlyph
+
+      // 字形骨架绑定：需要将 adaptedScript 临时设置到 glyph.script 上供脚本执行
+      if (isNewGlyphSkeleton) {
+        const refData = (newGlyph.skeleton as any)?.referenceGlyphData
+        const adaptedScript = refData?.adaptedScript
+        const savedScript = newGlyph.script
+        if (adaptedScript) {
+          newGlyph.script = adaptedScript
+          newGlyph.script_reference = undefined
+        }
+        try {
+          executeGlyphScript(newGlyph, comp.uuid, { ignoreTempDataGuard: true })
+        } finally {
+          newGlyph.script = savedScript
+        }
+        // 脚本执行后绑定笔组件到新骨架
+        const inst = instanceManager.acquireTemporaryInstance(
+          comp.uuid,
+          () => new CustomGlyph(newGlyph),
+          'glyph',
+        ) as unknown as CustomGlyph
+        if (inst) {
+          inst._components = []
+          const hasExistingBind = !!(newGlyph.skeleton as any)?.glyphSkeletonBindData
+          if (import.meta.env.DEV) {
+            console.log('[strokeStyleReplace] glyphSkeleton bind:', {
+              strokeName,
+              hasExistingBind,
+              hasPenComps: newGlyph.components?.some((c: any) => c.type === 'pen'),
+              penCount: newGlyph.components?.filter((c: any) => c.type === 'pen').length || 0,
+              oldBindBones: (newGlyph.skeleton as any)?.glyphSkeletonBindData?.bones?.length || 0,
+            })
+          }
+          if (hasExistingBind) {
+            glyphSkeletonRebind(inst)
+          } else if (refData && newGlyph.components?.some((c: any) => c.type === 'pen')) {
+            glyphSkeletonBindFromRefGlyph(inst, refData, (newGlyph.skeleton as any).boneSegmentsPerRefLine || 5)
+          }
+          // 更新 componentPointRanges 为新字形笔组件的 UUID（originalPoints 和 bindMatrix 由 rebind/bindFn 保留）
+          const bindData = (newGlyph.skeleton as any)?.glyphSkeletonBindData
+          if (bindData && newGlyph.components) {
+            const penComps = (newGlyph.components as any[]).filter((c: any) => c.type === 'pen')
+            const newRanges: Array<{componentUUID: string, start: number, end: number}> = []
+            let offset = 0
+            for (const pc of penComps) {
+              const pts = pc.value?.points
+              if (pts && pts.length > 0) {
+                newRanges.push({ componentUUID: pc.uuid, start: offset, end: offset + pts.length })
+                offset += pts.length
+              }
+            }
+            if (newRanges.length > 0) {
+              bindData.componentPointRanges = newRanges
+            }
+          }
+        }
+      } else {
+        executeGlyphScript(newGlyph, comp.uuid)
+      }
+    }
+  }
+
+  /** 笔画风格切换预览：刷新样例字符 */
+  async function refreshStrokeStylePreviews() {
+    const tag = strokeStyleTagSelected.value
+    if (import.meta.env.DEV) console.log('[strokeStyleReplace] refreshStrokeStylePreviews, tag:', tag)
+    await updateSampleCharactersList()
+    const chars: ICharacterFileLite[] = []
+    for (const orig of originSampleCharactersList.value) {
+      const c = R.clone(orig)
+      if (tag) replaceGlyphComponentsByStyleTag(c, tag)
+      chars.push(c)
+    }
+    sampleCharactersList.value = chars
+    await nextTick()
+    requestAnimationFrame(() => renderStrokeStylePreviews())
+  }
+
+  function renderStrokeStylePreviews() {
+    const m = getFontMetrics()
+    for (const ch of sampleCharactersList.value) {
+      const canvas = document.getElementById(`advanced-edit-preview-canvas-${ch.uuid}`) as HTMLCanvasElement | null
+      if (!canvas) continue
+      const ordered = orderedListWithItemsForCharacterFile(ch)
+      const contours = ContourConverter.componentsToContours(
+        ordered,
+        { ...m, preview: true, forceUpdate: true, advancedEdit: true },
+        { x: 0, y: 0 },
+      )
+      const fillColors = ContourConverter.getFillColors(ordered as IComponent[])
+      renderAdvancedEditPreview(canvas, contours, fillColors, projectStore.fontPreviewStyle)
+    }
+  }
+
+  /** 一键更新全部字库：将笔画风格切换应用到所有字符 */
+  async function applyStrokeStyleToEntireProject() {
+    const tag = strokeStyleTagSelected.value
+    if (!tag) return
+    const file = projectStore.selectedFile
+    if (!file) return
+
+    const list = file.characterList ?? []
+    const n = Math.max(1, list.length)
+    projectStore.loading = true
+    projectStore.loadingTotal = n
+    projectStore.loadingProgress = 0
+    projectStore.loadingMessage = '正在应用笔画风格到全部字符…'
+    let lastYield = performance.now()
+    let bulkCompleted = false
+
+    try {
+      if (import.meta.env.DEV) console.log('[strokeStyleReplace] applyToEntireProject, tag:', tag, 'charCount:', list.length)
+      for (let i = 0; i < list.length; i++) {
+        const meta = list[i]
+        const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
+        if (!ch) continue
+        const beforeCount = ch.components?.filter((c: any) => c.type === 'glyph').length || 0
+        replaceGlyphComponentsByStyleTag(ch, tag)
+        const afterGlyphs = ch.components?.filter((c: any) => c.type === 'glyph') || []
+        if (import.meta.env.DEV && afterGlyphs.length > 0 && i < 3) {
+          console.log(`[strokeStyleReplace] char ${i} "${(meta.character as any)?.text || ''}": ${beforeCount} glyphs, styles:`, afterGlyphs.map((c: any) => (c.value as any)?.style || (c.value as any)?.skeleton?.type || 'none'))
+        }
+        await characterDataManager.updateCharacter(file.uuid, ch)
+        projectStore.loadingProgress = i + 1
+        const now = performance.now()
+        if (now - lastYield >= 16) {
+          await new Promise<void>((r) => setTimeout(r, 0))
+          lastYield = performance.now()
+        }
+      }
+      projectStore.markFileUnsaved(file.uuid)
+      await characterStore.invalidateAllCachedCharacterPreviews()
+      await refreshStrokeStylePreviews()
       bulkCompleted = true
     } finally {
       projectStore.loading = false
@@ -1287,5 +1513,10 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     refreshFangYuanStylePreviews,
     quickRefreshFangYuanStylePreviews,
     applyFangYuanStylesToEntireProject,
+    strokeStyleTagSelected,
+    strokeStyleTagOptions,
+    replaceGlyphComponentsByStyleTag,
+    refreshStrokeStylePreviews,
+    applyStrokeStyleToEntireProject,
   }
 })

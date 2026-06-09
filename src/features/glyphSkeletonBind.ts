@@ -1639,20 +1639,25 @@ export function glyphSkeletonBindFromRefGlyph(
  * 应用 glyphSkeleton 变形到所有绑定的钢笔组件
  * 使用 glyphSkeletonBindData 中的原始点和当前骨骼计算新位置
  */
-function applyGlyphSkeletonTransformation(glyphInstance: CustomGlyph): void {
+export function applyGlyphSkeletonTransformation(glyphInstance: CustomGlyph): void {
   const skeleton = (glyphInstance._glyph as any)?.skeleton
   if (!skeleton?.glyphSkeletonBindData) return
 
   const { bones, pointsBonesMap, originalPoints, componentPointRanges } = skeleton.glyphSkeletonBindData
   if (!originalPoints?.length || !bones?.length) return
 
-  // 更新骨骼的 currentMatrix: current * inv(bind)，即从绑定姿态到当前姿态的增量变换
+  // 更新骨骼的 currentMatrix: newMatrix * scale * inv(bindMatrix)
+  // scale 沿 uAxis（骨骼方向），骨骼端点位移由 newMatrix 的平移分量捕获
   let anyBoneChanged = false
   bones.forEach((bone: Bone) => {
     const newMatrix = calculateBoneMatrix(bone)
+    const bindLen = typeof bone.bindLength === 'number' && bone.bindLength > 0.001 ? bone.bindLength : bone.length
+    const curLen = bone.length > 0.001 ? bone.length : bindLen
+    const scale = curLen / bindLen
+    if (scale < 0.01 || scale > 100) return // 异常值跳过
+    const scaleMatrix = [scale, 0, 0, 1, 0, 0]
     const invBind = invertMatrix(bone.bindMatrix)
-    bone.currentMatrix = multiplyMatrices(newMatrix, invBind)
-    // 检查是否有骨骼发生了实际变化
+    bone.currentMatrix = multiplyMatrices(multiplyMatrices(newMatrix, scaleMatrix), invBind)
     if (!anyBoneChanged) {
       const [a, b, c, d, tx, ty] = bone.currentMatrix
       if (Math.abs(a - 1) > 0.001 || Math.abs(b) > 0.001 || Math.abs(c) > 0.001 ||
@@ -1753,21 +1758,25 @@ export function glyphSkeletonRebind(glyphInstance: CustomGlyph): void {
   const bindData = skeleton.glyphSkeletonBindData
   const oldBones = bindData.bones
 
+  if (import.meta.env.DEV) {
+    console.log('[glyphSkeletonRebind] oldBones:', oldBones?.length, 'newBones:', newBones.length,
+      'firstOldBindLen:', oldBones?.[0]?.bindLength, 'firstNewLen:', newBones?.[0]?.length)
+  }
+
   // 将旧骨骼的 bindMatrix 复制到新骨骼（保持绑定姿态不变）
   for (let i = 0; i < newBones.length && i < oldBones.length; i++) {
-    newBones[i].bindMatrix = oldBones[i].bindMatrix
+    newBones[i].bindMatrix = [...oldBones[i].bindMatrix]
     newBones[i].bindLength = oldBones[i].bindLength
+  }
+  // 如果新骨骼比旧骨骼多，多余骨骼用 identity bindMatrix
+  for (let i = oldBones.length; i < newBones.length; i++) {
+    newBones[i].bindLength = newBones[i].length
+    newBones[i].bindMatrix = calculateBoneMatrix(newBones[i])
   }
 
   bindData.bones = newBones
-
-  // 重新计算每个控制点的骨骼绑定
-  const { originalPoints } = bindData
-  if (originalPoints?.length) {
-    bindData.pointsBonesMap = originalPoints.map((point: { x: number; y: number }, index: number) =>
-      calculatePointBones(point, newBones, index),
-    )
-  }
+  // 注意：不重算 pointsBonesMap，保持初始绑定时的骨骼-控制点对应关系
+  // 重算会导致拖拽后控制点绑定到不同骨骼，产生不一致的变形
 
   skeleton.cachedRefLines = reflines
 

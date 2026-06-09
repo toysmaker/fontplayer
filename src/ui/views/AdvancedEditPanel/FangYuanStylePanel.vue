@@ -14,7 +14,8 @@ import { getValueParamName, VALUE_PARAM_DEFAULTS } from '@/features/advancedEdit
 import CharacterZoomPreview from './CharacterZoomPreview.vue'
 
 const advancedEdit = useAdvancedEditStore()
-const { fangYuanStyleItems, fangYuanStyleSelections, fangYuanStyleNumericValues, sampleCharactersList } =
+const { fangYuanStyleItems, fangYuanStyleSelections, fangYuanStyleNumericValues, sampleCharactersList,
+  strokeStyleTagSelected, strokeStyleTagOptions } =
   storeToRefs(advancedEdit)
 const zoomedIndex = ref<number | null>(null)
 
@@ -34,6 +35,15 @@ onMounted(() => {
     fullRefresh()
   }
 })
+
+function handleStrokeStyleChange() {
+  if (import.meta.env.DEV) console.log('[FangYuanStylePanel] handleStrokeStyleChange, tag:', strokeStyleTagSelected.value)
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      advancedEdit.refreshStrokeStylePreviews()
+    })
+  })
+}
 
 function handleToggleEditSample() {
   advancedEdit.isEditingSample = !advancedEdit.isEditingSample
@@ -205,6 +215,17 @@ function getNumericConfig(itemLabel: string) {
                   />
                 </div>
               </div>
+            </div>
+          </div>
+          <div v-if="strokeStyleTagOptions.length > 0" class="style-config-wrap" style="margin-top: 16px; border-top: 1px solid var(--light-5);">
+            <div class="title">笔画风格切换</div>
+            <div style="padding: 10px; padding-bottom: 20px;">
+              <n-select
+                :value="strokeStyleTagSelected"
+                :options="[{ label: '默认风格', value: '' }, ...strokeStyleTagOptions.map((t: string) => ({ label: t, value: t }))]"
+                placeholder="选择笔画风格"
+                @update:value="(val: string) => { strokeStyleTagSelected = val; handleStrokeStyleChange() }"
+              />
             </div>
           </div>
         </n-scrollbar>
