@@ -14,6 +14,9 @@ const dialogs = {
 		},
 		exportFontDialog: {
 			title: '导出字体库',
+			partialCharExport: '使用部分字符生成字库',
+			partialCharExportTip: '选择一个 .txt 文本文件，文件中包含的字符将被用于生成字库，未包含的字符将跳过导出。',
+			viewSelectedChars: '查看已选字符',
 			confirm: '确认',
 			cancel: '取消',
 			exportMsg: '请选择导出选项：',
@@ -33,6 +36,9 @@ const dialogs = {
 		},
 		exportVarFontDialog: {
 			title: '导出可变字体',
+			partialCharExport: '使用部分字符生成字库',
+			partialCharExportTip: '选择一个 .txt 文本文件，文件中包含的字符将被用于生成字库，未包含的字符将跳过导出。',
+			viewSelectedChars: '查看已选字符',
 			confirm: '确认',
 			cancel: '取消',
 			hint: '轴展示名（axis 名称）会写入 name 表，供 fvar 与客户端显示；axisTag（如 wght）为 OpenType 注册轴标签。',
@@ -64,6 +70,9 @@ const dialogs = {
 		},
 		exportColorFontDialog: {
 			title: '导出彩色字体',
+			partialCharExport: '使用部分字符生成字库',
+			partialCharExportTip: '选择一个 .txt 文本文件，文件中包含的字符将被用于生成字库，未包含的字符将跳过导出。',
+			viewSelectedChars: '查看已选字符',
 			volumeHint:
 				'彩色字体会生成 COLR/CPAL 等表，文件体积通常明显大于普通轮廓字体。',
 			removeOverlap: '去除重叠',
@@ -315,6 +324,9 @@ const dialogs = {
 		},
 		exportFontDialog: {
 			title: 'Export Font',
+			partialCharExport: 'Export partial characters',
+			partialCharExportTip: 'Select a .txt file containing the characters to export. Characters not in the file will be skipped.',
+			viewSelectedChars: 'View selected characters',
 			confirm: 'Confirm',
 			cancel: 'Cancel',
 			exportMsg: 'Choose export options:',
@@ -334,6 +346,9 @@ const dialogs = {
 		},
 		exportVarFontDialog: {
 			title: 'Export Variable Font',
+			partialCharExport: 'Export partial characters',
+			partialCharExportTip: 'Select a .txt file containing the characters to export. Characters not in the file will be skipped.',
+			viewSelectedChars: 'View selected characters',
 			confirm: 'OK',
 			cancel: 'Cancel',
 			hint: 'Axis display name is written to the name table (fvar); axisTag (e.g. wght) is the registered OpenType axis tag.',
@@ -365,6 +380,9 @@ const dialogs = {
 		},
 		exportColorFontDialog: {
 			title: 'Export color font',
+			partialCharExport: 'Export partial characters',
+			partialCharExportTip: 'Select a .txt file containing the characters to export. Characters not in the file will be skipped.',
+			viewSelectedChars: 'View selected characters',
 			volumeHint:
 				'Color fonts include COLR/CPAL and related tables; file size is usually much larger than plain outline fonts.',
 			removeOverlap: 'Remove overlap',
