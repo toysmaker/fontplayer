@@ -18,26 +18,51 @@
       </span>
     </span>
     <span class="icon-group">
-      <span class="copy-icon" @click.stop="handleCopy">
+      <span class="copy-icon" @click.stop @pointerup.stop="handleCopy">
         <font-awesome-icon :icon="['fas', 'copy']" />
       </span>
-      <span class="edit-icon" @click.stop="handleEdit">
+      <span class="edit-icon" @click.stop @pointerup.stop="handleEdit">
         <font-awesome-icon icon="fa-solid fa-pen-nib" />
       </span>
-      <span class="delete-icon" @click.stop="handleDelete">
+      <span class="delete-icon" @click.stop @pointerup.stop="handleDelete">
         <font-awesome-icon :icon="['fas', 'trash']" />
       </span>
     </span>
+    <TextInputDialog
+      v-model:show="showCopyDialog"
+      :title="'复制字符'"
+      :label="'字符文本'"
+      :initial-value="character.character.text + ' (副本)'"
+      placeholder="请输入单个汉字"
+      :maxlength="1"
+      :validator="validateCharacterCopy"
+      @confirm="onCopyConfirm"
+    />
+    <TextInputDialog
+      v-model:show="showRenameDialog"
+      :title="'编辑字符名称'"
+      :label="'字符文本'"
+      :initial-value="character.character.text"
+      placeholder="请输入单个汉字"
+      :maxlength="1"
+      :validator="validateCharacterRename"
+      @confirm="onRenameConfirm"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import type { ICharacterFileLite } from '@/core/types'
+import type { ICharacterFileLite, ICharacterFileMetadata } from '@/core/types'
 import { CharacterRenderer } from '@/core/font/CharacterRenderer'
 import { useProjectStore } from '@/stores/project'
 import { useCharacterStore } from '@/stores/character'
 import { CanvasManager } from '@/core/canvas/CanvasManager'
+import { useDialog, useMessage } from 'naive-ui'
+import { characterDataManager } from '@/core/storage/CharacterDataManager'
+import { genUUID } from '@/utils/uuid'
+import * as R from 'ramda'
+import TextInputDialog from '@/ui/dialogs/TextInputDialog.vue'
 
 // 标记是否已初始化（避免重复渲染）
 const isInitialized = ref(false)
@@ -53,6 +78,8 @@ const canvasWidth = 100
 const canvasHeight = 100
 const projectStore = useProjectStore()
 const characterStore = useCharacterStore()
+const dialog = useDialog()
+const message = useMessage()
 
 // 检查是否应该显示空字符红线
 const showEmptyLines = computed(() => {
@@ -137,20 +164,138 @@ const formatUnicode = (unicode: string | number): string => {
   return trimmed || unicode
 }
 
-// 处理复制、编辑、删除（暂时只实现编辑）
+const showCopyDialog = ref(false)
+const showRenameDialog = ref(false)
+
+const toUnicodeString = (ch: string): string => {
+  if (!ch) return ''
+  const code = ch.codePointAt(0) ?? 0
+  return 'U+' + code.toString(16).toUpperCase().padStart(4, '0')
+}
+
+const validateSingleChar = (val: string): string | null => {
+  if (Array.from(val).length !== 1) {
+    return '请输入单个汉字'
+  }
+  if (val === '.notdef') {
+    return '不能使用 .notdef 作为字符'
+  }
+  return null
+}
+
+const validateCharacterCopy = (val: string): string | null => {
+  const err = validateSingleChar(val)
+  if (err) return err
+
+  const unicodeLabel = toUnicodeString(val)
+  const file = projectStore.selectedFile
+  if (file?.characterList?.some(m => m.character?.unicode === unicodeLabel)) {
+    return '该字符已存在'
+  }
+  return null
+}
+
+const validateCharacterRename = (val: string): string | null => {
+  const err = validateSingleChar(val)
+  if (err) return err
+
+  const unicodeLabel = toUnicodeString(val)
+  const file = projectStore.selectedFile
+  if (file?.characterList?.some(
+    m => m.character?.unicode === unicodeLabel && m.uuid !== props.character.uuid
+  )) {
+    return '该字符已存在'
+  }
+  return null
+}
+
+const onCopyConfirm = async (text: string) => {
+  const fileUUID = projectStore.selectedFile?.uuid
+  if (!fileUUID) return
+
+  const fullChar = await characterDataManager.loadCharacter(fileUUID, props.character.uuid)
+  if (!fullChar) {
+    message.warning('无法加载字符数据')
+    return
+  }
+
+  const newChar = R.clone(fullChar) as ICharacterFileLite
+  newChar.uuid = genUUID()
+  newChar.character = {
+    ...newChar.character,
+    text,
+    unicode: toUnicodeString(text),
+  }
+  newChar.previewRef = undefined
+  newChar.contourRef = undefined
+
+  await characterDataManager.updateCharacter(fileUUID, newChar)
+
+  const metadata: ICharacterFileMetadata = {
+    uuid: newChar.uuid,
+    type: newChar.type,
+    character: newChar.character,
+  }
+  projectStore.selectedFile!.characterList.push(metadata)
+
+  message.success('字符已复制')
+}
+
+const onRenameConfirm = async (text: string) => {
+  const file = projectStore.selectedFile
+  if (!file) return
+
+  const newUnicode = toUnicodeString(text)
+
+  // 更新 prop 中的字符文本（即时更新预览）
+  props.character.character.text = text
+  props.character.character.unicode = newUnicode
+
+  // 更新 characterList 中的元数据
+  const meta = file.characterList.find(c => c.uuid === props.character.uuid)
+  if (meta) {
+    meta.character = { ...meta.character, text, unicode: newUnicode }
+  }
+
+  // 更新 IndexedDB 中的完整数据
+  const fileUUID = file.uuid
+  const fullChar = await characterDataManager.loadCharacter(fileUUID, props.character.uuid)
+  if (fullChar) {
+    fullChar.character = { ...fullChar.character, text, unicode: newUnicode }
+    await characterDataManager.updateCharacter(fileUUID, fullChar)
+  }
+
+  message.success('字符已重命名')
+}
+
 const handleCopy = () => {
-  // TODO: 实现复制功能
-  console.log('Copy character:', props.character.uuid)
+  showCopyDialog.value = true
 }
 
 const handleEdit = () => {
-  // TODO: 实现编辑功能（重命名）
-  console.log('Edit character:', props.character.uuid)
+  showRenameDialog.value = true
 }
 
 const handleDelete = () => {
-  // TODO: 实现删除功能
-  console.log('Delete character:', props.character.uuid)
+  dialog.warning({
+    title: '确认删除',
+    content: `确定要删除字符 "${props.character.character.text}" 吗？此操作不可撤销。`,
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      const file = projectStore.selectedFile
+      if (!file) return
+
+      const idx = file.characterList.findIndex(c => c.uuid === props.character.uuid)
+      if (idx >= 0) {
+        file.characterList.splice(idx, 1)
+      }
+
+      await characterDataManager.deleteCharacter(file.uuid, props.character.uuid)
+
+      message.success('字符已删除')
+    },
+  })
 }
 
 // 渲染字符预览

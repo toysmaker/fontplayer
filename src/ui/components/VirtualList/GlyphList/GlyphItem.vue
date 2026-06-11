@@ -15,16 +15,34 @@
       <span class="name">{{ glyph.name }}</span>
     </span>
     <span class="icon-group">
-      <span class="copy-icon" @click.stop="handleCopy">
+      <span class="copy-icon" @click.stop @pointerup.stop="handleCopy">
         <font-awesome-icon :icon="['fas', 'copy']" />
       </span>
-      <span class="edit-icon" @click.stop="handleEdit">
+      <span class="edit-icon" @click.stop @pointerup.stop="handleEdit">
         <font-awesome-icon icon="fa-solid fa-pen-nib" />
       </span>
-      <span class="delete-icon" @click.stop="handleDelete">
+      <span class="delete-icon" @click.stop @pointerup.stop="handleDelete">
         <font-awesome-icon :icon="['fas', 'trash']" />
       </span>
     </span>
+    <TextInputDialog
+      v-model:show="showCopyDialog"
+      title="复制字形"
+      label="字形名称"
+      :initial-value="glyph.name + ' (副本)'"
+      placeholder="请输入字形名称"
+      :validator="validateGlyphName"
+      @confirm="onCopyConfirm"
+    />
+    <TextInputDialog
+      v-model:show="showRenameDialog"
+      title="编辑字形名称"
+      label="字形名称"
+      :initial-value="glyph.name"
+      placeholder="请输入字形名称"
+      :validator="validateGlyphName"
+      @confirm="onRenameConfirm"
+    />
   </div>
 </template>
 
@@ -35,6 +53,10 @@ import { GlyphRenderer } from '@/core/font/GlyphRenderer'
 import { useProjectStore } from '@/stores/project'
 import { useGlyphStore } from '@/stores/glyph'
 import { CanvasManager } from '@/core/canvas/CanvasManager'
+import { useDialog, useMessage } from 'naive-ui'
+import { genUUID } from '@/utils/uuid'
+import * as R from 'ramda'
+import TextInputDialog from '@/ui/dialogs/TextInputDialog.vue'
 
 // 标记是否已初始化（避免重复渲染）
 const isInitialized = ref(false)
@@ -55,6 +77,8 @@ const canvasWidth = 100
 const canvasHeight = 100
 const projectStore = useProjectStore()
 const glyphStore = useGlyphStore()
+const dialog = useDialog()
+const message = useMessage()
 
 // 检查是否应该显示空字形红线
 const showEmptyLines = computed(() => {
@@ -240,23 +264,75 @@ const renderPreview = async (force: boolean = false) => {
   }
 }
 
-// 处理复制
+const glyphCategories = ['glyphs', 'stroke_glyphs', 'radical_glyphs', 'comp_glyphs'] as const
+
+function findGlyphList() {
+  const file = projectStore.selectedFile
+  if (!file) return null
+  for (const cat of glyphCategories) {
+    const list = file[cat]
+    if (list && list.find(g => g.uuid === props.glyph.uuid)) {
+      return { list, category: cat }
+    }
+  }
+  return null
+}
+
+const showCopyDialog = ref(false)
+const showRenameDialog = ref(false)
+
+const validateGlyphName = (val: string): string | null => {
+  if (!val.trim()) {
+    return '名称不能为空'
+  }
+  return null
+}
+
+const onCopyConfirm = (name: string) => {
+  const result = findGlyphList()
+  if (!result) return
+
+  const newGlyph = R.clone(props.glyph) as ICustomGlyph
+  newGlyph.uuid = genUUID()
+  newGlyph.name = name
+  newGlyph.previewRef = undefined
+  newGlyph.contourRef = undefined
+
+  result.list.push(newGlyph)
+  message.success('字形已复制')
+}
+
+const onRenameConfirm = (name: string) => {
+  props.glyph.name = name
+  message.success('字形已重命名')
+}
+
 const handleCopy = () => {
-  // TODO: 实现复制功能
-  console.log('Copy glyph:', props.glyph.uuid)
+  showCopyDialog.value = true
 }
 
-// 处理编辑
 const handleEdit = () => {
-  glyphStore.setEditingGlyph(props.glyph.uuid)
-  // TODO: 切换到字形编辑页面
-  console.log('Edit glyph:', props.glyph.uuid)
+  showRenameDialog.value = true
 }
 
-// 处理删除
 const handleDelete = () => {
-  // TODO: 实现删除功能
-  console.log('Delete glyph:', props.glyph.uuid)
+  dialog.warning({
+    title: '确认删除',
+    content: `确定要删除字形 "${props.glyph.name}" 吗？此操作不可撤销。`,
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: () => {
+      const result = findGlyphList()
+      if (!result) return
+
+      const idx = result.list.findIndex(g => g.uuid === props.glyph.uuid)
+      if (idx >= 0) {
+        result.list.splice(idx, 1)
+      }
+
+      message.success('字形已删除')
+    },
+  })
 }
 
 onMounted(() => {

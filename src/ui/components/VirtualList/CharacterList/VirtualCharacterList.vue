@@ -74,7 +74,7 @@ const props = defineProps<{
 }>()
 
 // 配置
-const itemHeight = props.itemHeight || 112 // 字符项高度：80px preview + 32px info
+const itemHeight = props.itemHeight || 118 // 字符项高度：80px preview + 32px info + 3px border * 2
 const itemWidth = props.itemWidth || 86 // 字符项宽度：80px + 3px border * 2
 const gap = props.gap || 10 // 网格间距
 const padding = props.padding || 10 // 容器内边距
@@ -789,11 +789,11 @@ const processRenderQueue = async () => {
 
 .character-item {
   width: 86px;
-  height: 112px; /* 与 itemHeight 保持一致，确保默认“添加”按钮有正确高度 */
+  height: 118px; /* 与 itemHeight 保持一致：80px preview + 32px info + 3px border * 2 */
   contain: layout;
 }
 
-/* “添加字符”按钮样式，参考原工程的 default-character */
+/* "添加字符"按钮样式，参考原工程的 default-character */
 .default-character {
   display: flex;
   align-items: center;

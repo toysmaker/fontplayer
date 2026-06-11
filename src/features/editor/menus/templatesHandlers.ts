@@ -12,6 +12,9 @@ import { instanceManager } from '@/core/instance/InstanceManager'
 import { PictureImportPipelineService } from '@/features/editor/services/PictureImportPipelineService'
 import { strokeFnMap } from '@/templates/strokeFnMap'
 import { ParameterType, EditStatus } from '@/core/types'
+import { glyphSkeletonBindFromRefGlyph } from '@/features/glyphSkeletonBind'
+import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+import { getBound } from '@/core/utils/math'
 import { genUUID } from '@/utils/uuid'
 import { hei_strokes, kai_strokes, li_strokes } from '@/templates/strokes_1'
 import { lowercaseLetters } from '@/templates/lowercase_letters'
@@ -1031,6 +1034,112 @@ export async function importTemplateTest(): Promise<void> {
     glyph.uuid = uuid
     file.stroke_glyphs!.push(glyph)
   }
+  // ===== 识别 shapes 图片，生成"测试笔画模板1"字形骨架绑定 =====
+  const hasFangYuan = file.stroke_glyphs!.some((g: any) => g.style === '字玩方圆黑体')
+  const refStyleTag = hasFangYuan ? '字玩方圆黑体' : '测试笔画模板'
+  if (hasFangYuan) {
+    file.stroke_glyphs = file.stroke_glyphs!.filter((g: any) => g.style !== '测试笔画模板')
+  }
+
+  const shapeNames = strokes.map((s: any) => s.name)
+  const shapeTotal = shapeNames.length
+  projectStore.loading = true
+  projectStore.loadingTotal = Math.max(1, shapeTotal)
+  projectStore.loadingProgress = 0
+  projectStore.loadingMessage = '正在识别笔画图形并绑定骨架…'
+
+  try {
+    for (let i = 0; i < shapeNames.length; i++) {
+      const name = shapeNames[i]
+      const shapeUrl = getScriptUrl(`/templates/custom_1/shapes/${encodeURIComponent(name)}.png`)
+      let img: HTMLImageElement
+      try {
+        const shapeRes = await fetch(shapeUrl)
+        if (!shapeRes.ok) { projectStore.loadingProgress = i + 1; continue }
+        const blob = await shapeRes.blob()
+        const objectUrl = URL.createObjectURL(blob)
+        try { img = await loadImageFromUrl(objectUrl) }
+        finally { URL.revokeObjectURL(objectUrl) }
+      } catch { projectStore.loadingProgress = i + 1; continue }
+
+      let allComponents: IGlyphComponent[]
+      try {
+        allComponents = PictureImportPipelineService.traceHandDrawnImageToPenComponents(img, {
+          maxError: 5,        // 贝塞尔拟合误差，越小越平滑（UI 中对应"平滑"滑块）
+          dropThreshold: 4,   // 过滤点数过少的轮廓
+          minPolylineLength: 200, // 最小轮廓折线总长
+        })
+      }
+      catch { projectStore.loadingProgress = i + 1; continue }
+      if (!allComponents.length) { projectStore.loadingProgress = i + 1; continue }
+
+      let mainComp = allComponents[0]
+      let maxArea = 0
+      for (const c of allComponents) {
+        if (c.type !== 'pen') continue
+        const pts = (c.value as any)?.points
+        if (!pts?.length) continue
+        const b = getBound(pts)
+        const area = b.w * b.h
+        if (area > maxArea) { maxArea = area; mainComp = c }
+      }
+
+      const newUuid = genUUID()
+      const refGlyph = file.stroke_glyphs!.find((g: any) => g.style === refStyleTag && g.name === name)
+      if (!refGlyph) { projectStore.loadingProgress = i + 1; continue }
+
+      const newParams: IParameter[] = JSON.parse(JSON.stringify(refGlyph.parameters || []))
+      const refScript = refGlyph.script || ''
+      const adaptedScript = refScript.replace(
+        new RegExp(`script_${refGlyph.uuid.replaceAll('-', '_')}`, 'g'),
+        `script_${newUuid.replaceAll('-', '_')}`
+      )
+
+      const newGlyph: ICustomGlyph = {
+        uuid: newUuid, name, type: 'system',
+        components: [{ ...mainComp } as any],
+        groups: [], orderedList: [{ type: 'component', uuid: mainComp.uuid }],
+        selectedComponentsUUIDs: [],
+        view: { zoom: 100, translateX: 0, translateY: 0 },
+        parameters: newParams, joints: [], script: '',
+        style: '测试笔画模板1',
+        skeleton: {
+          type: 'glyphSkeleton', ox: 0, oy: 0,
+          referenceGlyphUUID: refGlyph.uuid,
+          referenceGlyphData: {
+            name: refGlyph.name,
+            parameters: JSON.parse(JSON.stringify(newParams)),
+            script: refScript, adaptedScript,
+          },
+          boneSegmentsPerRefLine: 5,
+        },
+      }
+
+      const savedScript = newGlyph.script
+      newGlyph.script = adaptedScript
+      newGlyph.script_reference = undefined
+      try { executeGlyphScript(newGlyph, newUuid, { ignoreTempDataGuard: true }) }
+      finally { newGlyph.script = savedScript }
+
+      const inst = instanceManager.acquireTemporaryInstance(
+        newUuid, () => new CustomGlyph(newGlyph), 'glyph',
+      ) as unknown as CustomGlyph
+      try {
+        inst._components = []
+        const bindRefData = (newGlyph.skeleton as any).referenceGlyphData
+        if (bindRefData) { glyphSkeletonBindFromRefGlyph(inst as any, bindRefData, 5) }
+      } finally { instanceManager.releaseTemporaryInstance(newUuid) }
+
+      file.stroke_glyphs!.push(newGlyph)
+      projectStore.loadingProgress = i + 1
+    }
+  } finally {
+    projectStore.loading = false
+    projectStore.loadingProgress = 0
+    projectStore.loadingTotal = 0
+    projectStore.loadingMessage = ''
+  }
+
   projectStore.markFileUnsaved(file.uuid)
   editorStore.setEditStatus(EditStatus.StrokeGlyphList)
 }
