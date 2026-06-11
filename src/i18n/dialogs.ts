@@ -105,6 +105,9 @@ const dialogs = {
 			confirm: '确认',
 			cancel: '取消',
 			duplicateUnicode: '已存在相同 Unicode 的字符，无法重复添加。',
+			batchAddChars: '批量添加字符',
+			batchAddCharsTip: '选择一个包含所有需要添加字符的 .txt 文本文件，文件中字符将去重后批量导入字库。',
+			viewSelectedChars: '查看已选字符',
 		},
 		addGlyphDialog: {
 			title: '添加字形',
@@ -405,6 +408,9 @@ const dialogs = {
 			cancel: 'Cancel',
 			duplicateUnicode:
 				'A character with this Unicode code point already exists. Duplicates are not allowed.',
+			batchAddChars: 'Batch Add Characters',
+			batchAddCharsTip: 'Select a .txt file containing all characters to add. Characters will be deduplicated and imported in batch.',
+			viewSelectedChars: 'View Selected Characters',
 		},
 		addGlyphDialog: {
 			title: 'Add Glyph',
