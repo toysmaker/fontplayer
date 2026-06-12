@@ -1,5 +1,5 @@
 /**
- * 字玩「测试笔画模板」专用：与原版 fontplayer templates/custom_1/strokeFnMap 一致。
+ * 字玩「测试笔画模板」专用：与原版 fontplayer templates/private/v1/strokeFnMap 一致。
  * 主工程 strokeFnMap（kai/）用于常规字形；替换部件时必须走此表，否则 computeParamsByJoints 与原版不符。
  */
 import { updateParamsByJoints as updateParamsByJoints_dian, computeParamsByJoints as computeParamsByJoints_dian } from './点'

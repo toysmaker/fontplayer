@@ -36,6 +36,7 @@ import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { glyphSkeletonBind, glyphSkeletonRebind } from '@/features/glyphSkeletonBind'
+import { rule1 } from '@/templates/config/restrict'
 import { orderedListWithItemsForGlyph } from '@/core/utils/glyph'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import { skeletonFreeEdit, enterSkeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
@@ -60,6 +61,86 @@ const dialog = useDialog()
 const message = useMessage()
 
 const { selectedComponent, selectedComponentUUID, selectedComponents, modifyComponent, editStatus } = useComponentEditor()
+
+// ---- 参数约束（字玩标准黑体） ----
+const isRestrictProject = computed(() => projectStore.selectedFile?.tag === '字玩标准黑体')
+const paramRestrictEnabled = ref(true)
+// 存储被修改参数的原始 value/min/max，取消约束时恢复
+const restrictOriginalValues = new Map<string, { value: number; min: number; max: number }>()
+
+function getGlyphNameForRestrict(): string {
+  if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return ''
+  return (selectedComponent.value.value as any)?.name || (selectedComponent.value as any).name || ''
+}
+
+function getRestrictedMinMax(paramName: string): { min?: number; max?: number } | null {
+  if (!paramRestrictEnabled.value) return null
+  const glyphName = getGlyphNameForRestrict()
+  if (!glyphName) return null
+  const rule = rule1.find((r: any) => r.name === glyphName)
+  if (!rule) return null
+  const p = rule.params.find((p: any) => p.name === paramName)
+  if (!p) return null
+  return { min: p.min, max: p.max }
+}
+
+function applyRestrictToParameters() {
+  const glyphName = getGlyphNameForRestrict()
+  if (!glyphName) return
+  const rule = rule1.find((r: any) => r.name === glyphName)
+  if (!rule) return
+  for (const rp of rule.params) {
+    for (const param of glyphParameters.value) {
+      if (param.name === rp.name && param.type === ParameterType.Number) {
+        // 保存原始值（仅首次）
+        if (!restrictOriginalValues.has(param.uuid)) {
+          restrictOriginalValues.set(param.uuid, {
+            value: param.value as number,
+            min: param.min ?? 0,
+            max: param.max ?? 1000,
+          })
+        }
+        // 应用约束
+        param.min = rp.min
+        param.max = rp.max
+        if ((rp as any).default !== undefined) param.value = (rp as any).default
+        else if ((param.value as number) < rp.min) param.value = rp.min
+        else if ((param.value as number) > rp.max) param.value = rp.max
+      }
+    }
+  }
+}
+
+function restoreRestrictParameters() {
+  for (const param of glyphParameters.value) {
+    const orig = restrictOriginalValues.get(param.uuid)
+    if (orig) {
+      param.value = orig.value
+      param.min = orig.min
+      param.max = orig.max
+    }
+  }
+  restrictOriginalValues.clear()
+}
+
+function toggleParamRestrict() {
+  paramRestrictEnabled.value = !paramRestrictEnabled.value
+  if (paramRestrictEnabled.value) {
+    applyRestrictToParameters()
+  } else {
+    restoreRestrictParameters()
+  }
+  getEditCanvasContext()?.onRender()
+}
+
+// 切换组件时清空存储的原始值
+watch(() => selectedComponent.value?.uuid, () => {
+  if (paramRestrictEnabled.value) {
+    restoreRestrictParameters()
+    paramRestrictEnabled.value = false
+  }
+  restrictOriginalValues.clear()
+})
 
 const showSetAsModal = ref(false)
 const showSelectModal = ref(false)
@@ -1218,7 +1299,11 @@ const handleFormatGlyphComponent = () => {
             ({{ t('panels.paramsPanel.glyphParamsPanel.skeletonRefGlyph') }}: {{ (selectedComponent.value as any)?.skeleton?.referenceGlyphData?.name || '—' }})
           </span>
         </div>
+        <!-- 参数约束开关（字玩标准黑体） -->
         <n-form label-placement="left" label-width="80px">
+          <n-form-item v-if="isRestrictProject" label="参数约束">
+            <n-switch :value="paramRestrictEnabled" @update:value="paramRestrictEnabled = $event; toggleParamRestrict()" />
+          </n-form-item>
           <n-form-item
             v-for="parameter in glyphParameters"
             :key="parameter.uuid"
@@ -1230,20 +1315,20 @@ const handleFormatGlyphComponent = () => {
                 <div class="param-inputs-grow">
                   <n-input-number
                     :value="displayGlyphNumberParamValue(parameter)"
-                    :step="parameter.max && parameter.max <= 10 ? 0.01 : 1"
-                    :min="parameter.min"
-                    :max="parameter.max"
+                    :step="(getRestrictedMinMax(parameter.name)?.max ?? parameter.max) && (getRestrictedMinMax(parameter.name)?.max ?? parameter.max) <= 10 ? 0.01 : 1"
+                    :min="getRestrictedMinMax(parameter.name)?.min ?? parameter.min"
+                    :max="getRestrictedMinMax(parameter.name)?.max ?? parameter.max"
                     :disabled="skeletonFreeEditMode"
                     :precision="precisionFromParamMax(parameter.max)"
                     @update:value="(v) => handleChangeParameter(parameter, v ?? 0)"
                   />
                   <n-slider
                     :value="displayGlyphNumberParamValue(parameter)"
-                    :step="parameter.max && parameter.max <= 10 ? 0.01 : 1"
-                    :min="parameter.min ?? 0"
-                    :max="parameter.max ?? 100"
+                    :step="(getRestrictedMinMax(parameter.name)?.max ?? parameter.max) && (getRestrictedMinMax(parameter.name)?.max ?? parameter.max) <= 10 ? 0.01 : 1"
+                    :min="getRestrictedMinMax(parameter.name)?.min ?? parameter.min ?? 0"
+                    :max="getRestrictedMinMax(parameter.name)?.max ?? parameter.max ?? 100"
                     :disabled="skeletonFreeEditMode"
-                    :precision="precisionFromParamMax(parameter.max)"
+                    :precision="precisionFromParamMax(getRestrictedMinMax(parameter.name)?.max ?? parameter.max)"
                     @update:value="(v) => handleChangeParameter(parameter, v)"
                     style="width: 100%; margin-top: 8px;"
                   />
@@ -1652,8 +1737,5 @@ const handleFormatGlyphComponent = () => {
   flex-shrink: 0;
 }
 
-.empty-state {
-  padding: 40px 20px;
-  text-align: center;
-}
+.empty-state { padding: 40px 20px; text-align: center; }
 </style>

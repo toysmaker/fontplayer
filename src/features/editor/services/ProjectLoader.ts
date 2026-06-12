@@ -31,7 +31,7 @@ import { decompressCharacterAt, parseFpzBuffer, type DecodedFpz } from '@/featur
 import { decompressGlyphBundleIfPresent, parseFpBuffer } from '@/features/editor/services/projectArchive/fpProjectFormat'
 import { hydrateGlyphComponentEnumOptionsFromLibrary } from '@/features/editor/services/glyphParameterHydration'
 import {
-  replaceGlyphScript_custom_1,
+  replaceGlyphScript_private_v1,
   replaceGlyphScript_templates2,
   widenFangYuanGlyphNumberParamBoundsInCharacterComponents,
   expandFangYuanGlyphEnumOptionsInCharacterComponents,
@@ -43,7 +43,7 @@ import {
 /** 带此 tag 的工程在加载完成后会为字符列表补全部件分解数据（高级编辑「脚本」Tab 亦仅在此 tag 下显示） */
 export const DEFAULT_TEMPLATE_PROJECT_TAG = '字玩默认模板工程'
 
-/** 临时代码：打开 .fp 时对此 tag 同步 `public/templates/custom_1` 笔画脚本（与 loadProject 内 replaceGlyphScript 注释块同类，后续可整段注释） */
+/** 临时代码：打开 .fp 时对此 tag 同步 `public/templates/private/v1` 笔画脚本（与 loadProject 内 replaceGlyphScript 注释块同类，后续可整段注释） */
 const TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG = '字玩方圆黑体'
 
 export interface LoadProgress {
@@ -368,10 +368,10 @@ export class ProjectLoader {
 
       const projectTag = typeof data.file?.tag === 'string' ? data.file.tag : undefined
 
-      // MARK: 临时代码 — 方圆黑体 .fp：将风格为"字玩方圆黑体"的笔画字形脚本替换为 public/templates/custom_1 同名 .js
+      // MARK: 临时代码 — 方圆黑体 .fp：将风格为"字玩方圆黑体"的笔画字形脚本替换为 public/templates/private/v1 同名 .js
       // 仅 dev 模式生效；后续需整段移除
       if (import.meta.env.DEV && projectTag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG && data.stroke_glyphs?.length) {
-        this.updateProgress(0, '同步笔画模板脚本 (custom_1)…')
+        this.updateProgress(0, '同步笔画模板脚本 (private/v1)…')
         try {
           // 先重命名"测试笔画模板" → "字玩方圆黑体"
           renameTestStrokeTemplateToFangYuan(data.stroke_glyphs as ICustomGlyph[])
@@ -379,11 +379,11 @@ export class ProjectLoader {
             (g) => g.style === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG,
           )
           if (fangYuanGlyphs.length) {
-            await replaceGlyphScript_custom_1(fangYuanGlyphs)
+            await replaceGlyphScript_private_v1(fangYuanGlyphs)
             expandFangYuanGlyphEnumOptionsForGlyphs(fangYuanGlyphs)
           }
         } catch (e) {
-          console.error('[ProjectLoader] replaceGlyphScript_custom_1 failed', e)
+          console.error('[ProjectLoader] replaceGlyphScript_private/v1 failed', e)
         }
         await this.yieldToMainThread()
       }

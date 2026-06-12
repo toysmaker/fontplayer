@@ -373,7 +373,7 @@ const handleChangeGlyphSkeletonRefParam = (param: IParameter, value: number | st
   ctx?.onRender()
 }
 
-// 将 skeleton.ox/oy 偏移应用到实例上所有关节（custom_1 脚本不认 ox/oy，需手动加回）
+// 将 skeleton.ox/oy 偏移应用到实例上所有关节（private/v1 脚本不认 ox/oy，需手动加回）
 function applySkeletonOffsetToJoints(inst: any) {
   const skel = inst?._glyph?.skeleton
   if (!skel || (!skel.ox && !skel.oy)) return

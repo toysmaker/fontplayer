@@ -21,7 +21,7 @@ import { lowercaseLetters } from '@/templates/lowercase_letters'
 import { capitalLetters } from '@/templates/capital_letters'
 import { digits } from '@/templates/digits'
 import { symbols_en, symbols_zh } from '@/templates/symbols'
-import { custom_strokes_1 } from '@/templates/custom_strokes_1'
+import { strokes } from '@/templates/private/v1/strokes'
 
 const TEMPLATES_BASE = ''
 
@@ -551,13 +551,12 @@ export async function importTemplateTest(): Promise<void> {
   const file = projectStore.selectedFile
   if (!file) return
   ensureStrokeGlyphs(file)
-  const strokes = custom_strokes_1
   for (let i = 0; i < strokes.length; i++) {
     const stroke = strokes[i]
     const { name } = stroke
     const uuid = genUUID()
 
-    // 基础参数：来自 custom_strokes_1（与原工程一致）
+    // 基础参数：来自 private/v1/strokes（与原工程一致）
     const parameters = paramsFromStroke(stroke)
 
     // 参考位置
@@ -1023,7 +1022,7 @@ export async function importTemplateTest(): Promise<void> {
       字重.max = 200
     }
 
-    const res = await fetch(getScriptUrl(`/templates/custom_1/${name}.js`))
+    const res = await fetch(getScriptUrl(`/templates/private/v1/${name}.js`))
     const stroke_script = await res.text()
     const glyph = createBaseGlyph(
       name,
@@ -1051,7 +1050,7 @@ export async function importTemplateTest(): Promise<void> {
   try {
     for (let i = 0; i < shapeNames.length; i++) {
       const name = shapeNames[i]
-      const shapeUrl = getScriptUrl(`/templates/custom_1/shapes/${encodeURIComponent(name)}.png`)
+      const shapeUrl = getScriptUrl(`/templates/private/v1/shapes/${encodeURIComponent(name)}.png`)
       let img: HTMLImageElement
       try {
         const shapeRes = await fetch(shapeUrl)

@@ -1,6 +1,6 @@
 import { genUUID } from '@/utils/uuid'
 
-const custom_strokes_1 = [
+const strokes = [
   {
     name: '横',
     uuid: 'KXIDGV2F_Pyd7r0C6_TB1',
@@ -1201,5 +1201,5 @@ const custom_strokes_1 = [
 ]
 
 export {
-  custom_strokes_1
+  strokes
 }

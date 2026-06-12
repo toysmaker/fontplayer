@@ -329,7 +329,7 @@ export function executeGlyphScript(
         }
       }
 
-      // glyphSkeleton：脚本不认 skeleton.ox/oy（custom_1 等模板使用硬编码坐标），需手动加回偏移
+      // glyphSkeleton：脚本不认 skeleton.ox/oy（private/v1 等模板使用硬编码坐标），需手动加回偏移
       if ((targetGlyph.skeleton as any)?.type === 'glyphSkeleton') {
         const skel = targetGlyph.skeleton as any
         const ox = skel.ox || 0

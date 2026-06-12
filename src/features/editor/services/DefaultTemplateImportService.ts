@@ -24,6 +24,7 @@ export async function readBundledDefaultTemplateFpzBytes(): Promise<ArrayBuffer>
 export async function importBundledDefaultTemplate(): Promise<void> {
   const buf = await readBundledDefaultTemplateFpzBytes()
   const projectFile = await projectLoader.loadProjectFromFpzArrayBuffer(buf)
+  projectFile.tag = '字玩标准黑体'
   const store = useProjectStore()
   const ok = store.addFile(projectFile)
   if (!ok) {

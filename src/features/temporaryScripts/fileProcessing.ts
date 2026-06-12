@@ -2,7 +2,7 @@ import type { IComponent, ICustomGlyph, IGlyphComponent, IParameter } from '@/co
 import { ParameterType } from '@/core/types'
 
 const templateBodyCache = new Map<string, string>()
-/** custom_1 与 templates2 分离缓存，避免同名笔画互相污染 */
+/** private/v1 与 templates2 分离缓存，避免同名笔画互相污染 */
 const custom1TemplateBodyCache = new Map<string, string>()
 
 function strokeTemplateUrl(strokeName: string): string {
@@ -184,7 +184,7 @@ function strokeTemplateUrl_custom1(strokeName: string): string {
   const base = import.meta.env.BASE_URL || '/'
   const normalizedBase = base.endsWith('/') ? base : `${base}/`
   const file = `${strokeName}.js`
-  return `${normalizedBase}templates/custom_1/${encodeURIComponent(file)}`
+  return `${normalizedBase}templates/private/v1/${encodeURIComponent(file)}`
 }
 
 async function fetchStrokeTemplateBody_custom1(strokeName: string): Promise<string | null> {
@@ -192,7 +192,7 @@ async function fetchStrokeTemplateBody_custom1(strokeName: string): Promise<stri
   if (cached !== undefined) return cached.length > 0 ? cached : null
 
   if (typeof fetch !== 'function') {
-    console.warn('[replaceGlyphScript_custom_1] fetch unavailable, skip template:', strokeName)
+    console.warn('[replaceGlyphScript_private/v1] fetch unavailable, skip template:', strokeName)
     custom1TemplateBodyCache.set(strokeName, '')
     return null
   }
@@ -201,7 +201,7 @@ async function fetchStrokeTemplateBody_custom1(strokeName: string): Promise<stri
   try {
     const res = await fetch(url)
     if (!res.ok) {
-      console.warn('[replaceGlyphScript_custom_1] template not found:', strokeName, res.status, url)
+      console.warn('[replaceGlyphScript_private/v1] template not found:', strokeName, res.status, url)
       custom1TemplateBodyCache.set(strokeName, '')
       return null
     }
@@ -209,18 +209,18 @@ async function fetchStrokeTemplateBody_custom1(strokeName: string): Promise<stri
     custom1TemplateBodyCache.set(strokeName, text)
     return text
   } catch (e) {
-    console.warn('[replaceGlyphScript_custom_1] fetch failed:', strokeName, e)
+    console.warn('[replaceGlyphScript_private/v1] fetch failed:', strokeName, e)
     custom1TemplateBodyCache.set(strokeName, '')
     return null
   }
 }
 
 /**
- * 将笔画列表（stroke_glyphs）中每个字形的内联 script 函数体替换为 `public/templates/custom_1` 下同名 `.js` 内容，
+ * 将笔画列表（stroke_glyphs）中每个字形的内联 script 函数体替换为 `public/templates/private/v1` 下同名 `.js` 内容，
  * 行为与 {@link replaceGlyphScript} 一致：保留原 `function script_<uuid>(…)` 函数名与参数列表；
  * 若无内联 script（仅有 script_reference），则写入标准外壳并清除 script_reference。
  */
-export async function replaceGlyphScript_custom_1(glyphs: ICustomGlyph[]): Promise<void> {
+export async function replaceGlyphScript_private_v1(glyphs: ICustomGlyph[]): Promise<void> {
   for (const glyph of glyphs) {
     const name = glyph.name?.trim()
     if (!name) continue
@@ -235,7 +235,7 @@ export async function replaceGlyphScript_custom_1(glyphs: ICustomGlyph[]): Promi
         glyph.script = next
       } else {
         console.warn(
-          '[replaceGlyphScript_custom_1] could not parse script wrapper, rewrite with default shell:',
+          '[replaceGlyphScript_private/v1] could not parse script wrapper, rewrite with default shell:',
           glyph.name,
           glyph.uuid,
         )

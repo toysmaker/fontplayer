@@ -1,5 +1,5 @@
 import { strokeFnMap } from '@/templates/strokeFnMap'
-import { strokeFnMap as custom1StrokeFnMap } from '@/templates/custom_1/strokeFnMap'
+import { strokeFnMap as custom1StrokeFnMap } from '@/templates/private/v1/strokeFnMap'
 import * as R from 'ramda'
 import type { ICustomGlyph, IGlyphComponent, ICharacterFileLite } from '@/core/types'
 import { FP } from '@/core/script/FPUtils'
@@ -179,7 +179,7 @@ const standardTransformStrokes = (strokes: Array<Array<IGlyphComponent>>, transf
     const gv = gc.value as ICustomGlyph
     const strokeName = gv.name as string
 
-    // 与原版一致：style===测试笔画模板 时走 templates/custom_1/strokeFnMap（非主 strokeFnMap 的 kai/ 实现）
+    // 与原版一致：style===测试笔画模板 时走 templates/private/v1/strokeFnMap（非主 strokeFnMap 的 kai/ 实现）
     if (gv.style === '测试笔画模板') {
       const fn = (custom1StrokeFnMap as Record<string, { computeParamsByJoints: (m: unknown, g: unknown) => unknown; updateParamsByJoints: (p: unknown, g: unknown) => void }>)[strokeName]
       if (fn) {
@@ -188,10 +188,10 @@ const standardTransformStrokes = (strokes: Array<Array<IGlyphComponent>>, transf
           fn.updateParamsByJoints(parameters, inst)
           executeGlyphScript(gv, gc.uuid)
         } catch (e) {
-          console.warn('[standardTransformStrokes] custom_1 joint/param update failed', strokeName, e)
+          console.warn('[standardTransformStrokes] private/v1 joint/param update failed', strokeName, e)
         }
       } else {
-        console.warn('[standardTransformStrokes] custom_1 strokeFnMap missing', strokeName)
+        console.warn('[standardTransformStrokes] private/v1 strokeFnMap missing', strokeName)
       }
     } else {
       const instAny = inst as unknown as {
