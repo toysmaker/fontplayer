@@ -82,6 +82,7 @@ export class FileHandler {
   private async ensureProjectTagBeforeSave(): Promise<boolean> {
     const file = this.projectStore.selectedFile
     if (!file) return false
+    if (!import.meta.env.DEV) return true
     const { useDialogsStore } = await import('@/stores/dialogs')
     const dialogs = useDialogsStore()
     const result = await dialogs.openProjectTagPrompt(file.tag ?? '')
