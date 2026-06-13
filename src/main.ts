@@ -215,6 +215,50 @@ app.component('font-awesome-icon', FontAwesomeIcon)
 
 app.mount('#app')
 
+// ---- 窗口恢复 / 页面可见性变化处理（修复长期最小化后 WKWebView 白屏） ----
+
+/** 检测 WebKit 合成器是否正常：创建 1x1 canvas 填充红色并读回像素 */
+function isCompositorHealthy(): boolean {
+  let c: HTMLCanvasElement | null = null
+  try {
+    c = document.createElement('canvas')
+    c.width = 1; c.height = 1
+    const ctx = c.getContext('2d')
+    if (!ctx) return false
+    ctx.fillStyle = '#ff0000'
+    ctx.fillRect(0, 0, 1, 1)
+    const pixel = ctx.getImageData(0, 0, 1, 1).data
+    return pixel[0] > 200 && pixel[1] < 50
+  } catch { return false }
+  finally { c?.remove() }
+}
+
+async function handleAppRestored() {
+  // 仅当合成器异常时才刷新，避免正常情况下的不必要重绘
+  if (isCompositorHealthy()) return
+  if (import.meta.env.DEV) console.log('[app] compositor broken, forcing re-render')
+  try {
+    const { CanvasManager } = await import('@/core/canvas/CanvasManager')
+    CanvasManager.forceCleanupAllCache()
+  } catch {}
+  window.dispatchEvent(new CustomEvent('force-character-list-refresh'))
+  window.dispatchEvent(new CustomEvent('force-glyph-list-refresh'))
+}
+
+// Tauri 端：窗口聚焦恢复事件
+try {
+  const { listen } = await import('@tauri-apps/api/event')
+  listen('window-focus-restored', () => { handleAppRestored() })
+} catch {}
+
+// Web 端兜底：页面可见性变化 + bfcache 恢复
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') handleAppRestored()
+})
+window.addEventListener('pageshow', (e) => {
+  if ((e as PageTransitionEvent).persisted) handleAppRestored()
+})
+
 // 启用 Vite HMR
 if (import.meta.hot) {
   import.meta.hot.accept()

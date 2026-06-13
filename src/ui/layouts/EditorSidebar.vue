@@ -440,6 +440,18 @@ watch(() => projectStore.hasFiles, () => {
   updateTauriMenuDisabled()
 })
 
+// 具名 handler（避免匿名函数导致 removeEventListener 失效）
+const onEditorCut = () => web_handlers['cut'] && web_handlers['cut']()
+const onEditorCopy = () => web_handlers['copy'] && web_handlers['copy']()
+const onEditorPaste = () => web_handlers['paste'] && web_handlers['paste']()
+const onEditorImportGlyphs = () => web_handlers['import-glyphs']?.()
+const onEditorExportGlyphs = () => web_handlers['export-glyphs']?.()
+const onFontSettings = () => { showFontSettingsDialog.value = true }
+const onPreferenceSettings = () => { showPreferenceSettingsDialog.value = true }
+const onLanguageSettings = () => { showLanguageSettingsDialog.value = true }
+const onSaveFile = async () => { try { await fileHandler.saveProjectTauriRememberPath() } catch (error) { console.error('Failed to save project from Tauri menu:', error) } }
+const onSaveAs = async () => { try { await fileHandler.saveProjectTauriAs() } catch (error) { console.error('Failed to save-as project from Tauri menu:', error) } }
+
 onMounted(() => {
   window.addEventListener('editor-show-new-project-dialog', handleShowNewProjectDialog)
   window.addEventListener('editor-add-character', handleShowAddCharacterDialog)
@@ -447,12 +459,12 @@ onMounted(() => {
   window.addEventListener('editor-add-glyph', handleShowAddGlyphDialog)
   window.addEventListener('show-warning-message', handleShowWarningMessage)
   window.addEventListener('editor-delete', handleEditorDelete)
-  window.addEventListener('editor-cut', () => web_handlers['cut'] && web_handlers['cut']())
-  window.addEventListener('editor-copy', () => web_handlers['copy'] && web_handlers['copy']())
-  window.addEventListener('editor-paste', () => web_handlers['paste'] && web_handlers['paste']())
-  window.addEventListener('editor-import-glyphs', () => web_handlers['import-glyphs']?.())
+  window.addEventListener('editor-cut', onEditorCut)
+  window.addEventListener('editor-copy', onEditorCopy)
+  window.addEventListener('editor-paste', onEditorPaste)
+  window.addEventListener('editor-import-glyphs', onEditorImportGlyphs)
   window.addEventListener('editor-import-pic', handleImportPicNative)
-  window.addEventListener('editor-export-glyphs', () => web_handlers['export-glyphs']?.())
+  window.addEventListener('editor-export-glyphs', onEditorExportGlyphs)
   window.addEventListener('editor-export-metrics-ref-native', handleExportMetricsRefNative)
   window.addEventListener('editor-export-jpeg-native', handleExportJpegNative)
   window.addEventListener('editor-export-png-native', handleExportPngNative)
@@ -462,25 +474,12 @@ onMounted(() => {
   window.addEventListener('editor-export-color-font-native', handleExportColorFontNative)
   window.addEventListener('editor-import-font-native', handleImportFontNative)
   window.addEventListener('editor-remove-overlap', handleEditorRemoveOverlap)
-  window.addEventListener('editor-font-settings', () => { showFontSettingsDialog.value = true })
-  window.addEventListener('editor-preference-settings', () => { showPreferenceSettingsDialog.value = true })
-  window.addEventListener('editor-language-settings', () => { showLanguageSettingsDialog.value = true })
+  window.addEventListener('editor-font-settings', onFontSettings)
+  window.addEventListener('editor-preference-settings', onPreferenceSettings)
+  window.addEventListener('editor-language-settings', onLanguageSettings)
   window.addEventListener('editor-template', handleEditorTemplate)
-  // 监听 Tauri 菜单触发的保存事件
-  window.addEventListener('save-file', async () => {
-    try {
-      await fileHandler.saveProjectTauriRememberPath()
-    } catch (error) {
-      console.error('Failed to save project from Tauri menu:', error)
-    }
-  })
-  window.addEventListener('save-as', async () => {
-    try {
-      await fileHandler.saveProjectTauriAs()
-    } catch (error) {
-      console.error('Failed to save-as project from Tauri menu:', error)
-    }
-  })
+  window.addEventListener('save-file', onSaveFile)
+  window.addEventListener('save-as', onSaveAs)
   
   // 初始化 Tauri 菜单状态
   updateTauriMenuDisabled()
@@ -493,12 +492,12 @@ onUnmounted(() => {
   window.removeEventListener('editor-add-glyph', handleShowAddGlyphDialog)
   window.removeEventListener('show-warning-message', handleShowWarningMessage)
   window.removeEventListener('editor-delete', handleEditorDelete)
-  window.removeEventListener('editor-cut', () => {})
-  window.removeEventListener('editor-copy', () => {})
-  window.removeEventListener('editor-paste', () => {})
-  window.removeEventListener('editor-import-glyphs', () => {})
+  window.removeEventListener('editor-cut', onEditorCut)
+  window.removeEventListener('editor-copy', onEditorCopy)
+  window.removeEventListener('editor-paste', onEditorPaste)
+  window.removeEventListener('editor-import-glyphs', onEditorImportGlyphs)
   window.removeEventListener('editor-import-pic', handleImportPicNative)
-  window.removeEventListener('editor-export-glyphs', () => {})
+  window.removeEventListener('editor-export-glyphs', onEditorExportGlyphs)
   window.removeEventListener('editor-export-metrics-ref-native', handleExportMetricsRefNative)
   window.removeEventListener('editor-export-jpeg-native', handleExportJpegNative)
   window.removeEventListener('editor-export-png-native', handleExportPngNative)
@@ -508,12 +507,12 @@ onUnmounted(() => {
   window.removeEventListener('editor-export-color-font-native', handleExportColorFontNative)
   window.removeEventListener('editor-import-font-native', handleImportFontNative)
   window.removeEventListener('editor-remove-overlap', handleEditorRemoveOverlap)
-  window.removeEventListener('editor-font-settings', () => {})
-  window.removeEventListener('editor-preference-settings', () => {})
-  window.removeEventListener('editor-language-settings', () => {})
+  window.removeEventListener('editor-font-settings', onFontSettings)
+  window.removeEventListener('editor-preference-settings', onPreferenceSettings)
+  window.removeEventListener('editor-language-settings', onLanguageSettings)
   window.removeEventListener('editor-template', handleEditorTemplate)
-  window.removeEventListener('save-file', () => {})
-  window.removeEventListener('save-as', () => {})
+  window.removeEventListener('save-file', onSaveFile)
+  window.removeEventListener('save-as', onSaveAs)
 })
 
 function handleFontSettingsOpenMore() {

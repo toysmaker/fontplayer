@@ -981,6 +981,16 @@ pub fn run() {
                 window.open_devtools();
             }
 
+            // 窗口恢复时通知前端检测合成器状态（JS 端判断是否需要刷新）
+            let handle = app.handle().clone();
+            if let Some(window) = app.get_webview_window("main") {
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::Focused(true) = event {
+                        let _ = handle.emit("window-focus-restored", ());
+                    }
+                });
+            }
+
             // 设置菜单事件处理
             app.on_menu_event(move |app, event| {
                 let id = event.id();
