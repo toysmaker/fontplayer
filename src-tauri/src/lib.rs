@@ -981,12 +981,17 @@ pub fn run() {
                 window.open_devtools();
             }
 
-            // 窗口恢复时通知前端检测合成器状态（JS 端判断是否需要刷新）
+            // 窗口恢复时检测 webview 是否存活，分层恢复
             let handle = app.handle().clone();
             if let Some(window) = app.get_webview_window("main") {
+                let w = window.clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::Focused(true) = event {
-                        let _ = handle.emit("window-focus-restored", ());
+                        if w.eval("true").is_ok() {
+                            // JS 引擎存活 → 让前端自行检测合成器并决定是否刷新（不丢状态）
+                            let _ = handle.emit("window-focus-restored", ());
+                        }
+                        // eval 失败 = 进程已死 → 不做任何事，保留白屏让用户感知异常
                     }
                 });
             }

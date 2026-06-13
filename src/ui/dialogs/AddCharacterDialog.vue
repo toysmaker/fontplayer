@@ -51,10 +51,9 @@ import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import { genUUID } from '@/utils/uuid'
 import { isTauri } from '@/utils/env'
 import { createDebouncedHandler } from '@/utils/debounce-click'
-import localforage from 'localforage'
 import * as R from 'ramda'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
-import { useTemplateSessionStore } from '@/stores/templateSession'
+import { useTemplateSessionStore, getCacheDb } from '@/stores/templateSession'
 import { importTemplate2, importTemplate5, importTemplate6, importTemplate7, importTemplate8 } from '@/features/editor/menus/templatesHandlers'
 
 const { t, tm, locale } = useI18n()
@@ -174,7 +173,7 @@ const _handleConfirm = async () => {
           try { await importFn() } catch (e) { if (import.meta.env.DEV) console.error('[AddChar] import style failed:', selectedStyle, e) }
           editorStore.setEditStatus(savedStatus)
           // 更新 IndexedDB 缓存
-          const cacheDb = localforage.createInstance({ name: 'fontplayer_storage', storeName: 'template_cache' })
+          const cacheDb = getCacheDb()
           await cacheDb.setItem('tmpl_strokes', JSON.stringify(file.stroke_glyphs || [])).catch(() => {})
         }
       }

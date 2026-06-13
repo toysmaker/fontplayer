@@ -10,12 +10,15 @@ import { projectLoader } from '@/features/editor/services/ProjectLoader'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import type { ICharacterFileLite, ICustomGlyph, IFile } from '@/core/types'
 
+// 模块级单例，避免每次调用 createInstance 创建新的 IndexedDB 连接
+let _cacheDb: ReturnType<typeof localforage.createInstance> | null = null
+export function getCacheDb() {
+  if (!_cacheDb) _cacheDb = localforage.createInstance({ name: 'fontplayer_storage', storeName: 'template_cache' })
+  return _cacheDb
+}
+
 export const useTemplateSessionStore = defineStore('templateSession', () => {
   const fileUuid = ref<string | null>(null)
-
-  function getCacheDb() {
-    return localforage.createInstance({ name: 'fontplayer_storage', storeName: 'template_cache' })
-  }
 
   async function loadIfNeeded(): Promise<{
     fileUuid: string; strokes: ICustomGlyph[]; constants: any[]
