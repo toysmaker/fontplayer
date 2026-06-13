@@ -37,6 +37,7 @@ import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { glyphSkeletonBind, glyphSkeletonRebind } from '@/features/glyphSkeletonBind'
 import { rule1 } from '@/templates/config/restrict'
+import { DEFAULT_TEMPLATE_PROJECT_TAG } from '@/features/editor/services/ProjectLoader'
 import { orderedListWithItemsForGlyph } from '@/core/utils/glyph'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import { skeletonFreeEdit, enterSkeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
@@ -63,7 +64,7 @@ const message = useMessage()
 const { selectedComponent, selectedComponentUUID, selectedComponents, modifyComponent, editStatus } = useComponentEditor()
 
 // ---- 参数约束（字玩标准黑体） ----
-const isRestrictProject = computed(() => projectStore.selectedFile?.tag === '字玩标准黑体')
+const isRestrictProject = computed(() => projectStore.selectedFile?.tag === DEFAULT_TEMPLATE_PROJECT_TAG)
 const paramRestrictEnabled = ref(true)
 // 存储被修改参数的原始 value/min/max，取消约束时恢复
 const restrictOriginalValues = new Map<string, { value: number; min: number; max: number }>()

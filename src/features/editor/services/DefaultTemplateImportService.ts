@@ -3,7 +3,7 @@
  */
 
 import { isTauri } from '@/utils/env'
-import { projectLoader } from '@/features/editor/services/ProjectLoader'
+import { projectLoader, DEFAULT_TEMPLATE_PROJECT_TAG } from '@/features/editor/services/ProjectLoader'
 import { useProjectStore } from '@/stores/project'
 
 /** Tauri bundle.resources 中的相对路径（见 tauri.conf.json） */
@@ -24,7 +24,7 @@ export async function readBundledDefaultTemplateFpzBytes(): Promise<ArrayBuffer>
 export async function importBundledDefaultTemplate(): Promise<void> {
   const buf = await readBundledDefaultTemplateFpzBytes()
   const projectFile = await projectLoader.loadProjectFromFpzArrayBuffer(buf)
-  projectFile.tag = '字玩标准黑体'
+  projectFile.tag = DEFAULT_TEMPLATE_PROJECT_TAG
   const store = useProjectStore()
   const ok = store.addFile(projectFile)
   if (!ok) {

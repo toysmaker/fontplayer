@@ -224,7 +224,7 @@ export class ProjectLoader {
   /**
    * 从打包的 .fpz（默认模板）加载工程；字符自压缩块流式解压并写入 IDB，避免整份 characterList 驻留内存。
    */
-  async loadProjectFromFpzArrayBuffer(buffer: ArrayBuffer): Promise<IFile> {
+  async loadProjectFromFpzArrayBuffer(buffer: ArrayBuffer, progressMsg?: string): Promise<IFile> {
     const decoded = parseFpzBuffer(buffer)
     const header = decoded.headerProject as any
     let data: any = {
@@ -262,6 +262,7 @@ export class ProjectLoader {
         data.file,
         decoded,
         this.collectGlyphLibraryFromProjectData(data),
+        progressMsg,
       )
 
       const fileForDecomp = data.file
@@ -328,7 +329,7 @@ export class ProjectLoader {
   /**
    * 从字玩 .fp 工程文件加载（FP01 + 分块 gzip + 尾部字形 gzip）
    */
-  async loadProjectFromFpArrayBuffer(buffer: ArrayBuffer): Promise<IFile> {
+  async loadProjectFromFpArrayBuffer(buffer: ArrayBuffer, progressMsg?: string): Promise<IFile> {
     const decodedFp = parseFpBuffer(buffer)
     const bundle = await decompressGlyphBundleIfPresent(decodedFp)
     const header = decodedFp.headerProject as any
@@ -413,6 +414,7 @@ export class ProjectLoader {
         data.file,
         decoded,
         this.collectGlyphLibraryFromProjectData(data),
+        progressMsg,
       )
 
       const fileForDecomp = data.file
@@ -483,6 +485,7 @@ export class ProjectLoader {
     file: any,
     decoded: DecodedFpz,
     glyphLibrary: ICustomGlyph[] = [],
+    progressMsg?: string,
   ): Promise<void> {
     const fangYuanWiden =
       typeof file?.tag === 'string' && file.tag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG
@@ -511,14 +514,17 @@ export class ProjectLoader {
 
       if ((i + 1) % 10 === 0 || i + 1 === total) {
         const ch = character as { character?: { text?: string }; uuid?: string }
-        this.updateProgress(i + 1, `处理字符: ${ch.character?.text || ch.uuid} (${i + 1}/${total})`)
+        const msg = progressMsg
+          ? `${progressMsg} ${i + 1}/${total}`
+          : `处理字符: ${ch.character?.text || ch.uuid} (${i + 1}/${total})`
+        this.updateProgress(i + 1, msg)
       }
       if ((i + 1) % 50 === 0) {
         await this.yieldToMainThread()
       }
     }
 
-    this.updateProgress(total, '存储字符数据到IndexedDB...')
+    this.updateProgress(total, progressMsg || '存储字符数据到IndexedDB...')
     file.characterList = metadataList
   }
 

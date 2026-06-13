@@ -101,7 +101,7 @@ const loadingMessage = computed(() => {
 }
 
 .loading-message {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--primary-0);
   text-align: center;
