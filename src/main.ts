@@ -215,6 +215,9 @@ app.component('font-awesome-icon', FontAwesomeIcon)
 
 app.mount('#app')
 
+// ---- 心跳保活：防止长期最小化后被 macOS 标记为空闲挂起 Web 进程 ----
+setInterval(() => { void Date.now() }, 600_000) // 每10分钟一次心跳，防止 Web 进程被 macOS 标记为空闲
+
 // ---- 窗口恢复 / 页面可见性变化处理（修复长期最小化后 WKWebView 白屏） ----
 
 /** 检测 WebKit 合成器是否正常：创建 1x1 canvas 填充红色并读回像素 */

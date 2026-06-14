@@ -981,6 +981,18 @@ pub fn run() {
                 window.open_devtools();
             }
 
+            // macOS: 声明后台活动，防止 App Nap 挂起 WKWebView 进程导致白屏
+            #[cfg(target_os = "macos")]
+            {
+                use objc2_foundation::{NSProcessInfo, NSActivityOptions, NSString};
+                let reason = NSString::from_str("Prevent webview suspension");
+                let activity = NSProcessInfo::processInfo().beginActivityWithOptions_reason(
+                    NSActivityOptions::Background | NSActivityOptions::IdleSystemSleepDisabled,
+                    &reason,
+                );
+                std::mem::forget(activity);
+            }
+
             // 窗口恢复时检测 webview 是否存活，分层恢复
             let handle = app.handle().clone();
             if let Some(window) = app.get_webview_window("main") {

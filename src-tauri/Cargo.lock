@@ -82,6 +82,8 @@ dependencies = [
  "base64 0.21.7",
  "lazy_static",
  "log",
+ "objc2",
+ "objc2-foundation",
  "regex",
  "serde",
  "serde_json",
