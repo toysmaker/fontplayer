@@ -28,6 +28,7 @@ src-tauri/target
 playwright-report
 
 public/data/*
+public/templates/private
 
 .vite
 
