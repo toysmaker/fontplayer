@@ -215,6 +215,20 @@ app.component('font-awesome-icon', FontAwesomeIcon)
 
 app.mount('#app')
 
+// ---- 全局修复 WKWebView 双击问题（macOS Tauri） ----
+// 根因：WKWebView 在 mousedown 后触发 input blur，导致后续 click 事件丢失
+// 修复：capture 阶段检测 input 聚焦时点击按钮，用微任务在 blur 完成后补发 click
+document.addEventListener('mousedown', (e) => {
+  const target = (e.target as HTMLElement)?.closest?.('.n-base-close') as HTMLElement | null
+  if (!target) return
+  const tag = (e.target as HTMLElement)?.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+  const activeEl = document.activeElement
+  if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+    Promise.resolve().then(() => { target.click() })
+  }
+}, true)
+
 // ---- 心跳保活：防止长期最小化后被 macOS 标记为空闲挂起 Web 进程 ----
 setInterval(() => { void Date.now() }, 600_000) // 每10分钟一次心跳，防止 Web 进程被 macOS 标记为空闲
 
