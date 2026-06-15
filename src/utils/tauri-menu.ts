@@ -161,6 +161,16 @@ export async function initTauriMenu() {
       window.dispatchEvent(new CustomEvent('editor-remove-overlap'))
     })
 
+    listen('component-union', () => {
+      window.dispatchEvent(new CustomEvent('editor-component-boolean', { detail: { operation: 'union' } }))
+    })
+    listen('component-intersect', () => {
+      window.dispatchEvent(new CustomEvent('editor-component-boolean', { detail: { operation: 'intersect' } }))
+    })
+    listen('component-subtract', () => {
+      window.dispatchEvent(new CustomEvent('editor-component-boolean', { detail: { operation: 'subtract' } }))
+    })
+
     listen('font-settings', () => {
       window.dispatchEvent(new CustomEvent('editor-font-settings'))
     })

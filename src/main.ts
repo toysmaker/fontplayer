@@ -248,10 +248,10 @@ async function handleAppRestored() {
   window.dispatchEvent(new CustomEvent('force-glyph-list-refresh'))
 }
 
-// Tauri 端：窗口聚焦恢复事件
+// Tauri 端：窗口聚焦恢复事件（仅 Tauri 环境有效）
 try {
   const { listen } = await import('@tauri-apps/api/event')
-  listen('window-focus-restored', () => { handleAppRestored() })
+  listen('window-focus-restored', () => { handleAppRestored() }).catch(() => {})
 } catch {}
 
 // Web 端兜底：页面可见性变化 + bfcache 恢复

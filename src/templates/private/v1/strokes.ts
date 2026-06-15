@@ -1197,7 +1197,92 @@ const strokes = [
         max: 200,
       },
     ]
-  }
+  },
+  {
+    name: '竖撇',
+    uuid: genUUID(),
+    params: [
+      {
+        name: '竖-竖直延伸',
+        default: 200,
+        min: 0,
+        max: 1000,
+        originParam: '竖-长度',
+      },
+      {
+        name: '撇-竖直延伸',
+        default: 200,
+        min: 0,
+        max: 1000,
+      },
+      {
+        name: '撇-水平延伸',
+        default: 200,
+        min: 0,
+        max: 1000,
+      },
+      {
+        name: '撇-弯曲度',
+        default: 1.5,
+        min: 1,
+        max: 2,
+      },
+      {
+        name: '字重',
+        default: 50,
+        min: 0,
+        max: 200,
+      },
+    ]
+  },
+  {
+    name: '可倾斜竖',
+    uuid: genUUID(),
+    params: [
+      {
+        name: '竖直延伸',
+        default: 500,
+        min: 0,
+        max: 1000,
+      },
+      {
+        name: '水平延伸',
+        default: 100,
+        min: -500,
+        max: 500,
+      },
+      {
+        name: '字重',
+        default: 50,
+        min: 0,
+        max: 200,
+      },
+    ]
+  },
+  {
+    name: '可倾斜横',
+    uuid: genUUID(),
+    params: [
+      {
+        name: '水平延伸',
+        default: 500,
+        min: 0,
+        max: 1000,
+      },
+      {
+        name: '竖直延伸',
+        default: 100,
+        min: -500,
+        max: 500,
+      },
+      {
+        name: '字重',
+        default: 50,
+        min: 0,
+        max: 200,
+      },
+    ]
+  },
 ]
 
 export {

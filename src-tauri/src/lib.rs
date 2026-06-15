@@ -456,6 +456,16 @@ fn format_current_character(app: AppHandle) {
     app.emit("format-current-character", ()).unwrap();
 }
 
+fn component_union(app: AppHandle) {
+    app.emit("component-union", ()).unwrap();
+}
+fn component_intersect(app: AppHandle) {
+    app.emit("component-intersect", ()).unwrap();
+}
+fn component_subtract(app: AppHandle) {
+    app.emit("component-subtract", ()).unwrap();
+}
+
 // 菜单启用/禁用逻辑
 fn enable(_edit_status: &str) -> bool {
     true
@@ -957,6 +967,18 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>, texts: &MenuTexts) -> Resul
                         .enabled(false)
                         .build(app)
                         ?,
+                    &MenuItemBuilder::with_id("component-union", "并集 (Union)")
+                        .enabled(false)
+                        .build(app)
+                        ?,
+                    &MenuItemBuilder::with_id("component-intersect", "交集 (Intersect)")
+                        .enabled(false)
+                        .build(app)
+                        ?,
+                    &MenuItemBuilder::with_id("component-subtract", "差集 (Subtract)")
+                        .enabled(false)
+                        .build(app)
+                        ?,
                 ],
             )
             ?,
@@ -1058,6 +1080,9 @@ pub fn run() {
                     "remove-overlap" | "remove_overlap" => remove_overlap(app.app_handle().clone()),
                     "format-all-characters" => format_all_characters(app.app_handle().clone()),
                     "format-current-character" => format_current_character(app.app_handle().clone()),
+                    "component-union" => component_union(app.app_handle().clone()),
+                    "component-intersect" => component_intersect(app.app_handle().clone()),
+                    "component-subtract" => component_subtract(app.app_handle().clone()),
                     _ => {}
                 }
             });

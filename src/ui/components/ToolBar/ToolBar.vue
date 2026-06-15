@@ -175,8 +175,28 @@
             :icon="['fas', 'text-width']"
           />
         </n-icon>
+
+        <!-- 布尔运算分隔线和按钮 -->
+        <template v-if="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
+          <div class="boolean-separator"></div>
+          <n-tooltip trigger="hover" placement="bottom"><template #trigger>
+            <n-icon class="tool-icon boolean-icon" size="24" @click="handleBooleanOp('union')" @pointerup="handleBooleanOp('union')">
+              <ShapeUnion16Filled />
+            </n-icon></template>并集
+          </n-tooltip>
+          <n-tooltip trigger="hover" placement="bottom"><template #trigger>
+            <n-icon class="tool-icon boolean-icon" size="24" @click="handleBooleanOp('intersect')" @pointerup="handleBooleanOp('intersect')">
+              <ShapeIntersect16Filled />
+            </n-icon></template>交集
+          </n-tooltip>
+          <n-tooltip trigger="hover" placement="bottom"><template #trigger>
+            <n-icon class="tool-icon boolean-icon" size="24" @click="handleBooleanOp('subtract')" @pointerup="handleBooleanOp('subtract')">
+              <ShapeSubtract16Filled />
+            </n-icon></template>差集
+          </n-tooltip>
+        </template>
       </div>
-      
+
       <!-- 返回字符列表按钮 -->
       <div class="to-list" @click="handleToList" @pointerup="handleToList">
         <font-awesome-icon class="to-list-icon" :icon="['fas', 'table-cells']" />
@@ -198,9 +218,11 @@ import { useCharacterStore } from '@/stores/character'
 import { useProjectStore } from '@/stores/project'
 import { EditStatus } from '@/core/types'
 import { isTauri } from '@/utils/env'
+import { ShapeUnion16Filled, ShapeIntersect16Filled, ShapeSubtract16Filled } from '@vicons/fluent'
 import { genPictureComponent } from '@/features/tools/picture'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import { confirmLeaveGlyphEditIfDirty } from '@/stores/editorConstantsSession'
+import { type BooleanOp } from '@/features/editor/services/BooleanOperationService'
 import {
   openProgrammingWindow,
   setupProgrammingWindowBridge,
@@ -326,6 +348,12 @@ const handlePictureTool = async () => {
   }
 }
 const switchTool = createDebouncedHandler(_switchTool, 'ToolBar.switchTool', (args) => args[0])
+
+// ---- 布尔运算：通过 window 事件触发，由 EditorSidebar 统一处理 ----
+const _handleBooleanOp = (op: BooleanOp) => {
+  window.dispatchEvent(new CustomEvent('editor-component-boolean', { detail: { operation: op } }))
+}
+const handleBooleanOp = createDebouncedHandler(_handleBooleanOp, 'ToolBar.booleanOp', (args: any) => args[0])
 
 let cleanupProgrammingBridge: (() => void) | null = null
 onMounted(async () => {
@@ -463,7 +491,8 @@ const handleToList = createDebouncedHandler(_handleToList, 'ToolBar.handleToList
   color: var(--primary-0);
 }
 
-.to-list-label {
-  color: var(--primary-0);
-}
+.to-list-label { color: var(--primary-0); }
+.boolean-separator { width: 1px; height: 28px; background: var(--primary-0); margin: 4px 8px; flex-shrink: 0; }
+.boolean-icon { cursor: pointer; opacity: 0.65; }
+.boolean-icon:hover { opacity: 1; }
 </style>

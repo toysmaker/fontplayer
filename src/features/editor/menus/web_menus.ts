@@ -361,6 +361,9 @@ const getWebMenu = (): Array<IMenu> => {
 					handlers['format-current-character']()
 				}
 			},
+			{ label: '并集', key: 'component-union', click: (h: IHandlerMap) => { h['component-union']() } },
+			{ label: '交集', key: 'component-intersect', click: (h: IHandlerMap) => { h['component-intersect']() } },
+			{ label: '差集', key: 'component-subtract', click: (h: IHandlerMap) => { h['component-subtract']() } },
 		]
 	}
 	]

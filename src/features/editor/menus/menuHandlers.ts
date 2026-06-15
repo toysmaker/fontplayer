@@ -138,6 +138,9 @@ export function createDisabledRules(ctx: {
 
     // tools
     'remove_overlap': enableAtEdit,
+    'component-union': enableAtEdit,
+    'component-intersect': enableAtEdit,
+    'component-subtract': enableAtEdit,
     'format-all-characters': enableAtList,
     'format-current-character': enableAtCharacterEdit,
   }

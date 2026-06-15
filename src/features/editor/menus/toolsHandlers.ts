@@ -172,10 +172,16 @@ export function createToolsHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
     })
   }
 
+  function handleComponentBoolean(op: string) {
+    window.dispatchEvent(new CustomEvent('editor-component-boolean', { detail: { operation: op } }))
+  }
   return {
     'remove_overlap': handleRemoveOverlap,
     'format-all-characters': handleFormatAllCharacters,
     'format-current-character': handleFormatCurrentCharacter,
+    'component-union': () => handleComponentBoolean('union'),
+    'component-intersect': () => handleComponentBoolean('intersect'),
+    'component-subtract': () => handleComponentBoolean('subtract'),
   }
 }
 

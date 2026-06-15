@@ -18,7 +18,7 @@ const OVERLAP_REMOVAL_CONFIG = {
   MERGE_TOLERANCE: 1e-6,
 }
 
-function createOptimizedPath(
+export function createOptimizedPath(
   contour: IContour
 ): paper.Path {
   const path = new paper.Path()

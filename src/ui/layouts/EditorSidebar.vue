@@ -100,6 +100,8 @@ import { useGlyphStore } from '@/stores/glyph'
 import { EditStatus } from '@/core/types'
 import { ImportExportSvgService } from '@/features/editor/services/ImportExportSvgService'
 import { formatContainerGlyphComponents } from '@/features/editor/services/FormatGlyphService'
+import { genUUID } from '@/utils/uuid'
+import { applyBooleanOperation, type BooleanOp } from '@/features/editor/services/BooleanOperationService'
 import type { IComponent } from '@/core/types'
 import { isTauri } from '@/utils/env'
 import NewProjectDialog from '@/ui/dialogs/NewProjectDialog.vue'
@@ -328,6 +330,41 @@ const handleEditorRemoveOverlap = () => {
   web_handlers['remove_overlap']?.()
 }
 
+const opLabels: Record<string, string> = { union: '并集', intersect: '交集', subtract: '差集' }
+const _handleEditorBooleanOperation = (event: Event) => {
+  const op = (event as CustomEvent<{ operation: BooleanOp }>).detail?.operation
+  if (!op) return
+  const isEdit = editorStore.editStatus === EditStatus.Edit
+  const selectedUUIDs = isEdit ? characterStore.selectedComponentsUUIDs : (glyphStore as any).selectedComponentsUUIDs
+  if (!selectedUUIDs?.length || selectedUUIDs.length < 2) return
+  const ordered = isEdit
+    ? (characterStore as any).orderedListWithItemsForCurrentCharacterFile
+    : (glyphStore as any).orderedListWithItemsForCurrentGlyph
+  if (!ordered) return
+  const selectedComponents = ordered.filter((c: any) => selectedUUIDs.includes(c.uuid))
+  if (selectedComponents.length < 2) return
+
+  dialog.warning({
+    title: `确认${opLabels[op]}`,
+    content: '布尔计算会删除原组件并生成一个新的钢笔组件，如果原组件包含脚本字形组件会对其进行格式化，确定执行？',
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      const results = applyBooleanOperation(selectedComponents, op, genUUID)
+      if (!results.length) return
+      for (const c of selectedComponents) {
+        if (isEdit) characterStore.removeComponent(c.uuid)
+        else glyphStore.removeComponent(c.uuid)
+      }
+      for (const r of results) {
+        if (isEdit) characterStore.addComponent(r)
+        else glyphStore.addComponent(r as any)
+      }
+    },
+  })
+}
+const handleEditorBooleanOperation = createDebouncedHandler(_handleEditorBooleanOperation, 'EditorSidebar.booleanOp')
+
 const handleExportMetricsRefNative = async () => {
   web_handlers['export-metrics-ref']?.()
 }
@@ -474,6 +511,7 @@ onMounted(() => {
   window.addEventListener('editor-export-color-font-native', handleExportColorFontNative)
   window.addEventListener('editor-import-font-native', handleImportFontNative)
   window.addEventListener('editor-remove-overlap', handleEditorRemoveOverlap)
+  window.addEventListener('editor-component-boolean', handleEditorBooleanOperation)
   window.addEventListener('editor-font-settings', onFontSettings)
   window.addEventListener('editor-preference-settings', onPreferenceSettings)
   window.addEventListener('editor-language-settings', onLanguageSettings)
@@ -507,6 +545,7 @@ onUnmounted(() => {
   window.removeEventListener('editor-export-color-font-native', handleExportColorFontNative)
   window.removeEventListener('editor-import-font-native', handleImportFontNative)
   window.removeEventListener('editor-remove-overlap', handleEditorRemoveOverlap)
+  window.removeEventListener('editor-component-boolean', handleEditorBooleanOperation)
   window.removeEventListener('editor-font-settings', onFontSettings)
   window.removeEventListener('editor-preference-settings', onPreferenceSettings)
   window.removeEventListener('editor-language-settings', onLanguageSettings)
