@@ -30,8 +30,8 @@ import { useCharacterStore } from '@/stores/character'
 import { useGlyphStore } from '@/stores/glyph'
 import { useProjectStore } from '@/stores/project'
 import { useCharacterGridEditStore } from '@/stores/characterGridEdit'
-import { EditStatus, ParameterType, type IParameter, type ICustomGlyph, type IConstant, type IVariable } from '@/core/types'
-import type { IGlyphComponent } from '@/core/types'
+import { EditStatus, ParameterType, PostProcessRuleType, type IParameter, type ICustomGlyph, type IConstant, type IVariable } from '@/core/types'
+import type { IGlyphComponent, PostProcessRule, IDifferenceRule } from '@/core/types'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
@@ -1144,6 +1144,142 @@ const handleChangeName = (name: string) => {
   modifyComponent({ name })
 }
 
+// ==================== 后处理规则 ====================
+
+const postProcessEditMode = ref(false)
+const editingPostProcessRules = ref<PostProcessRule[]>([])
+const showAddRuleSelect = ref(false)
+
+const availableRuleTypes = computed(() => [
+  { label: t('panels.paramsPanel.postProcessRules.difference'), value: PostProcessRuleType.Difference },
+])
+
+/** 当前编辑环境中可选的兄弟组件列表 */
+const availableSiblingComponents = computed(() => {
+  if (!selectedComponent.value) return []
+  const currentUUID = selectedComponent.value.uuid
+  let components: Array<{ uuid: string; name: string; type: string }> = []
+  if (editStatus.value === EditStatus.Edit) {
+    components = characterStore.editingCharacter?.components || []
+  } else if (editStatus.value === EditStatus.Glyph) {
+    components = glyphStore.editingGlyph?.components || []
+  }
+  return components
+    .filter(c => c.uuid !== currentUUID)
+    .map(c => ({ label: `${c.name} (${c.type})`, value: c.uuid }))
+})
+
+function enterPostProcessEditMode() {
+  if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return
+  const glyphValue = selectedComponent.value.value as ICustomGlyph
+  editingPostProcessRules.value = JSON.parse(JSON.stringify(glyphValue.postProcessRules || []))
+  postProcessEditMode.value = true
+}
+
+function cancelPostProcessEdit() {
+  postProcessEditMode.value = false
+  editingPostProcessRules.value = []
+}
+
+/** 应用后处理规则：规则已由 persistEditingRules 实时保存，此处只需重新执行脚本触发后处理渲染 */
+async function applyPostProcessRules() {
+  if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return
+  const compUUID = selectedComponent.value.uuid
+  // 规则数据已在每次编辑操作时由 persistEditingRules() 实时写入 store
+  // 这里直接用 store 中的最新值执行脚本
+  const glyphValue = selectedComponent.value.value as ICustomGlyph
+
+  // 重新执行脚本，PostProcessEngine.executeAll 会自动应用后处理
+  try {
+    executeGlyphScript(glyphValue, compUUID, { ignoreTempDataGuard: true })
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn('[applyPostProcessRules] script execution failed:', e)
+  }
+
+  postProcessEditMode.value = false
+  editingPostProcessRules.value = []
+  showAddRuleSelect.value = false
+
+  // 触发画布重绘和列表刷新
+  await nextTick()
+  const ctx = getEditCanvasContext()
+  ctx?.onRender()
+  if (editStatus.value === EditStatus.Edit) {
+    characterStore.characterListVersion++
+  } else if (editStatus.value === EditStatus.Glyph) {
+    glyphStore.glyphListVersion++
+  }
+}
+
+/** 将编辑中的规则立即持久化到 component value（不重跑脚本） */
+function persistEditingRules() {
+  if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return
+  const glyphValue = { ...selectedComponent.value.value } as ICustomGlyph
+  glyphValue.postProcessRules = JSON.parse(JSON.stringify(editingPostProcessRules.value))
+  modifyComponent({ value: glyphValue })
+}
+
+function handleAddPostProcessRule(ruleType: PostProcessRuleType) {
+  if (ruleType === PostProcessRuleType.Difference) {
+    editingPostProcessRules.value = [
+      ...editingPostProcessRules.value,
+      { type: PostProcessRuleType.Difference, targetComponentUUIDs: [] } as IDifferenceRule,
+    ]
+  }
+  showAddRuleSelect.value = false
+  persistEditingRules()
+}
+
+function handleRemovePostProcessRule(ruleIndex: number) {
+  editingPostProcessRules.value = editingPostProcessRules.value.filter((_, i) => i !== ruleIndex)
+  persistEditingRules()
+}
+
+function handleAddTarget(ruleIndex: number, targetUUID: string) {
+  const rules = [...editingPostProcessRules.value] as PostProcessRule[]
+  const rule = { ...rules[ruleIndex] } as IDifferenceRule
+  if (!rule.targetComponentUUIDs.includes(targetUUID)) {
+    rule.targetComponentUUIDs = [...rule.targetComponentUUIDs, targetUUID]
+  }
+  rules[ruleIndex] = rule
+  editingPostProcessRules.value = rules
+  persistEditingRules()
+}
+
+function handleRemoveTarget(ruleIndex: number, targetIndex: number) {
+  const rules = [...editingPostProcessRules.value] as PostProcessRule[]
+  const rule = { ...rules[ruleIndex] } as IDifferenceRule
+  rule.targetComponentUUIDs = rule.targetComponentUUIDs.filter((_, i) => i !== targetIndex)
+  rules[ruleIndex] = rule
+  editingPostProcessRules.value = rules
+  persistEditingRules()
+}
+
+/** 根据 UUID 查找组件名称 */
+function getComponentNameByUUID(uuid: string): string {
+  let components: Array<{ uuid: string; name: string }> = []
+  if (editStatus.value === EditStatus.Edit) {
+    components = characterStore.editingCharacter?.components || []
+  } else if (editStatus.value === EditStatus.Glyph) {
+    components = glyphStore.editingGlyph?.components || []
+  }
+  return components.find(c => c.uuid === uuid)?.name || uuid
+}
+
+/** 当前是否有已保存的后处理规则 */
+const hasSavedPostProcessRules = computed(() => {
+  if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return false
+  const glyphValue = selectedComponent.value.value as ICustomGlyph
+  return !!(glyphValue?.postProcessRules && glyphValue.postProcessRules.length > 0)
+})
+
+// 切换组件时退出编辑模式
+watch(() => selectedComponent.value?.uuid, () => {
+  postProcessEditMode.value = false
+  editingPostProcessRules.value = []
+  showAddRuleSelect.value = false
+})
+
 const handleFormatGlyphComponent = () => {
   if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') {
     dialog.warning({
@@ -1500,6 +1636,129 @@ const handleFormatGlyphComponent = () => {
         </n-form>
       </div>
 
+      <!-- 后处理规则 -->
+      <div
+        class="section"
+        v-if="selectedComponent && selectedComponent.type === 'glyph'"
+      >
+        <div class="section-title">{{ t('panels.paramsPanel.postProcessRules.title') }}</div>
+
+        <!-- 非编辑模式：显示编辑按钮 -->
+        <template v-if="!postProcessEditMode">
+          <div class="post-process-summary" v-if="hasSavedPostProcessRules">
+            <span class="post-process-badge">
+              {{ t('panels.paramsPanel.postProcessRules.rulesCount', { count: (selectedComponent.value as any)?.postProcessRules?.length || 0 }) }}
+            </span>
+          </div>
+          <n-button
+            block
+            @click="enterPostProcessEditMode"
+            @pointerup="enterPostProcessEditMode"
+          >
+            {{ t('panels.paramsPanel.postProcessRules.editRules') }}
+          </n-button>
+        </template>
+
+        <!-- 编辑模式：显示规则编辑器 -->
+        <template v-else>
+          <div
+            v-for="(rule, ruleIndex) in editingPostProcessRules"
+            :key="ruleIndex"
+            class="post-process-rule-item"
+          >
+            <div class="rule-header">
+              <span class="rule-type-label">{{ t('panels.paramsPanel.postProcessRules.difference') }}</span>
+              <n-button
+                size="tiny"
+                quaternary
+                type="error"
+                @click="handleRemovePostProcessRule(ruleIndex)"
+                @pointerup="handleRemovePostProcessRule(ruleIndex)"
+              >
+                <template #icon>
+                  <n-icon><font-awesome-icon :icon="['fas', 'trash']" /></n-icon>
+                </template>
+              </n-button>
+            </div>
+
+            <!-- 目标组件列表 -->
+            <div class="target-list">
+              <div
+                v-for="(targetUUID, targetIndex) in (rule as any).targetComponentUUIDs"
+                :key="targetUUID"
+                class="target-item"
+              >
+                <span class="target-name">{{ getComponentNameByUUID(targetUUID) }}</span>
+                <n-button
+                  size="tiny"
+                  quaternary
+                  type="error"
+                  class="target-delete-btn"
+                  @click="handleRemoveTarget(ruleIndex, targetIndex)"
+                  @pointerup="handleRemoveTarget(ruleIndex, targetIndex)"
+                >
+                  <template #icon>
+                    <n-icon size="12"><font-awesome-icon :icon="['fas', 'times']" /></n-icon>
+                  </template>
+                </n-button>
+              </div>
+              <div v-if="!(rule as any).targetComponentUUIDs?.length" class="target-empty">
+                {{ t('panels.paramsPanel.postProcessRules.noTargets') }}
+              </div>
+            </div>
+
+            <!-- 添加目标组件选择 -->
+            <n-select
+              :value="null"
+              :placeholder="t('panels.paramsPanel.postProcessRules.selectComponent')"
+              :options="availableSiblingComponents"
+              filterable
+              clearable
+              @update:value="(val: string) => handleAddTarget(ruleIndex, val)"
+              style="margin-top: 8px;"
+            />
+          </div>
+
+          <!-- 添加规则：默认显示按钮，点击后出现 select -->
+          <n-button
+            v-if="!showAddRuleSelect"
+            block
+            dashed
+            @click="showAddRuleSelect = true"
+            @pointerup="showAddRuleSelect = true"
+            style="margin-top: 12px;"
+          >
+            {{ t('panels.paramsPanel.postProcessRules.addNewRule') }}
+          </n-button>
+          <n-select
+            v-else
+            :value="null"
+            :placeholder="t('panels.paramsPanel.postProcessRules.addRule')"
+            :options="availableRuleTypes"
+            @update:value="(val: PostProcessRuleType) => handleAddPostProcessRule(val)"
+            @blur="showAddRuleSelect = false"
+            style="margin-top: 12px;"
+          />
+
+          <!-- 操作按钮 -->
+          <div class="post-process-actions">
+            <n-button
+              type="primary"
+              @click="applyPostProcessRules"
+              @pointerup="applyPostProcessRules"
+            >
+              {{ t('panels.paramsPanel.postProcessRules.apply') }}
+            </n-button>
+            <n-button
+              @click="cancelPostProcessEdit"
+              @pointerup="cancelPostProcessEdit"
+            >
+              {{ t('panels.paramsPanel.postProcessRules.cancel') }}
+            </n-button>
+          </div>
+        </template>
+      </div>
+
       <!-- 格式化字形组件 -->
       <div
         class="format-component-wrap"
@@ -1739,4 +1998,88 @@ const handleFormatGlyphComponent = () => {
 }
 
 .empty-state { padding: 40px 20px; text-align: center; }
+
+/* 后处理规则样式 */
+.post-process-summary {
+  margin-bottom: 10px;
+}
+
+.post-process-badge {
+  font-size: 12px;
+  color: var(--n-text-color-2);
+}
+
+.post-process-rule-item {
+  margin-bottom: 16px;
+  padding: 10px;
+  border: 1px solid var(--n-border-color);
+  border-radius: 4px;
+  background: var(--n-color-embedded);
+}
+
+.rule-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--n-text-color-3);
+  margin-bottom: 8px;
+}
+
+.target-list {
+  margin-bottom: 4px;
+}
+
+.target-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  background: var(--n-color);
+  border-radius: 2px;
+  font-size: 12px;
+}
+
+.target-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--primary-0);
+}
+
+.target-delete-btn {
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.target-empty {
+  font-size: 12px;
+  color: var(--n-text-color-3);
+  padding: 4px 0;
+}
+
+.post-process-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.post-process-actions .n-button {
+  flex: 1;
+}
+
+/* 后处理规则 n-select placeholder 和选中文本颜色 */
+:deep(.n-base-selection .n-base-selection-placeholder) {
+  color: var(--primary-0) !important;
+}
+:deep(.n-base-selection .n-base-selection-label) {
+  color: var(--primary-0) !important;
+}
+
+.rule-type-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--n-text-color-2);
+}
 </style>

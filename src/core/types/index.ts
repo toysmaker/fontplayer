@@ -211,6 +211,37 @@ export interface IGlyphComponent extends IComponentBase {
   oy?: number
 }
 
+// ==================== 后处理规则类型 ====================
+
+/**
+ * 后处理规则类型枚举
+ */
+export enum PostProcessRuleType {
+  Difference = 'difference',
+}
+
+/**
+ * 后处理规则基础接口
+ */
+export interface IPostProcessRule {
+  type: PostProcessRuleType
+}
+
+/**
+ * 差集后处理规则
+ * 计算当前组件与目标组件的差集，使用面积最大的结果作为最终轮廓
+ */
+export interface IDifferenceRule extends IPostProcessRule {
+  type: PostProcessRuleType.Difference
+  /** 目标组件 UUID 列表（当前字符/字形中包含的其他组件） */
+  targetComponentUUIDs: string[]
+}
+
+/**
+ * 后处理规则联合类型
+ */
+export type PostProcessRule = IDifferenceRule
+
 /**
  * 自定义字形组件值
  */
@@ -228,6 +259,8 @@ export interface ICustomGlyphComponent {
   script_reference?: string
   variables?: IVariable[]
   layers?: Record<string, string[]>
+  /** 后处理规则列表 */
+  postProcessRules?: PostProcessRule[]
   // ... 其他属性
 }
 
@@ -404,6 +437,8 @@ export interface ICustomGlyph {
   layers?: Record<string, string[]>
   /** 可变参数（差值轴） */
   variables?: IVariable[]
+  /** 后处理规则列表 */
+  postProcessRules?: PostProcessRule[]
   // ... 其他属性
 }
 

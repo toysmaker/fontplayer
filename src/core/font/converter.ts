@@ -7,6 +7,7 @@
 import type { IContours, IContour } from './types'
 import { PathType } from './types'
 import type { IComponent, ICharacterFileLite, ContourSegment, IPenComponent, IPolygonComponent, IRectangleComponent, IEllipseComponent, ICustomGlyph, IGlyphComponent } from '../types'
+import { PostProcessRuleType } from '../types'
 import { transformPoints, getRectanglePoints, getEllipsePoints, translate, getBound } from '../utils/math'
 import { formatPoints, genPenContour, genPolygonContour, genRectangleContour, genEllipseContour } from '../utils/contour'
 import { computeCoords } from '../utils/grid'
@@ -15,6 +16,7 @@ import { instanceManager } from '../instance/InstanceManager'
 import { CustomGlyph } from '../instance/CustomGlyph'
 import { orderedListWithItemsForGlyph } from '../utils/glyph'
 import { genUUID } from '@/utils/uuid'
+import { PostProcessEngine } from '../postProcess/PostProcessEngine'
 
 /**
  * 转换选项
@@ -235,6 +237,36 @@ export class ContourConverter {
       options.advanceWidth = options.unitsPerEm
     }
 
+    // 预扫描：收集所有后处理规则的目标组件轮廓
+    const postProcessTargetContourCache = new Map<string, IContours>()
+    const postProcessTargetListCache = new Map<string, IContours[]>()
+    for (const component of components) {
+      if (component.type !== 'glyph' || component.usedInCharacter === false) continue
+      const glyphValue = (component.value || (component as any).value) as ICustomGlyph
+      const rules = glyphValue?.postProcessRules
+      if (!rules || rules.length === 0) continue
+      const targetContoursList: IContours[] = []
+      for (const rule of rules) {
+        if (rule.type !== PostProcessRuleType.Difference) continue
+        for (const targetUUID of (rule as any).targetComponentUUIDs || []) {
+          if (postProcessTargetContourCache.has(targetUUID)) {
+            targetContoursList.push(postProcessTargetContourCache.get(targetUUID)!)
+            continue
+          }
+          const targetComp = components.find(c => c.uuid === targetUUID)
+          if (!targetComp || targetComp.usedInCharacter === false) continue
+          const targetResult = this.componentsToContours([targetComp] as IComponent[], options, offset, undefined)
+          if (targetResult.length > 0) {
+            postProcessTargetContourCache.set(targetUUID, targetResult)
+            targetContoursList.push(targetResult)
+          }
+        }
+      }
+      if (targetContoursList.length > 0) {
+        postProcessTargetListCache.set(component.uuid, targetContoursList)
+      }
+    }
+
     for (const component of components) {
       if (component.usedInCharacter === false) continue
 
@@ -423,8 +455,7 @@ export class ContourConverter {
         // 内置脚本组件类型（glyph-pen, glyph-polygon, glyph-rectangle, glyph-ellipse）
         case 'glyph-pen': {
           const scriptComp = component as any
-          // 如果没有轮廓或强制更新，调用 updateData 生成
-          if (!scriptComp.contour || !scriptComp.contour.length || forceUpdate) {
+          if (!scriptComp._postProcessed && (!scriptComp.contour || !scriptComp.contour.length || forceUpdate)) {
             if (!grid || useSkeletonGrid) {
               // 不使用布局调整或使用骨架布局调整的情况下，使用给定组件本身的数据
               if (typeof scriptComp.updateData === 'function') {
@@ -454,8 +485,7 @@ export class ContourConverter {
 
         case 'glyph-polygon': {
           const scriptComp = component as any
-          // 如果没有轮廓或强制更新，调用 updateData 生成
-          if (!scriptComp.contour || !scriptComp.contour.length || forceUpdate) {
+          if (!scriptComp._postProcessed && (!scriptComp.contour || !scriptComp.contour.length || forceUpdate)) {
             if (!grid || useSkeletonGrid) {
               if (typeof scriptComp.updateData === 'function') {
                 scriptComp.updateData(scriptIsGlyph, offset)
@@ -482,8 +512,7 @@ export class ContourConverter {
 
         case 'glyph-rectangle': {
           const scriptComp = component as any
-          // 如果没有轮廓或强制更新，调用 updateData 生成
-          if (!scriptComp.contour || !scriptComp.contour.length || forceUpdate) {
+          if (!scriptComp._postProcessed && (!scriptComp.contour || !scriptComp.contour.length || forceUpdate)) {
             if (!grid || useSkeletonGrid) {
               if (typeof scriptComp.updateData === 'function') {
                 scriptComp.updateData(scriptIsGlyph, offset)
@@ -510,8 +539,7 @@ export class ContourConverter {
 
         case 'glyph-ellipse': {
           const scriptComp = component as any
-          // 如果没有轮廓或强制更新，调用 updateData 生成
-          if (!scriptComp.contour || !scriptComp.contour.length || forceUpdate) {
+          if (!scriptComp._postProcessed && (!scriptComp.contour || !scriptComp.contour.length || forceUpdate)) {
             if (!grid || useSkeletonGrid) {
               if (typeof scriptComp.updateData === 'function') {
                 scriptComp.updateData(scriptIsGlyph, offset)
@@ -566,6 +594,30 @@ export class ContourConverter {
               () => new CustomGlyph(glyphValue),
               'glyph'
             ) as CustomGlyph | null
+
+            // 应用跨组件后处理规则（差集目标为当前字符/字形的兄弟组件）
+            const targetContoursList = postProcessTargetListCache.get(component.uuid)
+            if (targetContoursList && targetContoursList.length > 0 && glyphInstance) {
+              for (const comp of glyphInstance._components) {
+                // 确保轮廓数据已生成
+                if (!comp.contour?.length && typeof comp.updateData === 'function') {
+                  comp.updateData(scriptIsGlyph, childOffset)
+                }
+                const compContour = (preview ? comp.preview : comp.contour) as IContour | undefined
+                if (!compContour?.length) continue
+                const diffResult = PostProcessEngine.applyDifferenceToContours(
+                  [compContour], targetContoursList,
+                )
+                if (diffResult.length > 0 && diffResult[0].length > 0) {
+                  // diffResult 是 IContours（数组），取第一个轮廓（面积最大的）
+                  // comp.contour 应为单个 IContour，与 updateData 输出格式一致
+                  const resultContour = diffResult[0]
+                  comp.contour = resultContour
+                  comp.preview = resultContour
+                  comp._postProcessed = true
+                }
+              }
+            }
 
             const subSolidFlags: boolean[] | undefined = solidFlagsOut ? [] : undefined
             const childOptions = { ...options, forceUpdate: true }

@@ -12,6 +12,7 @@ import { useProjectStore } from '@/stores/project'
 import { FP } from './FPUtils'
 import { selectedFile } from './globals'
 import { strokeFnMap, updateSkeletonTransformation } from '@/templates/strokeFnMap'
+import { PostProcessEngine } from '../postProcess/PostProcessEngine'
 
 /**
  * 在工程尚未写入 projectStore 时（如 loadProject 中途的临时脚本），用于解析 script_reference。
@@ -373,20 +374,23 @@ export function executeGlyphScript(
                 () => new CustomGlyph(compGlyph),
                 'glyph'
               )
-              
+
               const keys = Object.keys(compGlyph.system_script)
               for (let i = 0; i < keys.length; i++) {
                 const script = compGlyph.system_script[keys[i]]
                 const fn = new Function(script)
                 fn()
               }
-              
+
               instanceManager.releaseTemporaryInstance(compGlyph.uuid)
               ;(window as any).comp_glyph = originalCompGlyph
             }
           }
         })
       }
+
+      // 执行后处理规则
+      PostProcessEngine.executeAll(glyphInstance)
 
       // 恢复全局变量
       ;(window as any).glyph = originalGlyph

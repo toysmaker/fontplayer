@@ -298,6 +298,8 @@ export function renderCanvas(
           () => new CustomGlyph(glyphValue),
           'glyph'
         ) as CustomGlyph
+        // 同步最新的 glyph 数据（包含可能的 postProcessRules 更新）
+        glyphInstance._glyph = glyphValue
       }
       
       // 如果实例没有脚本生成的组件，执行脚本

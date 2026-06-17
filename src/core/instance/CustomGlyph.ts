@@ -7,6 +7,8 @@
 
 import type { ICustomGlyph, IComponent, IParameter, IPenComponent } from '../types'
 import { ParameterType } from '../types'
+import type { IContour, IContours } from '../font/types'
+import { PathType } from '../font/types'
 import { interpolateGlyphOutline, getPreviewDisplayUUIDs } from '@/features/variableInterpolation'
 import { instanceManager, type IInstance } from './InstanceManager'
 import { orderedListWithItemsForGlyph } from '../utils/glyph'
@@ -16,6 +18,7 @@ import { renderCanvas } from '../canvas/EditorCanvasRenderer'
 import { fontRenderStyle } from '../script/globals'
 import { computeCoords, type ILayoutTransformGrid } from '../utils/grid'
 import { precisionFromParamMax, roundToPrecision } from '@/utils/number'
+import { mapCanvasX, mapCanvasY } from '@/utils/canvas'
 
 // 可变参数差值渲染前浅克隆组件，避免原地修改 reactive 数据触发 Vue deep watcher 死循环
 function cloneGlyphComponentsForVarInterp(comps: any[]): any[] {
@@ -46,6 +49,8 @@ export class CustomGlyph implements IInstance {
   private _joints: Array<any> = []
   private _reflines: Array<any> = []
   public _components: Array<any> = []
+  /** 后处理轮廓缓存：组件名称 -> { contour, preview } */
+  public _postProcessedContours: Map<string, { contour: IContour; preview: IContour }> = new Map()
   
   // 回调函数
   public onSkeletonDrag: Function | null = null
@@ -134,6 +139,38 @@ export class CustomGlyph implements IInstance {
     this._joints = []
     this._components = []
     this._reflines = []
+    this._postProcessedContours.clear()
+  }
+
+  /**
+   * 在 canvas 上绘制编辑空间的轮廓（使用 mapCanvas 做 1000→2000 坐标映射）
+   */
+  private drawEditContour(
+    ctx: CanvasRenderingContext2D,
+    contour: IContour,
+    offset: { x: number; y: number },
+    scale: number,
+  ): void {
+    if (!contour.length) return
+    const cx = (px: number) => mapCanvasX(px + offset.x) * scale
+    const cy = (py: number) => mapCanvasY(py + offset.y) * scale
+    for (const path of contour) {
+      if (path.type === PathType.LINE) {
+        ctx.lineTo(cx(path.end.x), cy(path.end.y))
+      } else if (path.type === PathType.CUBIC_BEZIER) {
+        ctx.bezierCurveTo(
+          cx(path.control1.x), cy(path.control1.y),
+          cx(path.control2.x), cy(path.control2.y),
+          cx(path.end.x), cy(path.end.y),
+        )
+      } else if (path.type === PathType.QUADRATIC_BEZIER) {
+        ctx.quadraticCurveTo(
+          cx(path.control.x), cy(path.control.y),
+          cx(path.end.x), cy(path.end.y),
+        )
+      }
+    }
+    ctx.closePath()
   }
 
   /**
@@ -250,33 +287,9 @@ export class CustomGlyph implements IInstance {
     }
     if (!isGlyphSkeleton) {
     this._components.forEach((component: any, index: number) => {
-      if (component.render) {
-        if (import.meta.env.DEV) {
-          // 获取点的坐标范围（用于调试）
-          const points = component.points || []
-          let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
-          if (points.length > 0) {
-            points.forEach((p: any) => {
-              if (p.x !== undefined) {
-                minX = Math.min(minX, p.x)
-                maxX = Math.max(maxX, p.x)
-              }
-              if (p.y !== undefined) {
-                minY = Math.min(minY, p.y)
-                maxY = Math.max(maxY, p.y)
-              }
-            })
-          }
-          console.log(`[CustomGlyph.render] Rendering _component ${index}:`, {
-            type: component.type,
-            pointsCount: points.length,
-            hasRender: !!component.render,
-            pointBounds: points.length > 0 ? { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY } : null,
-            firstPoint: points[0] ? { x: points[0].x, y: points[0].y } : null,
-            lastPoint: points[points.length - 1] ? { x: points[points.length - 1].x, y: points[points.length - 1].y } : null,
-            renderOptions: { offset, scale, fillColor }
-          })
-        }
+      if (component._postProcessed && component.contour?.length) {
+        this.drawEditContour(ctx, component.contour as IContour, offset, scale)
+      } else if (component.render) {
         component.render(canvas, {
           offset,
           scale: scale,
@@ -485,7 +498,9 @@ export class CustomGlyph implements IInstance {
         })
       } else {
         this._components.forEach((component: any) => {
-          if (component.render_grid) {
+          if (component._postProcessed && component.contour?.length) {
+            this.drawEditContour(ctx, component.contour as IContour, offset, scale)
+          } else if (component.render_grid) {
             component.render_grid(canvas, { offset, scale, grid })
           }
         })
@@ -571,13 +586,17 @@ export class CustomGlyph implements IInstance {
           ctx.beginPath()
         }
         this._components.forEach((component: any) => {
-          if (component.render_grid) {
+          if (component._postProcessed && component.contour?.length) {
+            this.drawEditContour(ctx, component.contour as IContour, offset, scale)
+          } else if (component.render_grid) {
             component.render_grid(canvas, { offset, scale, grid })
           }
         })
       } else {
         this._components.forEach((component: any) => {
-          if (component.render_grid) {
+          if (component._postProcessed && component.contour?.length) {
+            this.drawEditContour(ctx, component.contour as IContour, offset, scale)
+          } else if (component.render_grid) {
             component.render_grid(canvas, { offset, scale, grid })
           }
         })
