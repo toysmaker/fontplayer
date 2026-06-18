@@ -747,6 +747,10 @@ export abstract class BaseGlyphDragger {
       if (hasMoved || (this.draggingJoint && !this.isDraggingFirstJoint)) {
         this.handleDragEnd()
       }
+      // 发生过拖拽时阻止 mouseup 冒泡，避免 SelectTool 误触发点击选择
+      if (this.glyphDragMovedBeyondTap || this.draggingJoint) {
+        e.stopPropagation()
+      }
     } finally {
       this.cleanup()
     }
@@ -800,7 +804,9 @@ export abstract class BaseGlyphDragger {
   
   private cleanup() {
     this._isDragging = false
-    this.glyphDragMovedBeyondTap = false
+    // glyphDragMovedBeyondTap 不在此处重置——onMouseUp 末尾立即置 false 会导致
+    // 后续触发的 SelectTool.onMouseUp 读取时为 false，从而误触发 handleClickSelection。
+    // 改为在下一轮 onMouseDown 时重置（已在 onMouseDown 第 584 行处理）。
     this.draggingJoint = null
     this.isDraggingFirstJoint = false
     this.hoverJoint = null

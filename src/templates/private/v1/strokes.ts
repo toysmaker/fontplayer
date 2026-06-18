@@ -1247,7 +1247,7 @@ const strokes = [
       },
       {
         name: '水平延伸',
-        default: 100,
+        default: -100,
         min: -500,
         max: 500,
       },
@@ -1271,7 +1271,7 @@ const strokes = [
       },
       {
         name: '竖直延伸',
-        default: 100,
+        default: -100,
         min: -500,
         max: 500,
       },

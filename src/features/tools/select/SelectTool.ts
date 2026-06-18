@@ -16,7 +16,7 @@ import { PenSelectTool } from './PenSelectTool'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { DraggerManager } from '../glyphDragger'
 import { roundToPrecision } from '@/utils/number'
-import { skeletonFreeEdit } from '@/stores/skeletonDragger'
+import { skeletonFreeEdit, onSkeletonDragging, onSkeletonBind } from '@/stores/skeletonDragger'
 import { orderedListWithItemsForGlyph } from '@/core/utils/glyph'
 
 /**
@@ -1036,7 +1036,9 @@ export class SelectTool extends BaseTool {
       selectedComponent?.type === 'glyph' &&
       dragger?.shouldSuppressOverlapPickAfterGlyphDrag() === true
 
-    if (!this.mousemove && !suppressOverlapPickForGlyphDrag) {
+    //骨架拖拽/骨架绑定/骨架自由编辑中不触发点击选择，避免 mouseup 时误切到其他组件
+    const skeletonActive = onSkeletonDragging.value || skeletonFreeEdit.value || onSkeletonBind.value
+    if (!this.mousemove && !suppressOverlapPickForGlyphDrag && !skeletonActive) {
       this.handleClickSelection(e)
     }
 

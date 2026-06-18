@@ -39,6 +39,7 @@ import {
   renameTestStrokeTemplateToFangYuan,
   renameFangYuanStyleInCharacterComponents,
 } from '@/features/temporaryScripts/fileProcessing'
+import { addMissingFangYuanStrokes } from '@/features/temporaryScripts/addMissingFangYuanStrokes'
 
 /** 带此 tag 的工程在加载完成后会为字符列表补全部件分解数据（高级编辑「脚本」Tab 亦仅在此 tag 下显示） */
 export const DEFAULT_TEMPLATE_PROJECT_TAG = '字玩默认模板工程'
@@ -385,6 +386,21 @@ export class ProjectLoader {
           }
         } catch (e) {
           console.error('[ProjectLoader] replaceGlyphScript_private/v1 failed', e)
+        }
+        await this.yieldToMainThread()
+      }
+      // END 临时代码
+
+      // MARK: 临时代码 — 补全缺失的"字玩方圆黑体"笔画字形
+      if (import.meta.env.DEV && projectTag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG) {
+        this.updateProgress(0, '补全缺失的方圆黑体笔画…')
+        try {
+          data.stroke_glyphs = await addMissingFangYuanStrokes(
+            data.stroke_glyphs as ICustomGlyph[] | undefined,
+            (msg) => this.updateProgress(0, msg),
+          )
+        } catch (e) {
+          console.error('[ProjectLoader] addMissingFangYuanStrokes failed', e)
         }
         await this.yieldToMainThread()
       }
