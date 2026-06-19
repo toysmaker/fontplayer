@@ -251,8 +251,29 @@ function isCompositorHealthy(): boolean {
 }
 
 async function handleAppRestored() {
+  const compositorOk = isCompositorHealthy()
+
+  // 诊断：写日志到文件（通过 Tauri command）
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const canvases = document.querySelectorAll('canvas.preview-canvas')
+    let canvasPixels = 0
+    canvases.forEach((c) => {
+      try {
+        const ctx = (c as HTMLCanvasElement).getContext('2d')
+        if (ctx) {
+          const d = ctx.getImageData(50, 50, 1, 1).data
+          if (d[3] > 0) canvasPixels++
+        }
+      } catch {}
+    })
+    await invoke('log_diagnostic', {
+      msg: `handleAppRestored: compositorOk=${compositorOk} canvasCount=${canvases.length} canvasWithContent=${canvasPixels}`,
+    })
+  } catch {}
+
   // 仅当合成器异常时才刷新，避免正常情况下的不必要重绘
-  if (isCompositorHealthy()) return
+  if (compositorOk) return
   if (import.meta.env.DEV) console.log('[app] compositor broken, forcing re-render')
   try {
     const { CanvasManager } = await import('@/core/canvas/CanvasManager')
@@ -269,8 +290,15 @@ try {
 } catch {}
 
 // Web 端兜底：页面可见性变化 + bfcache 恢复
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') handleAppRestored()
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'hidden') {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('log_diagnostic', { msg: 'visibility hidden (app minimized / background)' })
+    } catch {}
+  } else if (document.visibilityState === 'visible') {
+    handleAppRestored()
+  }
 })
 window.addEventListener('pageshow', (e) => {
   if ((e as PageTransitionEvent).persisted) handleAppRestored()

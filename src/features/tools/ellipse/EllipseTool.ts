@@ -356,7 +356,7 @@ export class EllipseTool extends BaseTool {
         y: point.y * scale,
       })
     })
-    const preview_contour = genEllipseContour(preview_points, true)
+    const preview_contour = genEllipseContour(preview_points, 'none')
 
     return {
       uuid: genUUID(),

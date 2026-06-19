@@ -336,7 +336,7 @@ export class RectangleTool extends BaseTool {
         y: point.y * scale,
       })
     })
-    const preview_contour = genRectangleContour(preview_points, true)
+    const preview_contour = genRectangleContour(preview_points, 'none')
 
     return {
       uuid: genUUID(),

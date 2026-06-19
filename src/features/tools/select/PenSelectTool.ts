@@ -660,7 +660,7 @@ export class PenSelectTool extends BaseTool {
         y: point.y * scale,
       })
     })
-    const preview_contour = genPenContour(preview_points, true)
+    const preview_contour = genPenContour(preview_points, 'none')
 
     const patch: Partial<IComponent> = {
       value: {

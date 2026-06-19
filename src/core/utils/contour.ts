@@ -57,9 +57,14 @@ export function formatPoints(
 /**
  * 生成钢笔轮廓
  */
+function applyRound(v: number, mode: boolean | 'none'): number {
+  if (mode === 'none') return v
+  return mode ? Math.round(v) : Math.floor(v)
+}
+
 export function genPenContour(
   points: Array<IPoint>,
-  useRound: boolean = false,
+  useRound: boolean | 'none' = false,
   fill: boolean = false
 ): IContour {
   const contour: IContour = []
@@ -67,34 +72,10 @@ export function genPenContour(
     if (i + 3 >= points.length) break
     contour.push({
       type: PathType.CUBIC_BEZIER,
-      start: {
-        x: useRound ? Math.round(points[i].x) : Math.floor(points[i].x),
-        y: useRound ? Math.round(points[i].y) : Math.floor(points[i].y),
-      },
-      end: {
-        x: useRound
-          ? Math.round(points[i + 3].x)
-          : Math.floor(points[i + 3].x),
-        y: useRound
-          ? Math.round(points[i + 3].y)
-          : Math.floor(points[i + 3].y),
-      },
-      control1: {
-        x: useRound
-          ? Math.round(points[i + 1].x)
-          : Math.floor(points[i + 1].x),
-        y: useRound
-          ? Math.round(points[i + 1].y)
-          : Math.floor(points[i + 1].y),
-      },
-      control2: {
-        x: useRound
-          ? Math.round(points[i + 2].x)
-          : Math.floor(points[i + 2].x),
-        y: useRound
-          ? Math.round(points[i + 2].y)
-          : Math.floor(points[i + 2].y),
-      },
+      start:  { x: applyRound(points[i].x, useRound),     y: applyRound(points[i].y, useRound) },
+      end:    { x: applyRound(points[i + 3].x, useRound), y: applyRound(points[i + 3].y, useRound) },
+      control1: { x: applyRound(points[i + 1].x, useRound), y: applyRound(points[i + 1].y, useRound) },
+      control2: { x: applyRound(points[i + 2].x, useRound), y: applyRound(points[i + 2].y, useRound) },
     })
   }
   return contour
@@ -105,24 +86,14 @@ export function genPenContour(
  */
 export function genPolygonContour(
   points: Array<IPoint>,
-  useRound: boolean = false
+  useRound: boolean | 'none' = false
 ): IContour {
   const contour: IContour = []
   for (let i = 0; i < points.length - 1; i++) {
     contour.push({
       type: PathType.LINE,
-      start: {
-        x: useRound ? Math.round(points[i].x) : Math.floor(points[i].x),
-        y: useRound ? Math.round(points[i].y) : Math.floor(points[i].y),
-      },
-      end: {
-        x: useRound
-          ? Math.round(points[i + 1].x)
-          : Math.floor(points[i + 1].x),
-        y: useRound
-          ? Math.round(points[i + 1].y)
-          : Math.floor(points[i + 1].y),
-      },
+      start: { x: applyRound(points[i].x, useRound),     y: applyRound(points[i].y, useRound) },
+      end:   { x: applyRound(points[i + 1].x, useRound), y: applyRound(points[i + 1].y, useRound) },
     })
   }
   return contour
@@ -133,24 +104,14 @@ export function genPolygonContour(
  */
 export function genRectangleContour(
   points: Array<IPoint>,
-  useRound: boolean = false
+  useRound: boolean | 'none' = false
 ): IContour {
   const contour: IContour = []
   for (let i = 0; i < points.length - 1; i++) {
     contour.push({
       type: PathType.LINE,
-      start: {
-        x: useRound ? Math.round(points[i].x) : Math.floor(points[i].x),
-        y: useRound ? Math.round(points[i].y) : Math.floor(points[i].y),
-      },
-      end: {
-        x: useRound
-          ? Math.round(points[i + 1].x)
-          : Math.floor(points[i + 1].x),
-        y: useRound
-          ? Math.round(points[i + 1].y)
-          : Math.floor(points[i + 1].y),
-      },
+      start: { x: applyRound(points[i].x, useRound),     y: applyRound(points[i].y, useRound) },
+      end:   { x: applyRound(points[i + 1].x, useRound), y: applyRound(points[i + 1].y, useRound) },
     })
   }
   return contour
@@ -158,30 +119,17 @@ export function genRectangleContour(
 
 /**
  * 生成椭圆轮廓
- * 注意：这里使用简化的直线段近似，完整实现需要使用 fitCurve
  */
 export function genEllipseContour(
   points: Array<IPoint>,
-  useRound: boolean = false
+  useRound: boolean | 'none' = false
 ): IContour {
   const contour: IContour = []
-  // 简化实现：使用直线段连接点
-  // TODO: 完整实现需要使用 fitCurve 函数生成贝塞尔曲线
   for (let i = 0; i < points.length - 1; i++) {
     contour.push({
       type: PathType.LINE,
-      start: {
-        x: useRound ? Math.round(points[i].x) : Math.floor(points[i].x),
-        y: useRound ? Math.round(points[i].y) : Math.floor(points[i].y),
-      },
-      end: {
-        x: useRound
-          ? Math.round(points[i + 1].x)
-          : Math.floor(points[i + 1].x),
-        y: useRound
-          ? Math.round(points[i + 1].y)
-          : Math.floor(points[i + 1].y),
-      },
+      start: { x: applyRound(points[i].x, useRound),     y: applyRound(points[i].y, useRound) },
+      end:   { x: applyRound(points[i + 1].x, useRound), y: applyRound(points[i + 1].y, useRound) },
     })
   }
   return contour

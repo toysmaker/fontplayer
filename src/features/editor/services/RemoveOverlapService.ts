@@ -325,7 +325,7 @@ function genPenComponentEditing(
     y: p.y,
   }))
   const contour = flatPoints.length >= 4 ? genPenContour(flatPoints, false) : []
-  const preview = flatPoints.length >= 4 ? genPenContour(flatPoints, true) : []
+  const preview = flatPoints.length >= 4 ? genPenContour(flatPoints, 'none') : []
 
   return {
     uuid: genUUID(),

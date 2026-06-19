@@ -373,6 +373,7 @@ export function renderCanvas(
       const useSk = options.useSkeletonGrid ?? false
       const ox = (options.offset?.x || 0) + (component as IGlyphComponent).ox
       const oy = (options.offset?.y || 0) + (component as IGlyphComponent).oy
+
       if (hasLayoutTransform) {
         if (options.forceUpdate) {
           if (import.meta.env.DEV) console.log(`[EditorCanvas] calling render_grid_forceUpdate for "${glyphValue.name}"`)

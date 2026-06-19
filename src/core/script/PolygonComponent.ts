@@ -163,7 +163,7 @@ class PolygonComponent {
 				y: point.y * scale,
 			})
 		})
-		const preview_contour = genPolygonContour(preview_points)
+		const preview_contour = genPolygonContour(preview_points, 'none')
 
 		this.contour = contour as any
 		this.preview = preview_contour as any

@@ -593,6 +593,8 @@ onUnmounted(() => {
     const ch = (characterStore as any).editingCharacter as ICharacterFileLite | null
     reexecuteAllGlyphScriptsInEditingCharacter(ch)
     ;(characterStore as any).updateCharacterListFromEditFile()
+
+
     void rebuildCharacterListPreviewAfterExitEdit(editingCharacterUUID).catch((e) => {
       if (import.meta.env.DEV) {
         console.error('[CharacterEditor] rebuildCharacterListPreviewAfterExitEdit', e)

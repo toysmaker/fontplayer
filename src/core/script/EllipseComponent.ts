@@ -152,7 +152,7 @@ class EllipseComponent {
 				y: point.y * scale,
 			})
 		})
-		const preview_contour = genEllipseContour(preview_points)
+		const preview_contour = genEllipseContour(preview_points, 'none')
 
 		this.contour = contour as any
 		this.preview = preview_contour as any

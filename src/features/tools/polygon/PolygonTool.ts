@@ -314,7 +314,7 @@ export class PolygonTool extends BaseTool {
         y: point.y * scale,
       })
     })
-    const preview_contour = genPolygonContour(preview_points, true)
+    const preview_contour = genPolygonContour(preview_points, 'none')
 
     return {
       uuid: genUUID(),

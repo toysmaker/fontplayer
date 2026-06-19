@@ -305,7 +305,7 @@ export class ContourConverter {
               x: point.x * scale,
               y: point.y * scale,
             }))
-            const preview_contour = genPenContour(preview_points, true)
+            const preview_contour = genPenContour(preview_points, 'none')
 
             // 缓存计算结果到组件中
             penValue.preview = preview_contour as any
@@ -348,7 +348,7 @@ export class ContourConverter {
               x: point.x * scale,
               y: point.y * scale,
             }))
-            const preview_contour = genPolygonContour(preview_points, true)
+            const preview_contour = genPolygonContour(preview_points, 'none')
 
             polygonValue.preview = preview_contour as any
             polygonValue.contour = contour as any
@@ -390,7 +390,7 @@ export class ContourConverter {
               x: point.x * scale,
               y: point.y * scale,
             }))
-            const preview_contour = genRectangleContour(preview_points, true)
+            const preview_contour = genRectangleContour(preview_points, 'none')
 
             rectValue.preview = preview_contour as any
             rectValue.contour = contour as any
@@ -438,7 +438,7 @@ export class ContourConverter {
               x: point.x * scale,
               y: point.y * scale,
             }))
-            const preview_contour = genEllipseContour(preview_points, true)
+            const preview_contour = genEllipseContour(preview_points, 'none')
 
             ellipseValue.preview = preview_contour as any
             ellipseValue.contour = contour as any
@@ -455,14 +455,14 @@ export class ContourConverter {
         // 内置脚本组件类型（glyph-pen, glyph-polygon, glyph-rectangle, glyph-ellipse）
         case 'glyph-pen': {
           const scriptComp = component as any
-          if (!scriptComp._postProcessed && (!scriptComp.contour || !scriptComp.contour.length || forceUpdate)) {
+          const contourEmpty = !scriptComp.contour || !scriptComp.contour.length
+          const shouldUpdate = !scriptComp._postProcessed && (contourEmpty || forceUpdate)
+          if (shouldUpdate) {
             if (!grid || useSkeletonGrid) {
-              // 不使用布局调整或使用骨架布局调整的情况下，使用给定组件本身的数据
               if (typeof scriptComp.updateData === 'function') {
                 scriptComp.updateData(scriptIsGlyph, offset)
               }
             } else {
-              // 使用布局调整
               if (typeof scriptComp.updateData === 'function') {
                 scriptComp.updateData(scriptIsGlyph, offset, grid)
               }
@@ -768,7 +768,7 @@ export class ContourConverter {
         x: point.x * scale,
         y: point.y * scale,
       }))
-      const preview_contour = genPenContour(preview_points, true)
+      const preview_contour = genPenContour(preview_points, 'none')
 
       return {
         uuid: genUUID(),
