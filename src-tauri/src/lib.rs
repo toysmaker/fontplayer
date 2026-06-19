@@ -2,9 +2,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::collections::HashMap;
+use std::io::Write;
 use std::sync::Mutex;
 use std::fs;
 use std::path::PathBuf;
+use chrono::Local;
 use tauri::menu::{Menu, MenuItemBuilder, MenuItemKind, Submenu};
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -987,6 +989,46 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>, texts: &MenuTexts) -> Resul
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// 将诊断信息追加写入日志文件（路径 ~/Library/Logs/com.fontplayer.app/diagnostics.log）
+fn append_diag_log(msg: &str) {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let log_dir = PathBuf::from(home).join("Library/Logs/com.fontplayer.app");
+    let _ = fs::create_dir_all(&log_dir);
+    if let Ok(mut file) = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_dir.join("diagnostics.log"))
+    {
+        let ts = Local::now().format("%m-%d %H:%M:%S").to_string();
+        let _ = writeln!(file, "[{}] {}", ts, msg);
+    }
+}
+
+/// 记录上次焦点时间，用于判断是否长时间后台恢复
+static LAST_FOCUS_TIME: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+
+fn focus_gap_description() -> String {
+    let mut last = LAST_FOCUS_TIME.lock().unwrap();
+    let now = std::time::Instant::now();
+    let desc = if let Some(prev) = *last {
+        let gap = now.duration_since(prev).as_secs();
+        if gap > 30 {
+            format!("FOCUS_RESTORE (gap={}s, likely from sleep/minimize)", gap)
+        } else {
+            format!("FOCUS_NORMAL (gap={}s)", gap)
+        }
+    } else {
+        "FOCUS_FIRST".to_string()
+    };
+    *last = Some(now);
+    desc
+}
+
+#[tauri::command]
+fn log_diagnostic(msg: String) {
+    append_diag_log(&format!("[FRONTEND] {}", msg));
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::new().build())
@@ -1021,11 +1063,17 @@ pub fn run() {
                 let w = window.clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::Focused(true) = event {
-                        if w.eval("true").is_ok() {
-                            // JS 引擎存活 → 让前端自行检测合成器并决定是否刷新（不丢状态）
-                            let _ = handle.emit("window-focus-restored", ());
+                        let desc = focus_gap_description();
+                        append_diag_log(&format!("{}", desc));
+                        match w.eval("true") {
+                            Ok(_) => {
+                                append_diag_log("eval('true') OK, emitting window-focus-restored");
+                                let _ = handle.emit("window-focus-restored", ());
+                            }
+                            Err(e) => {
+                                append_diag_log(&format!("eval('true') FAILED: {:?}", e));
+                            }
                         }
-                        // eval 失败 = 进程已死 → 不做任何事，保留白屏让用户感知异常
                     }
                 });
             }
@@ -1099,7 +1147,8 @@ pub fn run() {
             update_menu_project_status,
             update_menu_language,
             save_project,
-            write_file_chunk
+            write_file_chunk,
+            log_diagnostic
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
