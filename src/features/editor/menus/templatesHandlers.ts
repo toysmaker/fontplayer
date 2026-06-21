@@ -661,7 +661,7 @@ export async function importTemplateTest(): Promise<void> {
 
     // 按笔画类型补充/调整参数（完全对齐原工程）
     if (name === '横') {
-    } else if (name === '撇' || name === '捺') {
+    } else if (name === '撇' || name === '捺' || name === '点') {
       const 起笔风格 = parameters.find(p => p.name === '起笔风格')
       const 收笔风格 = parameters.find(p => p.name === '收笔风格')
       起笔风格?.options.push(
@@ -1002,6 +1002,12 @@ export async function importTemplateTest(): Promise<void> {
           { value: 4, label: '斜切' },
           { value: 5, label: '圆切露锋' },
         ])
+      }
+    }
+    if (name === '倒直角撇') {
+      const 起笔风格 = parameters.find(p => p.name === '起笔风格')
+      if (起笔风格 && 起笔风格.options) {
+        起笔风格.options.push({ value: 10, label: '厚重露锋' })
       }
     }
 

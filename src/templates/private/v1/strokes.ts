@@ -153,15 +153,15 @@ const strokes = [
     params: [
       {
         name: '水平延伸',
-        default: 100,
+        default: 300,
         min: 0,
-        max: 500,
+        max: 1000,
       },
       {
         name: '竖直延伸',
-        default: 150,
+        default: 300,
         min: 0,
-        max: 500,
+        max: 1000,
       },
       {
         name: '弯曲游标',

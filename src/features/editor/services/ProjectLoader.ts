@@ -38,6 +38,8 @@ import {
   expandFangYuanGlyphEnumOptionsForGlyphs,
   renameTestStrokeTemplateToFangYuan,
   renameFangYuanStyleInCharacterComponents,
+  dedupAllParameterOptions,
+  dedupCharacterComponentOptions,
 } from '@/features/temporaryScripts/fileProcessing'
 import { addMissingFangYuanStrokes } from '@/features/temporaryScripts/addMissingFangYuanStrokes'
 
@@ -375,6 +377,8 @@ export class ProjectLoader {
       if (import.meta.env.DEV && projectTag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG && data.stroke_glyphs?.length) {
         this.updateProgress(0, '同步笔画模板脚本 (private/v1)…')
         try {
+          // 先去重：清除多次打开累积的重复 options
+          dedupAllParameterOptions(data)
           // 先重命名"测试笔画模板" → "字玩方圆黑体"
           renameTestStrokeTemplateToFangYuan(data.stroke_glyphs as ICustomGlyph[])
           const fangYuanGlyphs = (data.stroke_glyphs as ICustomGlyph[]).filter(
@@ -782,9 +786,10 @@ export class ProjectLoader {
     }
     if (fangYuanWidenParams) {
       widenFangYuanGlyphNumberParamBoundsInCharacterComponents(components)
-      // MARK: 临时代码 — 重命名风格标签 + 扩展 Enum 参数 options
+      // MARK: 临时代码 — 重命名风格标签 + 参数去重 + 扩展 Enum 参数 options
       if (import.meta.env.DEV) {
         renameFangYuanStyleInCharacterComponents(components)
+        dedupCharacterComponentOptions(components)
         expandFangYuanGlyphEnumOptionsInCharacterComponents(components)
       }
       // END 临时代码

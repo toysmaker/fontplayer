@@ -109,7 +109,7 @@ function buildParametersForStroke(stroke: { name: string; params: Array<{ name: 
   }
 
   // 撇/捺专有参数
-  if (name === '撇' || name === '捺') {
+  if (name === '撇' || name === '捺' || name === '点') {
     const qb = parameters.find(p => p.name === '起笔风格')!
     qb.options = [
       ...qb.options as Array<{ value: number; label: string }>,
@@ -185,6 +185,10 @@ function buildParametersForStroke(stroke: { name: string; params: Array<{ name: 
       { uuid: genUUID(), name: '圆度', type: ParameterType.Number, value: 0, min: 0, max: 2 },
       { uuid: genUUID(), name: '字重', type: ParameterType.Number, value: 0, min: 0, max: 2 },
     )
+  }
+
+  if (name === '倒直角撇') {
+    parameters.find(p => p.name === '起笔风格')?.options.push({ value: 10, label: '厚重露锋' })
   }
 
   // 字重比率

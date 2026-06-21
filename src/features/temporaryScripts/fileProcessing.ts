@@ -398,6 +398,19 @@ const 直角捺起笔 = ['直角捺']
 const 直角捺收笔 = ['直角捺']
 const 钩收笔 = ['横弯钩', '横折钩', '横折弯钩', '横折折弯钩', '竖钩', '竖弯钩', '竖折折钩']
 
+/** 向 options 中安全添加条目，避免重复添加 */
+function pushOptionsIfNew(
+  options: Array<{ value: number; label: string }>,
+  items: Array<{ value: number; label: string }>,
+): void {
+  const existingValues = new Set(options.map(o => o.value))
+  for (const item of items) {
+    if (!existingValues.has(item.value)) {
+      options.push(item)
+    }
+  }
+}
+
 function expandEnumOptionsForFangYuanGlyph(glyph: ICustomGlyph): void {
   const name = glyph.name
   if (!glyph.parameters || !Array.isArray(glyph.parameters)) return
@@ -405,7 +418,7 @@ function expandEnumOptionsForFangYuanGlyph(glyph: ICustomGlyph): void {
 
   if (横起笔.includes(name)) {
     const p = parameters.find(p => p.name === '起笔风格')
-    if (p?.options) p.options.push(
+    if (p?.options) pushOptionsIfNew(p.options, [
       { value: 1, label: '圆切-上' },
       { value: 2, label: '圆切-下' },
       { value: 3, label: '斜切-上' },
@@ -414,11 +427,11 @@ function expandEnumOptionsForFangYuanGlyph(glyph: ICustomGlyph): void {
       { value: 6, label: '圆切-圆弧装饰-下' },
       { value: 7, label: '圆切-棱角装饰-上' },
       { value: 8, label: '圆切-棱角装饰-下' },
-    )
+    ])
   }
   if (转角.includes(name)) {
     const p = parameters.find(p => p.name === '转角风格')
-    if (p?.options) p.options.push(
+    if (p?.options) pushOptionsIfNew(p.options, [
       { value: 2, label: '圆切-横' },
       { value: 3, label: '圆切-竖' },
       { value: 4, label: '斜切-横' },
@@ -429,11 +442,11 @@ function expandEnumOptionsForFangYuanGlyph(glyph: ICustomGlyph): void {
       { value: 9, label: '圆切-棱角装饰-竖' },
       { value: 10, label: '圆切露锋-横' },
       { value: 11, label: '圆切露锋-竖' },
-    )
+    ])
   }
   if (竖起笔.includes(name)) {
     const p = parameters.find(p => p.name === '起笔风格')
-    if (p?.options) p.options.push(
+    if (p?.options) pushOptionsIfNew(p.options, [
       { value: 1, label: '圆切-左' },
       { value: 2, label: '圆切-右' },
       { value: 3, label: '斜切-左' },
@@ -442,11 +455,11 @@ function expandEnumOptionsForFangYuanGlyph(glyph: ICustomGlyph): void {
       { value: 6, label: '圆切-圆弧装饰-右' },
       { value: 7, label: '圆切-棱角装饰-左' },
       { value: 8, label: '圆切-棱角装饰-右' },
-    )
+    ])
   }
   if (竖收笔.includes(name)) {
     const p = parameters.find(p => p.name === '收笔风格')
-    if (p?.options) p.options.push(
+    if (p?.options) pushOptionsIfNew(p.options, [
       { value: 1, label: '圆切-左' },
       { value: 2, label: '圆切-右' },
       { value: 3, label: '斜切-左' },
@@ -455,11 +468,11 @@ function expandEnumOptionsForFangYuanGlyph(glyph: ICustomGlyph): void {
       { value: 6, label: '圆切-圆弧装饰-右' },
       { value: 7, label: '圆切-棱角装饰-左' },
       { value: 8, label: '圆切-棱角装饰-右' },
-    )
+    ])
   }
   if (横收笔.includes(name)) {
     const p = parameters.find(p => p.name === '收笔风格')
-    if (p?.options) p.options.push(
+    if (p?.options) pushOptionsIfNew(p.options, [
       { value: 1, label: '燕尾收笔' },
       { value: 2, label: '圆切-上' },
       { value: 3, label: '圆切-下' },
@@ -469,11 +482,11 @@ function expandEnumOptionsForFangYuanGlyph(glyph: ICustomGlyph): void {
       { value: 7, label: '圆切-圆弧装饰-下' },
       { value: 8, label: '圆切-棱角装饰-上' },
       { value: 9, label: '圆切-棱角装饰-下' },
-    )
+    ])
   }
   if (直角撇起笔.includes(name)) {
     const p = parameters.find(p => p.name === '起笔风格')
-    if (p?.options) p.options.push(
+    if (p?.options) pushOptionsIfNew(p.options, [
       { value: 2, label: '圆切-左' },
       { value: 3, label: '圆切-右' },
       { value: 4, label: '斜切-左' },
@@ -482,11 +495,11 @@ function expandEnumOptionsForFangYuanGlyph(glyph: ICustomGlyph): void {
       { value: 7, label: '圆切-圆弧装饰-右' },
       { value: 8, label: '圆切-棱角装饰-左' },
       { value: 9, label: '圆切-棱角装饰-右' },
-    )
+    ])
   }
   if (直角捺起笔.includes(name)) {
     const p = parameters.find(p => p.name === '起笔风格')
-    if (p?.options) p.options.push(
+    if (p?.options) pushOptionsIfNew(p.options, [
       { value: 2, label: '圆切-左' },
       { value: 3, label: '圆切-右' },
       { value: 4, label: '斜切-左' },
@@ -495,11 +508,11 @@ function expandEnumOptionsForFangYuanGlyph(glyph: ICustomGlyph): void {
       { value: 7, label: '圆切-圆弧装饰-右' },
       { value: 8, label: '圆切-棱角装饰-左' },
       { value: 9, label: '圆切-棱角装饰-右' },
-    )
+    ])
   }
   if (直角撇收笔.includes(name)) {
     const p = parameters.find(p => p.name === '收笔风格')
-    if (p?.options) p.options.push(
+    if (p?.options) pushOptionsIfNew(p.options, [
       { value: 2, label: '圆切-上' },
       { value: 3, label: '圆切-下' },
       { value: 4, label: '斜切-上' },
@@ -509,11 +522,11 @@ function expandEnumOptionsForFangYuanGlyph(glyph: ICustomGlyph): void {
       { value: 8, label: '厚重露锋-圆切-下' },
       { value: 9, label: '厚重露锋-斜切-上' },
       { value: 10, label: '厚重露锋-斜切-下' },
-    )
+    ])
   }
   if (直角捺收笔.includes(name)) {
     const p = parameters.find(p => p.name === '收笔风格')
-    if (p?.options) p.options.push(
+    if (p?.options) pushOptionsIfNew(p.options, [
       { value: 2, label: '圆切-上' },
       { value: 3, label: '圆切-下' },
       { value: 4, label: '斜切-上' },
@@ -523,7 +536,7 @@ function expandEnumOptionsForFangYuanGlyph(glyph: ICustomGlyph): void {
       { value: 8, label: '厚重露锋-圆切-下' },
       { value: 9, label: '厚重露锋-斜切-上' },
       { value: 10, label: '厚重露锋-斜切-下' },
-    )
+    ])
   }
   if (name === '竖直单圆角部件' || name === '水平单圆角部件') {
     const 方头样式 = parameters.find(p => p.name === '转角风格')
@@ -562,11 +575,11 @@ function expandEnumOptionsForFangYuanGlyph(glyph: ICustomGlyph): void {
   }
   if (钩收笔.includes(name)) {
     const p = parameters.find(p => p.name === '收笔风格')
-    if (p?.options) p.options.push(
+    if (p?.options) pushOptionsIfNew(p.options, [
       { value: 3, label: '圆切' },
       { value: 4, label: '斜切' },
       { value: 5, label: '圆切露锋' },
-    )
+    ])
   }
 }
 
@@ -627,6 +640,97 @@ export function renameFangYuanStyleInCharacterComponents(
   components: IComponent[] | undefined,
 ): void {
   renameFangYuanStyleInTree(components)
+}
+
+// ============ 参数 options 去重 ============
+
+/** 对单个参数的 options 去重（按 value），原地修改 */
+function dedupParamOptions(param: IParameter): void {
+  if (!param.options || param.options.length <= 1) return
+  const seen = new Set<number>()
+  const deduped: Array<{ value: number; label: string }> = []
+  for (const o of param.options) {
+    if (!seen.has(o.value)) {
+      seen.add(o.value)
+      deduped.push(o)
+    }
+  }
+  if (deduped.length < param.options.length) {
+    if (import.meta.env.DEV) {
+      const dupCount = param.options.length - deduped.length
+      console.log(`[dedupParams] ${param.name}: 去除 ${dupCount} 个重复选项 (${param.options.length} → ${deduped.length})`)
+    }
+    param.options = deduped
+  }
+}
+
+/** 递归对字形列表中的所有参数 options 去重 */
+function dedupGlyphParams(glyphs: ICustomGlyph[] | undefined): void {
+  if (!glyphs?.length) return
+  for (const g of glyphs) {
+    if (g.parameters) {
+      for (const p of g.parameters) dedupParamOptions(p)
+    }
+    // 递归处理字形内的子组件
+    if (g.components) dedupComponentTreeParams(g.components)
+  }
+}
+
+/** 递归对组件树（字符组件列表）中所有字形组件的参数 options 去重 */
+function dedupComponentTreeParams(components: Array<IGlyphComponent | IComponent> | undefined): void {
+  if (!components?.length) return
+  for (const comp of components) {
+    if (!comp) continue
+    const compAny = comp as any
+    // 组件自身的 parameters（如有）
+    if (compAny.parameters) {
+      for (const p of compAny.parameters) dedupParamOptions(p)
+    }
+    // 字形组件的 value 中的 parameters
+    if (comp.type === 'glyph' || compAny.type === 'glyph') {
+      const v = (comp as any).value as ICustomGlyph | undefined
+      if (v?.parameters) {
+        for (const p of v.parameters) dedupParamOptions(p)
+      }
+      // 递归字形内部的子组件
+      if (v?.components) dedupComponentTreeParams(v.components)
+    }
+    // 递归子组件（普通组件的 value 中可能嵌套）
+    if (compAny.value?.components) {
+      dedupComponentTreeParams(compAny.value.components)
+    }
+  }
+}
+
+/**
+ * 对工程中所有组件参数 options 去重（dev 专用）。
+ * 覆盖 stroke_glyphs / glyphs / radical_glyphs / comp_glyphs 以及字符列表中的所有组件。
+ */
+/** 对字符组件树中所有参数 options 去重（供 processCharacters 调用） */
+export function dedupCharacterComponentOptions(components: IComponent[] | undefined): void {
+  if (!import.meta.env.DEV) return
+  dedupComponentTreeParams(components)
+}
+
+export function dedupAllParameterOptions(file: {
+  stroke_glyphs?: ICustomGlyph[]
+  glyphs?: ICustomGlyph[]
+  radical_glyphs?: ICustomGlyph[]
+  comp_glyphs?: ICustomGlyph[]
+  characterList?: Array<{ uuid: string; [key: string]: any }>
+  components?: IComponent[]
+}): void {
+  if (!import.meta.env.DEV) return
+
+  dedupGlyphParams(file.stroke_glyphs)
+  dedupGlyphParams(file.glyphs)
+  dedupGlyphParams(file.radical_glyphs)
+  dedupGlyphParams(file.comp_glyphs)
+
+  // 字符列表中的组件
+  if (file.components) {
+    dedupComponentTreeParams(file.components)
+  }
 }
 
 // END 临时代码
