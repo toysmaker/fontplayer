@@ -4,14 +4,20 @@
  */
 
 import { gzipDecompressToString, type FpzTocEntry } from '@/features/editor/services/compressedTemplate/fpzFormat'
+import { FP_ENCRYPTED_MAGIC, isEncryptedFile, getPrivateKey, decryptFile } from '@/core/encryption'
 
 export const FP_MAGIC = new Uint8Array([0x46, 0x50, 0x30, 0x31]) // "FP01"
 
 export function isFpProjectFile(buffer: ArrayBuffer): boolean {
   const u8 = new Uint8Array(buffer)
   if (u8.length < 4) return false
+  let match = true
   for (let i = 0; i < 4; i++) {
-    if (u8[i] !== FP_MAGIC[i]) return false
+    if (u8[i] !== FP_MAGIC[i]) { match = false; break }
+  }
+  if (match) return true
+  for (let i = 0; i < 4; i++) {
+    if (u8[i] !== FP_ENCRYPTED_MAGIC[i]) return false
   }
   return true
 }
@@ -126,6 +132,19 @@ export function parseFpBuffer(buffer: ArrayBuffer): DecodedFpFile {
     payloadByteOffset,
     glyphBundleByteOffset,
   }
+}
+
+/**
+ * Parse an FP buffer that may be encrypted (FPE1) or unencrypted (FP01).
+ * Automatically decrypts if needed.
+ */
+export async function parseFpBufferSafe(buffer: ArrayBuffer): Promise<DecodedFpFile> {
+  if (isEncryptedFile(buffer)) {
+    const privateKey = await getPrivateKey()
+    const plaintext = await decryptFile(buffer, privateKey)
+    return parseFpBuffer(plaintext)
+  }
+  return parseFpBuffer(buffer)
 }
 
 export { gzipDecompressToString }

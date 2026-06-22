@@ -175,7 +175,7 @@ export const FANG_YUAN_STYLE_ITEMS: StyleItem[] = [
   {
     label: '撇起笔风格',
     paramName: '起笔风格',
-    glyphNames: ['直角撇'],
+    glyphNames: ['直角撇', '倒直角撇'],
     options: [
       { value: 0, label: '默认' },
       { value: 1, label: '尖头' },
@@ -192,7 +192,7 @@ export const FANG_YUAN_STYLE_ITEMS: StyleItem[] = [
   {
     label: '撇收笔风格',
     paramName: '收笔风格',
-    glyphNames: ['直角撇', '横撇'],
+    glyphNames: ['直角撇', '横撇', '倒直角撇'],
     options: [
       { value: 0, label: '默认' },
       { value: 1, label: '尖头' },

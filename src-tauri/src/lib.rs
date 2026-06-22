@@ -554,6 +554,25 @@ fn save_project(data: String, path: String) -> Result<(), String> {
     fs::write(&target, data).map_err(|e| e.to_string())
 }
 
+/// 读取混淆后的私钥数据。
+/// dev 模式：从 src-tauri/resources/.keydata 读取
+/// release 模式：编译时嵌入二进制
+#[tauri::command]
+fn read_keydata() -> Result<String, String> {
+    #[cfg(debug_assertions)]
+    {
+        let key_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join(".keydata");
+        return std::fs::read_to_string(&key_path)
+            .map_err(|e| format!("Cannot read .keydata: {}. Run `npm run generate-keys` first.", e));
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        Ok(include_str!("../resources/.keydata").to_string())
+    }
+}
+
 // 流式写入工程文件的单个 chunk
 // append=false 时截断并从头写（第一块），append=true 时追加写（后续块）
 // 使用 write_all 保证整个 chunk 都被写入，不会出现部分写入导致 JSON 损坏的问题
@@ -1148,6 +1167,7 @@ pub fn run() {
             update_menu_language,
             save_project,
             write_file_chunk,
+            read_keydata,
             log_diagnostic
         ])
         .run(tauri::generate_context!())

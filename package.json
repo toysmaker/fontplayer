@@ -13,6 +13,7 @@
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
     "migrate-project": "tsx scripts/generate-new-project-file.ts",
     "pack:template": "tsx scripts/pack-default-template.mts",
+    "generate-keys": "tsx scripts/generate-keys.ts",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",

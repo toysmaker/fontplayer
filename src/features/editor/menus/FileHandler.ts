@@ -21,6 +21,7 @@ import {
   type FpHeaderWrap,
   type EncodeFpTocMeta,
 } from '@/features/editor/services/projectArchive/fpProjectFormat'
+import { encryptFile, getPublicKey } from '@/core/encryption'
 import { genUUID } from '@/utils/uuid'
 import {
   buildFpzHeaderProject,
@@ -663,12 +664,13 @@ export class FileHandler {
       if (onCharacterProgress) onCharacterProgress(i + 1)
     }
     const glyphBundleJson = this.createGlyphBundleJsonForSave(file)
-    return encodeFpFile({ headerWrap, characterChunks, tocMeta, glyphBundleJson })
+    const fpBuffer = await encodeFpFile({ headerWrap, characterChunks, tocMeta, glyphBundleJson })
+    const publicKey = await getPublicKey()
+    return encryptFile(fpBuffer, publicKey)
   }
 
   /**
-   * Tauri：流式写入 `.fp`——逐字 gzip 写入临时载荷文件，再拼头/TOC 与尾部 glyph gzip，
-   * 避免在 JS 中持有全部 gzip 分块 + 与整文件等长的单块 ArrayBuffer。
+   * Tauri：流式写入 `.fp`——逐字 gzip 写入临时载荷文件，组装后加密写入目标。
    */
   private async writeProjectFpFileToPathStreaming(
     file: IFile,
@@ -690,7 +692,9 @@ export class FileHandler {
       const out = new Uint8Array(prefix.length + glyphGzip.length)
       out.set(prefix, 0)
       out.set(glyphGzip, prefix.length)
-      await writeFile(filePath, out)
+      const publicKey = await getPublicKey()
+      const encrypted = await encryptFile(out.buffer, publicKey)
+      await writeFile(filePath, new Uint8Array(encrypted))
       return
     }
 
@@ -734,33 +738,20 @@ export class FileHandler {
       const prefix = encodeFpHeaderTocPrefix(headerWrap, toc)
       const glyphGzip = await gzipCompressBytes(new TextEncoder().encode(glyphBundleJson))
 
-      const dest = await open(filePath, { read: true, write: true, create: true, truncate: true })
-      try {
-        let w = await dest.write(prefix)
-        if (w !== prefix.byteLength) {
-          throw new Error(`FP streaming save: short write on header (${w}/${prefix.byteLength})`)
-        }
-        const payloadIn = await open(payloadTempPath, { read: true })
-        try {
-          const pumpBuf = new Uint8Array(256 * 1024)
-          while (true) {
-            const n = await payloadIn.read(pumpBuf)
-            if (n === null) break
-            w = await dest.write(pumpBuf.subarray(0, n))
-            if (w !== n) {
-              throw new Error(`FP streaming save: short write pumping payload (${w}/${n})`)
-            }
-          }
-        } finally {
-          await payloadIn.close()
-        }
-        w = await dest.write(glyphGzip)
-        if (w !== glyphGzip.byteLength) {
-          throw new Error(`FP streaming save: short write on glyph tail (${w}/${glyphGzip.byteLength})`)
-        }
-      } finally {
-        await dest.close()
-      }
+      // Read temp payload file and assemble full FP binary
+      const { readFile } = await import('@tauri-apps/plugin-fs')
+      const payloadBytes = await readFile(payloadTempPath)
+
+      const totalLen = prefix.length + payloadBytes.length + glyphGzip.length
+      const fullFp = new Uint8Array(totalLen)
+      fullFp.set(prefix, 0)
+      fullFp.set(payloadBytes, prefix.length)
+      fullFp.set(glyphGzip, prefix.length + payloadBytes.length)
+
+      // Encrypt and write
+      const publicKey = await getPublicKey()
+      const encrypted = await encryptFile(fullFp.buffer, publicKey)
+      await writeFile(filePath, new Uint8Array(encrypted))
     } finally {
       if (payloadOut) {
         try {

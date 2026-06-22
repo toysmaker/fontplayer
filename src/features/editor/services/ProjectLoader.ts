@@ -28,7 +28,7 @@ import {
 } from '@/features/decomposition/processing'
 import { isTauri } from '@/utils/env'
 import { decompressCharacterAt, parseFpzBuffer, type DecodedFpz } from '@/features/editor/services/compressedTemplate/fpzFormat'
-import { decompressGlyphBundleIfPresent, parseFpBuffer } from '@/features/editor/services/projectArchive/fpProjectFormat'
+import { decompressGlyphBundleIfPresent, parseFpBufferSafe } from '@/features/editor/services/projectArchive/fpProjectFormat'
 import { hydrateGlyphComponentEnumOptionsFromLibrary } from '@/features/editor/services/glyphParameterHydration'
 import {
   replaceGlyphScript_private_v1,
@@ -333,7 +333,7 @@ export class ProjectLoader {
    * 从字玩 .fp 工程文件加载（FP01 + 分块 gzip + 尾部字形 gzip）
    */
   async loadProjectFromFpArrayBuffer(buffer: ArrayBuffer, progressMsg?: string): Promise<IFile> {
-    const decodedFp = parseFpBuffer(buffer)
+    const decodedFp = await parseFpBufferSafe(buffer)
     const bundle = await decompressGlyphBundleIfPresent(decodedFp)
     const header = decodedFp.headerProject as any
     let data: any = {
