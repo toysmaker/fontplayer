@@ -33,6 +33,9 @@ import { hydrateGlyphComponentEnumOptionsFromLibrary } from '@/features/editor/s
 import {
   replaceGlyphScript_private_v1,
   replaceGlyphScript_templates2,
+  replaceCharacterComponentsGlyphScriptRefs_private_v1,
+  addDianGlyphParams_private_v1,
+  fixDaoZhiJiaoPieJianTouOptionValue_private_v1,
   widenFangYuanGlyphNumberParamBoundsInCharacterComponents,
   expandFangYuanGlyphEnumOptionsInCharacterComponents,
   expandFangYuanGlyphEnumOptionsForGlyphs,
@@ -428,13 +431,37 @@ export class ProjectLoader {
       }
       // END 临时代码
 
+      // MARK: 临时代码 — 为"字玩方圆黑体"的"点"字形按 importTemplateTest 设定补全参数
+      if (import.meta.env.DEV && projectTag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG) {
+        try {
+          addDianGlyphParams_private_v1(data.stroke_glyphs as ICustomGlyph[] | undefined)
+          fixDaoZhiJiaoPieJianTouOptionValue_private_v1(data.stroke_glyphs as ICustomGlyph[] | undefined)
+        } catch (e) {
+          console.error('[ProjectLoader] addDianGlyphParams/fixDaoZhiJiaoPie failed', e)
+        }
+      }
+      // END 临时代码
+
       await this.processGlyphs(data)
       const decoded = decodedFp as unknown as DecodedFpz
+
+      // MARK: 临时代码 — 构建 stroke_glyphs name→uuid 映射，供字符组件脚本引用
+      let strokeGlyphNameToUuid: Map<string, string> | undefined
+      if (import.meta.env.DEV && projectTag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG && data.stroke_glyphs?.length) {
+        strokeGlyphNameToUuid = new Map<string, string>()
+        for (const g of data.stroke_glyphs as ICustomGlyph[]) {
+          const name = g.name?.trim()
+          if (name) strokeGlyphNameToUuid.set(name, g.uuid)
+        }
+      }
+      // END 临时代码
+
       await this.processCharactersFromFpz(
         data.file,
         decoded,
         this.collectGlyphLibraryFromProjectData(data),
         progressMsg,
+        strokeGlyphNameToUuid,
       )
 
       const fileForDecomp = data.file
@@ -506,6 +533,7 @@ export class ProjectLoader {
     decoded: DecodedFpz,
     glyphLibrary: ICustomGlyph[] = [],
     progressMsg?: string,
+    strokeGlyphNameToUuid?: Map<string, string>,
   ): Promise<void> {
     const fangYuanWiden =
       typeof file?.tag === 'string' && file.tag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG
@@ -513,6 +541,10 @@ export class ProjectLoader {
     const fileUUID = file.uuid
     const total = decoded.toc.length
     const metadataList: ICharacterFileMetadata[] = []
+
+    if (strokeGlyphNameToUuid && strokeGlyphNameToUuid.size > 0 && import.meta.env.DEV) {
+      console.log('[ProjectLoader] 同步字符列表中字形组件脚本引用 (private/v1)…')
+    }
 
     for (let i = 0; i < total; i++) {
       const character = await decompressCharacterAt(decoded, i)
@@ -522,6 +554,12 @@ export class ProjectLoader {
         glyphLibrary,
         fangYuanWiden,
       )
+
+      // MARK: 临时代码 — 将字符组件树中所有字形组件的内联脚本清除，改为引用 stroke_glyphs 中对应脚本
+      if (strokeGlyphNameToUuid && strokeGlyphNameToUuid.size > 0 && import.meta.env.DEV) {
+        replaceCharacterComponentsGlyphScriptRefs_private_v1(characterLite.components, strokeGlyphNameToUuid)
+      }
+      // END 临时代码
 
       const key = `character_${fileUUID}_${characterLite.uuid}`
       await indexedDBManager.set(key, characterLite)

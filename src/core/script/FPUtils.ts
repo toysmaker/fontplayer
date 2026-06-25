@@ -2356,6 +2356,13 @@ const rotateFromPoint = (p1, p2, angle) => {
 	}
 }
 
+const getMiddlePoint = (p1, p2) => {
+	return {
+		x: (p1.x + p2.x) / 2,
+		y: (p1.y + p2.y) / 2,
+	}
+}
+
 const FP = {
 	EllipseComponent,
 	PenComponent,
@@ -2394,6 +2401,7 @@ const FP = {
 	getTangentOnCurves,
 	getCurveContoursHorizontal,
 	getCurveContoursVertical,
+	getMiddlePoint,
 }
 
 const suggestion_items = [

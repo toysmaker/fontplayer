@@ -106,7 +106,7 @@ export class FileHandler {
     return new Promise((resolve, reject) => {
       const input = document.createElement('input')
       input.type = 'file'
-      input.accept = '.json,.fp,application/json'
+      input.accept = '.fp,.json'
       input.style.display = 'none'
 
       input.addEventListener('change', async (e: Event) => {
@@ -258,6 +258,47 @@ export class FileHandler {
       return this.openFileTauri()
     } else {
       return this.openFileWeb()
+    }
+  }
+
+  /**
+   * 从 ArrayBuffer 加载工程（Web 端专用，供 WelcomeLayout 在 user activation 内同步打开文件对话框后调用）。
+   * 自动检测 .fp / .json 格式并加载，完成后添加到 projectStore 并选中。
+   */
+  async loadFromArrayBuffer(buf: ArrayBuffer): Promise<void> {
+    let projectFile: IFile
+    if (isFpProjectFile(buf)) {
+      projectFile = await projectLoader.loadProjectFromFpArrayBuffer(buf)
+    } else {
+      const text = new TextDecoder('utf-8').decode(buf)
+      const data = JSON.parse(text)
+      projectFile = await projectLoader.loadProject(data)
+    }
+
+    // 确保 loading 状态已清除
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        setTimeout(() => resolve(undefined), 0)
+      })
+    })
+
+    const success = this.projectStore.addFile(projectFile)
+    if (!success) {
+      throw new Error('Failed to add file')
+    }
+
+    // 延迟选择文件，确保 UI 响应
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        setTimeout(() => resolve(undefined), 0)
+      })
+    })
+
+    this.projectStore.selectFile(projectFile.uuid)
+
+    // 临时调试
+    if (import.meta.env.DEV) {
+      scanProblemGlyphs(projectFile).catch(console.error)
     }
   }
 

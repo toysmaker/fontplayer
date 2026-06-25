@@ -87,28 +87,79 @@ const _handleNewProject = () => {
   showNewProjectDialog.value = true
 }
 
-const _handleOpenProject = async () => {
-  try {
-    // 先跳转到编辑器页面，这样进度条才能显示
+/**
+ * 打开工程：在同步上下文中触发文件对话框（保留浏览器 user activation），
+ * 文件读取完成后再跳转到编辑器页面加载工程。
+ *
+ * 修复：此前先 router.push + await 再 openFile，导致 input.click() 不在
+ * 用户手势的直接同步调用链中，浏览器静默阻止文件对话框正常工作。
+ */
+const _handleOpenProject = () => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.fp,.json'
+  input.style.display = 'none'
+
+  let handled = false
+
+  input.addEventListener('change', async (e: Event) => {
+    if (handled) return
+    handled = true
+
+    const target = e.target as HTMLInputElement
+    const files = target.files
+    if (!files || files.length === 0) {
+      document.body.removeChild(input)
+      return
+    }
+
+    const file = files[0]
+
+    // 读取文件为 ArrayBuffer
+    let buf: ArrayBuffer
+    try {
+      buf = await new Promise<ArrayBuffer>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as ArrayBuffer)
+        reader.onerror = () => reject(new Error('Failed to read file'))
+        reader.readAsArrayBuffer(file)
+      })
+    } catch (err) {
+      console.error('Failed to read file:', err)
+      document.body.removeChild(input)
+      return
+    }
+
+    document.body.removeChild(input)
+
+    // 跳转到编辑器页面（进度条在 EditorLayout 中显示）
     router.push('/editor')
-    
-    // 等待路由跳转和页面渲染完成
     await nextTick()
-    // 再等待一个渲染周期确保 EditorLayout 和 LoadingProgress 组件已挂载
-    await new Promise(resolve => {
+    await new Promise((resolve) => {
       requestAnimationFrame(() => {
         setTimeout(() => resolve(undefined), 100)
       })
     })
-    
-    // 在编辑器页面中触发文件打开
-    await fileHandler.openFile()
-  } catch (error: any) {
-    // 用户取消选择文件时不显示错误
-    if (error.message !== 'File selection cancelled') {
+
+    // 加载工程
+    try {
+      await fileHandler.loadFromArrayBuffer(buf)
+    } catch (error: any) {
       console.error('Failed to open project:', error)
     }
-  }
+  })
+
+  // 用户取消文件选择（cancel 事件兼容性不佳，这里兜底清理 DOM）
+  input.addEventListener('cancel', () => {
+    if (!handled) {
+      handled = true
+      document.body.removeChild(input)
+    }
+  })
+
+  document.body.appendChild(input)
+  // 关键：在用户手势的同步调用链中触发文件对话框
+  input.click()
 }
 
 // 使用防重复调用包装

@@ -1,5 +1,6 @@
 import type { IComponent, ICustomGlyph, IGlyphComponent, IParameter } from '@/core/types'
 import { ParameterType } from '@/core/types'
+import { genUUID } from '@/utils/uuid'
 
 const templateBodyCache = new Map<string, string>()
 /** private/v1 与 templates2 分离缓存，避免同名笔画互相污染 */
@@ -247,6 +248,220 @@ export async function replaceGlyphScript_private_v1(glyphs: ICustomGlyph[]): Pro
     delete glyph.script_reference
   }
 }
+
+/**
+ * 遍历字符组件树，清除所有字形组件的内联 script，改为通过 script_reference 引用 stroke_glyphs
+ * 中对应名称的字形脚本。避免将脚本正文重复存储在每一条字符数据中，导致工程体积膨胀。
+ * 仅 dev 模式生效。
+ *
+ * @param components 字符组件树
+ * @param strokeGlyphNameToUuid stroke_glyphs 中 name → uuid 的映射（同一名称取最后出现的）
+ */
+export function replaceCharacterComponentsGlyphScriptRefs_private_v1(
+  components: Array<IComponent | IGlyphComponent> | undefined,
+  strokeGlyphNameToUuid: Map<string, string>,
+): void {
+  if (!import.meta.env.DEV) return
+  if (!components?.length) return
+
+  for (const comp of components) {
+    if (!comp) continue
+
+    if (comp.type === 'glyph' && comp.value) {
+      const glyph = comp.value as ICustomGlyph
+      const name = glyph.name?.trim()
+      if (name) {
+        const refUuid = strokeGlyphNameToUuid.get(name)
+        if (refUuid) {
+          // 清除内联脚本，改为引用 stroke_glyphs 中的对应脚本
+          delete glyph.script
+          glyph.script_reference = refUuid
+        }
+      }
+
+      // 递归处理字形内部的嵌套子组件
+      const nested = glyph.components as Array<IComponent | IGlyphComponent> | undefined
+      if (nested?.length) {
+        replaceCharacterComponentsGlyphScriptRefs_private_v1(nested, strokeGlyphNameToUuid)
+      }
+    }
+  }
+}
+
+// MARK: 临时代码 — 为"字玩方圆黑体"的"点"字形按 importTemplateTest 设定补全参数
+// 仅 dev 模式生效；后续需整段移除
+
+/** 向 options 中安全追加条目，按 value 去重 */
+function pushEnumOptionsIfNew(
+  options: Array<{ value: number; label: string }> | undefined,
+  items: Array<{ value: number; label: string }>,
+): void {
+  if (!options) return
+  const existingValues = new Set(options.map(o => o.value))
+  for (const item of items) {
+    if (!existingValues.has(item.value)) {
+      options.push(item)
+    }
+  }
+}
+
+/**
+ * 为 stroke_glyphs 中风格为"字玩方圆黑体"且名称为"点"的字形，按 importTemplateTest 的定义补全参数。
+ * - 仅添加缺失的参数，已有参数不覆盖（Number 类型保留现有值；Enum 类型合并缺失的 options）
+ * - 最后对全部参数的 options 去重
+ */
+export function addDianGlyphParams_private_v1(strokeGlyphs: ICustomGlyph[] | undefined): void {
+  if (!import.meta.env.DEV) return
+  if (!strokeGlyphs?.length) return
+
+  const dianGlyph = strokeGlyphs.find(
+    (g) => g.style === '字玩方圆黑体' && g.name?.trim() === '点',
+  )
+  if (!dianGlyph) {
+    console.log('[addDianGlyphParams_private/v1] 未找到风格为"字玩方圆黑体"的"点"字形，跳过')
+    return
+  }
+
+  // 确保 parameters 数组存在
+  if (!dianGlyph.parameters || !Array.isArray(dianGlyph.parameters)) {
+    dianGlyph.parameters = []
+  }
+  const params = dianGlyph.parameters as IParameter[]
+
+  const findParam = (name: string) => params.find((p) => p.name === name)
+
+  const ensureNumberParam = (name: string, value: number, min: number, max: number) => {
+    if (!findParam(name)) {
+      params.push({
+        uuid: genUUID(),
+        name,
+        type: ParameterType.Number,
+        value,
+        min,
+        max,
+      })
+    }
+  }
+
+  const ensureEnumParam = (
+    name: string,
+    defaultValue: number,
+    options: Array<{ value: number; label: string }>,
+  ): IParameter => {
+    let p = findParam(name)
+    if (!p) {
+      p = {
+        uuid: genUUID(),
+        name,
+        type: ParameterType.Enum,
+        value: defaultValue,
+        options: [...options],
+      }
+      params.push(p)
+    }
+    return p
+  }
+
+  // 1. 基础参数（来自 private/v1/strokes 对"点"的定义）
+  ensureNumberParam('水平延伸', 300, 0, 1000)
+  ensureNumberParam('竖直延伸', 300, 0, 1000)
+  ensureNumberParam('弯曲游标', 0.5, 0, 1)
+
+  // 2. 参考位置
+  ensureEnumParam('参考位置', 0, [
+    { value: 0, label: '默认' },
+    { value: 1, label: '右侧（上侧）' },
+    { value: 2, label: '左侧（下侧）' },
+  ])
+
+  // 3. 通用扩展参数（对齐 importTemplateTest）
+  const 起笔风格 = ensureEnumParam('起笔风格', 0, [{ value: 0, label: '无起笔样式' }])
+  ensureNumberParam('起笔数值', 1, 0, 2)
+
+  ensureEnumParam('转角风格', 0, [
+    { value: 0, label: '方角' },
+    { value: 1, label: '圆角' },
+  ])
+  ensureNumberParam('转角数值', 1.5, 1, 2)
+
+  const 收笔风格 = ensureEnumParam('收笔风格', 0, [{ value: 0, label: '无收笔样式' }])
+  ensureNumberParam('收笔数值', 2, 1, 3)
+
+  ensureEnumParam('运笔风格', 0, [
+    { value: 0, label: '默认运笔样式' },
+    { value: 1, label: '提笔变细-圆角' },
+    { value: 2, label: '提笔变细-斜角' },
+  ])
+  ensureNumberParam('运笔数值', 1, 1, 2)
+  ensureNumberParam('字重变化', 0, 0, 2)
+  ensureNumberParam('弯曲程度', 1, 0, 2)
+
+  // 4. "点"专属：起笔风格 / 收笔风格追加选项（与撇、捺同一分组处理）
+  pushEnumOptionsIfNew(起笔风格.options, [
+    { value: 1, label: '水平方头' },
+    { value: 2, label: '竖直方头' },
+    { value: 3, label: '尖头' },
+  ])
+  pushEnumOptionsIfNew(收笔风格.options, [
+    { value: 1, label: '水平方头' },
+    { value: 2, label: '竖直方头' },
+    { value: 3, label: '尖头' },
+  ])
+
+  // 5. 全部参数 options 去重
+  for (const p of params) {
+    dedupParamOptions(p)
+  }
+
+  if (import.meta.env.DEV) {
+    console.log(
+      '[addDianGlyphParams_private/v1] 已为"点"字形补全参数:',
+      params.map((p) => `${p.name}(${ParameterType[p.type] ?? p.type})`).join(', '),
+    )
+  }
+}
+
+/**
+ * 将 stroke_glyphs 中风格为"字玩方圆黑体"的"倒直角撇"字形的
+ * 起笔风格 / 收笔风格中"尖头" option 的 value 改为 1。
+ * 仅 dev 模式生效。
+ */
+export function fixDaoZhiJiaoPieJianTouOptionValue_private_v1(
+  strokeGlyphs: ICustomGlyph[] | undefined,
+): void {
+  if (!import.meta.env.DEV) return
+  if (!strokeGlyphs?.length) return
+
+  const glyph = strokeGlyphs.find(
+    (g) => g.style === '字玩方圆黑体' && g.name?.trim() === '倒直角撇',
+  )
+  if (!glyph) {
+    console.log(
+      '[fixDaoZhiJiaoPie_private/v1] 未找到风格为"字玩方圆黑体"的"倒直角撇"字形，跳过',
+    )
+    return
+  }
+
+  const params = glyph.parameters
+  if (!params || !Array.isArray(params)) return
+
+  for (const paramName of ['起笔风格', '收笔风格']) {
+    const param = (params as IParameter[]).find((p) => p.name === paramName)
+    if (!param?.options) continue
+    const option = param.options.find((o) => o.label === '尖头')
+    if (option) {
+      option.value = 1
+    }
+  }
+
+  if (import.meta.env.DEV) {
+    console.log(
+      '[fixDaoZhiJiaoPie_private/v1] 已将"倒直角撇"的起笔风格/收笔风格"尖头" option value 设为 1',
+    )
+  }
+}
+
+// END 临时代码
 
 // MARK: 临时代码 — 将风格为"字玩标准黑体"的 stroke_glyphs 脚本替换为 public/templates/templates2/${name}.js
 // 仅 dev 模式生效；后续需整段移除
@@ -584,7 +799,7 @@ function expandEnumOptionsForFangYuanGlyph(glyph: ICustomGlyph): void {
   if (name === '倒直角撇') {
     const 起笔风格 = parameters.find(p => p.name === '起笔风格')
     if (起笔风格?.options) {
-      起笔风格.options.push({ value: 10, label: '厚重露锋' })
+      pushOptionsIfNew(起笔风格.options, [{ value: 10, label: '厚重露锋' }])
     }
   }
 }

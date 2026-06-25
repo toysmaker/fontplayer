@@ -38,6 +38,8 @@ async function readRowsFromIdb(): Promise<CharacterDecompositionRow[] | null> {
  * 拉取（若 IDB 无则 fetch）并缓存 character_list_final_v8；更新 decompositionData store。
  */
 export async function loadDecompositionData(): Promise<void> {
+  // MARK: 暂时禁用
+  return
   if (loadInFlight) {
     return loadInFlight
   }
