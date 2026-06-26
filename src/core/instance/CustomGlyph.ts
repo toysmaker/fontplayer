@@ -152,8 +152,13 @@ export class CustomGlyph implements IInstance {
     scale: number,
   ): void {
     if (!contour.length) return
+    if (import.meta.env.DEV) {
+      console.log('[drawEditContour] offset=(' + offset.x + ',' + offset.y + ') scale=' + scale + ' contour=' + contour.length + '段 首点=(' + contour[0].start.x.toFixed(0) + ',' + contour[0].start.y.toFixed(0) + ') 调用栈:', new Error().stack)
+    }
     const cx = (px: number) => mapCanvasX(px + offset.x) * scale
     const cy = (py: number) => mapCanvasY(py + offset.y) * scale
+    // 重置起点到轮廓的真实第一点，防止 ctx 上残留的 moveTo（如 ox/oy=0 时的 p0 点）污染绘制
+    ctx.moveTo(cx(contour[0].start.x), cy(contour[0].start.y))
     for (const path of contour) {
       if (path.type === PathType.LINE) {
         ctx.lineTo(cx(path.end.x), cy(path.end.y))
@@ -288,6 +293,7 @@ export class CustomGlyph implements IInstance {
     if (!isGlyphSkeleton) {
     this._components.forEach((component: any, index: number) => {
       if (component._postProcessed && component.contour?.length) {
+        if (import.meta.env.DEV) console.log('[render] drawEditContour glyph=' + this._glyph.name + ' offset=(' + offset.x + ',' + offset.y + ')')
         this.drawEditContour(ctx, component.contour as IContour, offset, scale)
       } else if (component.render) {
         component.render(canvas, {

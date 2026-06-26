@@ -389,8 +389,20 @@ export function executeGlyphScript(
         })
       }
 
-      // 执行后处理规则
-      PostProcessEngine.executeAll(glyphInstance)
+      // 执行后处理规则（传入 instanceKey 用于精确定位当前组件）
+      try {
+        PostProcessEngine.executeAll(glyphInstance, key)
+      } catch (e) {
+        // 后处理失败时清除所有组件的后处理状态，确保渲染回退到原始轮廓
+        if (import.meta.env.DEV) {
+          console.warn('[ScriptExecutor] PostProcessEngine.executeAll failed:', e)
+        }
+        for (const comp of glyphInstance._components) {
+          comp._postProcessed = false
+          delete comp.contour
+          delete comp.preview
+        }
+      }
 
       // 恢复全局变量
       ;(window as any).glyph = originalGlyph

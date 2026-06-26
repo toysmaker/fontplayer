@@ -89,7 +89,31 @@ export function contourDifference(
     // 依次减去每个裁剪轮廓
     for (const clipContour of clipContours) {
       const clipPath = contourToPaperPath(clipContour)
+      if (import.meta.env.DEV) {
+        const subjBounds = (subjectPath as any).bounds
+        const clipBounds = (clipPath as any).bounds
+        const subjArea = Math.abs((subjectPath as any).area ?? 0)
+        console.log(
+          '[booleanOps] subtract: subj[%d] bounds(%.0f,%.0f,%.0f,%.0f) area=%.0f | clip bounds(%.0f,%.0f,%.0f,%.0f) area=%.0f | intersect=%s',
+          (subjectPath as any).curves?.length ?? 0,
+          subjBounds?.x, subjBounds?.y, (subjBounds?.x ?? 0) + (subjBounds?.width ?? 0), (subjBounds?.y ?? 0) + (subjBounds?.height ?? 0),
+          subjArea,
+          clipBounds?.x, clipBounds?.y, (clipBounds?.x ?? 0) + (clipBounds?.width ?? 0), (clipBounds?.y ?? 0) + (clipBounds?.height ?? 0),
+          Math.abs((clipPath as any).area ?? 0),
+          (subjBounds && clipBounds && (subjBounds as any).intersects?.(clipBounds)) ? 'YES' : 'NO',
+        )
+      }
       subjectPath = subjectPath.subtract(clipPath) as paper.PathItem
+      if (import.meta.env.DEV) {
+        const resultArea = Math.abs((subjectPath as any).area ?? 0)
+        const resultBounds = (subjectPath as any).bounds
+        console.log(
+          '[booleanOps] subtract result: area=%.0f bounds(%.0f,%.0f,%.0f,%.0f) curves=%d',
+          resultArea,
+          resultBounds?.x, resultBounds?.y, (resultBounds?.x ?? 0) + (resultBounds?.width ?? 0), (resultBounds?.y ?? 0) + (resultBounds?.height ?? 0),
+          (subjectPath as any).curves?.length ?? 0,
+        )
+      }
       clipPath.remove()
     }
 
@@ -120,6 +144,21 @@ export function contourDifference(
     }
 
     const resultContour = paperPathToContour(bestPath)
+
+    if (import.meta.env.DEV) {
+      console.log('[booleanOps] 结果轮廓 ' + resultContour.length + ' 段:')
+      for (let i = 0; i < resultContour.length; i++) {
+        const seg = resultContour[i] as any
+        const c1 = seg.control1
+        const c2 = seg.control2
+        const c = seg.control
+        const ctrlStr = c1 ? 'ctrl1(' + Number(c1.x).toFixed(1) + ',' + Number(c1.y).toFixed(1) + ') ctrl2(' + Number(c2.x).toFixed(1) + ',' + Number(c2.y).toFixed(1) + ')' : c ? 'ctrl(' + Number(c.x).toFixed(1) + ',' + Number(c.y).toFixed(1) + ')' : '(line)'
+        console.log(
+          '[booleanOps]   [' + i + '] start(' + Number(seg.start.x).toFixed(1) + ',' + Number(seg.start.y).toFixed(1) + ') → end(' + Number(seg.end.x).toFixed(1) + ',' + Number(seg.end.y).toFixed(1) + ') ' + ctrlStr,
+        )
+      }
+    }
+
     subjectPath.remove()
     return resultContour.length ? [resultContour] : []
   } catch (e) {
