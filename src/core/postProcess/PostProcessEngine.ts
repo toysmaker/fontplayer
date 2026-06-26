@@ -7,9 +7,13 @@ import { PostProcessRuleType } from '../types'
 import type { IContour, IContours } from '../font/types'
 import type { CustomGlyph } from '../instance/CustomGlyph'
 import { contourDifference } from '../utils/booleanOperations'
+import { contourUnite, contourDilate } from '../utils/contourDilate'
 import { ContourConverter } from '../font/converter'
 import { useCharacterStore } from '@/stores/character'
 import { useGlyphStore } from '@/stores/glyph'
+
+/** 差集留白默认膨胀距离（px） */
+const DEFAULT_WHITESPACE_MARGIN = 30
 
 export class PostProcessEngine {
   /**
@@ -52,9 +56,12 @@ export class PostProcessEngine {
     }
 
     for (const rule of rules) {
-      if (rule.type !== PostProcessRuleType.Difference) continue
       const targetUUIDs: string[] = (rule as any).targetComponentUUIDs || []
       if (!targetUUIDs.length) continue
+
+      const isRetainWhitespace = rule.type === PostProcessRuleType.DifferenceRetainWhitespace
+      const isDifference = rule.type === PostProcessRuleType.Difference
+      if (!isDifference && !isRetainWhitespace) continue
 
       // 获取目标组件的编辑空间轮廓
       const targetEditContours: IContour[] = []
@@ -67,11 +74,36 @@ export class PostProcessEngine {
       }
       if (!targetEditContours.length) continue
 
+      // 差集留白：先合并目标轮廓，再膨胀指定距离
+      let clipContoursList: IContours[]
+      if (isRetainWhitespace) {
+        const margin = (rule as any).whitespaceMargin ?? DEFAULT_WHITESPACE_MARGIN
+        const united = contourUnite(targetEditContours)
+        if (import.meta.env.DEV) {
+          console.log(
+            '[PostProcessEngine] 差集留白: %d 个目标轮廓 → unite 后 %d 个轮廓 → dilate(%d)',
+            targetEditContours.length,
+            united.length,
+            margin,
+          )
+        }
+        const dilated = contourDilate(united, margin)
+        if (import.meta.env.DEV) {
+          console.log(
+            '[PostProcessEngine] dilate 结果: %d 个轮廓 (原始 %d 个)',
+            dilated.length,
+            united.length,
+          )
+        }
+        clipContoursList = dilated.map((c) => [c])
+      } else {
+        clipContoursList = targetEditContours.map((c) => [c])
+      }
+
       // 对每个脚本组件应用差集
       for (const comp of glyphInstance._components) {
         if (!comp.points?.length && !comp.contour?.length) continue
 
-        // 脚本组件轮廓（提升到字符空间）
         const compContour = ContourConverter.componentsToContoursEditing(
           [comp as any], glyphOffset,
         )
@@ -79,10 +111,9 @@ export class PostProcessEngine {
 
         const diffResult = PostProcessEngine.applyDifferenceToContours(
           compContour,
-          targetEditContours.map(c => [c]),
+          clipContoursList,
         )
         if (diffResult.length > 0 && diffResult[0]?.length > 0) {
-          // 移回字形局部空间，保持编辑空间坐标（与 component.render 一致）
           const localContour: IContour = diffResult[0].map((path: any) => ({
             ...path,
             start: { x: path.start.x - glyphOffset.x, y: path.start.y - glyphOffset.y },
@@ -95,7 +126,6 @@ export class PostProcessEngine {
               control: { x: path.control.x - glyphOffset.x, y: path.control.y - glyphOffset.y },
             } : {}),
           }))
-          // 直接存储编辑空间轮廓用于 canvas 渲染（单个 IContour，与 updateData 输出格式一致）
           comp.contour = localContour
           comp.preview = localContour
           comp._postProcessed = true

@@ -31,7 +31,7 @@ import { useGlyphStore } from '@/stores/glyph'
 import { useProjectStore } from '@/stores/project'
 import { useCharacterGridEditStore } from '@/stores/characterGridEdit'
 import { EditStatus, ParameterType, PostProcessRuleType, type IParameter, type ICustomGlyph, type IConstant, type IVariable } from '@/core/types'
-import type { IGlyphComponent, PostProcessRule, IDifferenceRule } from '@/core/types'
+import type { IGlyphComponent, PostProcessRule, IDifferenceRule, IDifferenceRetainWhitespaceRule } from '@/core/types'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
@@ -1152,6 +1152,7 @@ const showAddRuleSelect = ref(false)
 
 const availableRuleTypes = computed(() => [
   { label: t('panels.paramsPanel.postProcessRules.difference'), value: PostProcessRuleType.Difference },
+  { label: t('panels.paramsPanel.postProcessRules.differenceRetainWhitespace'), value: PostProcessRuleType.DifferenceRetainWhitespace },
 ])
 
 /** 当前编辑环境中可选的兄弟组件列表 */
@@ -1225,6 +1226,11 @@ function handleAddPostProcessRule(ruleType: PostProcessRuleType) {
       ...editingPostProcessRules.value,
       { type: PostProcessRuleType.Difference, targetComponentUUIDs: [] } as IDifferenceRule,
     ]
+  } else if (ruleType === PostProcessRuleType.DifferenceRetainWhitespace) {
+    editingPostProcessRules.value = [
+      ...editingPostProcessRules.value,
+      { type: PostProcessRuleType.DifferenceRetainWhitespace, targetComponentUUIDs: [], whitespaceMargin: 30 } as IDifferenceRetainWhitespaceRule,
+    ]
   }
   showAddRuleSelect.value = false
   persistEditingRules()
@@ -1264,6 +1270,14 @@ function getComponentNameByUUID(uuid: string): string {
     components = glyphStore.editingGlyph?.components || []
   }
   return components.find(c => c.uuid === uuid)?.name || uuid
+}
+
+/** 获取规则类型的显示标签 */
+function getRuleTypeLabel(type: PostProcessRuleType): string {
+  if (type === PostProcessRuleType.DifferenceRetainWhitespace) {
+    return t('panels.paramsPanel.postProcessRules.differenceRetainWhitespace')
+  }
+  return t('panels.paramsPanel.postProcessRules.difference')
 }
 
 /** 当前是否有已保存的后处理规则 */
@@ -1667,7 +1681,7 @@ const handleFormatGlyphComponent = () => {
             class="post-process-rule-item"
           >
             <div class="rule-header">
-              <span class="rule-type-label">{{ t('panels.paramsPanel.postProcessRules.difference') }}</span>
+              <span class="rule-type-label">{{ getRuleTypeLabel(rule.type) }}</span>
               <n-button
                 size="tiny"
                 quaternary

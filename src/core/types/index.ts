@@ -218,6 +218,8 @@ export interface IGlyphComponent extends IComponentBase {
  */
 export enum PostProcessRuleType {
   Difference = 'difference',
+  /** 差集留白：合并目标组件 → 膨胀 → 差集 */
+  DifferenceRetainWhitespace = 'differenceRetainWhitespace',
 }
 
 /**
@@ -238,9 +240,21 @@ export interface IDifferenceRule extends IPostProcessRule {
 }
 
 /**
+ * 差集留白后处理规则
+ * 与差集类似，但先将目标组件合并后膨胀（默认30px留白），再用当前组件减去膨胀后的合集
+ */
+export interface IDifferenceRetainWhitespaceRule extends IPostProcessRule {
+  type: PostProcessRuleType.DifferenceRetainWhitespace
+  /** 目标组件 UUID 列表 */
+  targetComponentUUIDs: string[]
+  /** 留白膨胀距离（px），默认 30 */
+  whitespaceMargin?: number
+}
+
+/**
  * 后处理规则联合类型
  */
-export type PostProcessRule = IDifferenceRule
+export type PostProcessRule = IDifferenceRule | IDifferenceRetainWhitespaceRule
 
 /**
  * 自定义字形组件值

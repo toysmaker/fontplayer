@@ -17,6 +17,7 @@ import { CustomGlyph } from '../instance/CustomGlyph'
 import { orderedListWithItemsForGlyph } from '../utils/glyph'
 import { genUUID } from '@/utils/uuid'
 import { PostProcessEngine } from '../postProcess/PostProcessEngine'
+import { contourUnite, contourDilate } from '../utils/contourDilate'
 
 /**
  * 转换选项
@@ -247,7 +248,9 @@ export class ContourConverter {
       if (!rules || rules.length === 0) continue
       const targetContoursList: IContours[] = []
       for (const rule of rules) {
-        if (rule.type !== PostProcessRuleType.Difference) continue
+        const isDifference = rule.type === PostProcessRuleType.Difference
+        const isRetainWhitespace = rule.type === PostProcessRuleType.DifferenceRetainWhitespace
+        if (!isDifference && !isRetainWhitespace) continue
         for (const targetUUID of (rule as any).targetComponentUUIDs || []) {
           if (postProcessTargetContourCache.has(targetUUID)) {
             targetContoursList.push(postProcessTargetContourCache.get(targetUUID)!)
@@ -260,6 +263,10 @@ export class ContourConverter {
             postProcessTargetContourCache.set(targetUUID, targetResult)
             targetContoursList.push(targetResult)
           }
+        }
+        // 差集留白：此处只收集目标轮廓，膨胀 + 差集在下方统一处理
+        if (isRetainWhitespace) {
+          postProcessTargetListCache.set(component.uuid, targetContoursList)
         }
       }
       if (targetContoursList.length > 0) {
@@ -598,6 +605,19 @@ export class ContourConverter {
             // 应用跨组件后处理规则（差集目标为当前字符/字形的兄弟组件）
             const targetContoursList = postProcessTargetListCache.get(component.uuid)
             if (targetContoursList && targetContoursList.length > 0 && glyphInstance) {
+              // 差集留白：合并目标轮廓后膨胀
+              const glyphValue = (component.value || (component as any).value) as ICustomGlyph
+              const hasRetainWhitespace = glyphValue?.postProcessRules?.some(
+                (r) => r.type === PostProcessRuleType.DifferenceRetainWhitespace,
+              )
+              let clipContoursList = targetContoursList
+              if (hasRetainWhitespace) {
+                const allTargetContours = targetContoursList.flat()
+                const united = contourUnite(allTargetContours)
+                const dilated = contourDilate(united, 30)
+                clipContoursList = dilated.map((c) => [c])
+              }
+
               for (const comp of glyphInstance._components) {
                 // 确保轮廓数据已生成
                 if (!comp.contour?.length && typeof comp.updateData === 'function') {
@@ -606,11 +626,9 @@ export class ContourConverter {
                 const compContour = (preview ? comp.preview : comp.contour) as IContour | undefined
                 if (!compContour?.length) continue
                 const diffResult = PostProcessEngine.applyDifferenceToContours(
-                  [compContour], targetContoursList,
+                  [compContour], clipContoursList,
                 )
                 if (diffResult.length > 0 && diffResult[0].length > 0) {
-                  // diffResult 是 IContours（数组），取第一个轮廓（面积最大的）
-                  // comp.contour 应为单个 IContour，与 updateData 输出格式一致
                   const resultContour = diffResult[0]
                   comp.contour = resultContour
                   comp.preview = resultContour

@@ -400,7 +400,9 @@ export class CustomGlyph implements IInstance {
     // 渲染脚本生成的组件（_components）
     if (this._glyph.skeleton?.type !== 'glyphSkeleton') {
     this._components.forEach((component: any) => {
-      if (component.render) {
+      if (component._postProcessed && component.contour?.length) {
+        this.drawEditContour(ctx, component.contour as IContour, offset, scale)
+      } else if (component.render) {
         component.render(canvas, {
           offset,
           scale: scale,
@@ -492,7 +494,9 @@ export class CustomGlyph implements IInstance {
         }
         const fillColorForComps = fontRenderStyle.value === 'black' ? '#000' : (fillColor || '#000')
         this._components.forEach((component: any) => {
-          if (component.render) {
+          if (component._postProcessed && component.contour?.length) {
+            this.drawEditContour(ctx, component.contour as IContour, offset, scale)
+          } else if (component.render) {
             component.render(canvas, { offset, scale, fillColor: fillColorForComps })
           }
         })
