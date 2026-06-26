@@ -35,6 +35,9 @@ function ensureStrokeGlyphs(file: any) {
 function ensureGlyphs(file: any) {
   if (!file.glyphs) file.glyphs = []
 }
+function ensureCompGlyphs(file: any) {
+  if (!file.comp_glyphs) file.comp_glyphs = []
+}
 
 function createBaseGlyph(name: string, style: string, script: string, parameters: IParameter[]): ICustomGlyph {
   return {
@@ -1149,6 +1152,50 @@ export async function importTemplateTest(): Promise<void> {
   editorStore.setEditStatus(EditStatus.StrokeGlyphList)
 }
 
+export async function importTemplateIcons(): Promise<void> {
+  const projectStore = useProjectStore()
+  const editorStore = useEditorStore()
+  const file = projectStore.selectedFile
+  if (!file) return
+  ensureCompGlyphs(file)
+
+  const iconNames = ['脸型', '发型1', '胸像', '头帘1'] as const
+
+  for (const name of iconNames) {
+    const uuid = genUUID()
+
+    // 从 src/templates/private/icons/ 导入参数定义
+    const paramsModule = await import(`@/templates/private/icons/${name}.js`)
+    const rawParams: Record<string, { name: string; default: number; min?: number; max?: number }> =
+      paramsModule.params || {}
+
+    const parameters: IParameter[] = Object.values(rawParams).map((p) => ({
+      uuid: genUUID(),
+      name: p.name,
+      type: ParameterType.Number,
+      value: p.default,
+      min: p.min ?? 0,
+      max: p.max === 0 ? 0 : (p.max ?? 1000),
+    }))
+
+    // 从 public/templates/private/icons/ 获取脚本
+    const res = await fetch(getScriptUrl(`/templates/private/icons/${name}.js`))
+    const scriptBody = await res.text()
+
+    const glyph = createBaseGlyph(
+      name,
+      '图标模板',
+      `function script_${uuid.replaceAll('-', '_')} (glyph, constants, FP) {\n\t${scriptBody}\n}`,
+      parameters,
+    )
+    glyph.uuid = uuid
+    file.comp_glyphs!.push(glyph)
+  }
+
+  projectStore.markFileUnsaved(file.uuid)
+  editorStore.setEditStatus(EditStatus.CompGlyphList)
+}
+
 export const templateHandlers: Record<string, () => Promise<void>> = {
   'template-2': importTemplate2,
   'template-3': importTemplate3,
@@ -1160,4 +1207,5 @@ export const templateHandlers: Record<string, () => Promise<void>> = {
   'template-letters': importTemplateLetters,
   'template-symbols': importTemplateSymbols,
   'template-test': importTemplateTest,
+  'template-icons': importTemplateIcons,
 }

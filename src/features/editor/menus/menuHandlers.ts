@@ -135,6 +135,7 @@ export function createDisabledRules(ctx: {
     'template-letters': templateEnable,
     'template-symbols': templateEnable,
     'template-test': templateEnable,
+    'template-icons': templateEnable,
 
     // tools
     'remove_overlap': enableAtEdit,

@@ -33,6 +33,7 @@ export function createTemplateMenuHandlers(ctx: MenuHandlerContext): MenuHandler
     'template-letters': () => runTemplate('template-letters'),
     'template-symbols': () => runTemplate('template-symbols'),
     'template-test': () => runTemplate('template-test'),
+    'template-icons': () => runTemplate('template-icons'),
   }
 }
 

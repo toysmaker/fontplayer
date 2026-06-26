@@ -8,7 +8,7 @@ const params = {
   w2: {
     name: 'w2',
     default: 100,
-    min: 100,
+    min: 10,
     max: 300,
   },
   w3: {

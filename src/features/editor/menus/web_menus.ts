@@ -334,6 +334,13 @@ const getWebMenu = (): Array<IMenu> => {
 					handlers['template-test']()
 				}
 			},
+			{
+				label: tm('menus.templates.icons'),
+				key: 'template-icons',
+				click: (handlers: IHandlerMap) => {
+					handlers['template-icons']()
+				}
+			},
 		]
 	},
 	{

@@ -65,6 +65,7 @@ const menus = {
 			letters: '字母模板',
 			symbols: '符号模板',
 			test: '测试模板',
+			icons: '图标模板',
 		},
 		tools: {
 			remove_overlap: '去除重叠',
@@ -139,6 +140,7 @@ const menus = {
 			letters: 'Letters Template',
 			symbols: 'Symbols Template',
 			test: 'Test Template',
+			icons: 'Icon Template',
 		},
 		tools: {
 			remove_overlap: 'remove_overlap',
