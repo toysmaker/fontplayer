@@ -152,6 +152,7 @@ export class CustomGlyph implements IInstance {
     scale: number,
   ): void {
     if (!contour.length) return
+    ctx.beginPath()
     if (import.meta.env.DEV) {
       console.log('[drawEditContour] offset=(' + offset.x + ',' + offset.y + ') scale=' + scale + ' contour=' + contour.length + '段 首点=(' + contour[0].start.x.toFixed(0) + ',' + contour[0].start.y.toFixed(0) + ') 调用栈:', new Error().stack)
     }
@@ -176,6 +177,7 @@ export class CustomGlyph implements IInstance {
       }
     }
     ctx.closePath()
+    ctx.stroke()
   }
 
   /**

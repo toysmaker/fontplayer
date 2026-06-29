@@ -16,7 +16,7 @@ import { PathType, type IContour, type IContours } from '../font/types'
 
 // ---------- 内部：IContour ↔ Paper.js Path ----------
 
-function contourToPaperPath(contour: IContour): paper.Path {
+export function contourToPaperPath(contour: IContour): paper.Path {
   const path = new paper.Path()
   if (contour.length === 0) return path
 
@@ -54,7 +54,7 @@ function contourToPaperPath(contour: IContour): paper.Path {
   return path
 }
 
-function paperPathToContour(path: paper.Path): IContour {
+export function paperPathToContour(path: paper.Path): IContour {
   const contour: IContour = []
   if (!path.curves || path.curves.length === 0) return contour
 
@@ -182,7 +182,9 @@ export function contourDilate(contours: IContours, distance: number): IContours 
   if (!contours.length) return []
   if (distance === 0) return contours.map((c) => [...c])
 
-  const absDist = Math.abs(distance)
+  // 多步小偏移：将大距离拆成多次小步，每次小偏移精度更高，累积误差远小于单次大偏移
+  const STEPS = 6
+  const stepDist = distance / STEPS
 
   try {
     // 1. 合并所有轮廓为一个 Paper.js compound path
@@ -202,7 +204,7 @@ export function contourDilate(contours: IContours, distance: number): IContours 
       return contours.map((c) => [...c])
     }
 
-    // 2. 提取所有子路径
+    // 2. 提取子路径、单步高精度偏移
     const subPaths: paper.Path[] = []
     const children = (combined as any).children
     if (children && children.length > 0) {
@@ -213,7 +215,6 @@ export function contourDilate(contours: IContours, distance: number): IContours 
       subPaths.push(combined)
     }
 
-    // 3. 克隆每条子路径后做顶点偏移（避免 flatten 破坏原路径）
     const offsetPaths: paper.Path[] = []
     for (const sp of subPaths) {
       const clone = sp.clone() as paper.Path
@@ -226,21 +227,21 @@ export function contourDilate(contours: IContours, distance: number): IContours 
       return contours.map((c) => [...c])
     }
 
-    // 4. 合并所有偏移后的路径
+    // 3. 合并偏移结果
     let merged: paper.PathItem = offsetPaths[0]
     for (let i = 1; i < offsetPaths.length; i++) {
       merged = merged.unite(offsetPaths[i]) as paper.PathItem
       offsetPaths[i].remove()
     }
 
-    // 5. 膨胀时与原形状 unite，确保膨胀区域为原形状的超集
+    // 4. 膨胀时与原形状 unite
     if (distance > 0) {
       merged = combined.unite(merged) as paper.PathItem
     } else {
       combined.remove()
     }
 
-    // 6. simplify 还原贝塞尔曲线
+    // 5. simplify
     const allResultPaths: paper.Path[] = []
     const resChildren = (merged as any).children
     if (resChildren && resChildren.length > 0) {
@@ -251,7 +252,7 @@ export function contourDilate(contours: IContours, distance: number): IContours 
       allResultPaths.push(merged)
     }
     for (const rp of allResultPaths) {
-      if (rp.curves.length > 0) rp.simplify(1.5)
+      if (rp.curves.length > 0) rp.simplify(4)
     }
 
     if (!merged || (merged as any).isEmpty?.()) {
@@ -282,7 +283,7 @@ function dilateSinglePath(path: paper.Path, distance: number): paper.Path | null
     path.reverse()
   }
 
-  // 高精度 flatten
+  // flatten 精度：每像素至少 0.5 个顶点，确保偏移后边界平滑
   const flatTolerance = 1.0
   path.flatten(flatTolerance)
 
@@ -392,10 +393,7 @@ function dilateSinglePath(path: paper.Path, distance: number): paper.Path | null
   if (import.meta.env.DEV) {
     // 用原始 clone 面积做对比（clone 已被 unite 消耗，这里用 approximate）
     console.log(
-      '[contourDilate] dilateSinglePath: vertices=%d distance=%d area %.0f',
-      vertices.length,
-      distance,
-      Math.abs(bestPath.area),
+      '[contourDilate] dilateSinglePath: vertices=' + vertices.length + ' distance=' + distance + ' area=' + Math.round(Math.abs(bestPath.area)),
     )
   }
 

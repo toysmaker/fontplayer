@@ -96,6 +96,7 @@ export class PostProcessEngine {
     }
 
     if (import.meta.env.DEV) {
+      console.log('[PostProcessEngine] allComponents列表:', allComponents.map((c: any) => c.name + ' uuid=' + c.uuid + ' ox=' + ((c as any).ox ?? 0) + ' oy=' + ((c as any).oy ?? 0)))
       console.log(
         '[PostProcessEngine] selfComp: name=%s x=%d y=%d ox=%d oy=%d → glyphOffset=(%d, %d) | glyphUuid=%s selfComponentUuid=%s',
         selfComp?.name || '(unknown)',
