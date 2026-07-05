@@ -213,6 +213,17 @@ setupI18n(app)
 // 注册 FontAwesome 全局组件
 app.component('font-awesome-icon', FontAwesomeIcon)
 
+// MARK-DEVTOOLS: 生产环境临时调试快捷键 Cmd+Shift+I，打包版也可打开 DevTools，日后删除
+document.addEventListener('keydown', async (e) => {
+  if (e.metaKey && e.shiftKey && e.key === 'I') {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('open_devtools_cmd')
+    } catch {}
+  }
+})
+// END-MARK-DEVTOOLS
+
 app.mount('#app')
 
 // ---- 全局修复 WKWebView 双击问题（macOS Tauri） ----

@@ -6,6 +6,7 @@
  */
 
 import type { ICharacterFileLite, ICustomGlyph, IComponent } from '../types'
+import { CustomGlyph } from './CustomGlyph'
 import type { IInstance } from './InstanceManager'
 
 export class Character implements IInstance {
@@ -113,6 +114,100 @@ export class Character implements IInstance {
    */
   getCharacter(): ICharacterFileLite {
     return this._character
+  }
+
+  /**
+   * 获取参数
+   */
+  getParam(name: string): number {
+    return null
+  }
+
+  /**
+   * 获取字形（通过 ID）
+   */
+  getGlyphByID(id: string): ICustomGlyph | null {
+    return null
+  }
+
+  /**
+   * 获取字形（通过外层组件名称）
+   */
+  getGlyphByComponentName(name: string): CustomGlyph | null {
+    return null
+  }
+
+  /**
+   * 获取字形（通过外层组件ID）
+   */
+  getGlyphByComponentID(id: string): CustomGlyph | null {
+    return null
+  }
+
+  /**
+   * 获取字形实例（通过字形名称）
+   */
+  getGlyphInstance(name: string): CustomGlyph | null {
+    return null
+  }
+
+  /**
+   * 获取字形实例（通过字形ID）
+   */
+  getGlyphInstanceByID(id: string): CustomGlyph | null {
+    return null
+  }
+
+  /**
+   * 获取字形实例（通过外层组件名称）
+   */
+  getGlyphInstanceByComponentName(name: string): CustomGlyph | null {
+    return null
+  }
+
+  /**
+   * 获取字形实例（通过外层组件ID）
+   */
+  getGlyphInstanceByComponentID(id: string): CustomGlyph | null {
+    return null
+  }
+
+  /**
+   * 清除所有组件
+   */
+  clearComponents(): void {
+  }
+
+  /**
+   * 移除组件（通过名称）
+   */
+  removeComponent(name: string): void {
+  }
+
+  /**
+   * 移除组件（通过 ID）
+   */
+  removeComponentByID(id: string): void {
+  }
+
+  /**
+   * 组件选择器（通过名称、ID、字形名称、字形ID），选择符合条件的所有组件
+   */
+  selectComponents(options: { name: string, id: string, glyphName: string, glyphID: string }): void {
+  }
+
+  /**
+   * 添加包含指定名称或id字形的组件，如果有多个满足条件的字形，选择第一个
+   * 参数：
+   * - componentName: 将要添加的组件名称
+   * - glyphName: 组件包含的字形名称
+   * - glyphID: 组件包含的字形ID
+   * - glyphStyleTag: 组件包含的字形样式标签
+   * - ox: 组件ox
+   * - oy: 组件oy
+   */
+  addGlyphComponent(options: { componentName: string, glyphName: string, glyphID: string, glyphStyleTag: string }): void {
+    return null
   }
 }
 

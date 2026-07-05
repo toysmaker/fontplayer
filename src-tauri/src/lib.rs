@@ -1048,6 +1048,13 @@ fn log_diagnostic(msg: String) {
     append_diag_log(&format!("[FRONTEND] {}", msg));
 }
 
+// MARK-DEVTOOLS: 临时调试命令，生产环境用 Cmd+Shift+I 打开 DevTools，日后删除
+#[tauri::command]
+fn open_devtools_cmd(window: tauri::WebviewWindow) {
+    window.as_ref().open_devtools();
+}
+// END-MARK-DEVTOOLS
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::new().build())
@@ -1168,7 +1175,8 @@ pub fn run() {
             save_project,
             write_file_chunk,
             read_keydata,
-            log_diagnostic
+            log_diagnostic,
+            open_devtools_cmd // MARK-DEVTOOLS: 临时调试命令，日后删除
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
