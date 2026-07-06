@@ -2,6 +2,7 @@ const programming = {
 	zh: {
 		'global-constants': '全局常量',
 		'glyph-parameters': '字形参数',
+		'character-parameters': '字符参数',
 		'glyph-layout': '字形布局',
 		'new-constant': '新建常量',
 		'new-parameter': '新建参数',
@@ -37,6 +38,7 @@ const programming = {
 	en: {
 		'global-constants': 'Global Constants',
 		'glyph-parameters': 'Glyph Parameters',
+		'character-parameters': 'Character Parameters',
 		'glyph-layout': 'Glyph Layout',
 		'new-constant': 'New Constant',
 		'new-parameter': 'New Parameter',

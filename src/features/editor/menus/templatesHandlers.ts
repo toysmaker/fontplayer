@@ -1159,7 +1159,7 @@ export async function importTemplateIcons(): Promise<void> {
   if (!file) return
   ensureCompGlyphs(file)
 
-  const iconNames = ['脸型', '发型1', '胸像', '头帘1', '花瓣1'] as const
+  const iconNames = ['脸型', '发型1', '胸像', '头帘1', '花瓣1', '可变换脸型'] as const
 
   for (const name of iconNames) {
     const uuid = genUUID()

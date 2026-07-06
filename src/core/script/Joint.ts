@@ -63,6 +63,14 @@ class Joint {
 		return this._y
 	}
 
+	set x (x: number) {
+		this._x = x
+	}
+	
+	set y (y: number) {
+		this._y = y
+	}
+
 	public getData = () => {
 		return {
 			_x: this._x,

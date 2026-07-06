@@ -355,6 +355,8 @@ export interface ICharacterFileLite {
   selectedComponentsUUIDs?: Array<string>
   script?: string
   glyph_script?: string
+  /** 字符自身参数（供字符脚本 character.getParam 使用） */
+  parameters?: IParameter[]
   contourRef?: string // IndexedDB key for contour data
   previewRef?: string // IndexedDB key for preview data
   /** 部件拆解（部分批量脚本依赖；可选） */

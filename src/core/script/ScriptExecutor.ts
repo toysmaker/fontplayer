@@ -3,9 +3,10 @@
  * 负责执行字形脚本，生成组件
  */
 
-import type { ICustomGlyph } from '../types'
+import type { ICustomGlyph, ICharacterFileLite } from '../types'
 import { instanceManager } from '../instance/InstanceManager'
 import { CustomGlyph } from '../instance/CustomGlyph'
+import { Character } from '../instance/Character'
 import { ConstantsMap } from './ConstantsMap'
 import { getGlobalConstantsMap } from './ParametersMap'
 import { useProjectStore } from '@/stores/project'
@@ -448,5 +449,106 @@ export function executeGlyphScript(
     instanceManager.unpinTemporaryFromLRUEviction(key)
     guard.delete(key)
     guard.delete(glyphUuidGuardKey)
+  }
+}
+
+// ==================== 字符脚本执行 ====================
+
+function getCharacterScript(character: ICharacterFileLite): string | null {
+  if (character.script) return character.script
+  return null
+}
+
+/**
+ * 执行字符脚本
+ *
+ * 字符脚本格式：function script_UUID(character, constants, FP) { body }
+ * 脚本通过 character.addGlyphComponent() 声明要使用的字形组件，
+ * 渲染管线会自动执行各字形组件的脚本。
+ *
+ * @param characterData  字符数据
+ * @param instanceKey    实例池 key（默认用 characterData.uuid）
+ */
+export function executeCharacterScript(
+  characterData: ICharacterFileLite,
+  instanceKey?: string,
+): void {
+  const script = getCharacterScript(characterData)
+  if (!script) return
+
+  const key = instanceKey || characterData.uuid
+
+  try {
+    instanceManager.pinTemporaryFromLRUEviction(key)
+
+    // 获取或创建 Character 实例
+    let characterInstance: Character | null = null
+    if (instanceManager.isTemporary(key)) {
+      characterInstance = instanceManager.acquireTemporaryInstance(
+        key,
+        () => new Character(characterData),
+        'character',
+      ) as Character
+    } else {
+      characterInstance = instanceManager.getInstance(key, () => new Character(characterData), 'character') as Character
+    }
+
+    if (!characterInstance) return
+
+    // 同步最新字符数据并清空脚本生成状态
+    characterInstance._character = characterData
+    characterInstance.clear()
+
+    // 设置窗口全局变量
+    const originalCharacter = (window as any).character
+    const originalConstantsMap = (window as any).constantsMap
+    const originalFP = (window as any).FP
+
+    const projectStore = useProjectStore()
+    const constantsMap = getGlobalConstantsMap() || projectStore.constantsMap || ConstantsMap.getInstance([])
+
+    ;(window as any).character = characterInstance
+    ;(window as any).constantsMap = constantsMap
+    ;(window as any).FP = FP
+
+    // 注入 selectedFile
+    const originalSelectedFile = selectedFile.value
+    selectedFile.value = projectStore.selectedFile
+
+    try {
+      const scriptFunctionName = `script_${characterData.uuid.replaceAll('-', '_')}`
+      const scriptCode = `${script}\n${scriptFunctionName}(character, constantsMap, FP)`
+      const fn = new Function(scriptCode)
+      fn()
+    } catch (scriptError) {
+      console.error(
+        `[ScriptExecutor] Error executing character script for "${characterData.character?.text || '?'}" (${characterData.uuid}):`,
+        scriptError,
+      )
+    } finally {
+      ;(window as any).character = originalCharacter
+      ;(window as any).constantsMap = originalConstantsMap
+      ;(window as any).FP = originalFP
+      if (originalSelectedFile !== undefined) {
+        selectedFile.value = originalSelectedFile
+      }
+    }
+
+    // 执行字符内所有 glyph 组件的脚本
+    for (const comp of characterData.components) {
+      if (comp.type === 'glyph' && comp.value) {
+        try {
+          executeGlyphScript(comp.value as ICustomGlyph, comp.uuid)
+        } catch (e) {
+          if (import.meta.env.DEV) {
+            console.warn(`[ScriptExecutor] sub-glyph script failed for ${(comp.value as any).name}:`, e)
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[ScriptExecutor] executeCharacterScript failed:', e)
+  } finally {
+    instanceManager.unpinTemporaryFromLRUEviction(key)
   }
 }

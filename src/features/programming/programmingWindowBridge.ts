@@ -5,7 +5,7 @@ import { useGlyphStore } from '@/stores/glyph'
 import { useCharacterStore } from '@/stores/character'
 import { useEditorStore } from '@/stores/editor'
 import { EditStatus } from '@/core/types'
-import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+import { executeGlyphScript, executeCharacterScript } from '@/core/script/ScriptExecutor'
 import { getGlyphParametersArray } from './glyphProgrammingUtils'
 
 let hasShowWindow = false
@@ -46,6 +46,9 @@ function applySyncFromPayload(payload: {
       glyphStore.editingGlyph.script = payload.__script
     }
   } else if (editorStore.editStatus === EditStatus.Edit && characterStore.editingCharacter) {
+    if (Array.isArray(payload.__parameters)) {
+      characterStore.editingCharacter.parameters = R.clone(payload.__parameters) as typeof characterStore.editingCharacter.parameters
+    }
     if (typeof payload.__script === 'string') {
       characterStore.editingCharacter.script = payload.__script
     }
@@ -86,13 +89,18 @@ async function handleWebPostMessage(e: MessageEvent) {
       glyphStore.editingGlyph.script = scriptStr
     } else if (
       editorStore.editStatus === EditStatus.Edit &&
-      characterStore.editingCharacter &&
-      scriptStr !== null
+      characterStore.editingCharacter
     ) {
-      characterStore.editingCharacter.script = scriptStr
+      if (parametersRaw) {
+        try { characterStore.editingCharacter.parameters = JSON.parse(parametersRaw) } catch { /* ignore */ }
+      }
+      if (scriptStr !== null) {
+        characterStore.editingCharacter.script = scriptStr
+      }
     }
   } else if (e.data === 'execute-script') {
     const glyphStore = useGlyphStore()
+    const characterStore = useCharacterStore()
     const editorStore = useEditorStore()
     const projectStore = useProjectStore()
     const file = projectStore.selectedFile
@@ -117,6 +125,23 @@ async function handleWebPostMessage(e: MessageEvent) {
       }
       executeGlyphScript(glyphStore.editingGlyph, glyphStore.editingGlyph.uuid)
       glyphStore.bumpProgrammingPreview()
+    } else if (editorStore.editStatus === EditStatus.Edit && characterStore.editingCharacter) {
+      try {
+        const constantsRaw = localStorage.getItem('constants')
+        const parametersRaw = localStorage.getItem('parameters')
+        const scriptStr = localStorage.getItem('script')
+        if (constantsRaw) {
+          projectStore.updateFile(file.uuid, { constants: JSON.parse(constantsRaw) })
+        }
+        if (parametersRaw) {
+          characterStore.editingCharacter.parameters = JSON.parse(parametersRaw)
+        }
+        if (scriptStr !== null) {
+          characterStore.editingCharacter.script = scriptStr
+        }
+      } catch { /* ignore */ }
+      executeCharacterScript(characterStore.editingCharacter, characterStore.editingCharacter.uuid)
+      characterStore.characterListVersion++
     }
   } else if (e.data === 'close-window') {
     onScriptWindowClose()
@@ -143,6 +168,7 @@ export async function setupProgrammingWindowBridge(): Promise<() => void> {
       if (editorStore.editStatus === EditStatus.Edit && characterStore.editingCharacter) {
         await emit('init-data', {
           __constants: R.clone(file.constants ?? []),
+          __parameters: R.clone(characterStore.editingCharacter.parameters ?? []),
           __script: characterStore.editingCharacter.script ?? '',
           __isWeb: false,
           __uuid: characterStore.editingCharacter.uuid,
@@ -173,10 +199,14 @@ export async function setupProgrammingWindowBridge(): Promise<() => void> {
 
     const u3 = await listen('execute-script', () => {
       const glyphStore = useGlyphStore()
+      const characterStore = useCharacterStore()
       const editorStore = useEditorStore()
       if (editorStore.editStatus === EditStatus.Glyph && glyphStore.editingGlyph) {
         executeGlyphScript(glyphStore.editingGlyph, glyphStore.editingGlyph.uuid)
         glyphStore.bumpProgrammingPreview()
+      } else if (editorStore.editStatus === EditStatus.Edit && characterStore.editingCharacter) {
+        executeCharacterScript(characterStore.editingCharacter, characterStore.editingCharacter.uuid)
+        characterStore.characterListVersion++
       }
     })
 
@@ -225,6 +255,7 @@ export async function openProgrammingWindow(): Promise<void> {
   if (getEnv() === 'web') {
     if (editorStore.editStatus === EditStatus.Edit && characterStore.editingCharacter) {
       window.__constants = R.clone(file.constants ?? [])
+      window.__parameters = R.clone(characterStore.editingCharacter.parameters ?? [])
       window.__uuid = characterStore.editingCharacter.uuid
       window.__script = characterStore.editingCharacter.script ?? ''
       window.__is_web = true

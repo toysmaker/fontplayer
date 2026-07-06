@@ -10,6 +10,7 @@ import { useProjectStore } from './project'
 import { useEditorStore } from './editor'
 import { instanceManager } from '@/core/instance'
 import { Character } from '@/core/instance/Character'
+import { executeCharacterScript } from '@/core/script/ScriptExecutor'
 import { selectedItemByUUID } from '@/core/utils/component'
 import { genUUID } from '@/utils/uuid'
 import * as R from 'ramda'
@@ -341,6 +342,11 @@ export const useCharacterStore = defineStore('character', () => {
     instanceManager.markEditing(uuid)
     // 获取或创建实例（延迟实例化）
     getCharacterInstance()
+
+    // 执行字符自身脚本（如有），脚本会通过 addGlyphComponent 声明字形组件
+    if (editingCharacter.value.script) {
+      executeCharacterScript(editingCharacter.value, editingCharacter.value.uuid)
+    }
 
     applyCharacterGlyphPlacementEditingMarks(editingCharacter.value.components)
   }

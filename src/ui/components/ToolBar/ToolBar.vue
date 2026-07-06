@@ -134,7 +134,7 @@
           @click="switchTool('params')"
           @pointerup="switchTool('params')"
           size="40"
-          v-show="editStatus === EditStatus.Glyph">
+          v-show="editStatus === EditStatus.Glyph || (editStatus === EditStatus.Edit && characterStore.editingCharacter?.script)">
           <font-awesome-icon
             :icon="['fas', 'sliders']"
           />

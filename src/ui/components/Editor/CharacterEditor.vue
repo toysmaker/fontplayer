@@ -103,6 +103,7 @@ import { useEditorStore } from '@/stores/editor'
 import { fontRenderStyle } from '@/core/script/globals'
 import { JointManager } from '@/features/tools/glyphDragger/core/JointManager'
 import { reexecuteAllGlyphScriptsInEditingCharacter } from '@/features/editor/globalParam/reexecuteCharacterGlyphScripts'
+import { executeCharacterScript } from '@/core/script/ScriptExecutor'
 import { rebuildCharacterListPreviewAfterExitEdit } from '@/features/editor/listPreview/rebuildListPreviewAfterEditorExit'
 import { skeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
@@ -591,6 +592,10 @@ onUnmounted(() => {
     // 离开前用已提交的全局常量重算顶层字形脚本，避免「未提交草稿」或仅局部重算导致的内存几何
     // 被写回列表/IDB，列表预览与再次进入时的参数不一致。
     const ch = (characterStore as any).editingCharacter as ICharacterFileLite | null
+    // 先执行字符脚本（生成字形组件），再执行字形脚本
+    if (ch?.script) {
+      executeCharacterScript(ch, ch.uuid)
+    }
     reexecuteAllGlyphScriptsInEditingCharacter(ch)
     ;(characterStore as any).updateCharacterListFromEditFile()
 

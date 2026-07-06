@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useDialog } from 'naive-ui'
 import {
   NTabs,
   NTabPane,
@@ -14,23 +15,34 @@ import {
   NCollapseItem,
   NIcon,
 } from 'naive-ui'
-import type { IConstant, IRingParameter } from '@/core/types'
+import type { IConstant, IParameter, IRingParameter } from '@/core/types'
 import { ParameterType } from '@/core/types'
 import { genUUID } from '@/utils/uuid'
 import { isTauri } from '@/utils/env'
 import { emit, listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { defaultCharacterScriptTemplate } from '@/features/programming/glyphProgrammingUtils'
+import { basicSetup, EditorView } from 'codemirror'
+import { javascript } from '@codemirror/lang-javascript'
+import { oneDark } from '@codemirror/theme-one-dark'
 
 const { t } = useI18n()
+const dialog = useDialog()
 
 const constants = ref<IConstant[]>([])
-/** 不在此页编辑脚本，同步回父窗口时始终带初始脚本 */
-const scriptSnapshot = ref('')
+const parameters = ref<IParameter[]>([])
+const script = ref('')
 const editMap = ref<Record<string, boolean>>({})
 const activeTab = ref('global-constants')
 
 let unlistenInit: (() => void) | null = null
 let unlistenClose: (() => void) | null = null
+
+const parameterOptions = [
+  { value: ParameterType.Number, key: 'number' },
+  { value: ParameterType.Constant, key: 'constant' },
+  { value: ParameterType.Enum, key: 'enum' },
+]
 
 const constantsOptions = [
   { value: ParameterType.Number, key: 'number' },
@@ -47,15 +59,49 @@ const constantsSelectOpts = computed(() =>
   constantsOptions.map((item) => ({ label: optLabel(item.key as ProgrammingTypeKey), value: item.value })),
 )
 
-function applyInitPayload(payload: { __constants: IConstant[]; __script: string; __uuid: string }) {
+const parameterSelectOpts = computed(() =>
+  parameterOptions.map((item) => ({ label: optLabel(item.key as ProgrammingTypeKey), value: item.value })),
+)
+
+let codeEditor: EditorView | null = null
+
+function mountEditor() {
+  const container = document.getElementById('codes-container')
+  if (!container || codeEditor) return
+  codeEditor = new EditorView({
+    doc: script.value || '',
+    extensions: [basicSetup, javascript(), oneDark, EditorView.updateListener.of((v) => {
+      if (v.docChanged) {
+        script.value = v.state.doc.toString()
+      }
+    })],
+    parent: container,
+  })
+}
+
+function teardownEditor() {
+  if (codeEditor) {
+    codeEditor.destroy()
+    codeEditor = null
+  }
+}
+
+function applyInitPayload(payload: {
+  __constants: IConstant[]
+  __parameters: IParameter[]
+  __script: string
+  __uuid: string
+}) {
   window.__uuid = payload.__uuid
   window.__constants = payload.__constants
+  window.__parameters = payload.__parameters
   window.__script = payload.__script
-  constants.value = payload.__constants
-  scriptSnapshot.value = payload.__script ?? ''
-  constants.value.forEach((c) => {
-    editMap.value[c.uuid] = false
-  })
+  constants.value = payload.__constants || []
+  parameters.value = payload.__parameters || []
+  script.value = payload.__script ?? ''
+  constants.value.forEach((c) => { editMap.value[c.uuid] = false })
+  parameters.value.forEach((p) => { editMap.value[p.uuid] = false })
+  mountEditor()
 }
 
 onMounted(async () => {
@@ -66,7 +112,12 @@ onMounted(async () => {
       unlistenInit = null
     })
     unlistenInit = await listen('init-data', (event) => {
-      const p = event.payload as { __constants: IConstant[]; __script: string; __uuid: string }
+      const p = event.payload as {
+        __constants: IConstant[]
+        __parameters: IParameter[]
+        __script: string
+        __uuid: string
+      }
       applyInitPayload(p)
     })
     await emit('on-webview-mounted')
@@ -79,51 +130,75 @@ onMounted(async () => {
 
     const op = window.opener as Window & typeof window
     constants.value = op.__constants ? [...op.__constants] : []
-    scriptSnapshot.value = op.__script ?? ''
+    parameters.value = op.__parameters ? [...op.__parameters] : []
+    script.value = op.__script ?? ''
     window.__uuid = op.__uuid
     window.__constants = constants.value
-    window.__script = scriptSnapshot.value
-    constants.value.forEach((c) => {
-      editMap.value[c.uuid] = false
-    })
+    window.__parameters = parameters.value
+    window.__script = script.value
+    constants.value.forEach((c) => { editMap.value[c.uuid] = false })
+    parameters.value.forEach((p) => { editMap.value[p.uuid] = false })
+    mountEditor()
   }
 })
 
 onUnmounted(() => {
+  teardownEditor()
   unlistenInit?.()
   unlistenClose?.()
   unlistenClose = null
 })
 
-watch(constants, syncInfo, { deep: true })
+watch([constants, parameters, script], syncInfo, { deep: true })
 
 async function syncInfo() {
   if (isTauri()) {
     await emit('sync-info', {
       __constants: constants.value,
-      __script: scriptSnapshot.value,
+      __parameters: parameters.value,
+      __script: script.value,
     })
   } else {
     localStorage.setItem('constants', JSON.stringify(constants.value))
-    localStorage.setItem('script', scriptSnapshot.value)
+    localStorage.setItem('parameters', JSON.stringify(parameters.value))
+    localStorage.setItem('script', script.value)
     window.opener?.postMessage('sync-info', location.origin)
   }
 }
 
-function toggleEdit(uuid: string, value: boolean) {
-  editMap.value[uuid] = value
+async function runExecute() {
+  if (isTauri()) {
+    await emit('execute-script')
+  } else {
+    window.opener?.postMessage('execute-script', location.origin)
+  }
 }
+
+function resetScript() {
+  dialog.warning({
+    title: t('programming.resetScriptTitle'),
+    content: t('programming.resetScriptConfirm'),
+    positiveText: t('dialogs.tipsDialog.confirm'),
+    negativeText: t('dialogs.tipsDialog.cancel'),
+    onPositiveClick: () => {
+      const uuid = window.__uuid || ''
+      script.value = defaultCharacterScriptTemplate(uuid)
+      if (codeEditor) {
+        codeEditor.dispatch({
+          changes: { from: 0, to: codeEditor.state.doc.length, insert: script.value },
+        })
+      }
+    },
+  })
+}
+
+// ============ Constants management ============
+
+function toggleEdit(uuid: string, value: boolean) { editMap.value[uuid] = value }
 
 function addConstant() {
   const uuid = genUUID()
-  constants.value.push({
-    uuid,
-    name: uuid.slice(0, 5),
-    value: 0,
-    type: ParameterType.Number,
-    min: 0,
-    max: 1000,
-  })
+  constants.value.push({ uuid, name: uuid.slice(0, 5), value: 0, type: ParameterType.Number, min: 0, max: 1000 })
 }
 
 function removeConstant(uuid: string) {
@@ -147,11 +222,35 @@ function sortUpConstant(uuid: string) {
   }
 }
 
-function addParam(ring: IRingParameter) {
-  ring.params.push({ name: '', min: 0, max: 1000, value: 500 })
+// ============ Parameters management ============
+
+function addParameter() {
+  const uuid = genUUID()
+  parameters.value.push({ uuid, name: uuid.slice(0, 5), type: ParameterType.Number, value: 0, min: 0, max: 1000 })
 }
 
-function onParamTypeChange(param: IConstant) {
+function removeParameter(uuid: string) {
+  const i = parameters.value.findIndex((p: IParameter) => p.uuid === uuid)
+  if (i !== -1) parameters.value.splice(i, 1)
+}
+
+function sortDownParameter(uuid: string) {
+  const i = parameters.value.findIndex((p: IParameter) => p.uuid === uuid)
+  if (i !== -1 && i < parameters.value.length - 1) {
+    const [item] = parameters.value.splice(i, 1)
+    parameters.value.splice(i + 1, 0, item)
+  }
+}
+
+function sortUpParameter(uuid: string) {
+  const i = parameters.value.findIndex((p: IParameter) => p.uuid === uuid)
+  if (i > 0) {
+    const [item] = parameters.value.splice(i, 1)
+    parameters.value.splice(i - 1, 0, item)
+  }
+}
+
+function onParamTypeChange(param: IConstant | IParameter) {
   if (param.type === ParameterType.Number) {
     param.value = 0
   } else if (param.type === ParameterType.Constant) {
@@ -168,15 +267,19 @@ function onParamTypeChange(param: IConstant) {
   }
 }
 
-function addOption(param: IConstant) {
+function addOption(param: IConstant | IParameter) {
   if (!param.options) param.options = []
   param.options.push({ label: '', value: 0 })
 }
 
-function removeOption(param: IConstant, option: { value: number }) {
+function removeOption(param: IConstant | IParameter, option: { value: number }) {
   if (!param.options) return
   const idx = param.options.findIndex((item) => item.value === option.value)
   if (idx !== -1) param.options.splice(idx, 1)
+}
+
+function addRingParam(param: IRingParameter) {
+  param.params.push({ name: '', min: 0, max: 1000, value: 500 })
 }
 </script>
 
@@ -184,6 +287,7 @@ function removeOption(param: IConstant, option: { value: number }) {
   <div class="glyph-programming-editor">
     <div class="left-panel">
       <n-tabs v-model:value="activeTab" class="prog-tabs" type="line">
+        <!-- Global Constants Tab -->
         <n-tab-pane :name="'global-constants'" :tab="t('programming.global-constants')">
           <div class="prog-pane-scroll">
             <n-form label-placement="left" :show-feedback="false" size="small" class="prog-left-form">
@@ -234,11 +338,7 @@ function removeOption(param: IConstant, option: { value: number }) {
                   <n-button class="add-option-button" block @pointerdown="addOption(parameter)">
                     {{ t('programming.new_enum_option') }}
                   </n-button>
-                  <div
-                    v-for="option in parameter.options || []"
-                    :key="`${parameter.uuid}-${option.value}`"
-                    class="option-item"
-                  >
+                  <div v-for="option in parameter.options || []" :key="`${parameter.uuid}-${option.value}`" class="option-item">
                     <n-form-item label="label" label-width="80" class="prog-form-item prog-form-item--label80">
                       <n-input v-model:value="option.label" class="option-name" />
                     </n-form-item>
@@ -265,25 +365,13 @@ function removeOption(param: IConstant, option: { value: number }) {
                       <n-input v-model:value="(parameter.value as unknown as IRingParameter).radius.name" class="parameter-value" />
                     </n-form-item>
                     <n-form-item label="value" label-width="42" class="prog-form-item">
-                      <n-input-number
-                        v-model:value="(parameter.value as unknown as IRingParameter).radius.value"
-                        class="parameter-value"
-                        :precision="2"
-                      />
+                      <n-input-number v-model:value="(parameter.value as unknown as IRingParameter).radius.value" class="parameter-value" :precision="2" />
                     </n-form-item>
                     <n-form-item label="min" label-width="42" class="prog-form-item">
-                      <n-input-number
-                        v-model:value="(parameter.value as unknown as IRingParameter).radius.min"
-                        class="parameter-value"
-                        :precision="2"
-                      />
+                      <n-input-number v-model:value="(parameter.value as unknown as IRingParameter).radius.min" class="parameter-value" :precision="2" />
                     </n-form-item>
                     <n-form-item label="max" label-width="42" class="prog-form-item">
-                      <n-input-number
-                        v-model:value="(parameter.value as unknown as IRingParameter).radius.max"
-                        class="parameter-value"
-                        :precision="2"
-                      />
+                      <n-input-number v-model:value="(parameter.value as unknown as IRingParameter).radius.max" class="parameter-value" :precision="2" />
                     </n-form-item>
                   </n-tab-pane>
                   <n-tab-pane :name="parameter.uuid + '-cde'" tab="degree">
@@ -291,29 +379,17 @@ function removeOption(param: IConstant, option: { value: number }) {
                       <n-input v-model:value="(parameter.value as unknown as IRingParameter).degree.name" class="parameter-value" />
                     </n-form-item>
                     <n-form-item label="value" label-width="42" class="prog-form-item">
-                      <n-input-number
-                        v-model:value="(parameter.value as unknown as IRingParameter).degree.value"
-                        class="parameter-value"
-                        :precision="2"
-                      />
+                      <n-input-number v-model:value="(parameter.value as unknown as IRingParameter).degree.value" class="parameter-value" :precision="2" />
                     </n-form-item>
                     <n-form-item label="min" label-width="42" class="prog-form-item">
-                      <n-input-number
-                        v-model:value="(parameter.value as unknown as IRingParameter).degree.min"
-                        class="parameter-value"
-                        :precision="2"
-                      />
+                      <n-input-number v-model:value="(parameter.value as unknown as IRingParameter).degree.min" class="parameter-value" :precision="2" />
                     </n-form-item>
                     <n-form-item label="max" label-width="42" class="prog-form-item">
-                      <n-input-number
-                        v-model:value="(parameter.value as unknown as IRingParameter).degree.max"
-                        class="parameter-value"
-                        :precision="2"
-                      />
+                      <n-input-number v-model:value="(parameter.value as unknown as IRingParameter).degree.max" class="parameter-value" :precision="2" />
                     </n-form-item>
                   </n-tab-pane>
                   <n-tab-pane :name="parameter.uuid + '-cpa'" tab="params">
-                    <n-button class="add-parameter-button" block @pointerdown="addParam(parameter.value as unknown as IRingParameter)">
+                    <n-button class="add-parameter-button" block @pointerdown="addRingParam(parameter.value as unknown as IRingParameter)">
                       {{ t('programming.new-parameter') }}
                     </n-button>
                     <n-collapse>
@@ -353,23 +429,102 @@ function removeOption(param: IConstant, option: { value: number }) {
             </n-form>
           </div>
         </n-tab-pane>
+
+        <!-- Parameters Tab -->
+        <n-tab-pane :name="'glyph-parameters'" :tab="t('programming.character-parameters')">
+          <div class="prog-pane-scroll">
+            <n-form label-placement="left" :show-feedback="false" size="small" class="prog-left-form">
+            <n-button class="add-constant-button" block @pointerdown="addParameter">
+              {{ t('programming.new-parameter') }}
+            </n-button>
+            <div v-for="param in parameters" :key="param.uuid" class="constant-item">
+              <div class="parameter-name">
+                <span v-show="!editMap[param.uuid]" class="parameter-name-label">{{ param.name }}</span>
+                <n-input
+                  v-show="editMap[param.uuid]"
+                  v-model:value="param.name"
+                  class="parameter-name-input"
+                  @keyup.enter="toggleEdit(param.uuid, false)"
+                />
+                <n-icon v-show="!editMap[param.uuid]" class="edit-icon" @pointerdown="toggleEdit(param.uuid, true)">
+                  <font-awesome-icon icon="fa-solid fa-pen-to-square" />
+                </n-icon>
+              </div>
+              <n-select
+                v-model:value="param.type"
+                class="parameter-type-select"
+                :placeholder="t('programming.type')"
+                :options="parameterSelectOpts"
+                @update:value="() => onParamTypeChange(param)"
+              />
+              <div v-if="param.type === ParameterType.Number" class="parameter-number-block">
+                <n-input-number v-model:value="param.value" class="parameter-value" :precision="2" />
+                <n-form-item label="min" label-width="42" class="prog-form-item">
+                  <n-input-number v-model:value="param.min" class="parameter-value" :precision="2" />
+                </n-form-item>
+                <n-form-item label="max" label-width="42" class="prog-form-item">
+                  <n-input-number v-model:value="param.max" class="parameter-value" :precision="2" />
+                </n-form-item>
+              </div>
+              <div v-else-if="param.type === ParameterType.Enum" class="enum-wrap">
+                <n-select
+                  v-model:value="param.value"
+                  class="parameter-const-select"
+                  :placeholder="t('programming.value')"
+                  :options="(param.options || []).map((o) => ({ label: o.label, value: o.value }))"
+                />
+                <div class="options-wrap">
+                  <n-button class="add-option-button" block @pointerdown="addOption(param)">
+                    {{ t('programming.new_enum_option') }}
+                  </n-button>
+                  <div v-for="option in param.options || []" :key="`${param.uuid}-${option.value}`" class="option-item">
+                    <n-form-item label="label" label-width="80" class="prog-form-item prog-form-item--label80">
+                      <n-input v-model:value="option.label" class="option-name" />
+                    </n-form-item>
+                    <n-form-item label="value" label-width="80" class="prog-form-item prog-form-item--label80">
+                      <n-input-number v-model:value="option.value" class="option-value" :precision="2" />
+                    </n-form-item>
+                    <n-icon class="option-remove-btn" @pointerdown="removeOption(param, option)">
+                      <font-awesome-icon icon="fa-solid fa-trash" />
+                    </n-icon>
+                  </div>
+                </div>
+              </div>
+              <n-select
+                v-else-if="param.type === ParameterType.Constant"
+                v-model:value="param.value"
+                class="parameter-const-select"
+                :placeholder="t('programming.value')"
+                :options="constants.map((item) => ({ label: item.name, value: item.uuid }))"
+              />
+              <n-icon class="sort-down-btn" @pointerdown="sortDownParameter(param.uuid)">
+                <font-awesome-icon icon="fa-solid fa-arrow-down" />
+              </n-icon>
+              <n-icon class="sort-up-btn" @pointerdown="sortUpParameter(param.uuid)">
+                <font-awesome-icon icon="fa-solid fa-arrow-up" />
+              </n-icon>
+              <n-icon class="remove-btn" @pointerdown="removeParameter(param.uuid)">
+                <font-awesome-icon icon="fa-solid fa-xmark" />
+              </n-icon>
+            </div>
+            </n-form>
+          </div>
+        </n-tab-pane>
       </n-tabs>
     </div>
+
+    <!-- Right Panel - Script Editor -->
     <div class="right-panel">
       <div class="codes-header">
         <div class="codes-title">{{ t('programming.script') }}</div>
-        <n-button class="reset-btn" disabled>
+        <n-button class="reset-btn" @pointerdown="resetScript">
           {{ t('programming.reset') }}
         </n-button>
-        <n-button type="primary" class="execute-btn" disabled>
+        <n-button type="primary" class="execute-btn" @pointerdown="runExecute">
           {{ t('programming.execute') }}
         </n-button>
       </div>
-      <div id="codes-container" class="codes-container-disabled">
-        <div class="codes-disabled-overlay">
-          {{ t('programming.characterScriptEditorDisabled') }}
-        </div>
-      </div>
+      <div id="codes-container" />
     </div>
   </div>
 </template>
@@ -401,27 +556,14 @@ function removeOption(param: IConstant, option: { value: number }) {
   margin-right: auto;
   font-weight: bold;
 }
-.codes-container-disabled {
+.right-panel .codes-header .execute-btn {
+  margin-left: 8px;
+}
+#codes-container {
   flex: 1;
   min-height: 0;
-  position: relative;
-  background-color: #282c34;
-  overflow-x: hidden;
-  overflow-y: auto;
-  pointer-events: none;
-}
-.codes-disabled-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  color: var(--light-2);
-  text-align: center;
+  overflow: auto;
   font-size: 14px;
-  line-height: 1.5;
-  background: rgba(0, 0, 0, 0.35);
 }
 </style>
 

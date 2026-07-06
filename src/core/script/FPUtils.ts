@@ -8,6 +8,7 @@ import { Character } from '../instance/Character'
 import { _fitCurve as fitCurve } from '../utils/fitCurve'
 import { bezierCurve, multiBezierCurve, IPoint } from '../utils/bezierCurve'
 import * as R from 'ramda'
+import * as PenComponentOps from './FPUtils/PenComponentOps'
 
 interface IGetContoursOption {
 	unticlockwise?: boolean;
@@ -2206,6 +2207,14 @@ const degreeToRadius = (degree) => {
 	return Math.PI * degree / 180
 }
 
+const degreeToRadian = (degree) => {
+	return Math.PI * degree / 180
+}
+
+const radianToDegree = (radian) => {
+	return radian * 180 / Math.PI
+}
+
 const radiusToDegree = (radius) => {
 	return radius * 180 / Math.PI
 }
@@ -2402,6 +2411,9 @@ const FP = {
 	getCurveContoursHorizontal,
 	getCurveContoursVertical,
 	getMiddlePoint,
+	degreeToRadian,
+	radianToDegree,
+	interpolateFromKeyframes: PenComponentOps.interpolateFromKeyframes,
 }
 
 const suggestion_items = [

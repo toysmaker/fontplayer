@@ -19,6 +19,7 @@ import PolygonEditPanel from './paramsEditPanels/PolygonEditPanel.vue'
 import PictureEditPanel from './paramsEditPanels/PictureEditPanel.vue'
 import GlyphEditPanel from './paramsEditPanels/GlyphEditPanel.vue'
 import GlyphParamsPanel from './paramsEditPanels/GlyphParamsPanel.vue'
+import CharacterParamsPanel from './paramsEditPanels/CharacterParamsPanel.vue'
 import MetricsEditPanel from './paramsEditPanels/MetricsEditPanel.vue'
 import LayoutGridEditPanel from './paramsEditPanels/LayoutGridEditPanel.vue'
 import PictureImportParamsPanel from './paramsEditPanels/PictureImportParamsPanel.vue'
@@ -50,6 +51,10 @@ if (import.meta.env.DEV) {
     />
     <layout-grid-edit-panel
       v-else-if="editStatus === EditStatus.Edit && tool === 'grid'"
+    />
+    <!-- 字符编辑 params 工具：显示字符参数面板 -->
+    <character-params-panel
+      v-else-if="editStatus === EditStatus.Edit && tool === 'params'"
     />
     <!-- 字形编辑 params 工具：显示字形参数面板（骨架绑定等） -->
     <glyph-params-panel

@@ -208,6 +208,10 @@ const panels = {
 				cancel: '取消',
 				rulesCount: '已配置 {count} 条规则',
 			},
+			characterParams: {
+				title: '字符参数',
+				noParams: '暂无参数',
+			},
 			formatComponent: {
 				title: '格式化组件',
 				button: '格式化字形组件',
@@ -561,6 +565,10 @@ const panels = {
 				apply: 'Apply',
 				cancel: 'Cancel',
 				rulesCount: '{count} rule(s) configured',
+			},
+			characterParams: {
+				title: 'Character Parameters',
+				noParams: 'No parameters available',
 			},
 			formatComponent: {
 				title: 'Format Component',
