@@ -41,6 +41,12 @@ const params = {
     min: -90,
     max: 90,
   },
+  rotation: {
+    name: '倾斜度',
+    default: 0,
+    min: -90,
+    max: 90,
+  }
 }
 
 export {

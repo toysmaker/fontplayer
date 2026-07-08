@@ -1,4 +1,8 @@
 import { PenComponent } from "../PenComponent";
+import paper from 'paper'
+import { genUUID } from '@/utils/uuid'
+import type { IContour } from '@/core/font/types'
+import { PathType } from '@/core/font/types'
 
 /**
  * 关键帧关节数据：可以是 Joint 实例数组或 key-value 对象
@@ -254,5 +258,399 @@ const interpolateFromKeyframes = (
 	return { component: resultComp, joints: resultJoints }
 }
 
-export { interpolateFromKeyframes }
+// ==================== 工具函数：PenComponent ↔ Contour ↔ Paper.Path ====================
+
+/**
+ * 将 PenComponent 的点数组转换为轮廓（IContour）
+ * PenComponent 点格式：[anchor0, ctrl1, ctrl2, anchor1, ctrl1, ctrl2, ...]
+ * 与 genPenContour 算法一致：每 3 个点组成一段三次贝塞尔曲线
+ */
+const penPointsToContour = (points: Array<{ x: number; y: number }>): IContour => {
+	const contour: IContour = []
+	for (let i = 0; i < points.length - 1; i += 3) {
+		if (i + 3 >= points.length) break
+		contour.push({
+			type: PathType.CUBIC_BEZIER as const,
+			start:  { x: points[i].x,     y: points[i].y },
+			end:    { x: points[i + 3].x, y: points[i + 3].y },
+			control1: { x: points[i + 1].x, y: points[i + 1].y },
+			control2: { x: points[i + 2].x, y: points[i + 2].y },
+		})
+	}
+	return contour
+}
+
+/**
+ * 将轮廓转换为 Paper.js Path
+ */
+const contourToPaperPath = (contour: IContour): paper.Path => {
+	const path = new paper.Path()
+	if (contour.length === 0) return path
+
+	const seg0 = contour[0]
+	path.moveTo(new paper.Point(seg0.start.x, seg0.start.y))
+	let lastX = seg0.start.x
+	let lastY = seg0.start.y
+
+	for (const segment of contour) {
+		if (segment.type === PathType.LINE) {
+			path.lineTo(new paper.Point(segment.end.x, segment.end.y))
+			lastX = segment.end.x
+			lastY = segment.end.y
+		} else if (segment.type === PathType.CUBIC_BEZIER) {
+			path.cubicCurveTo(
+				new paper.Point(segment.control1.x, segment.control1.y),
+				new paper.Point(segment.control2.x, segment.control2.y),
+				new paper.Point(segment.end.x, segment.end.y),
+			)
+			lastX = segment.end.x
+			lastY = segment.end.y
+		} else if (segment.type === PathType.QUADRATIC_BEZIER) {
+			const startPt = new paper.Point(lastX, lastY)
+			const control = new paper.Point(segment.control.x, segment.control.y)
+			const endPt = new paper.Point(segment.end.x, segment.end.y)
+			const c1 = startPt.multiply(1 / 3).add(control.multiply(2 / 3))
+			const c2 = endPt.multiply(1 / 3).add(control.multiply(2 / 3))
+			path.cubicCurveTo(c1, c2, endPt)
+			lastX = segment.end.x
+			lastY = segment.end.y
+		}
+	}
+
+	path.closePath()
+	return path
+}
+
+/**
+ * 将 Paper.js Path 转换为轮廓（IContour）
+ */
+const paperPathToContour = (path: paper.Path): IContour => {
+	const contour: IContour = []
+	if (!path.curves || path.curves.length === 0) return contour
+
+	for (const curve of path.curves) {
+		const p0 = curve.point1
+		const p1 = p0.add(curve.handle1)
+		const p2 = curve.point2.add(curve.handle2)
+		const p3 = curve.point2
+
+		contour.push({
+			type: PathType.CUBIC_BEZIER as const,
+			start: { x: p0.x, y: p0.y },
+			control1: { x: p1.x, y: p1.y },
+			control2: { x: p2.x, y: p2.y },
+			end: { x: p3.x, y: p3.y },
+		})
+	}
+
+	return contour
+}
+
+/**
+ * 将轮廓转换回 PenComponent 的点数组
+ * 轮廓格式：[{start, control1, control2, end}, ...]
+ * 输出格式：[anchor0, ctrl1_0, ctrl2_0, anchor1, ctrl1_1, ctrl2_1, ...]
+ * 对于闭合路径，最后一个 anchor 等于第一个 anchor
+ */
+const contourToPenPoints = (
+	contour: IContour,
+): Array<{ uuid: string; type: string; x: number; y: number; origin: string | null }> => {
+	const points: Array<{ uuid: string; type: string; x: number; y: number; origin: string | null }> = []
+
+	if (contour.length === 0) return points
+
+	// 第一个锚点
+	const firstAnchorUuid = genUUID()
+	points.push({
+		uuid: firstAnchorUuid,
+		type: 'anchor',
+		x: contour[0].start.x,
+		y: contour[0].start.y,
+		origin: null,
+	})
+
+	for (let i = 0; i < contour.length; i++) {
+		const seg = contour[i]
+		const anchorUuid = genUUID()
+
+		// control1 — origin 指向前一个锚点
+		points.push({
+			uuid: genUUID(),
+			type: 'control',
+			x: ('control1' in seg ? seg.control1.x : seg.start.x),
+			y: ('control1' in seg ? seg.control1.y : seg.start.y),
+			origin: points[points.length - 1].uuid,
+		})
+
+		// control2 — origin 指向当前段的目标锚点
+		points.push({
+			uuid: genUUID(),
+			type: 'control',
+			x: ('control2' in seg ? seg.control2.x : seg.end.x),
+			y: ('control2' in seg ? seg.control2.y : seg.end.y),
+			origin: anchorUuid,
+		})
+
+		// 锚点
+		points.push({
+			uuid: anchorUuid,
+			type: 'anchor',
+			x: seg.end.x,
+			y: seg.end.y,
+			origin: null,
+		})
+	}
+
+	// 对于闭合路径，最后一个锚点应与第一个锚点坐标一致
+	if (points.length >= 4) {
+		const first = points[0]
+		const last = points[points.length - 1]
+		if (Math.abs(last.x - first.x) < 0.001 && Math.abs(last.y - first.y) < 0.001) {
+			// 移除最后一个重复的锚点及其前面的两个控制点
+			// 因为 genPenContour 期望 [a0, c1, c2, a1, c1, c2, a2, ...] 最后锚点不应重复
+			points.pop() // anchor
+			points.pop() // control2
+			points.pop() // control1
+		}
+	}
+
+	return points
+}
+
+/**
+ * 将 PenComponent 转换为 Paper.js Path
+ */
+const penComponentToPaperPath = (pen: PenComponent): paper.Path => {
+	const contour = penPointsToContour(pen.points)
+	return contourToPaperPath(contour)
+}
+
+/**
+ * 将 Paper.js 布尔运算结果转换为新的 PenComponent
+ * 若结果为 CompoundPath，取面积最大的子路径
+ */
+const paperResultToPenComponent = (result: paper.PathItem): PenComponent | null => {
+	if (!result || (result as any).isEmpty?.()) return null
+
+	// 处理 CompoundPath：找到面积最大的子路径
+	const children = (result as any).children
+	let bestPath: paper.Path | null = null
+	let maxArea = -Infinity
+
+	if (children && children.length > 0) {
+		for (const child of children) {
+			if (child instanceof paper.Path && child.curves && child.curves.length > 0) {
+				const area = Math.abs((child as any).area ?? 0)
+				if (area > maxArea) {
+					maxArea = area
+					bestPath = child
+				}
+			}
+		}
+	} else if (result instanceof paper.Path && result.curves && result.curves.length > 0) {
+		bestPath = result
+	}
+
+	if (!bestPath || bestPath.curves.length === 0) return null
+
+	const contour = paperPathToContour(bestPath)
+	const points = contourToPenPoints(contour)
+
+	if (points.length < 4) return null
+
+	const comp = new PenComponent()
+	comp.points = points
+	comp.isClosed = true
+	// 清除计算缓存
+	comp.contour = []
+	comp.preview = []
+
+	return comp
+}
+
+/**
+ * 布尔运算通用执行函数
+ */
+const executeBooleanOp = (
+	pen1: PenComponent,
+	pen2: PenComponent,
+	operation: 'unite' | 'intersect' | 'subtract',
+): PenComponent | null => {
+	if (!pen1 || !pen1.points || pen1.points.length < 4) {
+		if (import.meta.env.DEV) {
+			console.warn(`[PenComponentOps] ${operation}: pen1 has insufficient points`)
+		}
+		return null
+	}
+	if (!pen2 || !pen2.points || pen2.points.length < 4) {
+		if (import.meta.env.DEV) {
+			console.warn(`[PenComponentOps] ${operation}: pen2 has insufficient points`)
+		}
+		return null
+	}
+
+	try {
+		const path1 = penComponentToPaperPath(pen1)
+		const path2 = penComponentToPaperPath(pen2)
+
+		let result: paper.PathItem
+		if (operation === 'unite') {
+			result = path1.unite(path2) as paper.PathItem
+		} else if (operation === 'intersect') {
+			result = path1.intersect(path2) as paper.PathItem
+		} else {
+			result = path1.subtract(path2) as paper.PathItem
+		}
+
+		// 清理临时 paper 路径
+		path1.remove()
+		path2.remove()
+
+		const penResult = paperResultToPenComponent(result)
+
+		// 清理结果 paper 路径
+		if (result) result.remove()
+
+		if (!penResult) {
+			if (import.meta.env.DEV) {
+				console.warn(`[PenComponentOps] ${operation}: boolean operation produced empty result`)
+			}
+			return null
+		}
+
+		if (import.meta.env.DEV) {
+			console.log(
+				`[PenComponentOps] ${operation}: pen1(${pen1.points.length}pts) + pen2(${pen2.points.length}pts) → result(${penResult.points.length}pts)`,
+			)
+		}
+
+		return penResult
+	} catch (e) {
+		if (import.meta.env.DEV) {
+			console.error(`[PenComponentOps] ${operation} failed:`, e)
+		}
+		return null
+	}
+}
+
+// ==================== 公开方法 ====================
+
+/**
+ * 对钢笔组件进行旋转变换
+ * 围绕指定中心点旋转给定的角度（单位为度，360°制），返回旋转后的新组件
+ *
+ * @param pen - 要旋转的钢笔组件
+ * @param angle - 旋转角度（度），正值顺时针旋转
+ * @param center - 旋转中心点
+ * @returns 旋转后的新 PenComponent
+ */
+const rotatePenComponent = (
+	pen: PenComponent,
+	angle: number,
+	center: { x: number; y: number },
+): PenComponent => {
+	const comp = new PenComponent()
+	comp.setData(pen.getData())
+
+	const angleRad = (angle * Math.PI) / 180
+	const cosA = Math.cos(angleRad)
+	const sinA = Math.sin(angleRad)
+
+	for (let i = 0; i < comp.points.length; i++) {
+		const dx = comp.points[i].x - center.x
+		const dy = comp.points[i].y - center.y
+		comp.points[i] = {
+			...comp.points[i],
+			x: center.x + dx * cosA - dy * sinA,
+			y: center.y + dx * sinA + dy * cosA,
+		}
+	}
+
+	// 清除计算缓存
+	comp.contour = []
+	comp.preview = []
+
+	if (import.meta.env.DEV) {
+		console.log(
+			`[PenComponentOps] rotate: angle=${angle}°, center=(${center.x},${center.y}), points=${comp.points.length}`,
+		)
+	}
+
+	return comp
+}
+
+/**
+ * 布尔差集运算：pen1 - pen2
+ * 从 pen1 中减去 pen2 的区域，返回结果中面积最大的部分
+ *
+ * @param pen1 - 被减钢笔组件
+ * @param pen2 - 减去区域钢笔组件
+ * @returns 差集运算后的新 PenComponent，结果为空时返回 null
+ */
+const subtractOp = (pen1: PenComponent, pen2: PenComponent): PenComponent | null => {
+	return executeBooleanOp(pen1, pen2, 'subtract')
+}
+
+/**
+ * 布尔交集运算：pen1 ∩ pen2
+ * 取 pen1 和 pen2 重叠的区域
+ *
+ * @param pen1 - 第一个钢笔组件
+ * @param pen2 - 第二个钢笔组件
+ * @returns 交集运算后的新 PenComponent，结果为空时返回 null
+ */
+const intersectOp = (pen1: PenComponent, pen2: PenComponent): PenComponent | null => {
+	return executeBooleanOp(pen1, pen2, 'intersect')
+}
+
+/**
+ * 布尔并集运算：pen1 ∪ pen2
+ * 合并 pen1 和 pen2 的区域
+ *
+ * @param pen1 - 第一个钢笔组件
+ * @param pen2 - 第二个钢笔组件
+ * @returns 并集运算后的新 PenComponent，结果为空时返回 null
+ */
+const unionOp = (pen1: PenComponent, pen2: PenComponent): PenComponent | null => {
+	return executeBooleanOp(pen1, pen2, 'unite')
+}
+
+/**
+ * 对骨架（关节数组）进行旋转变换
+ * 围绕指定中心点旋转给定角度（度，360°制），返回旋转后的新关节数组
+ *
+ * @param skeleton - 关节数组，每项包含 name、x、y
+ * @param angle - 旋转角度（度），正值顺时针旋转
+ * @param center - 旋转中心点
+ * @returns 旋转后的新关节数组
+ */
+const rotateSkeleton = (
+	skeleton: Array<{ name: string; x: number; y: number }>,
+	angle: number,
+	center: { x: number; y: number },
+): Array<{ name: string; x: number; y: number }> => {
+	const angleRad = (angle * Math.PI) / 180
+	const cosA = Math.cos(angleRad)
+	const sinA = Math.sin(angleRad)
+
+	const result = skeleton.map((joint) => {
+		const dx = joint.x - center.x
+		const dy = joint.y - center.y
+		return {
+			name: joint.name,
+			x: center.x + dx * cosA - dy * sinA,
+			y: center.y + dx * sinA + dy * cosA,
+		}
+	})
+
+	if (import.meta.env.DEV) {
+		console.log(
+			`[PenComponentOps] rotateSkeleton: angle=${angle}°, center=(${center.x},${center.y}), joints=${result.length}`,
+		)
+	}
+
+	return result
+}
+
+export { interpolateFromKeyframes, rotatePenComponent, rotateSkeleton, subtractOp, intersectOp, unionOp }
 export type { IKeyframe, IInterpolationResult, JointData }

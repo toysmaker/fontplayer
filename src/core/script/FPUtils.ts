@@ -2414,6 +2414,11 @@ const FP = {
 	degreeToRadian,
 	radianToDegree,
 	interpolateFromKeyframes: PenComponentOps.interpolateFromKeyframes,
+	rotatePenComponent: PenComponentOps.rotatePenComponent,
+	rotateSkeleton: PenComponentOps.rotateSkeleton,
+	subtractOp: PenComponentOps.subtractOp,
+	intersectOp: PenComponentOps.intersectOp,
+	unionOp: PenComponentOps.unionOp,
 }
 
 const suggestion_items = [
@@ -2483,6 +2488,30 @@ const suggestion_items = [
 	},
 	{
 		item: 'getComponent',
+		type: 'method',
+	},
+	{
+		item: 'interpolateFromKeyframes',
+		type: 'method',
+	},
+	{
+		item: 'rotatePenComponent',
+		type: 'method',
+	},
+	{
+		item: 'rotateSkeleton',
+		type: 'method',
+	},
+	{
+		item: 'subtractOp',
+		type: 'method',
+	},
+	{
+		item: 'intersectOp',
+		type: 'method',
+	},
+	{
+		item: 'unionOp',
 		type: 'method',
 	},
 ]
