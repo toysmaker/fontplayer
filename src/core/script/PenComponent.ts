@@ -7,6 +7,7 @@ import { computeCoords } from '../utils/grid'
 import { fontRenderStyle, selectedFile } from './globals'
 import { getStrokeWidth } from '@/utils/canvas-utils'
 import * as R from 'ramda'
+import { FP } from './FPUtils'
 
 interface IOption {
 	offset?: {
@@ -123,6 +124,21 @@ class PenComponent {
         y: y2,
         origin: null,
 			})
+		}
+	}
+
+	public smooth (points, options: { curvature: number }) {
+		let { curvature = 0 } = options
+		if (curvature > 0.5) curvature = 0
+		this.lineTo(points[0].x, points[0].y)
+		for (let i = 0; i < points.length - 2; i++) {
+			if (curvature === 0) {
+				this.quadraticBezierTo(points[i + 1].x, points[i + 1].y, points[i + 2].x, points[i + 2].y)
+			} else {
+				const control1 = FP.getPointOnLine(points[i], points[i + 1], curvature)
+				const control2 = FP.getPointOnLine(points[i + 1], points[i + 2], curvature)
+				this.bezierTo(control1.x, control1.y, control2.x, control2.y, points[i + 2].x, points[i + 2].y)
+			}
 		}
 	}
 

@@ -32,7 +32,7 @@ function parseEncryptedHeader(buffer: ArrayBuffer): EncryptedFileHeader {
     throw new Error(`Encrypted FP: unsupported version ${version}`)
   }
 
-  const encType = u8[o]!
+  const encType = u8[o]
   o += 1
   if (encType !== ENCRYPTION_TYPE_RSA_AES_GCM) {
     throw new Error(`Encrypted FP: unknown encryption type ${encType}`)
@@ -62,6 +62,10 @@ export async function encryptFile(
   plaintext: ArrayBuffer,
   publicKey: CryptoKey,
 ): Promise<ArrayBuffer> {
+  // 大 buffer 加密前 yield 给主线程呼吸，防止 WKWebView 中 crypto.subtle 阻塞 UI
+  if (plaintext.byteLength > 50 * 1024 * 1024) {
+    await new Promise(resolve => setTimeout(resolve, 0))
+  }
   const aesKey = await crypto.subtle.generateKey(AES_ALGORITHM, true, ['encrypt'])
   const iv = crypto.getRandomValues(new Uint8Array(12))
 
@@ -82,7 +86,7 @@ export async function encryptFile(
   const dv = new DataView(out.buffer)
 
   let w = 0
-  for (let i = 0; i < 4; i++) out[w++] = FP_ENCRYPTED_MAGIC[i]!
+  for (let i = 0; i < 4; i++) out[w++] = FP_ENCRYPTED_MAGIC[i]
   dv.setUint32(w, FP_ENCRYPTED_VERSION, true)
   w += 4
   out[w++] = ENCRYPTION_TYPE_RSA_AES_GCM

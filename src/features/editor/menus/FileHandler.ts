@@ -718,6 +718,15 @@ export class FileHandler {
     filePath: string,
     onCharacterProgress?: (index: number) => void,
   ): Promise<void> {
+    const t0 = performance.now()
+    const log = async (msg: string) => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke('log_diagnostic', { msg: `[SAVE] ${msg}` })
+      } catch {}
+    }
+    await log(`start save, chars=${file.characterList?.length || 0} path=${filePath}`)
+
     const { open, remove, writeFile, mkdir } = await import('@tauri-apps/plugin-fs')
     const { join, appLocalDataDir } = await import('@tauri-apps/api/path')
     const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
@@ -762,6 +771,10 @@ export class FileHandler {
         const json = JSON.stringify(stripped)
         const gz = await gzipCompressBytes(new TextEncoder().encode(json))
         const written = await payloadOut.write(gz)
+        // 每 50 个字符 yield 一次，防止事件队列饿死
+        if (i % 50 === 49) {
+          await new Promise(resolve => setTimeout(resolve, 0))
+        }
         if (written !== gz.byteLength) {
           throw new Error(`FP streaming save: short write on payload (${written}/${gz.byteLength})`)
         }
@@ -775,13 +788,17 @@ export class FileHandler {
       await payloadOut.close()
       payloadOut = null
 
+      await log(`payload done: ${list.length} chars, ${((performance.now() - t0) / 1000).toFixed(1)}s elapsed`)
+
       const toc = buildFpTocEntries(tocMeta, compressedLengths)
       const prefix = encodeFpHeaderTocPrefix(headerWrap, toc)
       const glyphGzip = await gzipCompressBytes(new TextEncoder().encode(glyphBundleJson))
 
       // Read temp payload file and assemble full FP binary
       const { readFile } = await import('@tauri-apps/plugin-fs')
+      const tRead = performance.now()
       const payloadBytes = await readFile(payloadTempPath)
+      await log(`read payload: ${(payloadBytes.length / 1024 / 1024).toFixed(1)}MB, ${((performance.now() - tRead) / 1000).toFixed(1)}s`)
 
       const totalLen = prefix.length + payloadBytes.length + glyphGzip.length
       const fullFp = new Uint8Array(totalLen)
@@ -789,10 +806,17 @@ export class FileHandler {
       fullFp.set(payloadBytes, prefix.length)
       fullFp.set(glyphGzip, prefix.length + payloadBytes.length)
 
-      // Encrypt and write
+      // Encrypt and write — yield before heavy crypto to prevent main thread beachball
+      await new Promise(resolve => setTimeout(resolve, 0))
       const publicKey = await getPublicKey()
+      const tEncrypt = performance.now()
+      await log(`encrypt start: ${(fullFp.length / 1024 / 1024).toFixed(1)}MB`)
       const encrypted = await encryptFile(fullFp.buffer, publicKey)
+      await log(`encrypt done: ${((performance.now() - tEncrypt) / 1000).toFixed(1)}s`)
+      await new Promise(resolve => setTimeout(resolve, 0))
+      const tWrite = performance.now()
       await writeFile(filePath, new Uint8Array(encrypted))
+      await log(`write done: ${((performance.now() - tWrite) / 1000).toFixed(1)}s, total: ${((performance.now() - t0) / 1000).toFixed(1)}s`)
     } finally {
       if (payloadOut) {
         try {

@@ -58,23 +58,11 @@ function readU64(dv: DataView, o: number): bigint {
   return BigInt(lo) + (BigInt(hi) << 32n)
 }
 
+import { gzipSync } from 'fflate'
+
+/** 使用 fflate 纯 JS 实现，避免 WKWebView 的 CompressionStream 死锁导致保存卡死 */
 export async function gzipCompressBytes(input: Uint8Array): Promise<Uint8Array> {
-  const Ctor = (globalThis as unknown as { CompressionStream?: new (f: string) => object }).CompressionStream
-  // lib.dom 的 BlobPart 将 Uint8Array 收窄为 ArrayBuffer backing；运行时 Blob 接受任意 TypedArray
-  const blob =
-    typeof Blob !== 'undefined' ? new Blob([input as unknown as BlobPart]) : null
-  if (Ctor && blob && typeof blob.stream === 'function') {
-    const cs = new Ctor('gzip') as TransformStream<Uint8Array, Uint8Array>
-    const stream = blob.stream().pipeThrough(cs)
-    return new Uint8Array(await new Response(stream).arrayBuffer())
-  }
-  // Vitest/jsdom: no Blob.stream — use Node zlib (dead code in Vite browser bundle).
-  if (typeof process !== 'undefined' && process.versions?.node) {
-    const { gzipSync } = await import(/* @vite-ignore */ 'node:zlib')
-    const { Buffer } = await import(/* @vite-ignore */ 'node:buffer')
-    return new Uint8Array(gzipSync(Buffer.from(input.buffer, input.byteOffset, input.byteLength), { level: 9 }))
-  }
-  throw new Error('FP: gzip encode not available')
+  return gzipSync(input, { level: 9 })
 }
 
 /** End of character payload section (exclusive); bytes [end, buffer.length) may be glyph gzip */
