@@ -2372,6 +2372,25 @@ const getMiddlePoint = (p1, p2) => {
 	}
 }
 
+const getControlPoint = (start, end, ratio, length) => {
+	const p1 = FP.getPointOnLine(start, end, ratio * FP.distance(start, end))
+	const p2 = FP.turnLeft(start, p1, length)
+	return p2
+}
+
+const getPointOnCurveByPercentage = (curve, percentage) => {
+	const points = getCurvesPoints(curve)
+	const index = Math.floor(percentage * points.length)
+	const point = points[index]
+	const curve1 = fitCurvesByPoints(points.slice(0, index))
+	const curve2 = fitCurvesByPoints(points.slice(index))
+	return {
+		point,
+		curve1: curve1?.curves || [],
+		curve2: curve2?.curves || [],
+	}
+}
+
 const FP = {
 	EllipseComponent,
 	PenComponent,
@@ -2397,6 +2416,7 @@ const FP = {
 	turnAngle,
 	getPointOnLine,
 	getPointOnLineByPercentage,
+	getPointOnCurveByPercentage,
 	isPointOnLineSegment,
 	turnAngleFromStart,
 	turnAngleFromEnd,
@@ -2419,6 +2439,7 @@ const FP = {
 	subtractOp: PenComponentOps.subtractOp,
 	intersectOp: PenComponentOps.intersectOp,
 	unionOp: PenComponentOps.unionOp,
+	getControlPoint,
 }
 
 const suggestion_items = [

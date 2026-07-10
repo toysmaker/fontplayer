@@ -1159,15 +1159,48 @@ export async function importTemplateIcons(): Promise<void> {
   if (!file) return
   ensureCompGlyphs(file)
 
-  const iconNames = ['脸型', '发型1', '胸像', '头帘1', '花瓣1', '可变换脸型'] as const
+  // 硬编码的已有图标名称
+  const hardcodedIconNames = ['脸型', '发型1', '胸像', '头帘1', '花瓣1', '可变换脸型']
+
+  // 从 src/templates/private/icons_v1/ 动态发现 v1 图标参数文件
+  const v1IconModules = import.meta.glob<{
+    params: Record<string, { name: string; default: number; min?: number; max?: number }>
+  }>('/src/templates/private/icons_v1/*.ts')
+  const v1IconNames = Object.keys(v1IconModules).map((path) => {
+    const fileName = path.split('/').pop()!
+    return fileName.replace(/\.ts$/, '')
+  })
+
+  if (import.meta.env.DEV) {
+    console.log(
+      `[importTemplateIcons] Discovered ${v1IconNames.length} v1 icon(s):`,
+      v1IconNames,
+    )
+  }
+
+  // 合并所有图标名称
+  const iconNames = [...hardcodedIconNames, ...v1IconNames]
 
   for (const name of iconNames) {
     const uuid = genUUID()
+    const isV1 = v1IconNames.includes(name)
 
-    // 从 src/templates/private/icons/ 导入参数定义
-    const paramsModule = await import(`@/templates/private/icons/${name}.js`)
-    const rawParams: Record<string, { name: string; default: number; min?: number; max?: number }> =
-      paramsModule.params || {}
+    // 获取参数定义（v1 用 glob 导入，已有图标用动态 import）
+    let rawParams: Record<string, { name: string; default: number; min?: number; max?: number }>
+    if (isV1) {
+      const modulePath = Object.keys(v1IconModules).find((p) => p.endsWith(`/${name}.ts`))
+      if (!modulePath) {
+        if (import.meta.env.DEV) {
+          console.warn(`[importTemplateIcons] v1 module not found for: ${name}`)
+        }
+        continue
+      }
+      const paramsModule = await v1IconModules[modulePath]()
+      rawParams = paramsModule.params || {}
+    } else {
+      const paramsModule = await import(`@/templates/private/icons/${name}.ts`)
+      rawParams = paramsModule.params || {}
+    }
 
     const parameters: IParameter[] = Object.values(rawParams).map((p) => ({
       uuid: genUUID(),
@@ -1179,7 +1212,14 @@ export async function importTemplateIcons(): Promise<void> {
     }))
 
     // 从 public/templates/private/icons/ 获取脚本
-    const res = await fetch(getScriptUrl(`/templates/private/icons/${name}.js`))
+    const scriptPath = getScriptUrl(`/templates/private/icons/${name}.js`)
+    const res = await fetch(scriptPath)
+    if (!res.ok) {
+      if (import.meta.env.DEV) {
+        console.warn(`[importTemplateIcons] Script not found (${res.status}): ${scriptPath}`)
+      }
+      continue
+    }
     const scriptBody = await res.text()
 
     const glyph = createBaseGlyph(

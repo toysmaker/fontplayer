@@ -131,7 +131,7 @@ class PenComponent {
 		let { curvature = 0 } = options
 		if (curvature > 0.5) curvature = 0
 		this.lineTo(points[0].x, points[0].y)
-		for (let i = 0; i < points.length - 2; i++) {
+		for (let i = 0; i < points.length - 2; i+= 2) {
 			if (curvature === 0) {
 				this.quadraticBezierTo(points[i + 1].x, points[i + 1].y, points[i + 2].x, points[i + 2].y)
 			} else {

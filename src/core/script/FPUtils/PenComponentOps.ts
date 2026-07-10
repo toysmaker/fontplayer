@@ -15,7 +15,7 @@ type JointData = { name: string; x: number; y: number }
  */
 interface IKeyframe {
 	paramPairs: Array<{ name: string, value: number }>;
-	component: PenComponent;
+	component?: PenComponent;
 	/** 关节数据，支持 Joint 实例数组或 { name: Joint } 对象两种形式 */
 	joints?: Array<{ name: string; x: number; y: number }> | Record<string, { name: string; x: number; y: number }>;
 }
@@ -24,7 +24,7 @@ interface IKeyframe {
  * interpolateFromKeyframes 的返回值
  */
 interface IInterpolationResult {
-	component: PenComponent;
+	component?: PenComponent;
 	joints: Array<JointData>;
 }
 
@@ -107,9 +107,13 @@ const interpolateFromKeyframes = (
 
 	// 单个关键帧：直接克隆返回
 	if (keyframes.length === 1) {
-		const comp = new PenComponent()
-		comp.setData(keyframes[0].component.getData())
-		const joints = normalizeJoints(keyframes[0].joints) || []
+		const kf = keyframes[0]
+		let comp: PenComponent | undefined = undefined
+		if (kf.component) {
+			comp = new PenComponent()
+			comp.setData(kf.component.getData())
+		}
+		const joints = normalizeJoints(kf.joints) || []
 		return { component: comp, joints }
 	}
 
@@ -118,23 +122,41 @@ const interpolateFromKeyframes = (
 		if (import.meta.env.DEV) {
 			console.warn('[interpolateFromKeyframes] No paramPairs provided, returning first keyframe')
 		}
-		const comp = new PenComponent()
-		comp.setData(keyframes[0].component.getData())
-		const joints = normalizeJoints(keyframes[0].joints) || []
+		const kf = keyframes[0]
+		let comp: PenComponent | undefined = undefined
+		if (kf.component) {
+			comp = new PenComponent()
+			comp.setData(kf.component.getData())
+		}
+		const joints = normalizeJoints(kf.joints) || []
 		return { component: comp, joints }
 	}
 
-	// 验证所有关键帧组件具有相同的点结构（点数一致）
-	const pointCount = keyframes[0].component.points.length
-	for (let i = 1; i < keyframes.length; i++) {
-		if (keyframes[i].component.points.length !== pointCount) {
-			if (import.meta.env.DEV) {
-				console.error(
-					`[interpolateFromKeyframes] Keyframe point count mismatch: ` +
-					`keyframe[0] has ${pointCount} points, keyframe[${i}] has ${keyframes[i].component.points.length} points`,
-				)
+	// 判断关键帧中可插值的数据类型
+	const hasComponents = keyframes.every(kf => kf.component != null)
+	const hasJoints = keyframes.some(kf => kf.joints != null)
+
+	if (!hasComponents && !hasJoints) {
+		if (import.meta.env.DEV) {
+			console.warn('[interpolateFromKeyframes] No components or joints found in keyframes')
+		}
+		return null
+	}
+
+	// 验证所有关键帧组件具有相同的点结构（仅在有关键帧包含组件时）
+	let pointCount = 0
+	if (hasComponents) {
+		pointCount = keyframes[0].component!.points.length
+		for (let i = 1; i < keyframes.length; i++) {
+			if (keyframes[i].component!.points.length !== pointCount) {
+				if (import.meta.env.DEV) {
+					console.error(
+						`[interpolateFromKeyframes] Keyframe point count mismatch: ` +
+						`keyframe[0] has ${pointCount} points, keyframe[${i}] has ${keyframes[i].component!.points.length} points`,
+					)
+				}
+				return null
 			}
-			return null
 		}
 	}
 
@@ -196,27 +218,31 @@ const interpolateFromKeyframes = (
 
 	// --- 组件点插值 ---
 
-	// 基于 low 关键帧克隆创建结果组件
-	const resultComp = new PenComponent()
-	resultComp.setData(lowKf.keyframe.component.getData())
+	let resultComp: PenComponent | undefined = undefined
 
-	// 对每个点进行线性插值：result = low + (high - low) * t
-	const lowPoints = lowKf.keyframe.component.points
-	const highPoints = highKf.keyframe.component.points
+	if (hasComponents) {
+		// 基于 low 关键帧克隆创建结果组件
+		resultComp = new PenComponent()
+		resultComp.setData(lowKf.keyframe.component!.getData())
 
-	for (let i = 0; i < pointCount; i++) {
-		const lp = lowPoints[i]
-		const hp = highPoints[i]
-		resultComp.points[i] = {
-			...resultComp.points[i],
-			x: lp.x + (hp.x - lp.x) * t,
-			y: lp.y + (hp.y - lp.y) * t,
+		// 对每个点进行线性插值：result = low + (high - low) * t
+		const lowPoints = lowKf.keyframe.component!.points
+		const highPoints = highKf.keyframe.component!.points
+
+		for (let i = 0; i < pointCount; i++) {
+			const lp = lowPoints[i]
+			const hp = highPoints[i]
+			resultComp.points[i] = {
+				...resultComp.points[i],
+				x: lp.x + (hp.x - lp.x) * t,
+				y: lp.y + (hp.y - lp.y) * t,
+			}
 		}
-	}
 
-	// 清除计算缓存（contour、preview 等将在后续渲染管线中重新计算）
-	resultComp.contour = []
-	resultComp.preview = []
+		// 清除计算缓存（contour、preview 等将在后续渲染管线中重新计算）
+		resultComp.contour = []
+		resultComp.preview = []
+	}
 
 	// --- 关节插值 ---
 
