@@ -474,26 +474,36 @@ export function executeCharacterScript(
   instanceKey?: string,
 ): void {
   const script = getCharacterScript(characterData)
-  if (!script) return
+  if (!script) {
+    if (import.meta.env.DEV) {
+      console.log(
+        `[ScriptExecutor] executeCharacterScript SKIP: no script for ` +
+        `"${characterData.character?.text || '?'}" (${characterData.uuid?.slice(0, 8)}), ` +
+        `type=${characterData.type}`
+      )
+    }
+    return
+  }
 
   const key = instanceKey || characterData.uuid
+  if (import.meta.env.DEV) {
+    console.log(
+      `[ScriptExecutor] executeCharacterScript START: "${characterData.character?.text || '?'}" ` +
+      `key=${key?.slice(0, 8)} scriptLen=${script.length}`
+    )
+  }
 
   try {
     instanceManager.pinTemporaryFromLRUEviction(key)
 
     // 获取或创建 Character 实例
-    let characterInstance: Character | null = null
-    if (instanceManager.isTemporary(key)) {
-      characterInstance = instanceManager.acquireTemporaryInstance(
-        key,
-        () => new Character(characterData),
-        'character',
-      ) as Character
-    } else {
-      characterInstance = instanceManager.getInstance(key, () => new Character(characterData), 'character') as Character
-    }
-
-    if (!characterInstance) return
+    // 始终使用 acquireTemporaryInstance：导入模板等场景下既非编辑态也非临时实例，
+    // getInstance 要求 isEditing || isTemporary 为 true，否则返回 null 导致脚本不执行
+    const characterInstance = instanceManager.acquireTemporaryInstance(
+      key,
+      () => new Character(characterData),
+      'character',
+    ) as Character
 
     // 同步最新字符数据并清空脚本生成状态
     characterInstance._character = characterData
@@ -501,6 +511,7 @@ export function executeCharacterScript(
 
     // 设置窗口全局变量
     const originalCharacter = (window as any).character
+    const originalGlyph = (window as any).glyph
     const originalConstantsMap = (window as any).constantsMap
     const originalFP = (window as any).FP
 
@@ -508,6 +519,7 @@ export function executeCharacterScript(
     const constantsMap = getGlobalConstantsMap() || projectStore.constantsMap || ConstantsMap.getInstance([])
 
     ;(window as any).character = characterInstance
+    ;(window as any).glyph = characterInstance
     ;(window as any).constantsMap = constantsMap
     ;(window as any).FP = FP
 
@@ -518,6 +530,16 @@ export function executeCharacterScript(
     try {
       const scriptFunctionName = `script_${characterData.uuid.replaceAll('-', '_')}`
       const scriptCode = `${script}\n${scriptFunctionName}(character, constantsMap, FP)`
+      if (import.meta.env.DEV) {
+        console.log(
+          `[ScriptExecutor] About to exec script for "${characterData.character?.text || '?'}": ` +
+          `fnName=${scriptFunctionName}, ` +
+          `window.character=${!!(window as any).character}, ` +
+          `window.glyph=${!!(window as any).glyph}, ` +
+          `window.constantsMap=${!!(window as any).constantsMap}, ` +
+          `window.FP=${!!(window as any).FP}`
+        )
+      }
       const fn = new Function(scriptCode)
       fn()
     } catch (scriptError) {
@@ -527,6 +549,7 @@ export function executeCharacterScript(
       )
     } finally {
       ;(window as any).character = originalCharacter
+      ;(window as any).glyph = originalGlyph
       ;(window as any).constantsMap = originalConstantsMap
       ;(window as any).FP = originalFP
       if (originalSelectedFile !== undefined) {
@@ -535,10 +558,12 @@ export function executeCharacterScript(
     }
 
     // 执行字符内所有 glyph 组件的脚本
+    // 传入 ignoreTempDataGuard 以绕过 tempData 守卫：
+    // 参数变更 re-execute 时实例已有 tempData，需强制重新执行才能反映新参数值
     for (const comp of characterData.components) {
       if (comp.type === 'glyph' && comp.value) {
         try {
-          executeGlyphScript(comp.value as ICustomGlyph, comp.uuid)
+          executeGlyphScript(comp.value as ICustomGlyph, comp.uuid, { ignoreTempDataGuard: true })
         } catch (e) {
           if (import.meta.env.DEV) {
             console.warn(`[ScriptExecutor] sub-glyph script failed for ${(comp.value as any).name}:`, e)

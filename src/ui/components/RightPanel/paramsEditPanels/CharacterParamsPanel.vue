@@ -31,6 +31,12 @@ function getConstantOptions(param: IParameter): Array<{ label: string; value: nu
   return [{ label: String(value ?? param.value), value: Number(value ?? param.value) }]
 }
 
+function getParamStep(param: IParameter): number {
+  const min = Number(param.min ?? 0)
+  const max = Number(param.max === 0 ? 0 : (param.max ?? 1000))
+  return (max - min) <= 3 ? 0.05 : 1
+}
+
 function handleParamChange(param: IParameter, newValue: number | null | undefined) {
   if (newValue === null || newValue === undefined) return
   param.value = newValue
@@ -43,12 +49,8 @@ function rerenderAndExecute() {
   if (!ch) return
   if (ch.script) {
     executeCharacterScript(ch, ch.uuid)
-    // 执行字符内所有 glyph 脚本
-    for (const comp of ch.components) {
-      if (comp.type === 'glyph' && comp.value) {
-        executeGlyphScript(comp.value as ICustomGlyph, comp.uuid)
-      }
-    }
+    // executeCharacterScript 内部已对子 glyph 调用 executeGlyphScript({ ignoreTempDataGuard: true })
+    // 此处无需重复调用
   }
   const ctx = getEditCanvasContext()
   ctx?.onRender()
@@ -72,7 +74,7 @@ const hasParams = computed(() => params.value.length > 0)
             :value="Number(param.value)"
             :min="Number(param.min ?? 0)"
             :max="Number(param.max === 0 ? 0 : (param.max ?? 1000))"
-            :step="1"
+            :step="getParamStep(param)"
             @update:value="(v: number | null) => handleParamChange(param, v)"
           />
           <n-slider
@@ -80,7 +82,7 @@ const hasParams = computed(() => params.value.length > 0)
             :value="Number(param.value)"
             :min="Number(param.min ?? 0)"
             :max="Number(param.max === 0 ? 0 : (param.max ?? 1000))"
-            :step="1"
+            :step="getParamStep(param)"
             @update:value="(v: number) => handleParamChange(param, v)"
           />
         </div>

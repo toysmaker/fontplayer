@@ -9,6 +9,7 @@ import { _fitCurve as fitCurve } from '../utils/fitCurve'
 import { bezierCurve, multiBezierCurve, IPoint } from '../utils/bezierCurve'
 import * as R from 'ramda'
 import * as PenComponentOps from './FPUtils/PenComponentOps'
+import { parseColorToHex } from '../utils/color'
 
 interface IGetContoursOption {
 	unticlockwise?: boolean;
@@ -2440,6 +2441,7 @@ const FP = {
 	intersectOp: PenComponentOps.intersectOp,
 	unionOp: PenComponentOps.unionOp,
 	getControlPoint,
+	parseColorToHex,
 }
 
 const suggestion_items = [

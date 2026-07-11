@@ -152,8 +152,11 @@ const selectConstantUuid = ref<string | null>(null)
 const glyphInstanceFillColor = computed(() => {
   const c = selectedComponent.value
   if (!c || c.type !== 'glyph') return null
-  const v = c.fillColor
-  return v && String(v).trim() ? v : null
+  // 优先读组件级 fillColor，其次读 value（字形定义深拷贝）上的 fillColor
+  const compFill = c.fillColor
+  if (compFill && String(compFill).trim()) return compFill
+  const valFill = (c.value as any)?.fillColor
+  return valFill && String(valFill).trim() ? valFill : null
 })
 
 const handleGlyphInstanceFillColor = (color: string | null) => {
@@ -1698,7 +1701,7 @@ const handleFormatGlyphComponent = () => {
             <!-- 目标组件列表 -->
             <div class="target-list">
               <div
-                v-for="(targetUUID, targetIndex) in (rule as any).targetComponentUUIDs"
+                v-for="(targetUUID, targetIndex) in rule.targetComponentUUIDs"
                 :key="targetUUID"
                 class="target-item"
               >
@@ -1716,7 +1719,7 @@ const handleFormatGlyphComponent = () => {
                   </template>
                 </n-button>
               </div>
-              <div v-if="!(rule as any).targetComponentUUIDs?.length" class="target-empty">
+              <div v-if="!rule.targetComponentUUIDs?.length" class="target-empty">
                 {{ t('panels.paramsPanel.postProcessRules.noTargets') }}
               </div>
             </div>

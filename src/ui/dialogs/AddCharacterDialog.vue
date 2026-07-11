@@ -210,8 +210,11 @@ const _handleConfirm = async () => {
   tmplCharList = []; tmplStrokeGlyphs = []; tmplConstants = []
 
   try {
-    file.characterList.push(...newMetas); projectStore.markFileUnsaved(file.uuid)
+    // 先存储到 IndexedDB，再添加到 characterList
+    // 必须保证此顺序：若先 push，Vue 响应式更新时 VirtualCharacterList 从 IndexedDB
+    // 加载不到数据，fallback 为 components: [] 的空对象导致预览空白
     await characterDataManager.storeCharacters(file.uuid, newRecords)
+    file.characterList.push(...newMetas); projectStore.markFileUnsaved(file.uuid)
     if (editorStore.editStatus !== EditStatus.CharacterList) editorStore.setEditStatus(EditStatus.CharacterList)
     resetForm(); visible.value = false; message.success(`已添加 ${charsToAdd.length} 个字符`)
   } catch (error: any) { console.error('Failed to add characters:', error); message.error(error?.message || '添加字符失败') }

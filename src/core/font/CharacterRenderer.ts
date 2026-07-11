@@ -66,16 +66,24 @@ export class CharacterRenderer {
       // 优先从 IndexedDB 加载预览数据（如果已计算过）
       let nonzeroContours: IContours | null = null
       let solidContours: IContours = []
+      let fillColorsOut: string[] = []
+      let solidFlagsOut: boolean[] = []
 
       if (characterFile.previewRef) {
         try {
-          const stored = await indexedDBManager.get<IContours | { nonzero: IContours; solid: IContours }>(characterFile.previewRef)
+          const stored = await indexedDBManager.get<IContours | { nonzero: IContours; solid: IContours; fillColors?: string[] }>(characterFile.previewRef)
           if (stored) {
             if ('nonzero' in (stored as any)) {
               // 新格式
-              const grouped = stored as { nonzero: IContours; solid: IContours }
+              const grouped = stored as { nonzero: IContours; solid: IContours; fillColors?: string[] }
               nonzeroContours = grouped.nonzero
               solidContours = grouped.solid || []
+              // 从缓存恢复 fillColors（仅彩色模式需要）
+              if (grouped.fillColors) {
+                fillColorsOut = grouped.fillColors
+                // 重建 solidFlagsOut：fillColors 长度即 nonzero 数量
+                solidFlagsOut = Array.from({ length: fillColorsOut.length }, () => false)
+              }
             } else {
               // 旧格式，全部视为 nonzero
               nonzeroContours = stored as IContours
@@ -95,7 +103,17 @@ export class CharacterRenderer {
       if (!nonzeroContours) {
         const components = ContourConverter.getComponentsForCharacter(characterFile)
 
+        if (import.meta.env.DEV) {
+          console.warn(
+            `[CharacterRenderer] DEBUG components for "${characterFile.character?.text || '?'}": ` +
+            `count=${components.length}, ` +
+            `fills=[${components.map((c: any) => `${c.name}=${c.fillColor || (c.value as any)?.fillColor || 'none'}`).join(', ')}]`
+          )
+        }
         if (components.length === 0) {
+          if (import.meta.env.DEV) {
+            console.log('[CharacterRenderer] renderPreview EMPTY: no components for char "' + (characterFile.character?.text || '?') + '" uuid=' + (characterFile.uuid?.slice(0, 8) || '?'))
+          }
           RenderEngine.clearCanvas(canvas)
           return true
         }
@@ -113,7 +131,8 @@ export class CharacterRenderer {
               }
             : undefined
 
-        const solidFlagsOut: boolean[] = []
+        solidFlagsOut = []
+        fillColorsOut = []
         const allContours = ContourConverter.componentsToContours(
           components,
           {
@@ -124,7 +143,8 @@ export class CharacterRenderer {
             grid: layoutGrid,
           },
           { x: 0, y: 0 },
-          solidFlagsOut
+          solidFlagsOut,
+          fillColorsOut,
         )
 
         nonzeroContours = allContours.filter((_, i) => !solidFlagsOut[i])
@@ -133,12 +153,14 @@ export class CharacterRenderer {
         // 持久化预览：必须 await，成功后才写入 previewRef，避免「未落库却持 ref」的竞态
         // 与 GlyphRenderer 一致：先 JSON 深拷贝为纯数据。组件在 Vue 响应式树中时，
         // contour 数组可能是 Proxy，IndexedDB structured clone 会报 DataCloneError。
+        // 同时保存 fillColors 以便彩色模式从缓存加载时也能正确着色
         if (allContours.length > 0 && !characterFile.previewRef) {
           const previewKey = IndexedDBManager.generatePreviewKey(characterFile.uuid)
           try {
+            const previewFillColors = fillColorsOut.filter((_, i) => !solidFlagsOut[i])
             const payload = JSON.parse(
-              JSON.stringify({ nonzero: nonzeroContours, solid: solidContours }),
-            ) as { nonzero: IContours; solid: IContours }
+              JSON.stringify({ nonzero: nonzeroContours, solid: solidContours, fillColors: previewFillColors }),
+            ) as { nonzero: IContours; solid: IContours; fillColors?: string[] }
             await indexedDBManager.set(previewKey, payload)
             characterFile.previewRef = previewKey
             if (import.meta.env.DEV) {
@@ -164,11 +186,29 @@ export class CharacterRenderer {
       const projectStore = useProjectStore()
       const previewStyle = projectStore.fontPreviewStyle
 
-      // 获取填充颜色（仅彩色模式需要）
+      // 获取填充颜色（从 componentsToContours 输出的 fillColorsOut 获取，
+      // 已按轮廓索引对齐，解决了 glyph 组件产生多轮廓时 getFillColors 颜色数量不匹配的问题）
       let fillColors: string[] = []
       if (previewStyle === 'color') {
-        const components = ContourConverter.getComponentsForCharacter(characterFile)
-        fillColors = ContourConverter.getFillColors(components)
+        if (fillColorsOut.length > 0) {
+          // 优先使用 componentsToContours 输出的轮廓对齐颜色
+          fillColors = fillColorsOut.filter((_, i) => !solidFlagsOut[i])
+        } else {
+          // 从 IndexedDB 缓存加载时没有 fillColorsOut，回退到 getFillColors
+          const comps = ContourConverter.getComponentsForCharacter(characterFile)
+          fillColors = ContourConverter.getFillColors(comps)
+        }
+        if (import.meta.env.DEV) {
+          console.warn(
+            `[CharacterRenderer] COLOR MODE "${characterFile.character?.text || '?'}" ` +
+            `uuid=${characterFile.uuid?.slice(0, 8)} ` +
+            `fromCache=${!!characterFile.previewRef} ` +
+            `fillColorsOut.len=${fillColorsOut.length} ` +
+            `nonzero.len=${nonzeroContours?.length} ` +
+            `finalColors.len=${fillColors.length} ` +
+            `colors=[${fillColors.slice(0, 8).join(',')}${fillColors.length > 8 ? '...' : ''}]`
+          )
+        }
       }
 
       // 使用实际字体坐标空间渲染，保持与编辑界面一致的位置关系

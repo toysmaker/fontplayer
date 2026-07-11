@@ -559,9 +559,18 @@ onUnmounted(() => {
 })
 
 // 监听预览样式变化，清空所有缓存并重新渲染
+// 必须逐个 invalidateCache：forceCleanupAllCache 不清理 DOM 中可见 canvas 的缓存，
+// 导致 canSkipRender 返回 true，CharacterRenderer 根本不会被调用
 watch(() => projectStore.fontPreviewStyle, () => {
   renderCache.clear()
   CanvasManager.forceCleanupAllCache()
+
+  // 清除所有可见字符的 previewRef 和 CanvasManager 缓存
+  for (const item of visibleItems.value) {
+    item.previewRef = undefined
+    CanvasManager.invalidateCache(item.uuid)
+  }
+
   scheduleRender()
 })
 

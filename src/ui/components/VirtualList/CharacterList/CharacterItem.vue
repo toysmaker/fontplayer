@@ -12,10 +12,16 @@
       />
     </span>
     <span class="info">
-      <span class="text">{{ character.character.text }}</span>
-      <span v-if="character.type === 'text'" class="unicode">
-        {{ formatUnicode(character.character.unicode) }}
-      </span>
+      <!-- icon 类型仅显示 unicode，避免长名称溢出 -->
+      <template v-if="character.type === 'icon'">
+        <span class="text icon-text">{{ formatUnicode(character.character.unicode) }}</span>
+      </template>
+      <template v-else>
+        <span class="text">{{ character.character.text }}</span>
+        <span v-if="character.type === 'text'" class="unicode">
+          {{ formatUnicode(character.character.unicode) }}
+        </span>
+      </template>
     </span>
     <span class="icon-group">
       <span class="copy-icon" @click.stop @pointerup.stop="handleCopy">

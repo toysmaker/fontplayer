@@ -15,13 +15,40 @@ import { getGlobalConstantsMap } from '../script/ParametersMap'
 import { useProjectStore } from '@/stores/project'
 
 /** 查找工程文件中所有字形表 */
+
+/** 字形别名：脚本中使用的名称与工程中实际字形名不一致时使用 */
+const GLYPH_NAME_ALIASES: Record<string, string> = {
+  '脸形': '脸型',
+}
+
 function findGlyphInProject(name: string): ICustomGlyph | null {
   const file = useProjectStore().selectedFile
   if (!file) return null
+
+  // 构建搜索名称列表（原名 + 别名）
+  const searchNames = [name]
+  const alias = GLYPH_NAME_ALIASES[name]
+  if (alias) searchNames.push(alias)
+  // 同时检查包含别名的组合名（如 '脸形阴影' → '脸型阴影'）
+  for (const [from, to] of Object.entries(GLYPH_NAME_ALIASES)) {
+    if (name.includes(from)) {
+      const replaced = name.replace(new RegExp(from, 'g'), to)
+      if (!searchNames.includes(replaced)) searchNames.push(replaced)
+    }
+  }
+
   for (const list of [file.glyphs, file.stroke_glyphs, file.radical_glyphs, file.comp_glyphs]) {
     if (!list) continue
-    const g = list.find((g: ICustomGlyph) => g.name === name)
-    if (g) return g
+    for (const g of list) {
+      // 1. 精确匹配
+      if (searchNames.includes(g.name)) return g
+      const glyphNameStripped = g.name.replace(/_/g, '')
+      for (const sn of searchNames) {
+        if (glyphNameStripped.endsWith(sn) || g.name.endsWith('_' + sn)) {
+          return g
+        }
+      }
+    }
   }
   return null
 }

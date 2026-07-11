@@ -6,14 +6,15 @@
 
 import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
-import type { ICustomGlyph, IGlyphComponent, IParameter } from '@/core/types'
+import type { ICustomGlyph, IGlyphComponent, IParameter, ICharacterFileLite, ICharacterFileMetadata, ICharacterInfo } from '@/core/types'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { PictureImportPipelineService } from '@/features/editor/services/PictureImportPipelineService'
 import { strokeFnMap } from '@/templates/strokeFnMap'
 import { ParameterType, EditStatus } from '@/core/types'
+import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import { glyphSkeletonBindFromRefGlyph } from '@/features/glyphSkeletonBind'
-import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+import { executeGlyphScript, executeCharacterScript } from '@/core/script/ScriptExecutor'
 import { getBound } from '@/core/utils/math'
 import { genUUID } from '@/utils/uuid'
 import { hei_strokes, kai_strokes, li_strokes } from '@/templates/strokes_1'
@@ -54,6 +55,39 @@ function createBaseGlyph(name: string, style: string, script: string, parameters
     script,
     style,
   }
+}
+
+function buildCharacterInfo(width: number): ICharacterInfo {
+  const size = width || 1000
+  const centerSquareSize = size / 3
+  return {
+    gridSettings: {
+      dx: 0,
+      dy: 0,
+      centerSquareSize,
+      size,
+      default: true,
+      initialGrid: {
+        dx: 0, dy: 0, dx1: 0, dx2: 0, dx3: 0, dx4: 0,
+        dy1: 0, dy2: 0, dy3: 0, dy4: 0,
+        ox: 500, oy: 500, width: 1000, height: 1000, centerSquareScale: 1,
+      },
+      currentGrid: {
+        dx: 0, dy: 0, dx1: 0, dx2: 0, dx3: 0, dx4: 0,
+        dy1: 0, dy2: 0, dy3: 0, dy4: 0,
+        ox: 500, oy: 500, width: 1000, height: 1000, centerSquareScale: 1,
+      },
+    },
+    useSkeletonGrid: false,
+    layout: '',
+    layoutTree: [],
+  }
+}
+
+function toIconUnicodeString(index: number): string {
+  const base = 0xf000
+  const code = base + index
+  return 'U+' + code.toString(16).toUpperCase()
 }
 
 function paramsFromStroke(stroke: { params: Array<{ name: string; default: number; min?: number; max?: number }> }): IParameter[] {
@@ -1232,8 +1266,139 @@ export async function importTemplateIcons(): Promise<void> {
     file.comp_glyphs!.push(glyph)
   }
 
+  // --- 从 icons_v1/chars/ 动态遍历，自动创建图标字符 ---
+  const charsModules = import.meta.glob<{
+    params: Record<string, { name: string; default: number; min?: number; max?: number }>
+  }>('/src/templates/private/icons_v1/chars/*.ts')
+
+  const charNames = Object.keys(charsModules).map((path) => {
+    const fileName = path.split('/').pop()!
+    return fileName.replace(/\.ts$/, '')
+  })
+
+  if (import.meta.env.DEV) {
+    console.log(
+      `[importTemplateIcons] Discovered ${charNames.length} char(s):`,
+      charNames,
+    )
+  }
+
+  for (const name of charNames) {
+    const modulePath = Object.keys(charsModules).find((p) => p.endsWith(`/${name}.ts`))
+    if (!modulePath) {
+      if (import.meta.env.DEV) {
+        console.warn(`[importTemplateIcons] char module not found for: ${name}`)
+      }
+      continue
+    }
+
+    const paramsModule = await charsModules[modulePath]()
+    const rawParams = paramsModule.params || {}
+
+    const parameters: IParameter[] = Object.values(rawParams).map((p) => ({
+      uuid: genUUID(),
+      name: p.name,
+      type: ParameterType.Number,
+      value: p.default,
+      min: p.min ?? 0,
+      max: p.max === 0 ? 0 : (p.max ?? 1000),
+    }))
+
+    // 从 public/templates/private/icons/ 获取字符脚本
+    const scriptPath = getScriptUrl(`/templates/private/icons/${name}.js`)
+    const res = await fetch(scriptPath)
+    if (!res.ok) {
+      if (import.meta.env.DEV) {
+        console.warn(`[importTemplateIcons] Char script not found (${res.status}): ${scriptPath}`)
+      }
+      continue
+    }
+    const scriptBody = await res.text()
+
+    const iconIndex = file.iconsCount || 0
+    const characterUUID = genUUID()
+    const fileUUID = genUUID()
+
+    const characterLite: ICharacterFileLite = {
+      uuid: fileUUID,
+      type: 'icon',
+      character: {
+        uuid: characterUUID,
+        text: name,
+        unicode: toIconUnicodeString(iconIndex),
+      },
+      components: [],
+      groups: [],
+      orderedList: [],
+      view: { zoom: 100, translateX: 0, translateY: 0 },
+      info: buildCharacterInfo(file.width),
+      selectedComponentsTree: [],
+      selectedComponentsUUIDs: [],
+      script: `function script_${fileUUID.replaceAll('-', '_')}(character, constants, FP) {\n\t${scriptBody}\n}`,
+      parameters,
+    }
+
+    const metadata: ICharacterFileMetadata = {
+      uuid: characterLite.uuid,
+      type: characterLite.type,
+      character: characterLite.character,
+    }
+
+    // 执行字符脚本以填充 components（预览需要脚本生成的组件）
+    if (import.meta.env.DEV) {
+      console.log(
+        `[importTemplateIcons] Before script exec for "${name}": ` +
+        `hasScript=${!!characterLite.script}, ` +
+        `scriptLen=${characterLite.script?.length || 0}, ` +
+        `scriptStart=${characterLite.script?.substring(0, 120) || '(none)'}, ` +
+        `paramsCount=${characterLite.parameters?.length || 0}, ` +
+        `charUUID=${characterLite.uuid?.slice(0, 8)}`
+      )
+    }
+    try {
+      executeCharacterScript(characterLite)
+      if (import.meta.env.DEV) {
+        console.log(
+          `[importTemplateIcons] Script executed for "${name}": ` +
+          `components=${characterLite.components.length}, ` +
+          `orderedList=${characterLite.orderedList?.length || 0}, ` +
+          `comp names: [${characterLite.components.map((c: any) => `${c.name}(${c.value?.name || c.value?.type || '?'})`).join(', ')}]`
+        )
+      }
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn(`[importTemplateIcons] Character script execution FAILED for "${name}":`, e)
+      }
+    }
+
+    // 先存储到 IndexedDB，再添加到 characterList
+    // 必须保证此顺序：若先 push 到 characterList，Vue 响应式更新时 VirtualCharacterList
+    // 的 updateVisibleItems() 会从 IndexedDB 加载字符数据，但此时数据尚未写入，
+    // loadFullCharacter 返回 null 后 fallback 为 components: [] 的空对象，导致列表预览空白
+    await characterDataManager.storeCharacters(file.uuid, [characterLite])
+
+    if (import.meta.env.DEV) {
+      // 验证存储后能否正确读回
+      const verifyLoad = await characterDataManager.loadCharacter(file.uuid, characterLite.uuid)
+      console.log(
+        `[importTemplateIcons] Stored & verified "${name}": ` +
+        `stored_components=${characterLite.components.length}, ` +
+        `loaded_components=${verifyLoad?.components?.length || 0}`
+      )
+    }
+
+    file.characterList.push(metadata)
+    file.iconsCount = (file.iconsCount || 0) + 1
+  }
+
   projectStore.markFileUnsaved(file.uuid)
-  editorStore.setEditStatus(EditStatus.CompGlyphList)
+
+  // 导入图标模板后，若有创建字符则切换到字符列表视图展示导入结果
+  if (charNames.length > 0) {
+    editorStore.setEditStatus(EditStatus.CharacterList)
+  } else {
+    editorStore.setEditStatus(EditStatus.CompGlyphList)
+  }
 }
 
 export const templateHandlers: Record<string, () => Promise<void>> = {

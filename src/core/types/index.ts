@@ -340,7 +340,7 @@ export interface ICharacterFileLite {
   uuid: string
   type: string
   character: ICharacter
-  components: Array<IComponent>
+  components: Array<Component>
   groups: Array<{
     type: string
     uuid: string
