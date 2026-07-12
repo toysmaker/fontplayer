@@ -845,6 +845,7 @@ export class ProjectLoader {
       selectedComponentsTree: character.selectedComponentsTree,
       selectedComponentsUUIDs: character.selectedComponentsUUIDs,
       script: character.script,
+      parameters: character.parameters || [],
       glyph_script: character.glyph_script,
       decomposition: character.decomposition,
       matches: character.matches,

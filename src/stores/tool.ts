@@ -9,7 +9,7 @@ import { ref } from 'vue'
 export const useToolStore = defineStore('tool', () => {
   // 当前选中的工具
   const tool = ref<string>('')
-  
+
   // 坐标查看工具显示的文本
   const coordsText = ref<string>('')
 
@@ -37,7 +37,7 @@ export const useToolStore = defineStore('tool', () => {
     // State
     tool,
     coordsText,
-    
+
     // Actions
     setTool,
     setCoordsText,

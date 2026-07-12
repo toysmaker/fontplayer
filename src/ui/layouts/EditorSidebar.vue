@@ -207,6 +207,7 @@ const web_menu_icons: Record<string, any> = {
   'settings': ['fas', 'gear'],
   'templates': ['fas', 'list'],
   'tools': ['fas', 'wrench'],
+  'effects': ['fas', 'bolt'],
 }
 
 // 菜单处理器与禁用规则（由统一的 handlers 模块提供）

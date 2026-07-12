@@ -7,6 +7,8 @@
 export type StripCharacterOptions = {
   /** 默认 true。为 false 时保留字形组件参数上的 enum.options（用户工程 .fp） */
   stripGlyphParameterEnumOptions?: boolean
+  /** 默认 true。为 false 时保留含 "Todo something" 的默认脚本（用户工程 .fp 导出） */
+  stripTodoScript?: boolean
 }
 
 export function stripGlyphValueForTemplate(
@@ -31,10 +33,13 @@ export function stripCharacterForTemplate<T extends Record<string, unknown>>(
   options?: StripCharacterOptions,
 ): T {
   const stripEnumOpts = options?.stripGlyphParameterEnumOptions !== false
+  const stripTodo = options?.stripTodoScript !== false
   const c = JSON.parse(JSON.stringify(character)) as T
-  const script = c.script
-  if (typeof script === 'string' && script.includes('Todo something')) {
-    ;(c as { script?: string }).script = ''
+  if (stripTodo) {
+    const script = c.script
+    if (typeof script === 'string' && script.includes('Todo something')) {
+      ;(c as { script?: string }).script = ''
+    }
   }
   const components = (c as { components?: unknown[] }).components
   if (Array.isArray(components)) {

@@ -23,12 +23,15 @@ import CharacterParamsPanel from './paramsEditPanels/CharacterParamsPanel.vue'
 import MetricsEditPanel from './paramsEditPanels/MetricsEditPanel.vue'
 import LayoutGridEditPanel from './paramsEditPanels/LayoutGridEditPanel.vue'
 import PictureImportParamsPanel from './paramsEditPanels/PictureImportParamsPanel.vue'
+import EffectParamsPanel from './paramsEditPanels/EffectParamsPanel.vue'
+import { useEffectStore } from '@/features/effects/effectStore'
 
 const { t } = useI18n()
 
 const { selectedComponent, selectedComponentUUID, editStatus } = useComponentEditor()
 const toolStore = useToolStore()
 const { tool } = storeToRefs(toolStore)
+const effectStore = useEffectStore()
 
 // 调试信息
 if (import.meta.env.DEV) {
@@ -44,7 +47,9 @@ if (import.meta.env.DEV) {
 
 <template>
   <div class="right-panel" data-testid="parameter-panel">
-    <picture-import-params-panel v-if="editStatus === EditStatus.Pic" />
+    <!-- 效果滤镜参数面板（最高优先级，在其他任何面板之前显示） -->
+    <effect-params-panel v-if="effectStore.isActive" />
+    <picture-import-params-panel v-else-if="editStatus === EditStatus.Pic" />
     <!-- 字符编辑 metrics 工具：度量参数 -->
     <metrics-edit-panel
       v-else-if="editStatus === EditStatus.Edit && tool === 'metrics'"

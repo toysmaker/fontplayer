@@ -5,6 +5,7 @@ import { panels } from './panels'
 import { menus } from './menus'
 import { welcome } from './welcome'
 import { programming } from './programming'
+import { effects } from './effects'
 
 const messages = {
 	zh: {
@@ -13,27 +14,29 @@ const messages = {
 		panels: panels.zh,
 		welcome: welcome.zh,
 		programming: programming.zh,
-  },
-  en: {
+		effects: effects.zh,
+	},
+	en: {
 		menus: menus.en,
 		dialogs: dialogs.en,
 		panels: panels.en,
 		welcome: welcome.en,
 		programming: programming.en,
-  },
+		effects: effects.en,
+	},
 }
 
 const i18nOptions = {
-  locale: 'zh',
+	locale: 'zh',
 	fallbackLocale: 'en',
-  allowComposition: true,
+	allowComposition: true,
 	messages,
 }
 
 const i18n = createI18n(i18nOptions)
 
 export function setupI18n(app: App) {
-  app.use(i18n)
+	app.use(i18n)
 }
 
 export {

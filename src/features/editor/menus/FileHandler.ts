@@ -694,6 +694,7 @@ export class FileHandler {
       const plain = char ? this.plainCharacter(char) : metadata
       const stripped = stripCharacterForTemplate(plain as Record<string, unknown>, {
         stripGlyphParameterEnumOptions: false,
+        stripTodoScript: false,
       })
       const json = JSON.stringify(stripped)
       const gz = await gzipCompressBytes(new TextEncoder().encode(json))
@@ -767,6 +768,7 @@ export class FileHandler {
         const plain = char ? this.plainCharacter(char) : metadata
         const stripped = stripCharacterForTemplate(plain as Record<string, unknown>, {
           stripGlyphParameterEnumOptions: false,
+          stripTodoScript: false,
         })
         const json = JSON.stringify(stripped)
         const gz = await gzipCompressBytes(new TextEncoder().encode(json))
@@ -1259,6 +1261,9 @@ export class FileHandler {
     // 可选字段
     if (character.script) {
       data.script = character.script
+    }
+    if (character.parameters && character.parameters.length > 0) {
+      data.parameters = character.parameters
     }
     if (character.info) {
       data.info = character.info

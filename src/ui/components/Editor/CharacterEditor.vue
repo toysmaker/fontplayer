@@ -106,6 +106,7 @@ import { reexecuteAllGlyphScriptsInEditingCharacter } from '@/features/editor/gl
 import { executeCharacterScript } from '@/core/script/ScriptExecutor'
 import { rebuildCharacterListPreviewAfterExitEdit } from '@/features/editor/listPreview/rebuildListPreviewAfterEditorExit'
 import { skeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
+import { useEffectStore } from '@/features/effects/effectStore'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import { discardGlobalConstantsDraftOnLeave } from '@/stores/editorConstantsSession'
 import { setEditCanvasContext, clearEditCanvasContext } from '@/features/editor/editCanvas'
@@ -143,6 +144,9 @@ const editingCharacter = computed(() => (characterStore as any).editingCharacter
 // 当前工具和选择控制状态（用于鼠标样式）
 const currentTool = ref<ToolType | ''>('')
 const selectControl = ref<string>('null')
+
+// 效果滤镜 Store
+const effectStore = useEffectStore()
 
 // 防止 watch 回调重入：渲染路径中可能写入被监听数据（如 previewRef），导致循环更新
 const isRenderingFromWatch = ref(false)
@@ -796,6 +800,20 @@ watch(() => toolStore.tool, async (newTool) => {
     return
   }
 
+
+	// 效果滤镜面板激活时阻止工具切换
+	if (effectStore.isActive && newTool && newTool !== "select") {
+		const { useMessage } = await import("naive-ui")
+		const { useI18n } = await import("vue-i18n")
+		const message = useMessage()
+		const { t } = useI18n()
+		message.warning(t("effects.effectPanelActive"))
+		nextTick(() => {
+			toolStore.setTool("select")
+		})
+		return
+	}
+
   // 更新当前工具状态
   currentTool.value = (newTool as ToolType | '') || ''
 
@@ -868,6 +886,16 @@ watch(
 
 // 注意：鼠标事件由 dragger 和工具系统的 activate() 方法自动处理
 // 不需要在模板中手动绑定 @mousedown, @mousemove, @mouseup
+
+// 效果滤镜预览：参数变化时重新渲染画布
+watch(
+  () => effectStore.previewVersion,
+  () => {
+    if (effectStore.isActive) {
+      renderCanvas()
+    }
+  },
+)
 </script>
 
 <style scoped>

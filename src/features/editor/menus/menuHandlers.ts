@@ -7,6 +7,7 @@ import { createCharacterHandlers } from './characterHandlers'
 import { createSettingsHandlers } from './settingsHandlers'
 import { createTemplateMenuHandlers } from './templateMenuHandlers'
 import { createToolsHandlers } from './toolsHandlers'
+import { createEffectHandlers } from './effectHandlers'
 import { EditStatus } from '@/core/types'
 
 /**
@@ -23,6 +24,7 @@ export function createMenuHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
     ...createSettingsHandlers(ctx),
     ...createTemplateMenuHandlers(ctx),
     ...createToolsHandlers(ctx),
+    ...createEffectHandlers(ctx),
   }
 }
 
@@ -144,6 +146,16 @@ export function createDisabledRules(ctx: {
     'component-subtract': enableAtEdit,
     'format-all-characters': enableAtList,
     'format-current-character': enableAtCharacterEdit,
+
+    // effects
+    'effect-adjust-weight': enableAtCharacterEdit,
+    'effect-ink-bleed': enableAtCharacterEdit,
+    'effect-rough-edge': enableAtCharacterEdit,
+    'effect-glitch': enableAtCharacterEdit,
+    'effect-hand-drawn-jitter': enableAtCharacterEdit,
+    'effect-melt': enableAtCharacterEdit,
+    'effect-geometric-simplify': enableAtCharacterEdit,
+    'effect-pixelate': enableAtCharacterEdit,
   }
 }
 

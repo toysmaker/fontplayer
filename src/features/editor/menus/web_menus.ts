@@ -372,7 +372,69 @@ const getWebMenu = (): Array<IMenu> => {
 			{ label: '交集', key: 'component-intersect', click: (h: IHandlerMap) => { h['component-intersect']() } },
 			{ label: '差集', key: 'component-subtract', click: (h: IHandlerMap) => { h['component-subtract']() } },
 		]
-	}
+	},
+	{
+		label: tm('menus.effects.effects'),
+		key: 'effects',
+		submenu: [
+			{
+				label: tm('menus.effects.adjust_weight'),
+				key: 'effect-adjust-weight',
+				click: (handlers: IHandlerMap) => {
+					handlers['effect-adjust-weight']()
+				}
+			},
+			{
+				label: tm('menus.effects.ink_bleed'),
+				key: 'effect-ink-bleed',
+				click: (handlers: IHandlerMap) => {
+					handlers['effect-ink-bleed']()
+				}
+			},
+			{
+				label: tm('menus.effects.rough_edge'),
+				key: 'effect-rough-edge',
+				click: (handlers: IHandlerMap) => {
+					handlers['effect-rough-edge']()
+				}
+			},
+			{
+				label: tm('menus.effects.glitch'),
+				key: 'effect-glitch',
+				click: (handlers: IHandlerMap) => {
+					handlers['effect-glitch']()
+				}
+			},
+			{
+				label: tm('menus.effects.hand_drawn_jitter'),
+				key: 'effect-hand-drawn-jitter',
+				click: (handlers: IHandlerMap) => {
+					handlers['effect-hand-drawn-jitter']()
+				}
+			},
+			{
+				label: tm('menus.effects.melt'),
+				key: 'effect-melt',
+				click: (handlers: IHandlerMap) => {
+					handlers['effect-melt']()
+				}
+			},
+			{
+				label: tm('menus.effects.geometric_simplify'),
+				key: 'effect-geometric-simplify',
+				click: (handlers: IHandlerMap) => {
+					handlers['effect-geometric-simplify']()
+				}
+			},
+			{
+				label: tm('menus.effects.pixelate'),
+				key: 'effect-pixelate',
+				click: (handlers: IHandlerMap) => {
+					handlers['effect-pixelate']()
+				}
+			},
+		]
+	},
 	]
 }
 
