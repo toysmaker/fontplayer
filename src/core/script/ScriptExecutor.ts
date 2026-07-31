@@ -227,7 +227,12 @@ export function executeGlyphScript(
 
     // 实例池中的 instance 可能是用旧的 targetGlyph 创建的，getParam() 从 _glyph.parameters 读值。
     // 若不同步为当前 targetGlyph，脚本开头读取的「水平延伸」等会一直是旧值，表现为改参数无反应。
-    glyphInstance._glyph = targetGlyph
+    // 浅拷贝 + 替换 components/orderedList 为普通数组：addGlyphComponent push 不触发 Vue 响应式
+    glyphInstance._glyph = {
+      ...targetGlyph,
+      components: targetGlyph.components ? [...targetGlyph.components] : [],
+      orderedList: targetGlyph.orderedList ? [...targetGlyph.orderedList] : [],
+    }
 
     // 处理 skeleton 类型的字形（对齐原工程 glyph.ts 1511-1524）
     // 关键点/辅助线不是通过 script 生成的，而是通过 strokeFnMap 的 instanceBasicGlyph 生成。
@@ -506,7 +511,12 @@ export function executeCharacterScript(
     ) as Character
 
     // 同步最新字符数据并清空脚本生成状态
-    characterInstance._character = characterData
+    // 浅拷贝 + 替换 components/orderedList 为普通数组：addGlyphComponent push 不触发 Vue 响应式
+    characterInstance._character = {
+      ...characterData,
+      components: characterData.components ? [...characterData.components] : [],
+      orderedList: characterData.orderedList ? [...characterData.orderedList] : [],
+    }
     characterInstance.clear()
 
     // 设置窗口全局变量
@@ -557,10 +567,11 @@ export function executeCharacterScript(
       }
     }
 
-    // 执行字符内所有 glyph 组件的脚本
+    // 执行字符内所有 glyph 组件的脚本（用实例克隆体，含脚本新加的组件）
     // 传入 ignoreTempDataGuard 以绕过 tempData 守卫：
     // 参数变更 re-execute 时实例已有 tempData，需强制重新执行才能反映新参数值
-    for (const comp of characterData.components) {
+    const clonedChar = characterInstance._character
+    for (const comp of clonedChar.components) {
       if (comp.type === 'glyph' && comp.value) {
         try {
           executeGlyphScript(comp.value as ICustomGlyph, comp.uuid, { ignoreTempDataGuard: true })
@@ -571,6 +582,10 @@ export function executeCharacterScript(
         }
       }
     }
+
+    // 将克隆体上脚本修改的 components/orderedList 同步回原始 characterData
+    characterData.components = clonedChar.components
+    characterData.orderedList = clonedChar.orderedList
   } catch (e) {
     console.error('[ScriptExecutor] executeCharacterScript failed:', e)
   } finally {

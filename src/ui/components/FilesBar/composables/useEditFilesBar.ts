@@ -37,10 +37,10 @@ export function useEditFilesBar() {
         { label: '彩色', value: 'color' },
       ]
     } else if (editStatus.value === EditStatus.Glyph) {
-      // 字形编辑模式：2个选项
       return [
         { label: '轮廓', value: 'contour' },
         { label: '黑色', value: 'black' },
+        { label: '彩色', value: 'color' },
       ]
     }
     return []

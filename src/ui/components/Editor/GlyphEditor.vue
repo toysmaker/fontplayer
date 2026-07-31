@@ -576,7 +576,7 @@ onMounted(async () => {
         componentsCount: finalInstance._components?.length || 0,
         isEditing: instanceManager.isEditing(instanceKey),
         isTemporary: instanceManager.isTemporary(instanceKey),
-        componentTypes: finalInstance._components?.map((c: any) => c.type || 'unknown') || []
+        componentTypes: finalInstance._components?.filter((c: any) => c != null).map((c: any) => c.type || 'unknown') || []
       })
     }
   }

@@ -40,7 +40,7 @@ export interface IInstance {
  */
 export class InstanceManager {
   private instancePool: Map<string, IInstance> = new Map()
-  private maxPoolSize: number = 10
+  private maxPoolSize: number = 50
   private editingUUIDs: Set<string> = new Set()
   private temporaryInstances: Set<string> = new Set() // 临时实例集合（用于脚本执行等）
   /** 防止 cleanupPool LRU 驱逐：executeGlyphScript 等持有临时实例期间递增，finally 递减 */
@@ -221,57 +221,53 @@ export class InstanceManager {
       return
     }
 
-    // 找到最久未使用的实例
-    // 优先清理：不在编辑状态且不是临时实例的实例
-    // 如果还不够，清理不在编辑状态的临时实例（最久未使用的）
+    const toRemove = this.instancePool.size - this.maxPoolSize
+    let removed = 0
+
+    // 淘汰优先级：空实例 > 非临时实例 > 已初始化临时实例
+    // 1. 优先踢未初始化的临时实例（无 _components 也无 _glyph.components）
+    const emptyTemps: Array<{ uuid: string; lastUsed: number }> = []
     const nonTemporaryCandidates: Array<{ uuid: string; lastUsed: number }> = []
-    const temporaryCandidates: Array<{ uuid: string; lastUsed: number }> = []
-    
+    const initTemps: Array<{ uuid: string; lastUsed: number }> = []
+
     for (const [uuid, instance] of this.instancePool.entries()) {
-      // 跳过正在编辑的实例（无论是否为临时实例）
-      if (this.isEditing(uuid)) {
-        continue
-      }
-      // 正在 executeGlyphScript（等）中持有的 key：不可 LRU 驱逐，否则 cleanup() 会清空脚本刚写入的 _components
-      if (this.isEvictionPinned(uuid)) {
-        continue
-      }
+      if (this.isEditing(uuid)) continue
+      if (this.isEvictionPinned(uuid)) continue
+
+      const hasComps = (instance as any)._components?.length > 0 ||
+        (instance as any)._glyph?.components?.length > 0
 
       if (this.isTemporary(uuid)) {
-        // 临时实例候选（不在编辑状态）
-        temporaryCandidates.push({
-          uuid,
-          lastUsed: instance.lastUsed,
-        })
+        if (hasComps) {
+          initTemps.push({ uuid, lastUsed: instance.lastUsed })
+        } else {
+          emptyTemps.push({ uuid, lastUsed: instance.lastUsed })
+        }
       } else {
-        // 非临时实例候选
-        nonTemporaryCandidates.push({
-          uuid,
-          lastUsed: instance.lastUsed,
-        })
+        nonTemporaryCandidates.push({ uuid, lastUsed: instance.lastUsed })
       }
     }
 
-    // 按最后使用时间排序
-    nonTemporaryCandidates.sort((a, b) => a.lastUsed - b.lastUsed)
-    temporaryCandidates.sort((a, b) => a.lastUsed - b.lastUsed)
+    const sortByLRU = (a: { lastUsed: number }, b: { lastUsed: number }) => a.lastUsed - b.lastUsed
+    emptyTemps.sort(sortByLRU)
+    nonTemporaryCandidates.sort(sortByLRU)
+    initTemps.sort(sortByLRU)
 
-    // 计算需要移除的数量
-    const toRemove = this.instancePool.size - this.maxPoolSize
-    
-    // 优先移除非临时实例
-    let removed = 0
-    for (let i = 0; i < toRemove && i < nonTemporaryCandidates.length; i++) {
-      this.releaseInstance(nonTemporaryCandidates[i].uuid)
+    // 依次淘汰：空临时 → 非临时 → 已初始化临时
+    for (const c of emptyTemps) {
+      if (removed >= toRemove) break
+      this.releaseTemporaryInstance(c.uuid)
       removed++
     }
-    
-    // 如果还不够，移除临时实例（最久未使用的）
-    if (removed < toRemove) {
-      for (let i = 0; i < (toRemove - removed) && i < temporaryCandidates.length; i++) {
-        // 释放临时实例（会从 temporaryInstances 集合中移除）
-        this.releaseTemporaryInstance(temporaryCandidates[i].uuid)
-      }
+    for (const c of nonTemporaryCandidates) {
+      if (removed >= toRemove) break
+      this.releaseInstance(c.uuid)
+      removed++
+    }
+    for (const c of initTemps) {
+      if (removed >= toRemove) break
+      this.releaseTemporaryInstance(c.uuid)
+      removed++
     }
   }
 

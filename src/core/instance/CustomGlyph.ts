@@ -16,9 +16,51 @@ import { useProjectStore } from '@/stores/project'
 import { getGlobalConstantsMap } from '../script/ParametersMap'
 import { renderCanvas } from '../canvas/EditorCanvasRenderer'
 import { fontRenderStyle } from '../script/globals'
+import { genUUID } from '@/utils/uuid'
 import { computeCoords, type ILayoutTransformGrid } from '../utils/grid'
 import { precisionFromParamMax, roundToPrecision } from '@/utils/number'
 import { mapCanvasX, mapCanvasY } from '@/utils/canvas'
+
+/** 字形别名 */
+const GLYPH_NAME_ALIASES: Record<string, string> = {
+  '脸形': '脸型',
+}
+
+function findGlyphInProject(name: string): ICustomGlyph | null {
+  const file = useProjectStore().selectedFile
+  if (!file) return null
+  const searchNames = [name]
+  const alias = GLYPH_NAME_ALIASES[name]
+  if (alias) searchNames.push(alias)
+  for (const [from, to] of Object.entries(GLYPH_NAME_ALIASES)) {
+    if (name.includes(from)) {
+      const replaced = name.replace(new RegExp(from, 'g'), to)
+      if (!searchNames.includes(replaced)) searchNames.push(replaced)
+    }
+  }
+  for (const list of [file.glyphs, file.stroke_glyphs, file.radical_glyphs, file.comp_glyphs]) {
+    if (!list) continue
+    for (const g of list) {
+      if (searchNames.includes(g.name)) return g
+      const stripped = g.name.replace(/_/g, '')
+      for (const sn of searchNames) {
+        if (stripped.endsWith(sn) || g.name.endsWith('_' + sn)) return g
+      }
+    }
+  }
+  return null
+}
+
+function findGlyphInProjectByID(id: string): ICustomGlyph | null {
+  const file = useProjectStore().selectedFile
+  if (!file) return null
+  for (const list of [file.glyphs, file.stroke_glyphs, file.radical_glyphs, file.comp_glyphs]) {
+    if (!list) continue
+    const g = list.find((g2: ICustomGlyph) => g2.uuid === id)
+    if (g) return g
+  }
+  return null
+}
 
 // 可变参数差值渲染前浅克隆组件，避免原地修改 reactive 数据触发 Vue deep watcher 死循环
 function cloneGlyphComponentsForVarInterp(comps: any[]): any[] {
@@ -122,7 +164,9 @@ export class CustomGlyph implements IInstance {
    * 添加组件
    */
   addComponent(component: any) {
-    this._components.push(component)
+    if (component != null) {
+      this._components.push(component)
+    }
   }
 
   /**
@@ -691,8 +735,11 @@ export class CustomGlyph implements IInstance {
   /**
    * 获取字形数据
    */
-  getGlyph(): ICustomGlyph {
-    return this._glyph
+  getGlyph(name?: string): ICustomGlyph | null {
+    if (!name) return this._glyph
+    const all = (this._glyph.components || []).concat(this._components || [])
+    const comp = all.find((c: any) => c.name === name && c.type === 'glyph')
+    return comp ? (comp as any).value as ICustomGlyph : null
   }
 
   /**
@@ -700,11 +747,13 @@ export class CustomGlyph implements IInstance {
    */
   get components(): Array<any> {
     try {
-      return orderedListWithItemsForGlyph(this._glyph).concat(this._components || [])
+      // 过滤 null：FP.subtractOp 等操作可能返回 null，脚本可能直接 push 到 _components
+      const safeComponents = (this._components || []).filter((c: any) => c != null)
+      return orderedListWithItemsForGlyph(this._glyph).concat(safeComponents)
     } catch (e) {
       // 如果出错，返回 _components
       console.error('Error getting components:', e)
-      return this._components || []
+      return (this._components || []).filter((c: any) => c != null)
     }
   }
 
@@ -884,28 +933,19 @@ export class CustomGlyph implements IInstance {
   }
 
   /**
-   * 获取组件（通过名称）
+   * 获取组件（通过名称，先查 _glyph.components，再查 _components）
    */
   getComponent(name: string): any {
-    if (!this._glyph.components) return null
-    for (let i = 0; i < this._glyph.components.length; i++) {
-      if (this._glyph.components[i].name === name) {
-        return this._glyph.components[i]
+    if (this._glyph.components) {
+      for (let i = 0; i < this._glyph.components.length; i++) {
+        if (this._glyph.components[i].name === name) {
+          return this._glyph.components[i]
+        }
       }
     }
-    return null
-  }
-
-  /**
-   * 获取字形（通过名称）
-   */
-  getGlyphByName(name: string): any {
-    if (!this._glyph.components) return null
-    for (let i = 0; i < this._glyph.components.length; i++) {
-      if (this._glyph.components[i].name === name && this._glyph.components[i].type === 'glyph') {
-        const glyph = this._glyph.components[i].value as ICustomGlyph
-        // 从 InstanceManager 获取实例
-        return instanceManager.getOrCreateGlyphInstance(glyph, () => new CustomGlyph(glyph)) as any
+    for (let i = 0; i < this._components.length; i++) {
+      if (this._components[i].name === name) {
+        return this._components[i]
       }
     }
     return null
@@ -918,5 +958,169 @@ export class CustomGlyph implements IInstance {
     const joints = this.getJoints()
     const arr = joints.filter((joint: any) => joint.name === name)
     return arr.length ? arr[0] : null
+  }
+
+  /**
+   * 清除所有组件（_glyph 定义组件 + 脚本生成组件）
+   */
+  clearComponents(): void {
+    // 释放被清除组件的临时实例，避免孤儿实例在 InstanceManager 池中累积
+    if (this._glyph.components) {
+      for (const comp of this._glyph.components) {
+        if (comp.type === 'glyph' && instanceManager.isTemporary(comp.uuid)) {
+          instanceManager.releaseTemporaryInstance(comp.uuid)
+        }
+      }
+      this._glyph.components.length = 0
+    }
+    if (this._glyph.orderedList) this._glyph.orderedList.length = 0
+    this._components.length = 0
+  }
+
+  /**
+   * 按名称删除组件（从 _glyph.components 或 _components）
+   */
+  removeComponent(name: string): void {
+    // 先从 _components 查找
+    let idx = this._components.findIndex((c: any) => c.name === name)
+    if (idx !== -1) { this._components.splice(idx, 1); return }
+    // 再从 _glyph.components 查找
+    if (!this._glyph.components) return
+    idx = this._glyph.components.findIndex((c: any) => c.name === name)
+    if (idx === -1) return
+    const comp = this._glyph.components[idx]
+    this._glyph.components.splice(idx, 1)
+    if (this._glyph.orderedList) {
+      const olIdx = this._glyph.orderedList.findIndex((o: any) => o.uuid === comp.uuid)
+      if (olIdx !== -1) this._glyph.orderedList.splice(olIdx, 1)
+    }
+  }
+
+  /**
+   * 按 ID 删除组件
+   */
+  removeComponentByID(id: string): void {
+    let idx = this._components.findIndex((c: any) => c.uuid === id)
+    if (idx !== -1) { this._components.splice(idx, 1); return }
+    if (!this._glyph.components) return
+    idx = this._glyph.components.findIndex((c: any) => c.uuid === id)
+    if (idx === -1) return
+    this._glyph.components.splice(idx, 1)
+    if (this._glyph.orderedList) {
+      const olIdx = this._glyph.orderedList.findIndex((o: any) => o.uuid === id)
+      if (olIdx !== -1) this._glyph.orderedList.splice(olIdx, 1)
+    }
+  }
+
+  /**
+   * 查询 glyph 类型组件
+   */
+  selectComponents(options: { name?: string; id?: string; glyphName?: string; glyphID?: string }): IComponent[] {
+    const all = (this._glyph.components || []).concat(this._components || [])
+    return all.filter((c: any) => {
+      if (c.type !== 'glyph') return false
+      const v = c.value as any
+      if (options.name && c.name !== options.name) return false
+      if (options.id && c.uuid !== options.id) return false
+      if (options.glyphName && v?.name !== options.glyphName) return false
+      if (options.glyphID && v?.uuid !== options.glyphID) return false
+      return true
+    })
+  }
+
+  /**
+   * 添加 glyph 类型子组件到当前字形
+   */
+  addGlyphComponent(options: {
+    name?: string
+    glyphName?: string
+    glyphID?: string
+    glyphStyleTag?: string
+    ox?: number
+    oy?: number
+  }): { uuid: string; id: string } | null {
+    // 查找工程中的字形定义
+    let glyphData: ICustomGlyph | null = null
+    if (options.glyphID) {
+      glyphData = findGlyphInProjectByID(options.glyphID)
+    }
+    if (!glyphData && options.glyphName) {
+      glyphData = findGlyphInProject(options.glyphName)
+    }
+    if (!glyphData && options.glyphStyleTag) {
+      const file = useProjectStore().selectedFile
+      if (file) {
+        for (const list of [file.glyphs, file.stroke_glyphs, file.radical_glyphs, file.comp_glyphs]) {
+          if (!list) continue
+          const g = list.find((g2: ICustomGlyph) => (g2 as any).style === options.glyphStyleTag && g2.name === (options.glyphName || options.name))
+          if (g) { glyphData = g; break }
+        }
+      }
+    }
+
+    const uuid = genUUID()
+    const compName = options.name || options.glyphName || 'glyph'
+
+    const glyphValue: any = glyphData
+      ? JSON.parse(JSON.stringify(glyphData))
+      : { uuid: options.glyphID || '', name: options.glyphName || '', type: 'system' }
+
+    const component: IComponent = {
+      uuid, type: 'glyph', name: compName,
+      lock: false, visible: true,
+      x: 0, y: 0, w: 0, h: 0,
+      rotation: 0, flipX: false, flipY: false,
+      usedInCharacter: true,
+      ox: options.ox ?? 0, oy: options.oy ?? 0,
+      value: glyphValue as any,
+    } as IComponent
+
+    if (!this._glyph.components) this._glyph.components = []
+    this._glyph.components.push(component)
+    if (!this._glyph.orderedList) this._glyph.orderedList = []
+    this._glyph.orderedList.push({ type: 'component', uuid })
+
+    return { uuid, id: uuid }
+  }
+
+  /**
+   * 获取嵌套字形值（通过 ID）
+   */
+  getGlyphByID(id: string): ICustomGlyph | null {
+    const all = (this._glyph.components || []).concat(this._components || [])
+    const comp = all.find((c: any) => c.uuid === id && c.type === 'glyph')
+    return comp ? (comp as any).value as ICustomGlyph : null
+  }
+
+  /**
+   * 获取嵌套字形的 CustomGlyph 实例（通过名称）
+   */
+  getGlyphByComponentName(name: string): CustomGlyph | null {
+    const all = (this._glyph.components || []).concat(this._components || [])
+    const comp = all.find((c: any) => c.name === name && c.type === 'glyph')
+    if (!comp) return null
+    const glyphValue = (comp as any).value as ICustomGlyph
+    // 用 component.uuid 做 key，确保同一字形的多个子组件各自独立实例
+    return instanceManager.acquireTemporaryInstance(
+      comp.uuid,
+      () => new CustomGlyph(glyphValue),
+      'glyph'
+    ) as CustomGlyph
+  }
+
+  getGlyphByComponentID(id: string): CustomGlyph | null {
+    const all = (this._glyph.components || []).concat(this._components || [])
+    const comp = all.find((c: any) => c.uuid === id && c.type === 'glyph')
+    if (!comp) return null
+    const glyphValue = (comp as any).value as ICustomGlyph
+    return instanceManager.acquireTemporaryInstance(
+      comp.uuid,
+      () => new CustomGlyph(glyphValue),
+      'glyph'
+    ) as CustomGlyph
+  }
+
+  getGlyphInstanceByComponentID(id: string): CustomGlyph | null {
+    return this.getGlyphByComponentID(id)
   }
 }

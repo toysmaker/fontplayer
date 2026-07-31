@@ -807,17 +807,17 @@ export function render(
         const hasSkeleton = !!options.glyph?.skeleton
         
         // 检查是否需要执行脚本
-        // 注意：如果实例存在但 _components 为空，需要执行脚本
-        // 但如果实例不存在，可能是第一次进入，需要先获取实例再判断
+        // 注意：脚本可能产出内置组件（_components）或子字形引用（_glyph.components），需检查两者
+        const hasBuiltinComps = existingInstance?._components?.length > 0
+        const hasGlyphComps = (existingInstance?._glyph?.components?.length || 0) > 0
+        const hasAnyComps = hasBuiltinComps || hasGlyphComps
+
         let needsScriptExecution = false
         if (!existingInstance) {
-          // 如果实例不存在，需要执行脚本
           needsScriptExecution = true
-        } else if (!existingInstance._components || !existingInstance._components.length) {
-          // 如果实例存在但 _components 为空，需要执行脚本
+        } else if (!hasAnyComps) {
           needsScriptExecution = true
         } else if (forceUpdate) {
-          // 如果强制更新，需要执行脚本
           needsScriptExecution = true
         }
         

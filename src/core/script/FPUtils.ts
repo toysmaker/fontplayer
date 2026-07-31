@@ -10,6 +10,7 @@ import { bezierCurve, multiBezierCurve, IPoint } from '../utils/bezierCurve'
 import * as R from 'ramda'
 import * as PenComponentOps from './FPUtils/PenComponentOps'
 import { parseColorToHex } from '../utils/color'
+import { SeededRandom, seededRandom } from './FPUtils/SeededRandom'
 
 interface IGetContoursOption {
 	unticlockwise?: boolean;
@@ -309,6 +310,16 @@ const multiBezierFn1 = (x: number, speed: number = 1.0) : number => {
 	return getYFromMultiBezierByX(bezier, x, speed)
 }
 
+const leafFn = (x: number, speed: number = 1.0) : number => {
+	const bezier = [
+		{ x: 0, y: 0.5 },
+		{ x: 0.5, y: 1 },
+		{ x: 0.75, y: 0.75 },
+		{ x: 1, y: 0 },
+	]
+	return getYFromMultiBezierByX(bezier, x, speed)
+}
+
 const getBezierFn = (type: string) => {
   if (type === 'bezier1') {
 		return bezier1Fn
@@ -316,6 +327,8 @@ const getBezierFn = (type: string) => {
 		return bezierRoundHeadFn
 	} else if (type === 'multiBezier1') {
 		return multiBezierFn1
+	} else if (type === 'leaf') {
+		return leafFn
 	}
 	return bezierFn
 }
@@ -1103,6 +1116,10 @@ const getCurveContours2 = (name, skeleton, weight, options: IGetContoursOption) 
 					const f = fn(j / (n * beziers.length), speed)
 					in_weights.push(weight / 2 * f)
 					out_weights.push(weight / 2 * f)
+				} else if (options.weightsVariationFnType === 'leaf') {
+					const f = fn(j / (n * beziers.length), speed)
+					in_weights.push(weight / 2 * f)
+					out_weights.push(weight / 2 * f)
 				} else {
 					const f = fn(j / (n * beziers.length))
 					in_weights.push(in_endWeight + (in_startWeight - in_endWeight) * f)
@@ -1112,6 +1129,10 @@ const getCurveContours2 = (name, skeleton, weight, options: IGetContoursOption) 
 				// 字重变化为由起始到收尾方向
 				//const f = Math.pow(i / n, options.weightsVariationPower)
 				if (options.weightsVariationFnType === 'multiBezier1') {
+					const f = fn(i / (n * beziers.length), speed)
+					in_weights.push(weight / 2 * f)
+					out_weights.push(weight / 2 * f)
+				}  else if (options.weightsVariationFnType === 'leaf') {
 					const f = fn(i / (n * beziers.length), speed)
 					in_weights.push(weight / 2 * f)
 					out_weights.push(weight / 2 * f)
@@ -1719,6 +1740,44 @@ const getIntersection = (item1, item2) => {
 	}
 }
 
+const getIntersection2 = (
+	lines: Array<{ start: { x: number; y: number }; end: { x: number; y: number } }>,
+	curves: Array<{ points: Array<{ x: number; y: number }> }>,
+): Array<{
+	corner: { x: number; y: number }
+	lineIndex: number
+	curveIndex: number
+	curveVertexIndex: number
+}> => {
+	const results: Array<{
+		corner: { x: number; y: number }
+		lineIndex: number
+		curveIndex: number
+		curveVertexIndex: number
+	}> = []
+	for (let li = 0; li < lines.length; li++) {
+		const line = lines[li]
+		for (let ci = 0; ci < curves.length; ci++) {
+			const curve = curves[ci]
+			if (!curve.points || curve.points.length < 2) continue
+			for (let vi = 0; vi < curve.points.length - 1; vi++) {
+				const p1 = curve.points[vi]
+				const p2 = curve.points[vi + 1]
+				const corner = calculateIntersection(p1, p2, line.start, line.end)
+				if (corner) {
+					results.push({
+						corner,
+						lineIndex: li,
+						curveIndex: ci,
+						curveVertexIndex: vi,
+					})
+				}
+			}
+		}
+	}
+	return results
+}
+
 const calculateIntersection = (p1, p2, p3, p4) => {
 	// 计算分母
 	const denominator = (p4.y - p3.y) * (p2.x - p1.x) - (p4.x - p3.x) * (p2.y - p1.y);
@@ -1959,8 +2018,9 @@ const getBezierCurve = (curve) => {
 const getCurvesPoints = (curves) => {
 	const n = 100
 	const points = []
-	for (let i = 0; i < curves.length; i++) {
-		const curve = curves[i]
+	const list = Array.isArray(curves) ? curves : [curves]
+	for (let i = 0; i < list.length; i++) {
+		const curve = list[i]
 		let _curve = [curve.start, curve.control1, curve.control2, curve.end]
 		if (curve.control) {
 			_curve = [
@@ -2183,23 +2243,37 @@ const turnAngle = (start, end, angle, length) => {
 }
 
 const turnAngleFromStart = (start, end, angle, length) => {
-	const angle1 = Math.atan2(start.y - end.y, end.x - start.x)
+	const dx = end.x - start.x
+	const dy = start.y - end.y
+	// 显式处理竖直线段：dx ≈ 0 时直接用 ±π/2，避免 atan2(y, 0) 返回 NaN
+	const EPS = 1e-10
+	const angle1 = Math.abs(dx) < EPS
+		? (dy >= 0 ? Math.PI / 2 : -Math.PI / 2)
+		: Math.atan2(dy, dx)
+	// length 默认取 start→end 距离，兼容不传 length 的调用
+	const len = length ?? Math.sqrt(dx * dx + dy * dy)
 	// 逆时针为正，顺时针为负
 	const angle2 = angle1 + angle
 	const point = {
-		x: start.x + length * Math.cos(angle2),
-		y: start.y - length * Math.sin(angle2),
+		x: start.x + len * Math.cos(angle2),
+		y: start.y - len * Math.sin(angle2),
 	}
 	return point
 }
 
 const turnAngleFromEnd = (start, end, angle, length) => {
-	const angle1 = Math.atan2(start.y - end.y, end.x - start.x)
+	const dx = end.x - start.x
+	const dy = start.y - end.y
+	const EPS = 1e-10
+	const angle1 = Math.abs(dx) < EPS
+		? (dy >= 0 ? Math.PI / 2 : -Math.PI / 2)
+		: Math.atan2(dy, dx)
+	const len = length ?? Math.sqrt(dx * dx + dy * dy)
 	// 逆时针为正，顺时针为负
 	const angle2 = angle1 + angle
 	const point = {
-		x: end.x + length * Math.cos(angle2),
-		y: end.y - length * Math.sin(angle2),
+		x: end.x + len * Math.cos(angle2),
+		y: end.y - len * Math.sin(angle2),
 	}
 	return point
 }
@@ -2392,6 +2466,130 @@ const getPointOnCurveByPercentage = (curve, percentage) => {
 	}
 }
 
+/**
+ * 沿贝塞尔曲线组等距或按百分比采样，返回每个采样点的坐标和切线斜率 k。
+ *
+ * @param curves - 曲线段数组。三次贝塞尔：{ start, control1, control2, end }
+ *                 二次贝塞尔：{ start, control, end }
+ * @param options - { interval?: number } 恒定弧长间隔（单位同坐标），
+ *                  或 { percentages?: number[] } 百分比数组（0~1）
+ * @returns 采样结果数组 [{ x, y, k }]
+ *          k = dy/dx，竖直线时 k = Infinity
+ */
+const sampleCurvePoints = (
+	curves: Array<{
+		start: { x: number; y: number }
+		control1?: { x: number; y: number }
+		control2?: { x: number; y: number }
+		control?: { x: number; y: number }
+		end: { x: number; y: number }
+	}>,
+	options: { interval?: number; percentages?: number[] },
+): Array<{ x: number; y: number; k: number; angle: number }> => {
+	// 1. 将各曲线段离散采样为密集点集，记录每个点的累计弧长
+	const SAMPLES_PER_CURVE = 100
+	const allPoints: Array<{ x: number; y: number }> = []
+	const cumDist: number[] = [0] // 累计弧长，cumDist[0]=0
+	let totalLen = 0
+
+	for (const curve of curves) {
+		// 统一转为三次贝塞尔四元组 [start, c1, c2, end]
+		const c1 = curve.control1 || (curve.control
+			? { x: curve.start.x + 2/3 * (curve.control.x - curve.start.x),
+			    y: curve.start.y + 2/3 * (curve.control.y - curve.start.y) }
+			: curve.start)
+		const c2 = curve.control2 || (curve.control
+			? { x: curve.end.x + 2/3 * (curve.control.x - curve.end.x),
+			    y: curve.end.y + 2/3 * (curve.control.y - curve.end.y) }
+			: curve.end)
+		const bez = [curve.start, c1, c2, curve.end]
+
+		for (let j = 0; j <= SAMPLES_PER_CURVE; j++) {
+			const t = j / SAMPLES_PER_CURVE
+			const pt = bezierCurve.q(bez, t)
+			// 跳过首条曲线的起点（已在上一条曲线末尾添加）——但是第一条要加
+			if (j === 0 && allPoints.length > 0) continue
+			allPoints.push(pt)
+			if (allPoints.length > 1) {
+				const prev = allPoints[allPoints.length - 2]
+				totalLen += Math.sqrt((pt.x - prev.x) ** 2 + (pt.y - prev.y) ** 2)
+			}
+			cumDist.push(totalLen)
+		}
+	}
+
+	if (totalLen === 0 || allPoints.length < 2) return []
+
+	// 2. 确定目标弧长位置列表
+	let targets: number[] = []
+	if (options.percentages && options.percentages.length > 0) {
+		targets = options.percentages.map(p => p * totalLen)
+	} else if (options.interval && options.interval > 0) {
+		let d = 0
+		while (d <= totalLen + 1e-9) {
+			targets.push(d)
+			d += options.interval
+		}
+	} else {
+		return []
+	}
+
+	// 3. 对每个目标弧长，在密集点集中线性插值坐标和切线
+	const results: Array<{ x: number; y: number; k: number; angle: number }> = []
+	for (const target of targets) {
+		// 二分查找目标弧长所在区间
+		let lo = 0, hi = cumDist.length - 1
+		while (lo < hi) {
+			const mid = Math.floor((lo + hi) / 2)
+			if (cumDist[mid] < target) lo = mid + 1
+			else hi = mid
+		}
+		const idx = Math.min(lo, allPoints.length - 1)
+		if (idx === 0) {
+			const dx0 = allPoints[1].x - allPoints[0].x
+			const dy0 = allPoints[1].y - allPoints[0].y
+			results.push({ x: allPoints[0].x, y: allPoints[0].y, k: dx0 === 0 ? Infinity : dy0 / dx0, angle: Math.atan2(dy0, dx0) })
+			continue
+		}
+		// 在 idx-1 和 idx 之间插值
+		const dPrev = cumDist[idx - 1]
+		const dNext = cumDist[idx]
+		const segLen = dNext - dPrev
+		const ratio = segLen > 1e-12 ? (target - dPrev) / segLen : 0
+		const p0 = allPoints[idx - 1]
+		const p1 = allPoints[idx]
+		const x = p0.x + (p1.x - p0.x) * ratio
+		const y = p0.y + (p1.y - p0.y) * ratio
+		const dx = p1.x - p0.x
+		const dy = p1.y - p0.y
+		const k = Math.abs(dx) < 1e-10 ? Infinity : dy / dx
+		const angle = Math.atan2(dy, dx)
+		results.push({ x, y, k, angle })
+	}
+
+	return results
+}
+
+
+const getSegmentOnCurveByPercentage = (curves, startPercent, endPercent) => {
+	const points = getCurvesPoints(curves)
+	const startIndex = Math.floor(startPercent * points.length)
+	const endIndex = Math.floor(endPercent * (points.length - 1))
+	const startPoint = points[startIndex]
+	const endPoint = points[endIndex]
+	const curvesPoints = points.slice(startIndex, endIndex)
+	const segmentCurves = fitCurvesByPoints(curvesPoints)
+	const prevCurve = fitCurvesByPoints(curvesPoints.slice(0, -1))
+	const nextCurve = fitCurvesByPoints(curvesPoints.slice(1))
+	return {
+		startPoint,
+		endPoint,
+		curves: segmentCurves?.curves || [],
+		prevCurve: prevCurve?.curves || [],
+		nextCurve: nextCurve?.curves || [],
+	}
+}
+
 const FP = {
 	EllipseComponent,
 	PenComponent,
@@ -2404,6 +2602,7 @@ const FP = {
 	getLineContours,
 	getCurveContours,
 	getIntersection,
+	getIntersection2,
 	fitCurvesByPoints,
 	getRadiusPointsOnCurve,
 	distance,
@@ -2429,6 +2628,7 @@ const FP = {
 	getSquare,
 	getCircle,
 	getTangentOnCurves,
+	sampleCurvePoints,
 	getCurveContoursHorizontal,
 	getCurveContoursVertical,
 	getMiddlePoint,
@@ -2436,12 +2636,17 @@ const FP = {
 	radianToDegree,
 	interpolateFromKeyframes: PenComponentOps.interpolateFromKeyframes,
 	rotatePenComponent: PenComponentOps.rotatePenComponent,
+	flipPenComponent: PenComponentOps.flipPenComponent,
 	rotateSkeleton: PenComponentOps.rotateSkeleton,
 	subtractOp: PenComponentOps.subtractOp,
+	subtractOpAll: PenComponentOps.subtractOpAll,
 	intersectOp: PenComponentOps.intersectOp,
 	unionOp: PenComponentOps.unionOp,
+	SeededRandom,
+	seededRandom,
 	getControlPoint,
 	parseColorToHex,
+	getSegmentOnCurveByPercentage,
 }
 
 const suggestion_items = [

@@ -30,15 +30,15 @@ export function parseColorToHex(color: string): string {
     return normalizeHex(hexMatch[1])
   }
 
-  // 2. rgb / rgba
+  // 2. rgb / rgba（兼容浮点数）
   const rgbMatch =
     trimmed.match(
-      /^rgba?\s*\(\s*(\d+)\s*[\s,]\s*(\d+)\s*[\s,]\s*(\d+)\s*(?:[,/]\s*([\d.]+%?)\s*)?\)$/,
+      /^rgba?\s*\(\s*(\d+(?:\.\d+)?)\s*[\s,]\s*(\d+(?:\.\d+)?)\s*[\s,]\s*(\d+(?:\.\d+)?)\s*(?:[,/]\s*([\d.]+%?)\s*)?\)$/,
     )
   if (rgbMatch) {
-    const r = clamp(parseInt(rgbMatch[1]), 0, 255)
-    const g = clamp(parseInt(rgbMatch[2]), 0, 255)
-    const b = clamp(parseInt(rgbMatch[3]), 0, 255)
+    const r = clamp(Math.round(parseFloat(rgbMatch[1])), 0, 255)
+    const g = clamp(Math.round(parseFloat(rgbMatch[2])), 0, 255)
+    const b = clamp(Math.round(parseFloat(rgbMatch[3])), 0, 255)
     const a = parseAlpha(rgbMatch[4])
     return rgbaToHex(r, g, b, a)
   }

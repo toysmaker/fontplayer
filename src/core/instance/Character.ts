@@ -73,8 +73,6 @@ export class Character implements IInstance {
   public _components: Array<any> = []
 
   public _character: ICharacterFileLite
-  /** 缓存已获取的字形实例，cleanup 时统一释放 */
-  private _glyphInstances: Map<string, CustomGlyph> = new Map()
 
   constructor(character: ICharacterFileLite) {
     this._character = character
@@ -132,16 +130,15 @@ export class Character implements IInstance {
   }
 
   clearComponents(): void {
+    // 释放被清除组件的临时实例，避免孤儿实例在 InstanceManager 池中累积
+    for (const comp of this._character.components) {
+      if (comp.type === 'glyph' && instanceManager.isTemporary(comp.uuid)) {
+        instanceManager.releaseTemporaryInstance(comp.uuid)
+      }
+    }
     this._character.components.length = 0
     this._character.orderedList.length = 0
     this._components.length = 0
-    // 释放所有缓存的字形实例
-    for (const [key, instance] of this._glyphInstances) {
-      if (instanceManager.isTemporary(key)) {
-        instanceManager.releaseTemporaryInstance(key)
-      }
-    }
-    this._glyphInstances.clear()
   }
 
   removeComponent(name: string): void {
@@ -302,32 +299,23 @@ export class Character implements IInstance {
   private _getOrCreateGlyphInstance(component: IComponent): CustomGlyph | null {
     if (component.type !== 'glyph') return null
     const key = component.uuid
-    // 检查缓存
-    const cached = this._glyphInstances.get(key)
-    if (cached) return cached
-
     const glyphValue = (component as any).value as ICustomGlyph
-    const instance = instanceManager.acquireTemporaryInstance(
+    // 直接用 InstanceManager（自带 LRU 淘汰），不再本地缓存避免内存泄漏
+    return instanceManager.acquireTemporaryInstance(
       key,
       () => new CustomGlyph(glyphValue),
       'glyph'
     ) as CustomGlyph
-    this._glyphInstances.set(key, instance)
-    return instance
   }
 
   private _getOrCreateGlyphInstanceForGlyph(glyph: ICustomGlyph): CustomGlyph | null {
     const key = glyph.uuid
-    const cached = this._glyphInstances.get(key)
-    if (cached) return cached
-
-    const instance = instanceManager.acquireTemporaryInstance(
+    // 直接用 InstanceManager（自带 LRU 淘汰），不再本地缓存避免内存泄漏
+    return instanceManager.acquireTemporaryInstance(
       key,
       () => new CustomGlyph(glyph),
       'glyph'
     ) as CustomGlyph
-    this._glyphInstances.set(key, instance)
-    return instance
   }
 
   // ==================== 布局与坐标 ====================
@@ -370,12 +358,6 @@ export class Character implements IInstance {
 
   cleanup(): void {
     this._components = []
-    for (const [key, instance] of this._glyphInstances) {
-      if (instanceManager.isTemporary(key)) {
-        instanceManager.releaseTemporaryInstance(key)
-      }
-    }
-    this._glyphInstances.clear()
   }
 }
 

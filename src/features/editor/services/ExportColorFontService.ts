@@ -35,15 +35,44 @@ function resolveFontSettings(file: IFile): IFontSettings {
     : defaultFontSettings()
 }
 
-/** 与原版一致：任意组件存在分色 fillColor（value 或组件自身）则视为彩色分层字 */
+function componentHasFillColor(c: IComponent): boolean {
+  const onComp = !!(c as { fillColor?: string }).fillColor
+  const onValue = !!((c.value as { fillColor?: string } | undefined)?.fillColor)
+  if (onComp || onValue) return true
+  // 递归检查 glyph 子组件
+  if (c.type === 'glyph') {
+    const subs = (c.value as any)?.components as IComponent[] | undefined
+    if (subs && subs.length > 0) return subs.some(componentHasFillColor)
+  }
+  return false
+}
+
 export function characterUsesColorLayers(char: ICharacterFileLite): boolean {
   const components = ContourConverter.getComponentsForCharacter(char)
-  return components.some((c) => {
-    const v = c.value as { fillColor?: string } | undefined
-    const onValue = !!(v && v.fillColor)
-    const onComp = !!(c as { fillColor?: string }).fillColor
-    return onValue || onComp
-  })
+  return components.some(componentHasFillColor)
+}
+
+/** 递归收集所有带 fillColor 的叶子组件（展平 glyph 子组件树） */
+function collectColorComponents(components: IComponent[]): IComponent[] {
+  const result: IComponent[] = []
+  for (const comp of components) {
+    if (comp.type === 'glyph') {
+      const subComps = (comp.value as any)?.components as IComponent[] | undefined
+      if (subComps && subComps.length > 0) {
+        // 字形包含子组件：递归收集，父 fillColor 传给无色的子组件
+        const parentFill = (comp as any).fillColor || (comp.value as any)?.fillColor
+        for (const sub of collectColorComponents(subComps)) {
+          if (!(sub as any).fillColor && !(sub.value as any)?.fillColor && parentFill) {
+            (sub as any).fillColor = parentFill
+          }
+          result.push(sub)
+        }
+        continue
+      }
+    }
+    result.push(comp)
+  }
+  return result
 }
 
 function generateColorFontLayers(
@@ -51,6 +80,7 @@ function generateColorFontLayers(
   fs: IFontSettings
 ): NonNullable<ICharacter['layers']> {
   const components = ContourConverter.getComponentsForCharacter(char)
+  const flatComponents = collectColorComponents(components)
   const layers: NonNullable<ICharacter['layers']> = []
   const opts = {
     unitsPerEm: fs.unitsPerEm,
@@ -59,7 +89,7 @@ function generateColorFontLayers(
     preview: false,
     forceUpdate: false,
   }
-  for (const component of components) {
+  for (const component of flatComponents) {
     const contours = ContourConverter.componentsToContours(
       [component] as IComponent[],
       opts,

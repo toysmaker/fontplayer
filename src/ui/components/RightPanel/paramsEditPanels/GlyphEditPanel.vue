@@ -1627,7 +1627,6 @@ const handleFormatGlyphComponent = () => {
       <div
         class="fill-color-wrap"
         v-if="
-          editStatus === EditStatus.Edit &&
           selectedComponent &&
           selectedComponent.type === 'glyph'
         "

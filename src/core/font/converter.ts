@@ -261,7 +261,7 @@ export class ContourConverter {
     const postProcessTargetContourCache = new Map<string, IContours>()
     const postProcessTargetListCache = new Map<string, IContours[]>()
     for (const component of components) {
-      if (component.type !== 'glyph' || component.usedInCharacter === false) continue
+      if (!component || component.type !== 'glyph' || component.usedInCharacter === false) continue
       const glyphValue = (component.value || (component as any).value) as ICustomGlyph
       const rules = glyphValue?.postProcessRules
       if (!rules || rules.length === 0) continue

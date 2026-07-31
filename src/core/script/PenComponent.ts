@@ -130,16 +130,18 @@ class PenComponent {
 	public smooth (points, options: { curvature: number }) {
 		let { curvature = 0 } = options
 		if (curvature > 0.5) curvature = 0
+		const start = FP.getMiddlePoint(points[0], points[1])
 		this.lineTo(points[0].x, points[0].y)
-		for (let i = 0; i < points.length - 2; i+= 2) {
-			if (curvature === 0) {
-				this.quadraticBezierTo(points[i + 1].x, points[i + 1].y, points[i + 2].x, points[i + 2].y)
-			} else {
-				const control1 = FP.getPointOnLine(points[i], points[i + 1], curvature)
-				const control2 = FP.getPointOnLine(points[i + 1], points[i + 2], curvature)
-				this.bezierTo(control1.x, control1.y, control2.x, control2.y, points[i + 2].x, points[i + 2].y)
-			}
+		this.lineTo(start.x, start.y)
+		for (let i = 0; i < points.length - 2; i++) {
+			const end = FP.getMiddlePoint(points[i + 1], points[i + 2])
+			this.quadraticBezierTo(points[i + 1].x, points[i + 1].y, end.x, end.y)
 		}
+		this.lineTo(points[points.length - 1].x, points[points.length - 1].y)
+	}
+
+	public reversePath () {
+		this.points = this.points.reverse()
 	}
 
 	public lineTo (x: number, y: number) {

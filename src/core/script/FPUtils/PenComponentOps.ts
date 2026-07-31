@@ -427,18 +427,8 @@ const contourToPenPoints = (
 		})
 	}
 
-	// 对于闭合路径，最后一个锚点应与第一个锚点坐标一致
-	if (points.length >= 4) {
-		const first = points[0]
-		const last = points[points.length - 1]
-		if (Math.abs(last.x - first.x) < 0.001 && Math.abs(last.y - first.y) < 0.001) {
-			// 移除最后一个重复的锚点及其前面的两个控制点
-			// 因为 genPenContour 期望 [a0, c1, c2, a1, c1, c2, a2, ...] 最后锚点不应重复
-			points.pop() // anchor
-			points.pop() // control2
-			points.pop() // control1
-		}
-	}
+	// 闭合路径末尾保留锚点+controls，确保 penPointsToContour 能生成闭合段贝塞尔曲线
+	// 之前 pop 掉最后 3 点导致 Paper.js 布尔运算输入丢失最后一段曲线
 
 	return points
 }
@@ -495,6 +485,43 @@ const paperResultToPenComponent = (result: paper.PathItem): PenComponent | null 
 }
 
 /**
+ * 将 Paper.js 布尔运算结果转换为 PenComponent 数组
+ * CompoundPath 的每个子路径各自为一个 PenComponent（如圆环的外圆+内孔）
+ */
+const paperResultToPenComponents = (result: paper.PathItem): PenComponent[] => {
+	if (!result || (result as any).isEmpty?.()) return []
+
+	const children = (result as any).children
+	const paths: paper.Path[] = []
+
+	if (children && children.length > 0) {
+		for (const child of children) {
+			if (child instanceof paper.Path && child.curves && child.curves.length > 0) {
+				paths.push(child)
+			}
+		}
+	} else if (result instanceof paper.Path && result.curves && result.curves.length > 0) {
+		paths.push(result)
+	}
+
+	const components: PenComponent[] = []
+	for (const path of paths) {
+		const contour = paperPathToContour(path)
+		const points = contourToPenPoints(contour)
+		if (points.length >= 4) {
+			const comp = new PenComponent()
+			comp.points = points
+			comp.isClosed = true
+			comp.contour = []
+			comp.preview = []
+			components.push(comp)
+		}
+	}
+
+	return components
+}
+
+/**
  * 布尔运算通用执行函数
  */
 const executeBooleanOp = (
@@ -526,6 +553,34 @@ const executeBooleanOp = (
 			result = path1.intersect(path2) as paper.PathItem
 		} else {
 			result = path1.subtract(path2) as paper.PathItem
+		}
+
+		// 诊断：打印 Paper.js 布尔运算结果的所有曲线
+		if (import.meta.env.DEV) {
+			const children = (result as any).children
+			const paths: paper.Path[] = (children && children.length > 0)
+				? children.filter((c: any) => c instanceof paper.Path)
+				: (result instanceof paper.Path ? [result] : [])
+			for (let pi = 0; pi < paths.length; pi++) {
+				const p = paths[pi]
+				const curves = p.curves || []
+				console.log(
+					`[PenComponentOps] ${operation} result path[${pi}]: ` +
+					`curves=${curves.length}, closed=${p.closed}, area=${Math.abs((p as any).area ?? 0).toFixed(1)}`
+				)
+				for (let ci = 0; ci < curves.length; ci++) {
+					const c = curves[ci]
+					const h1len = Math.sqrt(c.handle1.x ** 2 + c.handle1.y ** 2).toFixed(2)
+					const h2len = Math.sqrt(c.handle2.x ** 2 + c.handle2.y ** 2).toFixed(2)
+					const isLinear = h1len === '0.00' && h2len === '0.00'
+					console.log(
+						`  curve[${ci}]: ` +
+						`p0=(${c.point1.x.toFixed(1)},${c.point1.y.toFixed(1)}) ` +
+						`→ p3=(${c.point2.x.toFixed(1)},${c.point2.y.toFixed(1)}) ` +
+						`h1len=${h1len} h2len=${h2len}${isLinear ? ' LINEAR' : ''}`
+					)
+				}
+			}
 		}
 
 		// 清理临时 paper 路径
@@ -642,6 +697,52 @@ const unionOp = (pen1: PenComponent, pen2: PenComponent): PenComponent | null =>
 }
 
 /**
+ * 布尔差集运算（全部轮廓）：pen1 - pen2
+ * 与 subtractOp 不同，CompoundPath 的每个子路径各自返回一个 PenComponent
+ * 用于圆环等场景（外圆+内孔 → 两个 PenComponent）
+ */
+const subtractOpAll = (pen1: PenComponent, pen2: PenComponent): PenComponent[] => {
+	return executeBooleanOpAll(pen1, pen2, 'subtract')
+}
+
+const executeBooleanOpAll = (
+	pen1: PenComponent,
+	pen2: PenComponent,
+	operation: 'unite' | 'intersect' | 'subtract',
+): PenComponent[] => {
+	if (!pen1 || !pen1.points || pen1.points.length < 4) return []
+	if (!pen2 || !pen2.points || pen2.points.length < 4) return []
+
+	try {
+		const path1 = penComponentToPaperPath(pen1)
+		const path2 = penComponentToPaperPath(pen2)
+
+		let result: paper.PathItem
+		if (operation === 'unite') {
+			result = path1.unite(path2) as paper.PathItem
+		} else if (operation === 'intersect') {
+			result = path1.intersect(path2) as paper.PathItem
+		} else {
+			result = path1.subtract(path2) as paper.PathItem
+		}
+
+		path1.remove()
+		path2.remove()
+
+		const components = paperResultToPenComponents(result)
+
+		if (result) result.remove()
+
+		return components
+	} catch (e) {
+		if (import.meta.env.DEV) {
+			console.error(`[PenComponentOps] ${operation}All failed:`, e)
+		}
+		return []
+	}
+}
+
+/**
  * 对骨架（关节数组）进行旋转变换
  * 围绕指定中心点旋转给定角度（度，360°制），返回旋转后的新关节数组
  *
@@ -678,5 +779,66 @@ const rotateSkeleton = (
 	return result
 }
 
-export { interpolateFromKeyframes, rotatePenComponent, rotateSkeleton, subtractOp, intersectOp, unionOp }
+/**
+ * 对钢笔组件进行镜像翻转（相对于由两点定义的直线）
+ * 返回翻转后的新 PenComponent，不清除原组件数据
+ *
+ * @param pen - 要翻转的钢笔组件
+ * @param p1 - 直线上的第一个点
+ * @param p2 - 直线上的第二个点
+ * @returns 翻转后的新 PenComponent
+ */
+const flipPenComponent = (
+	pen: PenComponent,
+	p1: { x: number; y: number },
+	p2: { x: number; y: number },
+): PenComponent => {
+	const comp = new PenComponent()
+	comp.setData(pen.getData())
+
+	const dx = p2.x - p1.x
+	const dy = p2.y - p1.y
+	const len2 = dx * dx + dy * dy
+
+	// 退化线段退化为关于 p1 点对称
+	if (len2 < 1e-10) {
+		for (let i = 0; i < comp.points.length; i++) {
+			comp.points[i] = {
+				...comp.points[i],
+				x: 2 * p1.x - comp.points[i].x,
+				y: 2 * p1.y - comp.points[i].y,
+			}
+		}
+	} else {
+		for (let i = 0; i < comp.points.length; i++) {
+			const px = comp.points[i].x
+			const py = comp.points[i].y
+			// 投影参数 t = ((P-p1)·d) / len²
+			const t = ((px - p1.x) * dx + (py - p1.y) * dy) / len2
+			// 垂足坐标
+			const fx = p1.x + t * dx
+			const fy = p1.y + t * dy
+			// 镜像点 = 2*垂足 - P
+			comp.points[i] = {
+				...comp.points[i],
+				x: 2 * fx - px,
+				y: 2 * fy - py,
+			}
+		}
+	}
+
+	// 清除计算缓存
+	comp.contour = []
+	comp.preview = []
+
+	if (import.meta.env.DEV) {
+		console.log(
+			`[PenComponentOps] flip: line=(${p1.x},${p1.y})→(${p2.x},${p2.y}), points=${comp.points.length}`,
+		)
+	}
+
+	return comp
+}
+
+export { interpolateFromKeyframes, rotatePenComponent, flipPenComponent, rotateSkeleton, subtractOp, intersectOp, unionOp, subtractOpAll }
 export type { IKeyframe, IInterpolationResult, JointData }
