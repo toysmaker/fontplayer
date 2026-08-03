@@ -92,10 +92,10 @@ import CharacterComponentList from '@/ui/components/ComponentList/CharacterCompo
 import RightPanel from '@/ui/components/RightPanel/RightPanel.vue'
 import BottomBar from '@/ui/components/BottomBar/BottomBar.vue'
 import EditFilesBar from '@/ui/components/FilesBar/EditFilesBar.vue'
-import type { IComponent, ICharacterFileLite } from '@/core/types'
+import type { IComponent, ICharacterFileLite, ICharacterSkeleton } from '@/core/types'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import { render } from '@/core/canvas/EditorCanvasRenderer'
-import { mapCanvasWidth, mapCanvasHeight } from '@/utils/canvas'
+import { mapCanvasWidth, mapCanvasHeight, mapCanvasX, mapCanvasY } from '@/utils/canvas'
 import type { IBackground, IGrid } from '@/core/canvas/types'
 import { useEditorPreferenceStore } from '@/stores/editorPreference'
 import { renderJoints, renderRefLines } from '@/core/script/Joint'
@@ -107,11 +107,10 @@ import { executeCharacterScript } from '@/core/script/ScriptExecutor'
 import { rebuildCharacterListPreviewAfterExitEdit } from '@/features/editor/listPreview/rebuildListPreviewAfterEditorExit'
 import { skeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
 import { useEffectStore } from '@/features/effects/effectStore'
+import { getStrokeWidth } from '@/utils/canvas-utils'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import { discardGlobalConstantsDraftOnLeave } from '@/stores/editorConstantsSession'
 import { setEditCanvasContext, clearEditCanvasContext } from '@/features/editor/editCanvas'
-import { mapCanvasX, mapCanvasY } from '@/utils/canvas'
-import { getStrokeWidth } from '@/utils/canvas-utils'
 import { bottomBarToolManager } from '@/features/bottomBar/BottomBarToolManager'
 import { useBottomBarToolStore } from '@/stores/bottomBarTool'
 import { toolManager, SelectTool, PenTool, PolygonTool, EllipseTool, RectangleTool, OverlayModeTool } from '@/features/tools'
@@ -219,6 +218,83 @@ const renderCanvas = (): void => {
     .catch(() => {})
 }
 
+// ============ 骨架渲染函数 ============
+// 渲染从位图提取的字符骨架，黑色stroke叠加在画布上
+// 与字形组件的关键点辅助线（renderJoints/renderRefLines）区分
+// TODO: 日后可改为独立渲染层
+function renderCharacterSkeleton(
+  canvas: HTMLCanvasElement,
+  skeleton: ICharacterSkeleton,
+): void {
+  const ctx = canvas.getContext('2d')
+  if (!ctx || !skeleton.strokes?.length) return
+
+  const raw = localStorage.getItem('skeletonPanel.selectedIndex')
+  const highlightIdx = raw != null ? parseInt(raw) : -1
+
+  ctx.save()
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  const strokes = skeleton.strokes
+  for (let si = 0; si < strokes.length; si++) {
+    const stroke = strokes[si]
+    const joints = stroke.joints
+    const jointKeys = Object.keys(joints)
+    const isHL = si === highlightIdx
+    ctx.strokeStyle = isHL ? '#FF0000' : '#000000'
+    ctx.lineWidth = isHL ? 3 : Math.max(1.5, getStrokeWidth() * 0.8)
+
+    if (jointKeys.length < 2) continue
+
+    ctx.beginPath()
+
+    if (jointKeys.length === 2) {
+      // 直线笔画：start → end
+      const start = joints[jointKeys[0]]
+      const end = joints[jointKeys[1]]
+      ctx.moveTo(mapCanvasX(start.x), mapCanvasY(start.y))
+      ctx.lineTo(mapCanvasX(end.x), mapCanvasY(end.y))
+    } else if (jointKeys.length === 3 && jointKeys.includes('bend')) {
+      // 曲线笔画（撇/捺/点/挑）：start → bend → end（二次贝塞尔）
+      const start = joints.start || joints[jointKeys[0]]
+      const bend = joints.bend || joints[jointKeys[1]]
+      const end = joints.end || joints[jointKeys[2]]
+      ctx.moveTo(mapCanvasX(start.x), mapCanvasY(start.y))
+      ctx.quadraticCurveTo(
+        mapCanvasX(bend.x), mapCanvasY(bend.y),
+        mapCanvasX(end.x), mapCanvasY(end.y),
+      )
+    } else {
+      // 多段笔画（横折/竖钩等）：按顺序连接所有关节
+      const orderedJoints = jointKeys
+        .map((k) => joints[k])
+        .filter((j) => j && j.x !== undefined && j.y !== undefined)
+
+      // 去重相邻相同坐标
+      const uniqueJoints: typeof orderedJoints = []
+      for (const j of orderedJoints) {
+        const last = uniqueJoints[uniqueJoints.length - 1]
+        if (!last || Math.abs(j.x - last.x) > 2 || Math.abs(j.y - last.y) > 2) {
+          uniqueJoints.push(j)
+        }
+      }
+
+      if (uniqueJoints.length >= 2) {
+        ctx.moveTo(mapCanvasX(uniqueJoints[0].x), mapCanvasY(uniqueJoints[0].y))
+        for (let i = 1; i < uniqueJoints.length; i++) {
+          ctx.lineTo(mapCanvasX(uniqueJoints[i].x), mapCanvasY(uniqueJoints[i].y))
+        }
+      }
+    }
+
+    ctx.stroke()
+  }
+
+  ctx.restore()
+}
+// ============ 骨架渲染函数结束 ============
+
 function runRenderCanvasSync() {
   if (!canvasRef.value || !editingCharacter.value) {
     if (import.meta.env.DEV) {
@@ -238,6 +314,16 @@ function runRenderCanvasSync() {
     layoutTransformGrid: layoutTransformGrid.value,
   })
   
+  // 渲染关键点和辅助线（在主要渲染之后）
+  // ============ 骨架渲染 (Character Skeleton Overlay) ============
+  // 渲染从位图提取的字符骨架，黑色stroke叠加
+  // 与字形组件的关键点辅助线区分开，日后可改为独立渲染层
+  const showSkeleton = localStorage.getItem('skeletonPanel.showOverlay') === 'true'
+  if (showSkeleton && editingCharacter.value?.skeleton?.strokes?.length) {
+    renderCharacterSkeleton(canvasRef.value, editingCharacter.value.skeleton)
+  }
+  // ============ 骨架渲染结束 ============
+
   // 渲染关键点和辅助线（在主要渲染之后）
   // 如果当前选中的组件被设置为不可见（visible === false），则不渲染其关键点和辅助线
   if (editorStore.checkJoints || editorStore.checkRefLines) {
@@ -564,9 +650,21 @@ onMounted(async () => {
   if (canvasRef.value && bottomBarToolStore.currentTool === 'coordsViewer') {
     bottomBarToolManager.activateCoordsViewer(canvasRef.value, false)
   }
+
+  // 监听骨架渲染事件（SkeletonPanel 触发）
+  window.addEventListener('editor-skeleton-render', onSkeletonRender)
 })
 
+function onSkeletonRender() {
+  if (import.meta.env.DEV) {
+    console.log('[CharacterEditor] Skeleton render event received')
+  }
+  renderCanvas()
+}
+
 onUnmounted(() => {
+  // 清理骨架渲染事件监听
+  window.removeEventListener('editor-skeleton-render', onSkeletonRender)
   // 清理骨架自由编辑状态，避免退出后再进入时残留状态
   if (skeletonFreeEdit.value) {
     exitSkeletonFreeEdit()

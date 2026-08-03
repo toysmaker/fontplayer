@@ -334,6 +334,39 @@ export interface ICharacterFileMetadata {
 }
 
 /**
+ * 字符骨架关节坐标
+ */
+export interface ISkeletonJoint {
+  x: number
+  y: number
+}
+
+/**
+ * 字符骨架中的单个笔画
+ * 包含笔画名称、参数、关键点、偏移量
+ */
+export interface ICharacterSkeletonStroke {
+  /** 笔画名称，对应 kai 模板类型，如 '横', '竖', '撇', '横折' 等 */
+  name: string
+  /** 笔画参数，如 { horizontalSpan: 300, verticalSpan: 10 } */
+  params: Record<string, number>
+  /** 关键点坐标，如 { start: {x:0,y:0}, end: {x:300,y:0} } */
+  joints: Record<string, ISkeletonJoint>
+  /** X轴偏移量（当前统一为0） */
+  ox: number
+  /** Y轴偏移量（当前统一为0） */
+  oy: number
+}
+
+/**
+ * 从位图提取的字符骨架数据
+ * 存储在 ICharacterFileLite.skeleton 字段中
+ */
+export interface ICharacterSkeleton {
+  strokes: Array<ICharacterSkeletonStroke>
+}
+
+/**
  * 字符文件（轻量版，大型数据存储在IndexedDB）
  */
 export interface ICharacterFileLite {
@@ -363,6 +396,8 @@ export interface ICharacterFileLite {
   decomposition?: unknown
   /** 部件匹配表（部分批量脚本依赖；可选） */
   matches?: unknown
+  /** 从位图提取的字符骨架数据 */
+  skeleton?: ICharacterSkeleton
 }
 
 /**

@@ -7,7 +7,7 @@ import type { IComponent } from '@/core/types'
 /**
  * 工具类型
  */
-export type ToolType = 'select' | 'pen' | 'polygon' | 'ellipse' | 'rectangle' | 'picture' | 'glyph' | 'code' | 'params' | 'grid' | 'metrics'
+export type ToolType = 'select' | 'pen' | 'polygon' | 'ellipse' | 'rectangle' | 'picture' | 'glyph' | 'code' | 'params' | 'grid' | 'metrics' | 'skeleton'
 
 /**
  * 编辑模式

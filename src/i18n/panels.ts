@@ -332,6 +332,15 @@ const panels = {
 		toolBar: {
 			characterList: '字符列表',
 		},
+		skeletonPanel: {
+			title: '骨架提取',
+			extract: '提取骨架',
+			extracting: '提取中...',
+			showSkeleton: '显示骨架',
+			strokes: '笔画列表',
+			emptyHint: '请先提取骨架（支持毛笔/钢笔字位图）',
+			noStrokesFound: '未能从图片中提取到笔画，请确认图片包含清晰的毛笔/钢笔字迹。',
+		},
 		rightPanel: {
 			selectComponent: '请选择一个组件进行编辑',
 		},
@@ -689,6 +698,15 @@ const panels = {
 		},
 		toolBar: {
 			characterList: 'Character List',
+		},
+		skeletonPanel: {
+			title: 'Skeleton Extraction',
+			extract: 'Extract Skeleton',
+			extracting: 'Extracting...',
+			showSkeleton: 'Show Skeleton',
+			strokes: 'Stroke List',
+			emptyHint: 'Extract skeleton from a calligraphy/pen character bitmap',
+			noStrokesFound: 'No strokes could be extracted from the image. Please ensure the image contains clear calligraphy/pen strokes.',
 		},
 		rightPanel: {
 			selectComponent: 'Please select a component to edit',

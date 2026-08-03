@@ -33,3 +33,8 @@ export const getEditCanvasContext = () => {
     onRender: editCanvasOnRender.value,
   }
 }
+
+/** 获取编辑器 canvas 元素（用于调试渲染） */
+export const getEditorCanvas = (): HTMLCanvasElement | null => {
+  return editCanvasRef.value
+}

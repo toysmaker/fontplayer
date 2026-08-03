@@ -6,9 +6,12 @@ use std::io::Write;
 use std::sync::Mutex;
 use std::fs;
 use std::path::PathBuf;
+use base64;
 use chrono::Local;
 use tauri::menu::{Menu, MenuItemBuilder, MenuItemKind, Submenu};
 use tauri::{AppHandle, Emitter, Manager, State};
+
+mod skeleton;
 
 // 语言状态管理
 struct LanguageState {
@@ -1055,6 +1058,37 @@ fn open_devtools_cmd(window: tauri::WebviewWindow) {
 }
 // END-MARK-DEVTOOLS
 
+/// 从二值位图mask提取骨架折线段
+/// mask_b64: base64编码的8位灰度图数据（0=前景/ink, 255=背景/paper）
+/// width, height: 图像尺寸（1000x1000）
+#[tauri::command]
+async fn extract_skeleton(
+    mask_b64: String,
+    width: u32,
+    height: u32,
+) -> Result<Vec<Vec<(f64, f64)>>, String> {
+    let bytes = base64::Engine::decode(
+        &base64::engine::general_purpose::STANDARD,
+        &mask_b64,
+    )
+    .map_err(|e| format!("base64 decode error: {}", e))?;
+
+    if bytes.len() != (width * height) as usize {
+        return Err(format!(
+            "mask size mismatch: expected {} bytes, got {}",
+            width * height,
+            bytes.len()
+        ));
+    }
+
+    let img = image::GrayImage::from_raw(width, height, bytes)
+        .ok_or_else(|| "invalid image dimensions".to_string())?;
+
+    // 调用 skeleton 模块提取折线段
+    skeleton::extract_skeleton_from_image_data(&img)
+        .map_err(|e| format!("skeleton extraction error: {}", e))
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::new().build())
@@ -1176,7 +1210,8 @@ pub fn run() {
             write_file_chunk,
             read_keydata,
             log_diagnostic,
-            open_devtools_cmd // MARK-DEVTOOLS: 临时调试命令，日后删除
+            open_devtools_cmd, // MARK-DEVTOOLS: 临时调试命令，日后删除
+            extract_skeleton,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

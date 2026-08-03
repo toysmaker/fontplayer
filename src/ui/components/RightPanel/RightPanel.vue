@@ -24,6 +24,7 @@ import MetricsEditPanel from './paramsEditPanels/MetricsEditPanel.vue'
 import LayoutGridEditPanel from './paramsEditPanels/LayoutGridEditPanel.vue'
 import PictureImportParamsPanel from './paramsEditPanels/PictureImportParamsPanel.vue'
 import EffectParamsPanel from './paramsEditPanels/EffectParamsPanel.vue'
+import SkeletonPanel from './paramsEditPanels/SkeletonPanel.vue'
 import { useEffectStore } from '@/features/effects/effectStore'
 
 const { t } = useI18n()
@@ -50,6 +51,11 @@ if (import.meta.env.DEV) {
     <!-- 效果滤镜参数面板（最高优先级，在其他任何面板之前显示） -->
     <effect-params-panel v-if="effectStore.isActive" />
     <picture-import-params-panel v-else-if="editStatus === EditStatus.Pic" />
+    <!-- 骨架提取面板 -->
+    <skeleton-panel
+      v-else-if="editStatus === EditStatus.Edit && tool === 'skeleton'"
+      ref="skeletonPanelRef"
+    />
     <!-- 字符编辑 metrics 工具：度量参数 -->
     <metrics-edit-panel
       v-else-if="editStatus === EditStatus.Edit && tool === 'metrics'"

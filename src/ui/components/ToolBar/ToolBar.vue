@@ -195,6 +195,24 @@
             </n-icon></template>差集
           </n-tooltip>
         </template>
+
+        <!-- 骨架提取按钮 - 仅在字符编辑模式显示 -->
+        <template v-if="editStatus === EditStatus.Edit">
+          <div class="boolean-separator"></div>
+          <n-tooltip trigger="hover" placement="bottom">
+            <template #trigger>
+              <n-icon
+                class="tool-icon"
+                :class="{ 'selected': tool === 'skeleton' }"
+                size="40"
+                @click="switchTool('skeleton')"
+                @pointerup="switchTool('skeleton')">
+                <font-awesome-icon :icon="['fas', 'cubes']" />
+              </n-icon>
+            </template>
+            {{ t('panels.skeletonPanel.title') }}
+          </n-tooltip>
+        </template>
       </div>
 
       <!-- 返回字符列表按钮 -->
