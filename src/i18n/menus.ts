@@ -84,6 +84,11 @@ const menus = {
 			geometric_simplify: '几何简化',
 			pixelate: '像素化',
 		},
+		test: {
+			test: "测试",
+			export_json: "导出为json工程",
+			exportFailed: "导出 JSON 工程失败",
+		},
   },
   en: {
 		app: 'FontPlayer',
@@ -169,6 +174,11 @@ const menus = {
 			melt: 'Melt',
 			geometric_simplify: 'Geometric Simplify',
 			pixelate: 'Pixelate',
+		},
+		test: {
+			test: "Test",
+			export_json: "Export as JSON",
+			exportFailed: "Export JSON failed",
 		},
   },
 }

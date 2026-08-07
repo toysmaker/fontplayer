@@ -30,6 +30,7 @@ struct MenuTexts {
     settings: SettingsMenuTexts,
     templates: TemplatesMenuTexts,
     tools: ToolsMenuTexts,
+    test: TestMenuTexts,
 }
 
 struct FileMenuTexts {
@@ -104,6 +105,12 @@ struct ToolsMenuTexts {
     format_current_character: &'static str,
 }
 
+struct TestMenuTexts {
+    test: &'static str,
+    export_json: &'static str,
+    export_stroke_pngs: &'static str,
+}
+
 fn get_menu_texts(lang: &str) -> MenuTexts {
     match lang {
         "en" => MenuTexts {
@@ -173,6 +180,11 @@ fn get_menu_texts(lang: &str) -> MenuTexts {
                 format_all_characters: "Format All Characters",
                 format_current_character: "Format Current Character",
             },
+            test: TestMenuTexts {
+                test: "Test",
+                export_json: "Export JSON",
+                export_stroke_pngs: "Export Stroke PNGs",
+            },
         },
         _ => MenuTexts {
             app: "字玩",
@@ -240,6 +252,11 @@ fn get_menu_texts(lang: &str) -> MenuTexts {
                 remove_overlap: "去除重叠",
                 format_all_characters: "一键格式化所有字符",
                 format_current_character: "一键格式化当前字符",
+            },
+            test: TestMenuTexts {
+                test: "测试",
+                export_json: "导出JSON",
+                export_stroke_pngs: "导出笔画字形图片",
             },
         },
     }
@@ -461,6 +478,14 @@ fn format_current_character(app: AppHandle) {
     app.emit("format-current-character", ()).unwrap();
 }
 
+fn save_char_pngs(app: AppHandle) {
+    println!("[RUST] save_char_pngs called");
+    match app.emit("save-char-pngs", ()) {
+        Ok(_) => println!("[RUST] emit save-char-pngs OK"),
+        Err(e) => println!("[RUST] emit save-char-pngs FAILED: {}", e),
+    }
+}
+
 fn component_union(app: AppHandle) {
     app.emit("component-union", ()).unwrap();
 }
@@ -545,6 +570,9 @@ fn build_menu_enabled_map() -> HashMap<String, Box<dyn Fn(&str) -> bool>> {
     map.insert("remove_overlap".to_string(), Box::new(enable_at_character_edit));
     map.insert("format-all-characters".to_string(), Box::new(enable_at_list));
     map.insert("format-current-character".to_string(), Box::new(enable_at_character_edit));
+    map.insert("test-export-json".to_string(), Box::new(enable));
+    map.insert("export-stroke-pngs".to_string(), Box::new(enable));
+    map.insert("save-char-pngs".to_string(), Box::new(enable));
     map
 }
 
@@ -699,6 +727,8 @@ fn get_menu_item_text<'a>(id: &str, texts: &'a MenuTexts) -> Option<&'a str> {
         "remove-overlap" | "remove_overlap" => Some(texts.tools.remove_overlap),
         "format-all-characters" => Some(texts.tools.format_all_characters),
         "format-current-character" => Some(texts.tools.format_current_character),
+        "test-export-json" => Some(texts.test.export_json),
+        "export-stroke-pngs" => Some(texts.test.export_stroke_pngs),
         _ => None,
     }
 }
@@ -715,6 +745,7 @@ fn get_submenu_text<'a>(index: usize, texts: &'a MenuTexts) -> Option<&'a str> {
         6 => Some(texts.settings.settings),
         7 => Some(texts.templates.templates),
         8 => Some(texts.tools.tools),
+        9 => Some(texts.test.test),
         _ => None,
     }
 }
@@ -1006,6 +1037,24 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>, texts: &MenuTexts) -> Resul
                 ],
             )
             ?,
+            // DEBUG-ONLY: 测试子菜单
+            &Submenu::with_items(
+                app,
+                texts.test.test,
+                true,
+                &[
+                    &MenuItemBuilder::with_id("test-export-json", texts.test.export_json)
+                        .build(app)
+                        ?,
+                    &MenuItemBuilder::with_id("export-stroke-pngs", texts.test.export_stroke_pngs)
+                        .build(app)
+                        ?,
+                    &MenuItemBuilder::with_id("save-char-pngs", "保存字符图片")
+                        .build(app)
+                        ?,
+                ],
+            )
+            ?,
         ],
     )
 }
@@ -1191,6 +1240,9 @@ pub fn run() {
                     "component-union" => component_union(app.app_handle().clone()),
                     "component-intersect" => component_intersect(app.app_handle().clone()),
                     "component-subtract" => component_subtract(app.app_handle().clone()),
+                    "test-export-json" => { let _ = app.app_handle().emit("test-export-json", ()); }
+                    "export-stroke-pngs" => { let _ = app.app_handle().emit("export-stroke-pngs", ()); }
+                    "save-char-pngs" => save_char_pngs(app.app_handle().clone()),
                     _ => {}
                 }
             });

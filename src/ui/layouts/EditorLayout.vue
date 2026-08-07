@@ -134,6 +134,9 @@ onMounted(() => {
   if (isTauri()) {
     initTauriMenu()
     window.addEventListener('show-new-project-dialog', handleShowNewProjectDialog)
+    window.addEventListener('show-save-char-pngs-dialog', (e: Event) => {
+      window.dispatchEvent(new CustomEvent('editor-show-save-char-pngs-dialog', { detail: (e as CustomEvent).detail }))
+    })
   }
 })
 

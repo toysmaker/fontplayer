@@ -81,6 +81,7 @@
     <FontSettingsMoreDialog v-model:show="showFontSettingsMoreDialog" />
     <PreferenceSettingsDialog v-model:show="showPreferenceSettingsDialog" />
     <LanguageSettingsDialog v-model:show="showLanguageSettingsDialog" />
+    <SaveCharPngsDialog v-if="isDev" v-model:show="showSaveCharPngsDialog" :total="saveCharPngsTotal" @confirm="onSaveCharPngsConfirm" />
     <ExportFontDialog />
     <ExportVarFontDialog />
     <ExportColorFontDialog />
@@ -113,6 +114,7 @@ import FontSettingsDialog from '@/ui/dialogs/FontSettingsDialog.vue'
 import FontSettingsMoreDialog from '@/ui/dialogs/FontSettingsMoreDialog.vue'
 import PreferenceSettingsDialog from '@/ui/dialogs/PreferenceSettingsDialog.vue'
 import LanguageSettingsDialog from '@/ui/dialogs/LanguageSettingsDialog.vue'
+import SaveCharPngsDialog from '@/ui/dialogs/SaveCharPngsDialog.vue'
 import ExportFontDialog from '@/ui/dialogs/ExportFontDialog.vue'
 import ExportVarFontDialog from '@/ui/dialogs/ExportVarFontDialog.vue'
 import ExportColorFontDialog from '@/ui/dialogs/ExportColorFontDialog.vue'
@@ -123,10 +125,12 @@ import { createDebouncedHandler } from '@/utils/debounce-click'
 import { createMenuHandlers, createDisabledRules } from '@/features/editor/menus/menuHandlers'
 import type { MenuHandlerContext } from '@/features/editor/menus/menuHandlerTypes'
 import { useDialogsStore } from '@/stores/dialogs'
+import { saveCharPngsCount, saveCharPngsTotal } from '@/stores/saveCharPngs'
 
 const { t } = useI18n()
 const message = useMessage()
 const dialog = useDialog()
+const isDev = import.meta.env.DEV
 const router = useRouter()
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
@@ -136,6 +140,10 @@ const showAddIconDialog = ref(false)
 const showAddGlyphDialog = ref(false)
 const addGlyphCategory = ref<'glyphs' | 'stroke_glyphs' | 'radical_glyphs' | 'comp_glyphs'>('glyphs')
 const dialogsStore = useDialogsStore()
+const showSaveCharPngsDialog = ref(false)
+const onSaveCharPngsConfirm = () => {
+	  window.dispatchEvent(new CustomEvent('save-char-pngs-count', { detail: saveCharPngsCount.value }))
+	}
 const showGlyphComponentsDialog = computed({
   get: () => dialogsStore.glyphComponentsDialogVisible,
   set: (v: boolean) => {
@@ -515,11 +523,26 @@ onMounted(() => {
   window.addEventListener('editor-component-boolean', handleEditorBooleanOperation)
   window.addEventListener('editor-font-settings', onFontSettings)
   window.addEventListener('editor-preference-settings', onPreferenceSettings)
+  if (import.meta.env.DEV) {
+    window.addEventListener('editor-show-save-char-pngs-dialog', (e: Event) => {
+      const detail = (e as CustomEvent).detail as { total: number }
+      saveCharPngsTotal.value = detail.total
+      showSaveCharPngsDialog.value = true
+    })
+  }
   window.addEventListener('editor-language-settings', onLanguageSettings)
   window.addEventListener('editor-template', handleEditorTemplate)
   window.addEventListener('save-file', onSaveFile)
   window.addEventListener('save-as', onSaveAs)
-  
+  if (import.meta.env.DEV) {
+    window.addEventListener('editor-show-save-char-pngs-dialog', (e: Event) => {
+      const detail = (e as CustomEvent).detail as { total: number }
+      saveCharPngsTotal.value = detail.total
+      saveCharPngsCount.value = Math.min(5000, detail.total)
+      showSaveCharPngsDialog.value = true
+    })
+  }
+
   // 初始化 Tauri 菜单状态
   updateTauriMenuDisabled()
 })

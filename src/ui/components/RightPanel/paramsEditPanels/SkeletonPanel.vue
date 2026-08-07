@@ -48,6 +48,17 @@
       <n-divider style="margin: 4px 0" />
       <!-- ====== 调试按钮结束 ====== -->
 
+      <!-- 生成笔画组件 -->
+      <n-space vertical size="small">
+        <n-button size="small" type="primary" @click="handleGenerateComponents" @pointerup="handleGenerateComponents" :disabled="!skeleton?.strokes?.length">
+          生成笔画组件
+        </n-button>
+        <n-button size="small" @click="handleRenderCharacter" @pointerup="handleRenderCharacter">
+          渲染字符
+        </n-button>
+      </n-space>
+      <n-divider style="margin: 4px 0" />
+
       <!-- 列表区域 -->
       <!-- 调试模式：折线/笔画列表 -->
       <div v-if="debugViewMode && debugList.length > 0" class="strokes-section">
@@ -92,6 +103,7 @@ import { useI18n } from 'vue-i18n'
 import { NSpace, NButton, NSwitch, NAlert, NEmpty, NDivider } from 'naive-ui'
 import { useCharacterStore } from '@/stores/character'
 import { extractSkeletonFromImageFile, getLastDebugData, type SkeletonDebugData } from '@/features/skeletonExtraction'
+import { generateAndAddGlyphComponents } from '@/features/skeletonExtraction/generateComponents'
 import { getEditorCanvas } from '@/features/editor/editCanvas'
 
 const { t } = useI18n()
@@ -172,6 +184,14 @@ const handleExtract = async () => {
   } finally {
     extracting.value = false
   }
+}
+
+// ====== 生成组件 ======
+function handleGenerateComponents() {
+  generateAndAddGlyphComponents()
+}
+function handleRenderCharacter() {
+  window.dispatchEvent(new CustomEvent('editor-skeleton-render'))
 }
 
 // ====== 调试视图 ======

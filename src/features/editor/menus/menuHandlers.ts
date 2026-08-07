@@ -8,6 +8,7 @@ import { createSettingsHandlers } from './settingsHandlers'
 import { createTemplateMenuHandlers } from './templateMenuHandlers'
 import { createToolsHandlers } from './toolsHandlers'
 import { createEffectHandlers } from './effectHandlers'
+import { createTestHandlers } from './testHandlers'
 import { EditStatus } from '@/core/types'
 
 /**
@@ -25,6 +26,7 @@ export function createMenuHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
     ...createTemplateMenuHandlers(ctx),
     ...createToolsHandlers(ctx),
     ...createEffectHandlers(ctx),
+    ...createTestHandlers(ctx),
   }
 }
 
@@ -146,6 +148,12 @@ export function createDisabledRules(ctx: {
     'component-subtract': enableAtEdit,
     'format-all-characters': enableAtList,
     'format-current-character': enableAtCharacterEdit,
+
+    // test (DEV only)
+    'test-export-json': enable,
+    'test-export-skeleton-params': enable,
+    'test-import-from-params': enable,
+    'test-import-from-skeleton': enable,
 
     // effects
     'effect-adjust-weight': enableAtCharacterEdit,

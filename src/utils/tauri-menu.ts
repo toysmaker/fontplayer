@@ -167,8 +167,175 @@ export async function initTauriMenu() {
     listen('component-intersect', () => {
       window.dispatchEvent(new CustomEvent('editor-component-boolean', { detail: { operation: 'intersect' } }))
     })
+    listen('save-char-pngs', async () => {
+      if (import.meta.env.DEV) console.warn('[tauri-menu] save-char-pngs event received!')
+      try {
+        const { useProjectStore } = await import('@/stores/project')
+        const file = useProjectStore().selectedFile
+        if (!file || !file.characterList?.length) { alert('当前工程没有字符'); return }
+
+        // 通过事件弹出 Vue 对话框（和新建工程一样）
+        const count: number = await new Promise((resolve) => {
+          const handler = (e: Event) => {
+            window.removeEventListener('save-char-pngs-count', handler)
+            resolve((e as CustomEvent).detail || 0)
+          }
+          window.addEventListener('save-char-pngs-count', handler)
+          window.dispatchEvent(new CustomEvent('show-save-char-pngs-dialog', {
+            detail: { total: file!.characterList.length }
+          }))
+        })
+        if (count <= 0) return
+
+        const { open } = await import('@tauri-apps/plugin-dialog')
+        const folderPath = await open({ directory: true, title: '选择导出文件夹' })
+        if (!folderPath) return
+
+        const { mkdir } = await import('@tauri-apps/plugin-fs')
+        const exportDir = `${folderPath}/char_pngs`
+        await mkdir(exportDir, { recursive: true })
+
+        const { ContourConverter } = await import('@/core/font/converter')
+        const { RenderEngine } = await import('@/core/font/renderer')
+        const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
+        const { executeCharacterScript } = await import('@/core/script/ScriptExecutor')
+        const { writeFile } = await import('@tauri-apps/plugin-fs')
+
+        const SIZE = 1000
+        const fs = file.fontSettings || { unitsPerEm: 1000, descender: -200 }
+
+        for (let i = 0; i < count; i++) {
+          const meta = file.characterList[i]
+          const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
+          if (!ch) continue
+
+          // 执行脚本重新生成组件
+          try { executeCharacterScript(ch, ch.uuid) } catch {}
+
+          const components = (ch.orderedList?.length
+            ? ch.orderedList.map((o: any) => ch.components.find((c: any) => c.uuid === o.uuid)).filter(Boolean)
+            : ch.components) || []
+
+          // 用编辑坐标（canvas 坐标系，不做 OpenType 转换）
+          const allContours = ContourConverter.componentsToContoursEditing(
+            components,
+            { x: 0, y: 0 }
+          )
+
+          const canvas = document.createElement('canvas')
+          canvas.width = SIZE; canvas.height = SIZE
+          RenderEngine.renderPreview(canvas, allContours, {
+            fillColor: '#000',
+            backgroundColor: 'rgba(0,0,0,0)',
+            previewStyle: 'black',
+            scale: 1, offset: { x: 0, y: 0 },
+          })
+
+          const blob: Blob = await new Promise(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
+          const arr = new Uint8Array(await blob.arrayBuffer())
+          const name = ch.character?.text || meta.character?.text || ''
+          if (!name || name === '.notdef') continue
+          const safeName = name.replace(/[\/\\:*?"<>|]/g, '_')
+          await writeFile(`${exportDir}/${safeName}.png`, arr)
+        }
+        alert(`已导出 ${count} 个字符 PNG 到 ${exportDir}`)
+      } catch (err) {
+        console.error('Save char PNGs failed:', err)
+        alert('导出失败: ' + (err as Error).message)
+      }
+    })
+
     listen('component-subtract', () => {
       window.dispatchEvent(new CustomEvent('editor-component-boolean', { detail: { operation: 'subtract' } }))
+    })
+
+    listen('test-export-json', async () => {
+      const { useProjectStore } = await import('@/stores/project')
+      const file = useProjectStore().selectedFile
+      if (!file) return
+      const json = JSON.stringify(file, null, 2)
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `${file.name || 'project'}.json`; a.click()
+      URL.revokeObjectURL(url)
+    })
+
+    listen('export-stroke-pngs', async () => {
+      try {
+        const { useProjectStore } = await import('@/stores/project')
+        const file = useProjectStore().selectedFile
+        if (!file || !file.stroke_glyphs?.length) {
+          alert('当前工程没有笔画字形')
+          return
+        }
+
+        // 弹出文件夹选择对话框
+        const { open } = await import('@tauri-apps/plugin-dialog')
+        const folderPath = await open({ directory: true, title: '选择导出文件夹' })
+        if (!folderPath) return
+
+        const { mkdir } = await import('@tauri-apps/plugin-fs')
+
+        // 创建子文件夹
+        const exportDir = `${folderPath}/stroke_glyphs`
+        await mkdir(exportDir, { recursive: true })
+
+        // 渲染每个笔画到 canvas 并导出（1000x1000，透明背景）
+        const { RenderEngine } = await import('@/core/font/renderer')
+        const { ContourConverter } = await import('@/core/font/converter')
+        const { executeGlyphScript } = await import('@/core/script/ScriptExecutor')
+        const { instanceManager } = await import('@/core/instance')
+        const { CustomGlyph } = await import('@/core/instance/CustomGlyph')
+        const { writeFile } = await import('@tauri-apps/plugin-fs')
+
+        const SIZE = 1000
+
+        for (const glyph of file.stroke_glyphs) {
+          // 创建离屏 canvas，1000x1000
+          const canvas = document.createElement('canvas')
+          canvas.width = SIZE
+          canvas.height = SIZE
+          const ctx = canvas.getContext('2d')
+          if (!ctx) continue
+
+          // 执行脚本生成组件
+          const instance = instanceManager.acquireTemporaryInstance(
+            glyph.uuid,
+            () => new CustomGlyph(glyph),
+            'glyph'
+          ) as any
+          try {
+            executeGlyphScript(glyph, glyph.uuid, { ignoreTempDataGuard: true })
+            const components = (instance as any).components || []
+            // 直接用编辑坐标（不做 OpenType 转换），1000×1000 透明背景黑色填充
+            const allContours = ContourConverter.componentsToContoursEditing(
+              components,
+              { x: 0, y: 0 }
+            )
+
+            RenderEngine.renderPreview(canvas, allContours, {
+              fillColor: '#000',
+              backgroundColor: 'rgba(0,0,0,0)',
+              previewStyle: 'black',
+              scale: 1,
+              offset: { x: 0, y: 0 },
+            })
+
+            const blob: Blob = await new Promise(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
+            const arr = new Uint8Array(await blob.arrayBuffer())
+            const pngPath = `${exportDir}/${glyph.name}.png`
+            await writeFile(pngPath, arr)
+          } finally {
+            instanceManager.releaseTemporaryInstance(glyph.uuid)
+          }
+        }
+
+        alert(`已导出 ${file.stroke_glyphs.length} 个笔画字形到 ${exportDir}`)
+      } catch (err) {
+        console.error('Export stroke PNGs failed:', err)
+        alert('导出失败: ' + (err as Error).message)
+      }
     })
 
     listen('font-settings', () => {

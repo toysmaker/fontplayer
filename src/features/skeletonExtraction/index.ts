@@ -340,28 +340,58 @@ function traceSkeletonInJS(imageData: ImageData): Array<Array<[number, number]>>
   const W = 1000
   const H = 1000
 
-  // 1. 从 ImageData 提取二值像素（标准 ZS 编码：1=前景/ink, 0=背景/paper）
-  const pixels = new Uint8Array(W * H)
-  let inkCount = 0
+  // 1. 提取灰度
+  const gray = new Uint8Array(W * H)
+  let darkCount = 0
   for (let i = 0; i < W * H; i++) {
-    const offset = i * 4
-    const gray = 0.299 * imageData.data[offset] + 0.587 * imageData.data[offset + 1] + 0.114 * imageData.data[offset + 2]
-    pixels[i] = gray < 128 ? 1 : 0
-    if (pixels[i] === 1) inkCount++
+    const o = i * 4
+    gray[i] = Math.round(0.299*imageData.data[o] + 0.587*imageData.data[o+1] + 0.114*imageData.data[o+2])
+    if (gray[i] < 128) darkCount++
+  }
+  if (darkCount > W*H/2) {
+    if (import.meta.env.DEV) console.log('[SkeletonExtraction] Auto-inverting')
+    for (let i = 0; i < W*H; i++) gray[i] = 255 - gray[i]
   }
 
-  if (inkCount > W * H / 2) {
-    if (import.meta.env.DEV) console.log('[SkeletonExtraction] Auto-inverting (ink > 50%)')
-    for (let i = 0; i < pixels.length; i++) pixels[i] = 1 - pixels[i]
+  // 2. 初略二值化 → 检测孔洞 → 分级处理
+  const binRough = new Uint8Array(W * H)
+  for (let i = 0; i < W*H; i++) binRough[i] = gray[i] < 128 ? 1 : 0
+  const holes = countHoles(binRough, W, H)
+
+  // 三级：印刷体(≤50) / 钢笔(50-200) / 毛笔(>200)
+  let level: 'print' | 'pen' | 'brush'
+  if (holes <= 50) level = 'print'
+  else if (holes <= 200) level = 'pen'
+  else level = 'brush'
+
+  let binary: Uint8Array
+  let spurLen: number
+  if (level === 'print') {
+    binary = binRough
+    spurLen = 12
+  } else {
+    const blurRadius = level === 'brush' ? 3 : 2
+    const closeIter = level === 'brush' ? 6 : 4
+    spurLen = level === 'brush' ? 35 : 25
+    if (import.meta.env.DEV) console.log(`[SkeletonExtraction] ${level} (holes=${holes}) → blur=${blurRadius} close=${closeIter} spur=${spurLen}`)
+    // 高斯模糊（毛笔用更大核半径）
+    const blurred = gaussianBlurN(gray, W, H, blurRadius)
+    const binBlur = new Uint8Array(W * H)
+    for (let i = 0; i < W*H; i++) binBlur[i] = blurred[i] < 128 ? 1 : 0
+    binary = morphClose(binBlur, W, H, closeIter)
   }
 
-  // 2. Zhang-Suen 细化
-  const thinned = zhangSuenThin(pixels, W, H)
+  // 4. Zhang-Suen 细化
+  const thinned = zhangSuenThin(binary, W, H)
 
-  // 3. 去除毛刺（spur pruning）：移除长度 < 12 像素的短分支
-  const pruned = pruneSpurs(thinned, W, H, 12)
+  // 5. 毛刺修剪
+  const pruned = pruneSpurs(thinned, W, H, spurLen)
+  if (import.meta.env.DEV) {
+    const n = pruned.reduce((c, v) => c + v, 0)
+    console.log(`[SkeletonExtraction] After prune: ${n} pixels`)
+  }
 
-  // 4. 追踪骨架为折线段
+  // 6. 追踪骨架为折线段
   const polylines = traceThinnedPixels(pruned, W, H)
 
   // 保存调试数据
@@ -380,6 +410,94 @@ function traceSkeletonInJS(imageData: ImageData): Array<Array<[number, number]>>
  * 编码：1=前景(ink), 0=背景(paper)
  * 反复剥除可移除的边界像素，直到只剩1像素宽的骨架
  */
+/** 高斯模糊：可变半径 r=2→5x5, r=3→7x7 可分离核 */
+function gaussianBlurN(gray: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  // 预计算核：sigma = r/2, 核大小 = 2*r+1
+  const size = 2 * r + 1
+  const kernel: number[] = []
+  const sigma = r / 2
+  for (let i = -r; i <= r; i++) {
+    kernel.push(Math.exp(-(i*i)/(2*sigma*sigma)))
+  }
+  // 归一化
+  const kSum = kernel.reduce((a, b) => a + b, 0)
+  for (let i = 0; i < kernel.length; i++) kernel[i] /= kSum
+
+  const tmp = new Float32Array(w * h)
+  const out = new Uint8Array(w * h)
+  // 水平
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let s = 0
+      for (let d = -r; d <= r; d++) {
+        const nx = x + d
+        if (nx >= 0 && nx < w) s += gray[y*w + nx] * kernel[d + r]
+      }
+      tmp[y*w + x] = s
+    }
+  }
+  // 竖直
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let s = 0
+      for (let d = -r; d <= r; d++) {
+        const ny = y + d
+        if (ny >= 0 && ny < h) s += tmp[ny*w + x] * kernel[d + r]
+      }
+      out[y*w + x] = Math.round(s)
+    }
+  }
+  return out
+}
+
+/** 检测二值图中孔洞数量（> 50 → 手写体需要预处理） */
+function countHoles(bin: Uint8Array, w: number, h: number): number {
+  const vis = new Uint8Array(w * h)
+  let holes = 0
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (bin[y*w + x] === 1 || vis[y*w + x]) continue
+      const q: [number, number][] = [[x, y]]
+      vis[y*w + x] = 1
+      let border = (x === 0 || x === w - 1 || y === 0 || y === h - 1)
+      let head = 0
+      while (head < q.length) {
+        const [cx, cy] = q[head++]
+        for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+          const nx = cx+dx, ny = cy+dy
+          if (nx<0||nx>=w||ny<0||ny>=h) continue
+          if (bin[ny*w+nx]===0 && !vis[ny*w+nx]) {
+            vis[ny*w+nx]=1; q.push([nx,ny])
+            if (nx===0||nx===w-1||ny===0||ny===h-1) border=true
+          }
+        }
+      }
+      if (!border) holes++
+    }
+  }
+  return holes
+}
+
+/** 闭运算：膨胀→腐蚀，填充笔画内孔洞 */
+function morphClose(bin: Uint8Array, w: number, h: number, iter: number): Uint8Array {
+  let src = bin
+  for (let t = 0; t < iter; t++) {
+    const d = new Uint8Array(w * h)
+    for (let y = 1; y < h-1; y++)
+      for (let x = 1; x < w-1; x++)
+        d[y*w+x] = src[y*w+x]||src[y*w+x-1]||src[y*w+x+1]||src[(y-1)*w+x]||src[(y+1)*w+x]||src[(y-1)*w+x-1]||src[(y-1)*w+x+1]||src[(y+1)*w+x-1]||src[(y+1)*w+x+1] ? 1 : 0
+    src = d
+  }
+  for (let t = 0; t < iter; t++) {
+    const e = new Uint8Array(w * h)
+    for (let y = 1; y < h-1; y++)
+      for (let x = 1; x < w-1; x++)
+        e[y*w+x] = src[y*w+x]&&src[y*w+x-1]&&src[y*w+x+1]&&src[(y-1)*w+x]&&src[(y+1)*w+x]&&src[(y-1)*w+x-1]&&src[(y-1)*w+x+1]&&src[(y+1)*w+x-1]&&src[(y+1)*w+x+1] ? 1 : 0
+    src = e
+  }
+  return src
+}
+
 function zhangSuenThin(pixels: Uint8Array, w: number, h: number): Uint8Array {
   const result = new Uint8Array(pixels)
   let changed = true
@@ -563,33 +681,38 @@ function traceThinnedPixels(pixels: Uint8Array, w: number, h: number): Array<Arr
     return countFg(x, y) === 2
   }
 
-  // 从起点追踪，直到遇到端点或交叉点
-  // 交叉点不标记 visited，允许多条路径共享
+  // 从起点追踪，优先保持行进方向（避免锯齿路径）
   function traceFrom(sx: number, sy: number): Array<[number, number]> {
     const path: Array<[number, number]> = [[sx, sy]]
     let cx = sx, cy = sy
+    let pdx = 0, pdy = 0 // 上一步方向
 
-    // 起点如果是普通像素（2邻居），标记 visited
     if (countFg(cx, cy) === 2) visited[cy * w + cx] = 1
 
     while (true) {
-      let nextX = -1, nextY = -1
+      // 按与上一方向接近度排序邻域
+      const candidates: [number, number, number][] = [] // [nx, ny, score]
       for (const [dx, dy] of dirs) {
         const nx = cx + dx, ny = cy + dy
         if (nx >= 0 && nx < w && ny >= 0 && ny < h &&
             pixels[ny * w + nx] === 1 && !visited[ny * w + nx]) {
-          nextX = nx; nextY = ny; break
+          // score: 与上一方向点积 (越大越接近)
+          const score = pdx * dx + pdy * dy
+          candidates.push([nx, ny, score])
         }
       }
-      if (nextX < 0) break
+      if (candidates.length === 0) break
 
-      cx = nextX; cy = nextY
+      // 选方向最接近的
+      candidates.sort((a, b) => b[2] - a[2])
+      const [nx, ny] = candidates[0]
+      pdx = nx - cx; pdy = ny - cy
+
+      cx = nx; cy = ny
       path.push([cx, cy])
 
       const nc = countFg(cx, cy)
-      // 只标记普通像素为 visited，交叉点和端点保留未标记
       if (nc === 2) visited[cy * w + cx] = 1
-      // 到达端点或交叉点 → 停止
       if (nc !== 2) break
     }
 

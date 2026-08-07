@@ -21,420 +21,124 @@ interface IHandlerMap {
 const getWebMenu = (): Array<IMenu> => {
 	const { tm } = i18n.global
 	return [
-	{
-		label: tm('menus.file.file'),
-		key: 'file',
-		submenu: [
-			{
-				label: tm('menus.file.new'),
-				key: 'create-file',
-				click: (handlers: IHandlerMap) => {
-					handlers['create-file']()
-				}
-			},
-			{
-				label: tm('menus.file.open'),
-				key: 'open-file',
-				click: (handlers: IHandlerMap) => {
-					handlers['open-file']()
-				}
-			},
-			{
-				label: tm('menus.file.cache'),
-				key: 'save-file',
-				click: (handlers: IHandlerMap) => {
-					handlers['save-file']()
-				}
-			},
-			{
-				label: tm('menus.file.clear'),
-				key: 'clear-cache',
-				click: (handlers: IHandlerMap) => {
-					handlers['clear-cache']()
-				}
-			},
-			{
-				label: tm('menus.file.sync_data'),
-				key: 'sync-data',
-				click: (handlers: IHandlerMap) => {
-					handlers['sync-data']()
-				}
-			},
-			{
-				label: tm('menus.file.export'),
-				key: 'save-as-json',
-				click: (handlers: IHandlerMap) => {
-					handlers['save-as-json']()
-				}
-			},
-		],
-	},
-	{
-		label: tm('menus.edit.edit'),
-		key: 'edit',
-		submenu: [
-			{
-				label: tm('menus.edit.undo'),
-				key: 'undo',
-				click: (handlers: IHandlerMap) => {
-					handlers['undo']()
-				}
-			},
-			{
-				label: tm('menus.edit.redo'),
-				key: 'redo',
-				click: (handlers: IHandlerMap) => {
-					handlers['redo']()
-				}
-			},
-			{
-				label: tm('menus.edit.cut'),
-				key: 'cut',
-				click: (handlers: IHandlerMap) => {
-					handlers['cut']()
-				}
-			},
-			{
-				label: tm('menus.edit.copy'),
-				key: 'copy',
-				click: (handlers: IHandlerMap) => {
-					handlers['copy']()
-				}
-			},
-			{
-				label: tm('menus.edit.paste'),
-				key: 'paste',
-				click: (handlers: IHandlerMap) => {
-					handlers['paste']()
-				}
-			},
-			{
-				label: tm('menus.edit.delete'),
-				key: 'delete',
-				click: (handlers: IHandlerMap) => {
-					handlers['delete']()
-				}
-			},
-		]
-	},
-	{
-		label: tm('menus.import.import'),
-		key: 'import',
-		submenu: [
-			{
-				label: tm('menus.import.font'),
-				key: 'import-font-file',
-				click: (handlers: IHandlerMap) => {
-					handlers['import-font-file']()
-				}
-			},
-			{
-				label: tm('menus.import.glyph'),
-				key: 'import-glyphs',
-				click: (handlers: IHandlerMap) => {
-					handlers['import-glyphs']()
-				}
-			},
-			{
-				label: tm('menus.import.picture'),
-				key: 'import-pic',
-				click: (handlers: IHandlerMap) => {
-					handlers['import-pic']()
-				}
-			},
-			{
-				label: tm('menus.import.svg'),
-				key: 'import-svg',
-				click: (handlers: IHandlerMap) => {
-					handlers['import-svg']()
-				}
-			},
-		]
-	},
-	{
-		label: tm('menus.export.export'),
-		key: 'export',
-		submenu: [
-			{
-				label: tm('menus.export.font'),
-				key: 'export-font-file',
-				click: (handlers: IHandlerMap) => {
-					handlers['export-font-file']()
-				}
-			},
-			{
-				label: tm('menus.export.var_font'),
-				key: 'export-var-font-file',
-				click: (handlers: IHandlerMap) => {
-					handlers['export-var-font-file']()
-				}
-			},
-			{
-				label: tm('menus.export.color_font'),
-				key: 'export-color-font',
-				click: (handlers: IHandlerMap) => {
-					handlers['export-color-font']()
-				}
-			},
-			{
-				label: tm('menus.export.glyph'),
-				key: 'export-glyphs',
-				click: (handlers: IHandlerMap) => {
-					handlers['export-glyphs']()
-				}
-			},
-			{
-				label: tm('menus.export.jpeg'),
-				key: 'export-jpeg',
-				click: (handlers: IHandlerMap) => {
-					handlers['export-jpeg']()
-				}
-			},
-			{
-				label: tm('menus.export.png'),
-				key: 'export-png',
-				click: (handlers: IHandlerMap) => {
-					handlers['export-png']()
-				}
-			},
-			{
-				label: tm('menus.export.svg'),
-				key: 'export-svg',
-				click: (handlers: IHandlerMap) => {
-					handlers['export-svg']()
-				}
-			},
-			{
-				label: tm('menus.export.metrics_ref'),
-				key: 'export-metrics-ref',
-				click: (handlers: IHandlerMap) => {
-					handlers['export-metrics-ref']()
-				}
-			},
-		]
-	},
-	{
-		label: tm('menus.char.char'),
-		key: 'character',
-		submenu: [
-			{
-				label: tm('menus.char.character'),
-				key: 'add-character',
-				click: (handlers: IHandlerMap) => {
-					handlers['add-character']()
-				}
-			},
-			{
-				label: tm('menus.char.icon'),
-				key: 'add-icon',
-				click: (handlers: IHandlerMap) => {
-					handlers['add-icon']()
-				}
-			},
-		]
-	},
-	{
-		label: tm('menus.settings.settings'),
-		key: 'settings',
-		submenu: [
-			{
-				label: tm('menus.settings.font'),
-				key: 'font-settings',
-				click: (handlers: IHandlerMap) => {
-					handlers['font-settings']()
-				}
-			},
-			{
-				label: tm('menus.settings.preference'),
-				key: 'preference-settings',
-				click: (handlers: IHandlerMap) => {
-					handlers['preference-settings']()
-				}
-			},
-			{
-				label: tm('menus.settings.language'),
-				key: 'language-settings',
-				click: (handlers: IHandlerMap) => {
-					handlers['language-settings']()
-				}
-			},
-		]
-	},
-	{
-		label: tm('menus.templates.templates'),
-		key: 'templates',
-		submenu: [
-			{
-				label: tm('menus.templates.test2'),
-				key: 'template-2',
-				click: (handlers: IHandlerMap) => {
-					handlers['template-2']()
-				}
-			},
-			{
-				label: tm('menus.templates.test3'),
-				key: 'template-3',
-				click: (handlers: IHandlerMap) => {
-					handlers['template-3']()
-				}
-			},
-			{
-				label: tm('menus.templates.test5'),
-				key: 'template-5',
-				click: (handlers: IHandlerMap) => {
-					handlers['template-5']()
-				}
-			},
-			{
-				label: tm('menus.templates.test6'),
-				key: 'template-6',
-				click: (handlers: IHandlerMap) => {
-					handlers['template-6']()
-				}
-			},
-			{
-				label: tm('menus.templates.test7'),
-				key: 'template-7',
-				click: (handlers: IHandlerMap) => {
-					handlers['template-7']()
-				}
-			},
-			{
-				label: tm('menus.templates.test8'),
-				key: 'template-8',
-				click: (handlers: IHandlerMap) => {
-					handlers['template-8']()
-				}
-			},
-			{
-				label: tm('menus.templates.digits'),
-				key: 'template-digits',
-				click: (handlers: IHandlerMap) => {
-					handlers['template-digits']()
-				}
-			},
-			{
-				label: tm('menus.templates.letters'),
-				key: 'template-letters',
-				click: (handlers: IHandlerMap) => {
-					handlers['template-letters']()
-				}
-			},
-			{
-				label: tm('menus.templates.symbols'),
-				key: 'template-symbols',
-				click: (handlers: IHandlerMap) => {
-					handlers['template-symbols']()
-				}
-			},
-			{
-				label: tm('menus.templates.test'),
-				key: 'template-test',
-				click: (handlers: IHandlerMap) => {
-					handlers['template-test']()
-				}
-			},
-			{
-				label: tm('menus.templates.icons'),
-				key: 'template-icons',
-				click: (handlers: IHandlerMap) => {
-					handlers['template-icons']()
-				}
-			},
-		]
-	},
-	{
-		label: tm('menus.tools.tools'),
-		key: 'tools',
-		submenu: [
-			{
-				label: tm('menus.tools.remove_overlap'),
-				key: 'remove_overlap',
-				click: (handlers: IHandlerMap) => {
-					handlers['remove_overlap']()
-				}
-			},
-			{
-			label: tm('menus.tools.format_all_characters'),
-				key: 'format-all-characters',
-				click: (handlers: IHandlerMap) => {
-					handlers['format-all-characters']()
-				}
-			},
-			{
-			label: tm('menus.tools.format_current_character'),
-				key: 'format-current-character',
-				click: (handlers: IHandlerMap) => {
-					handlers['format-current-character']()
-				}
-			},
-			{ label: '并集', key: 'component-union', click: (h: IHandlerMap) => { h['component-union']() } },
-			{ label: '交集', key: 'component-intersect', click: (h: IHandlerMap) => { h['component-intersect']() } },
-			{ label: '差集', key: 'component-subtract', click: (h: IHandlerMap) => { h['component-subtract']() } },
-		]
-	},
-	{
-		label: tm('menus.effects.effects'),
-		key: 'effects',
-		submenu: [
-			{
-				label: tm('menus.effects.adjust_weight'),
-				key: 'effect-adjust-weight',
-				click: (handlers: IHandlerMap) => {
-					handlers['effect-adjust-weight']()
-				}
-			},
-			{
-				label: tm('menus.effects.ink_bleed'),
-				key: 'effect-ink-bleed',
-				click: (handlers: IHandlerMap) => {
-					handlers['effect-ink-bleed']()
-				}
-			},
-			{
-				label: tm('menus.effects.rough_edge'),
-				key: 'effect-rough-edge',
-				click: (handlers: IHandlerMap) => {
-					handlers['effect-rough-edge']()
-				}
-			},
-			{
-				label: tm('menus.effects.glitch'),
-				key: 'effect-glitch',
-				click: (handlers: IHandlerMap) => {
-					handlers['effect-glitch']()
-				}
-			},
-			{
-				label: tm('menus.effects.hand_drawn_jitter'),
-				key: 'effect-hand-drawn-jitter',
-				click: (handlers: IHandlerMap) => {
-					handlers['effect-hand-drawn-jitter']()
-				}
-			},
-			{
-				label: tm('menus.effects.melt'),
-				key: 'effect-melt',
-				click: (handlers: IHandlerMap) => {
-					handlers['effect-melt']()
-				}
-			},
-			{
-				label: tm('menus.effects.geometric_simplify'),
-				key: 'effect-geometric-simplify',
-				click: (handlers: IHandlerMap) => {
-					handlers['effect-geometric-simplify']()
-				}
-			},
-			{
-				label: tm('menus.effects.pixelate'),
-				key: 'effect-pixelate',
-				click: (handlers: IHandlerMap) => {
-					handlers['effect-pixelate']()
-				}
-			},
-		]
-	},
+		{
+			label: tm('menus.file.file'),
+			key: 'file',
+			submenu: [
+				{ label: tm('menus.file.new'), key: 'create-file', click: (handlers: IHandlerMap) => { handlers['create-file']() } },
+				{ label: tm('menus.file.open'), key: 'open-file', click: (handlers: IHandlerMap) => { handlers['open-file']() } },
+				{ label: tm('menus.file.cache'), key: 'save-file', click: (handlers: IHandlerMap) => { handlers['save-file']() } },
+				{ label: tm('menus.file.clear'), key: 'clear-cache', click: (handlers: IHandlerMap) => { handlers['clear-cache']() } },
+				{ label: tm('menus.file.sync_data'), key: 'sync-data', click: (handlers: IHandlerMap) => { handlers['sync-data']() } },
+				{ label: tm('menus.file.export'), key: 'save-as-json', click: (handlers: IHandlerMap) => { handlers['save-as-json']() } },
+			],
+		},
+		{
+			label: tm('menus.edit.edit'),
+			key: 'edit',
+			submenu: [
+				{ label: tm('menus.edit.undo'), key: 'undo', click: (handlers: IHandlerMap) => { handlers['undo']() } },
+				{ label: tm('menus.edit.redo'), key: 'redo', click: (handlers: IHandlerMap) => { handlers['redo']() } },
+				{ label: tm('menus.edit.cut'), key: 'cut', click: (handlers: IHandlerMap) => { handlers['cut']() } },
+				{ label: tm('menus.edit.copy'), key: 'copy', click: (handlers: IHandlerMap) => { handlers['copy']() } },
+				{ label: tm('menus.edit.paste'), key: 'paste', click: (handlers: IHandlerMap) => { handlers['paste']() } },
+				{ label: tm('menus.edit.delete'), key: 'delete', click: (handlers: IHandlerMap) => { handlers['delete']() } },
+			]
+		},
+		{
+			label: tm('menus.import.import'),
+			key: 'import',
+			submenu: [
+				{ label: tm('menus.import.font'), key: 'import-font-file', click: (handlers: IHandlerMap) => { handlers['import-font-file']() } },
+				{ label: tm('menus.import.glyph'), key: 'import-glyphs', click: (handlers: IHandlerMap) => { handlers['import-glyphs']() } },
+				{ label: tm('menus.import.picture'), key: 'import-pic', click: (handlers: IHandlerMap) => { handlers['import-pic']() } },
+				{ label: tm('menus.import.svg'), key: 'import-svg', click: (handlers: IHandlerMap) => { handlers['import-svg']() } },
+			]
+		},
+		{
+			label: tm('menus.export.export'),
+			key: 'export',
+			submenu: [
+				{ label: tm('menus.export.font'), key: 'export-font-file', click: (handlers: IHandlerMap) => { handlers['export-font-file']() } },
+				{ label: tm('menus.export.var_font'), key: 'export-var-font-file', click: (handlers: IHandlerMap) => { handlers['export-var-font-file']() } },
+				{ label: tm('menus.export.color_font'), key: 'export-color-font', click: (handlers: IHandlerMap) => { handlers['export-color-font']() } },
+				{ label: tm('menus.export.glyph'), key: 'export-glyphs', click: (handlers: IHandlerMap) => { handlers['export-glyphs']() } },
+				{ label: tm('menus.export.jpeg'), key: 'export-jpeg', click: (handlers: IHandlerMap) => { handlers['export-jpeg']() } },
+				{ label: tm('menus.export.png'), key: 'export-png', click: (handlers: IHandlerMap) => { handlers['export-png']() } },
+				{ label: tm('menus.export.svg'), key: 'export-svg', click: (handlers: IHandlerMap) => { handlers['export-svg']() } },
+				{ label: tm('menus.export.metrics_ref'), key: 'export-metrics-ref', click: (handlers: IHandlerMap) => { handlers['export-metrics-ref']() } },
+			]
+		},
+		{
+			label: tm('menus.char.char'),
+			key: 'character',
+			submenu: [
+				{ label: tm('menus.char.character'), key: 'add-character', click: (handlers: IHandlerMap) => { handlers['add-character']() } },
+				{ label: tm('menus.char.icon'), key: 'add-icon', click: (handlers: IHandlerMap) => { handlers['add-icon']() } },
+			]
+		},
+		{
+			label: tm('menus.settings.settings'),
+			key: 'settings',
+			submenu: [
+				{ label: tm('menus.settings.font'), key: 'font-settings', click: (handlers: IHandlerMap) => { handlers['font-settings']() } },
+				{ label: tm('menus.settings.preference'), key: 'preference-settings', click: (handlers: IHandlerMap) => { handlers['preference-settings']() } },
+				{ label: tm('menus.settings.language'), key: 'language-settings', click: (handlers: IHandlerMap) => { handlers['language-settings']() } },
+			]
+		},
+		{
+			label: tm('menus.templates.templates'),
+			key: 'templates',
+			submenu: [
+				{ label: tm('menus.templates.test2'), key: 'template-2', click: (handlers: IHandlerMap) => { handlers['template-2']() } },
+				{ label: tm('menus.templates.test3'), key: 'template-3', click: (handlers: IHandlerMap) => { handlers['template-3']() } },
+				{ label: tm('menus.templates.test5'), key: 'template-5', click: (handlers: IHandlerMap) => { handlers['template-5']() } },
+				{ label: tm('menus.templates.test6'), key: 'template-6', click: (handlers: IHandlerMap) => { handlers['template-6']() } },
+				{ label: tm('menus.templates.test7'), key: 'template-7', click: (handlers: IHandlerMap) => { handlers['template-7']() } },
+				{ label: tm('menus.templates.test8'), key: 'template-8', click: (handlers: IHandlerMap) => { handlers['template-8']() } },
+				{ label: tm('menus.templates.digits'), key: 'template-digits', click: (handlers: IHandlerMap) => { handlers['template-digits']() } },
+				{ label: tm('menus.templates.letters'), key: 'template-letters', click: (handlers: IHandlerMap) => { handlers['template-letters']() } },
+				{ label: tm('menus.templates.symbols'), key: 'template-symbols', click: (handlers: IHandlerMap) => { handlers['template-symbols']() } },
+				{ label: tm('menus.templates.test'), key: 'template-test', click: (handlers: IHandlerMap) => { handlers['template-test']() } },
+				{ label: tm('menus.templates.icons'), key: 'template-icons', click: (handlers: IHandlerMap) => { handlers['template-icons']() } },
+			]
+		},
+		{
+			label: tm('menus.tools.tools'),
+			key: 'tools',
+			submenu: [
+				{ label: tm('menus.tools.remove_overlap'), key: 'remove_overlap', click: (handlers: IHandlerMap) => { handlers['remove_overlap']() } },
+				{ label: tm('menus.tools.format_all_characters'), key: 'format-all-characters', click: (handlers: IHandlerMap) => { handlers['format-all-characters']() } },
+				{ label: tm('menus.tools.format_current_character'), key: 'format-current-character', click: (handlers: IHandlerMap) => { handlers['format-current-character']() } },
+				{ label: '并集', key: 'component-union', click: (h: IHandlerMap) => { h['component-union']() } },
+				{ label: '交集', key: 'component-intersect', click: (h: IHandlerMap) => { h['component-intersect']() } },
+				{ label: '差集', key: 'component-subtract', click: (h: IHandlerMap) => { h['component-subtract']() } },
+			]
+		},
+		{
+			label: tm('menus.effects.effects'),
+			key: 'effects',
+			submenu: [
+				{ label: tm('menus.effects.adjust_weight'), key: 'effect-adjust-weight', click: (handlers: IHandlerMap) => { handlers['effect-adjust-weight']() } },
+				{ label: tm('menus.effects.ink_bleed'), key: 'effect-ink-bleed', click: (handlers: IHandlerMap) => { handlers['effect-ink-bleed']() } },
+				{ label: tm('menus.effects.rough_edge'), key: 'effect-rough-edge', click: (handlers: IHandlerMap) => { handlers['effect-rough-edge']() } },
+				{ label: tm('menus.effects.glitch'), key: 'effect-glitch', click: (handlers: IHandlerMap) => { handlers['effect-glitch']() } },
+				{ label: tm('menus.effects.hand_drawn_jitter'), key: 'effect-hand-drawn-jitter', click: (handlers: IHandlerMap) => { handlers['effect-hand-drawn-jitter']() } },
+				{ label: tm('menus.effects.melt'), key: 'effect-melt', click: (handlers: IHandlerMap) => { handlers['effect-melt']() } },
+				{ label: tm('menus.effects.geometric_simplify'), key: 'effect-geometric-simplify', click: (handlers: IHandlerMap) => { handlers['effect-geometric-simplify']() } },
+				{ label: tm('menus.effects.pixelate'), key: 'effect-pixelate', click: (handlers: IHandlerMap) => { handlers['effect-pixelate']() } },
+			]
+		},
+		...((import.meta as any).env.DEV ? [{
+			label: tm('menus.test.test'),
+			key: 'test',
+			submenu: [
+				{ label: tm('menus.test.export_json'), key: 'test-export-json', click: (handlers: IHandlerMap) => { handlers['test-export-json']() } },
+				{ label: '导出骨架与参数', key: 'test-export-skeleton-params', click: (handlers: IHandlerMap) => { handlers['test-export-skeleton-params']() } },
+				{ label: '根据参数生成字符列表', key: 'test-import-from-params', click: (handlers: IHandlerMap) => { handlers['test-import-from-params']() } },
+				{ label: '根据骨架生成字符列表', key: 'test-import-from-skeleton', click: (handlers: IHandlerMap) => { handlers['test-import-from-skeleton']() } },
+			]
+		}] : []),
 	]
 }
 
