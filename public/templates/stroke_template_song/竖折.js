@@ -19,7 +19,8 @@ const global_params = {
   turn_style_type: glyph.getParam('转角风格'),
   turn_style_value: glyph.getParam('转角数值'),
   bending_degree: glyph.getParam('弯曲程度'),
-  weight: glyph.getParam('字重') || 40,
+  weight: glyph.getParam('字重') * glyph.getParam('字重比率') || 40,
+  originalWeight: glyph.getParam('字重'),
 }
 
 const refline = (p1, p2, type) => {
@@ -158,7 +159,7 @@ const updateGlyphByParams = (params, global_params) => {
     zhe_verticalSpan,
     skeletonRefPos,
   } = params
-  const { weight } = global_params
+  let { weight } = global_params
 
   // 竖
   const shu_start = new FP.Joint(
@@ -313,7 +314,7 @@ const getComponents = (skeleton) => {
   }
   
   const getRadiusPoint = (options) => {
-    const { start, end, radius } = options
+    let { start, end, radius } = options
     const angle = Math.atan2(end.y - start.y, end.x - start.x)
     const point = {
       x: start.x + Math.cos(angle) * radius,
@@ -323,12 +324,16 @@ const getComponents = (skeleton) => {
   }
 
   // 根据骨架计算轮廓关键点
-  const {
+  let {
     shu_start,
     shu_end,
     zhe_start,
     zhe_end,
   } = skeleton
+  shu_start = FP.clonePoint(shu_start)
+  zhe_end = FP.clonePoint(zhe_end)
+  shu_start = FP.goStraight(shu_end, shu_start, global_params.originalWeight * 0.5)
+  zhe_end = FP.goStraight(zhe_start, zhe_end, global_params.originalWeight * 0.5)
 
   // 竖横比，竖的厚度比横的厚度
   const serif_size = 2.0

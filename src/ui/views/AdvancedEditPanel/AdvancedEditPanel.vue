@@ -6,7 +6,7 @@ import {
   PanelType,
 } from '@/stores/advancedEdit'
 import { useProjectStore } from '@/stores/project'
-import { DEFAULT_TEMPLATE_PROJECT_TAG } from '@/features/editor/services/ProjectLoader'
+import { DEFAULT_TEMPLATE_PROJECT_TAG, AI_FEATURE_TEST_TAG } from '@/features/editor/services/ProjectLoader'
 import GlobalParamsPanel from './GlobalParamsPanel.vue'
 import ConditionFilterPanel from './ConditionFilterPanel.vue'
 import ScriptsPanel from './ScriptsPanel.vue'
@@ -18,7 +18,7 @@ const advancedEdit = useAdvancedEditStore()
 const projectStore = useProjectStore()
 
 const showScriptTab = computed(
-  () => projectStore.selectedFile?.tag === DEFAULT_TEMPLATE_PROJECT_TAG,
+  () => projectStore.selectedFile?.tag === DEFAULT_TEMPLATE_PROJECT_TAG || projectStore.selectedFile?.tag === AI_FEATURE_TEST_TAG,
 )
 
 const FANG_YUAN_TAG = '字玩方圆黑体'

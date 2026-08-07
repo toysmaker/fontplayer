@@ -597,6 +597,86 @@ export function widenFangYuanGlyphNumberParamBoundsInCharacterComponents(
   widenOnGlyphTree(components)
 }
 
+// MARK: 临时代码 — AI 功能测试：将 Number 类型参数范围过大的放宽为 -1000~1000
+// 条件：|max - min| > 20；仅 dev 模式、tag 为 AI功能测试 时生效；后续需整段移除
+
+function widenAiTestNumberParamsInList(params: IParameter[] | undefined): void {
+  if (!params?.length) return
+  for (const p of params) {
+    if (!p || typeof p !== 'object') continue
+    if (!isNumberParameterType(p.type)) continue
+    const min = toFiniteNumber(p.min)
+    const max = toFiniteNumber(p.max)
+    if (min === null || max === null) continue
+    if (Math.abs(max - min) > 20 || (min === 0 && max === 0)) {
+      if (import.meta.env.DEV) {
+        console.log(
+          `[aiWiden] 放宽参数 "${String((p as any).name ?? '?')}": min=${p.min} max=${p.max} → -1000/1000`,
+        )
+      }
+      p.min = -1000
+      p.max = 1000
+    }
+  }
+}
+
+function widenAiTestOnGlyphTree(components: Array<IComponent | IGlyphComponent> | undefined): void {
+  if (!components?.length) return
+  for (const comp of components) {
+    if (!comp || comp.type !== 'glyph' || !comp.value) continue
+    const g = comp.value as ICustomGlyph
+    widenAiTestNumberParamsInList(parametersArrayFromGlyphValue(g))
+    const nested = g.components as IGlyphComponent[] | undefined
+    if (nested?.length) widenAiTestOnGlyphTree(nested)
+  }
+}
+
+export function widenAiTestNumberParamBoundsInCharacterComponents(
+  components: IComponent[] | undefined,
+): void {
+  if (import.meta.env.DEV) {
+    let glyphCount = 0
+    const countGlyphs = (comps: Array<IComponent | IGlyphComponent> | undefined) => {
+      if (!comps?.length) return
+      for (const c of comps) {
+        if (c?.type === 'glyph') {
+          glyphCount++
+          const nested = (c.value as any)?.components as IGlyphComponent[] | undefined
+          if (nested?.length) countGlyphs(nested)
+        }
+      }
+    }
+    countGlyphs(components)
+    console.log(`[aiWiden] 开始遍历字符组件树，共 ${glyphCount} 个 glyph 组件`)
+  }
+  widenAiTestOnGlyphTree(components)
+}
+
+/** 放宽单个字形定义的参数（就地修改，递归处理嵌套子字形） */
+function widenAiTestOnGlyphDef(glyph: ICustomGlyph): void {
+  widenAiTestNumberParamsInList(parametersArrayFromGlyphValue(glyph))
+  const nested = glyph.components as IGlyphComponent[] | undefined
+  if (nested?.length) widenAiTestOnGlyphTree(nested)
+}
+
+/**
+ * 放宽 glyph 定义数组的 Number 参数（修改 stroke_glyphs / glyphs 等字形定义自身）。
+ * 字符实例的放宽由 widenAiTestNumberParamBoundsInCharacterComponents 负责。
+ */
+export function widenAiTestNumberParamBoundsInGlyphDefinitions(
+  glyphs: ICustomGlyph[] | undefined,
+): void {
+  if (!glyphs?.length) return
+  if (import.meta.env.DEV) {
+    console.log(`[aiWiden] 放宽字形定义参数，共 ${glyphs.length} 个 glyph 定义`)
+  }
+  for (const g of glyphs) {
+    widenAiTestOnGlyphDef(g)
+  }
+}
+
+// END 临时代码
+
 // MARK: 临时代码 — 字玩方圆黑体：扩展风格标签为"字玩方圆黑体"的字形组件 Enum 参数 options
 // 仅 dev 模式生效；后续需整段移除
 

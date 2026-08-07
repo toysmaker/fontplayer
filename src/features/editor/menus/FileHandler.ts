@@ -23,6 +23,7 @@ import {
 } from '@/features/editor/services/projectArchive/fpProjectFormat'
 import { encryptFile, getPublicKey } from '@/core/encryption'
 import { genUUID } from '@/utils/uuid'
+import * as R from 'ramda'
 import {
   buildFpzHeaderProject,
   stripCharacterForTemplate,
@@ -79,17 +80,33 @@ export class FileHandler {
 
   /**
    * 保存 / 另存为 / 导出前：弹出标签输入，取消则中止
+   * @returns null 表示用户取消；否则返回 tag 和可选的部分字符过滤列表
    */
-  private async ensureProjectTagBeforeSave(): Promise<boolean> {
+  private async ensureProjectTagBeforeSave(): Promise<{ tag: string | null; selectedChars: string[] } | null> {
     const file = this.projectStore.selectedFile
-    if (!file) return false
-    if (!import.meta.env.DEV) return true
+    if (!file) return null
+    if (!import.meta.env.DEV) return { tag: file.tag ?? null, selectedChars: [] }
     const { useDialogsStore } = await import('@/stores/dialogs')
     const dialogs = useDialogsStore()
     const result = await dialogs.openProjectTagPrompt(file.tag ?? '')
-    if (result === null) return false
-    this.projectStore.updateFile(file.uuid, { tag: result })
-    return true
+    if (result === null) return null
+    if (result.tag !== null) {
+      this.projectStore.updateFile(file.uuid, { tag: result.tag })
+    }
+    return result
+  }
+
+  /**
+   * 根据选中的字符列表过滤文件中的 characterList
+   */
+  private applyCharacterFilter(file: IFile, selectedChars: string[]): IFile {
+    if (selectedChars.length === 0) return file
+    const charSet = new Set(selectedChars)
+    const filtered = R.clone(file)
+    filtered.characterList = (file.characterList || []).filter(
+      (m) => charSet.has(m.character?.text || ''),
+    )
+    return filtered
   }
 
   /**
@@ -394,7 +411,9 @@ export class FileHandler {
       throw new Error('No file selected')
     }
 
-    if (!(await this.ensureProjectTagBeforeSave())) return
+    const tagResult = await this.ensureProjectTagBeforeSave()
+    if (!tagResult) return
+    const workingFile = this.applyCharacterFilter(file, tagResult.selectedChars)
 
     let filePath = this.lastSavedPath
 
@@ -402,7 +421,7 @@ export class FileHandler {
       // 还没有保存路径，弹出对话框让用户选择
       const { save } = await import('@tauri-apps/plugin-dialog')
       const result = await save({
-        defaultPath: `${file.name}.fp`,
+        defaultPath: `${workingFile.name}.fp`,
         filters: [{ name: '字玩工程', extensions: ['fp'] }],
       })
       if (!result) return // 用户取消
@@ -410,8 +429,8 @@ export class FileHandler {
       this.lastSavedPath = filePath
     }
 
-    await this.writeProjectFpFile(file, filePath)
-    this.projectStore.markFileSaved(file.uuid)
+    await this.writeProjectFpFile(workingFile, filePath)
+    this.projectStore.markFileSaved(workingFile.uuid)
   }
 
   /**
@@ -428,19 +447,21 @@ export class FileHandler {
       throw new Error('No file selected')
     }
 
-    if (!(await this.ensureProjectTagBeforeSave())) return
+    const tagResult = await this.ensureProjectTagBeforeSave()
+    if (!tagResult) return
+    const workingFile = this.applyCharacterFilter(file, tagResult.selectedChars)
 
     const { save } = await import('@tauri-apps/plugin-dialog')
     const filePath = await save({
-      defaultPath: `${file.name}.fp`,
+      defaultPath: `${workingFile.name}.fp`,
       filters: [{ name: '字玩工程', extensions: ['fp'] }],
     })
     if (!filePath) return // 用户取消
 
     this.lastSavedPath = filePath
 
-    await this.writeProjectFpFile(file, filePath)
-    this.projectStore.markFileSaved(file.uuid)
+    await this.writeProjectFpFile(workingFile, filePath)
+    this.projectStore.markFileSaved(workingFile.uuid)
   }
 
   /**
@@ -538,33 +559,35 @@ export class FileHandler {
       throw new Error('No file selected')
     }
 
-    if (!(await this.ensureProjectTagBeforeSave())) return
+    const tagResult = await this.ensureProjectTagBeforeSave()
+    if (!tagResult) return
+    const workingFile = this.applyCharacterFilter(file, tagResult.selectedChars)
 
     if (isTauri()) {
       const { save } = await import('@tauri-apps/plugin-dialog')
       const filePath = await save({
-        defaultPath: `${file.name}.fp`,
+        defaultPath: `${workingFile.name}.fp`,
         filters: [{ name: '字玩工程', extensions: ['fp'] }],
       })
       if (!filePath) return
-      await this.writeProjectFpFile(file, filePath)
+      await this.writeProjectFpFile(workingFile, filePath)
     } else {
       const store = this.projectStore
-      const total = file.characterList?.length || 0
+      const total = workingFile.characterList?.length || 0
       store.loadingMessage = '正在导出工程...'
       store.loadingTotal = total
       store.loadingProgress = 0
       store.loading = true
 
       try {
-        const buf = await this.encodeCurrentProjectToFpBuffer(file, (index) => {
+        const buf = await this.encodeCurrentProjectToFpBuffer(workingFile, (index) => {
           store.loadingProgress = index
         })
         const blob = new Blob([buf], { type: 'application/octet-stream' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `${file.name}.fp`
+        a.download = `${workingFile.name}.fp`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
@@ -590,25 +613,27 @@ export class FileHandler {
       throw new Error('No file selected')
     }
 
-    if (!(await this.ensureProjectTagBeforeSave())) return
+    const tagResult = await this.ensureProjectTagBeforeSave()
+    if (!tagResult) return
+    const workingFile = this.applyCharacterFilter(file, tagResult.selectedChars)
 
     if (isTauri()) {
       const { save } = await import('@tauri-apps/plugin-dialog')
       const filePath = await save({
-        defaultPath: `${file.name}.json`,
+        defaultPath: `${workingFile.name}.json`,
         filters: [{ name: 'JSON', extensions: ['json'] }],
       })
       if (!filePath) return
-      await this.writeProjectStream(file, filePath)
+      await this.writeProjectStream(workingFile, filePath)
     } else {
       const store = this.projectStore
-      const total = file.characterList?.length || 0
+      const total = workingFile.characterList?.length || 0
       store.loadingMessage = '正在导出 JSON...'
       store.loadingTotal = total
       store.loadingProgress = 0
       store.loading = true
       try {
-        const projectData = await this.serializeProjectData(file, (index) => {
+        const projectData = await this.serializeProjectData(workingFile, (index) => {
           store.loadingProgress = index
         })
         this.logProjectDataSummary(projectData)
@@ -617,7 +642,7 @@ export class FileHandler {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `${file.name}.json`
+        a.download = `${workingFile.name}.json`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)

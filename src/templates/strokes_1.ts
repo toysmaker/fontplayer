@@ -4261,6 +4261,39 @@ li_strokes.find(stroke => stroke.name === '横折折弯钩').params.push({
   max: 1,
 })
 
+strokes.map(stroke => {
+  stroke.params.push({
+    name: '字重比率',
+    default: 1,
+    min: 0.1,
+    max: 2,
+  })
+})
+kai_strokes.map(stroke => {
+  stroke.params.push({
+    name: '字重比率',
+    default: 1,
+    min: 0.1,
+    max: 2,
+  })
+})
+li_strokes.map(stroke => {
+  stroke.params.push({
+    name: '字重比率',
+    default: 1,
+    min: 0.1,
+    max: 2,
+  })
+})
+hei_strokes.map(stroke => {
+  stroke.params.push({
+    name: '字重比率',
+    default: 1,
+    min: 0.1,
+    max: 2,
+  })
+})
+
 export {
   strokes,
   kai_strokes,

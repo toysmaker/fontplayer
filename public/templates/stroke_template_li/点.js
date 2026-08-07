@@ -11,7 +11,8 @@ const global_params = {
   end_style_type: glyph.getParam('收笔风格'),
   end_style_value: glyph.getParam('收笔数值'),
   bending_degree: glyph.getParam('弯曲程度'),
-  weight: glyph.getParam('字重') || 40,
+  weight: glyph.getParam('字重') * glyph.getParam('字重比率') || 40,
+  originalWeight: glyph.getParam('字重'),
 }
 const params = {
   horizontalSpan: glyph.getParam('水平延伸'),
@@ -143,7 +144,7 @@ const computeParamsByJoints = (jointsMap) => {
 }
 
 const updateGlyphByParams = (params, global_params) => {
-  const {
+  let {
     horizontalSpan,
     verticalSpan,
     bendCursor,
@@ -201,7 +202,7 @@ const updateGlyphByParams = (params, global_params) => {
 }
 
 const getComponents = (skeleton, global_params) => {
-  const {
+  let {
     weights_variation_power,
     start_style_type,
     start_style_value,
@@ -214,7 +215,12 @@ const getComponents = (skeleton, global_params) => {
   } = global_params
 
   // 根据骨架计算轮廓关键点
-  const { start, bend, end } = skeleton
+  let { start, bend, end } = skeleton
+  start = FP.clonePoint(start)
+  bend = FP.clonePoint(bend)
+  end = FP.clonePoint(end)
+  start = FP.goStraight(bend, start, global_params.originalWeight * 0.5)
+  end = FP.goStraight(bend, end, global_params.originalWeight * 0.5)
 
   // 竖横比，竖的厚度比横的厚度
   const stress_ratio = 3

@@ -37,6 +37,8 @@ import {
   addDianGlyphParams_private_v1,
   fixDaoZhiJiaoPieJianTouOptionValue_private_v1,
   widenFangYuanGlyphNumberParamBoundsInCharacterComponents,
+  widenAiTestNumberParamBoundsInCharacterComponents,
+  widenAiTestNumberParamBoundsInGlyphDefinitions,
   expandFangYuanGlyphEnumOptionsInCharacterComponents,
   expandFangYuanGlyphEnumOptionsForGlyphs,
   renameTestStrokeTemplateToFangYuan,
@@ -48,6 +50,12 @@ import { addMissingFangYuanStrokes } from '@/features/temporaryScripts/addMissin
 
 /** 带此 tag 的工程在加载完成后会为字符列表补全部件分解数据（高级编辑「脚本」Tab 亦仅在此 tag 下显示） */
 export const DEFAULT_TEMPLATE_PROJECT_TAG = '字玩默认模板工程'
+
+/** 带此 tag 的工程加载完成后同样补全部件分解数据，用于 AI 功能测试场景 */
+export const AI_FEATURE_TEST_TAG = 'AI功能测试'
+
+/** 需要补全部件分解数据的 tag 集合 */
+const DECOMPOSITION_TAGS = new Set([DEFAULT_TEMPLATE_PROJECT_TAG, AI_FEATURE_TEST_TAG])
 
 /** 临时代码：打开 .fp 时对此 tag 同步 `public/templates/private/v1` 笔画脚本（与 loadProject 内 replaceGlyphScript 注释块同类，后续可整段注释） */
 const TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG = '字玩方圆黑体'
@@ -82,6 +90,94 @@ export class ProjectLoader {
     if (typeof f.tag === 'string') return
     const rt = data?.tag
     if (typeof rt === 'string') f.tag = rt
+  }
+
+  /**
+   * 字符已写入 IDB 后补全 decomposition 数据。
+   * 在需要此逻辑的 tag（DECOMPOSITION_TAGS）下自动触发。
+   *
+   * @param fileUuid 工程 uuid
+   * @param metaList 字符元数据列表
+   * @param opts.withReplaceTemplate 是否同时执行「替换部件」（仅 Web 端生效）
+   * @param opts.replaceOpts replaceTemplateComponents 所需的额外参数（仅在 withReplaceTemplate 时需要）
+   */
+  private async runDecompositionAfterCharacterLoad(
+    fileUuid: string,
+    metaList: ICharacterFileMetadata[],
+    opts?: {
+      withReplaceTemplate?: boolean
+      replaceOpts?: {
+        projectGlyphsForScriptLookup: ICustomGlyph[]
+        projectConstants: any[]
+        fontSettings: IFontSettings | undefined
+      }
+    },
+  ): Promise<void> {
+    if (import.meta.env.DEV) {
+      console.log(`[decomposition] runDecompositionAfterCharacterLoad: fileUuid=${fileUuid}, metaList.length=${metaList.length}, withReplaceTemplate=${!!opts?.withReplaceTemplate}`)
+    }
+    if (metaList.length === 0) {
+      if (import.meta.env.DEV) console.log('[decomposition] runDecompositionAfterCharacterLoad: metaList is empty, skip')
+      return
+    }
+
+    const store = this.projectStore
+    const map = await tryEnsureDecompositionLookup()
+    if (!map) {
+      if (import.meta.env.DEV) console.warn('[decomposition] runDecompositionAfterCharacterLoad: tryEnsureDecompositionLookup returned null — 字典未加载，分解跳过！请检查 IDB 中是否有 decomposition_character_list_v3 数据，或 public/data/character_list_final_v2.json 是否存在')
+      return
+    }
+    if (import.meta.env.DEV) console.log(`[decomposition] runDecompositionAfterCharacterLoad: map ready, size=${map.size}`)
+
+    // 部件分解
+    {
+      const extra = metaList.length
+      store.loadingTotal += extra
+      const progressBase = store.loadingProgress
+      await buildDecompositionForOpenedProjectCharacters(fileUuid, metaList, {
+        map,
+        onProgress: (done, total) => {
+          this.updateProgress(progressBase + done, `部件分解 (${done}/${total})`)
+        },
+        yieldToMain: () => this.yieldToMainThread(),
+      })
+      // 临时诊断：验证 decomposition 后 IDB 中参数未被覆盖
+      if (import.meta.env.DEV && metaList.length > 0) {
+        const verifyCh = await characterDataManager.loadCharacter(fileUuid, metaList[0]!.uuid)
+        if (verifyCh) {
+          for (const comp of verifyCh.components || []) {
+            if (comp.type !== 'glyph') continue
+            const gv = comp.value as any
+            const params = Array.isArray(gv?.parameters)
+              ? gv.parameters
+              : gv?.parameters?.parameters
+            if (!Array.isArray(params)) continue
+            for (const p of params) {
+              if (p.type === 0 || p.type === 'Number' || p.type === 'number') {
+                console.log(`[aiWiden] decomp后IDB确认 — 字符「${verifyCh.character?.text}」参数 "${p.name}": min=${p.min} max=${p.max}`)
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 替换部件（仅 Web 端，默认模板工程 JSON 加载路径）
+    if (opts?.withReplaceTemplate && !isTauri()) {
+      const extraReplace = metaList.length
+      store.loadingTotal += extraReplace
+      const progressBaseReplace = store.loadingProgress
+      await replaceTemplateComponentsForOpenedProject(fileUuid, metaList, {
+        map,
+        projectGlyphsForScriptLookup: opts.replaceOpts?.projectGlyphsForScriptLookup ?? [],
+        projectConstants: opts.replaceOpts?.projectConstants ?? [],
+        fontSettings: opts.replaceOpts?.fontSettings,
+        onProgress: (done, total) => {
+          this.updateProgress(progressBaseReplace + done, `替换部件 (${done}/${total})`)
+        },
+        yieldToMain: () => this.yieldToMainThread(),
+      })
+    }
   }
 
   /**
@@ -137,44 +233,23 @@ export class ProjectLoader {
       // 2. 处理字符数据
       await this.processCharacters(data.file, this.collectGlyphLibraryFromProjectData(data))
 
-      // 2b. 默认模板工程：字符已入 IDB 后补全 decomposition（仅此时增加 loadingTotal）
-      const fileForDecomp = data.file
-      const metaListAfterChars = (fileForDecomp.characterList || []) as ICharacterFileMetadata[]
-      if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && metaListAfterChars.length > 0) {
-        const map = await tryEnsureDecompositionLookup()
-        if (map) {
-          const extra = metaListAfterChars.length
-          store.loadingTotal += extra
-          const progressBase = store.loadingProgress
-          await buildDecompositionForOpenedProjectCharacters(fileForDecomp.uuid, metaListAfterChars, {
-            map,
-            onProgress: (done, total) => {
-              this.updateProgress(progressBase + done, `部件分解 (${done}/${total})`)
-            },
-            yieldToMain: () => this.yieldToMainThread(),
-          })
-          // 临时脚本：默认模板「替换部件」仅在此 Web JSON 打开路径（loadProject）执行；.fp/.fpz 不跑，整段可删
-          if (!isTauri()) {
-            const extraReplace = metaListAfterChars.length
-            store.loadingTotal += extraReplace
-            const progressBaseReplace = store.loadingProgress
-            await replaceTemplateComponentsForOpenedProject(fileForDecomp.uuid, metaListAfterChars, {
-              map,
-              projectGlyphsForScriptLookup: [
-                ...(data.glyphs || []),
-                ...(data.stroke_glyphs || []),
-                ...(data.radical_glyphs || []),
-                ...(data.comp_glyphs || []),
-              ],
-              projectConstants: data.constants || [],
-              fontSettings: data.file?.fontSettings,
-              onProgress: (done, total) => {
-                this.updateProgress(progressBaseReplace + done, `替换部件 (${done}/${total})`)
-              },
-              yieldToMain: () => this.yieldToMainThread(),
-            })
-          }
-        }
+      // 2b. 字符已入 IDB 后补全 decomposition（仅此时增加 loadingTotal）
+      if (projectTag !== undefined && DECOMPOSITION_TAGS.has(projectTag)) {
+        const fileForDecomp = data.file
+        const metaListAfterChars = (fileForDecomp.characterList || []) as ICharacterFileMetadata[]
+        await this.runDecompositionAfterCharacterLoad(fileForDecomp.uuid, metaListAfterChars, {
+          withReplaceTemplate: true,
+          replaceOpts: {
+            projectGlyphsForScriptLookup: [
+              ...(data.glyphs || []),
+              ...(data.stroke_glyphs || []),
+              ...(data.radical_glyphs || []),
+              ...(data.comp_glyphs || []),
+            ],
+            projectConstants: data.constants || [],
+            fontSettings: data.file?.fontSettings,
+          },
+        })
       }
 
       // 3. 处理常量数据
@@ -271,22 +346,10 @@ export class ProjectLoader {
         progressMsg,
       )
 
-      const fileForDecomp = data.file
-      const metaListAfterChars = (fileForDecomp.characterList || []) as ICharacterFileMetadata[]
-      if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && metaListAfterChars.length > 0) {
-        const map = await tryEnsureDecompositionLookup()
-        if (map) {
-          const extra = metaListAfterChars.length
-          store.loadingTotal += extra
-          const progressBase = store.loadingProgress
-          await buildDecompositionForOpenedProjectCharacters(fileForDecomp.uuid, metaListAfterChars, {
-            map,
-            onProgress: (done, total) => {
-              this.updateProgress(progressBase + done, `部件分解 (${done}/${total})`)
-            },
-            yieldToMain: () => this.yieldToMainThread(),
-          })
-        }
+      if (projectTag !== undefined && DECOMPOSITION_TAGS.has(projectTag)) {
+        const fileForDecomp = data.file
+        const metaListAfterChars = (fileForDecomp.characterList || []) as ICharacterFileMetadata[]
+        await this.runDecompositionAfterCharacterLoad(fileForDecomp.uuid, metaListAfterChars)
       }
 
       const constants = data.constants || []
@@ -443,6 +506,16 @@ export class ProjectLoader {
       // END 临时代码
 
       await this.processGlyphs(data)
+
+      // MARK: 临时代码 — AI 功能测试：放宽字形定义的 Number 参数（在字符处理之前，确保实例也继承放宽后的值）
+      if (import.meta.env.DEV && projectTag === AI_FEATURE_TEST_TAG) {
+        widenAiTestNumberParamBoundsInGlyphDefinitions(data.stroke_glyphs as ICustomGlyph[] | undefined)
+        widenAiTestNumberParamBoundsInGlyphDefinitions(data.glyphs as ICustomGlyph[] | undefined)
+        widenAiTestNumberParamBoundsInGlyphDefinitions(data.radical_glyphs as ICustomGlyph[] | undefined)
+        widenAiTestNumberParamBoundsInGlyphDefinitions(data.comp_glyphs as ICustomGlyph[] | undefined)
+      }
+      // END 临时代码
+
       const decoded = decodedFp as unknown as DecodedFpz
 
       // MARK: 临时代码 — 构建 stroke_glyphs name→uuid 映射，供字符组件脚本引用
@@ -464,22 +537,10 @@ export class ProjectLoader {
         strokeGlyphNameToUuid,
       )
 
-      const fileForDecomp = data.file
-      const metaListAfterChars = (fileForDecomp.characterList || []) as ICharacterFileMetadata[]
-      if (projectTag === DEFAULT_TEMPLATE_PROJECT_TAG && metaListAfterChars.length > 0) {
-        const map = await tryEnsureDecompositionLookup()
-        if (map) {
-          const extra = metaListAfterChars.length
-          store.loadingTotal += extra
-          const progressBase = store.loadingProgress
-          await buildDecompositionForOpenedProjectCharacters(fileForDecomp.uuid, metaListAfterChars, {
-            map,
-            onProgress: (done, total) => {
-              this.updateProgress(progressBase + done, `部件分解 (${done}/${total})`)
-            },
-            yieldToMain: () => this.yieldToMainThread(),
-          })
-        }
+      if (projectTag !== undefined && DECOMPOSITION_TAGS.has(projectTag)) {
+        const fileForDecomp = data.file
+        const metaListAfterChars = (fileForDecomp.characterList || []) as ICharacterFileMetadata[]
+        await this.runDecompositionAfterCharacterLoad(fileForDecomp.uuid, metaListAfterChars)
       }
 
       const constants = data.constants || []
@@ -537,6 +598,13 @@ export class ProjectLoader {
   ): Promise<void> {
     const fangYuanWiden =
       typeof file?.tag === 'string' && file.tag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG
+    // MARK: 临时代码 — AI 功能测试：放宽 Number 参数范围 >20 的为 -1000~1000
+    const aiWiden =
+      import.meta.env.DEV && typeof file?.tag === 'string' && file.tag === AI_FEATURE_TEST_TAG
+    if (aiWiden && import.meta.env.DEV) {
+      console.log('[aiWiden] processCharactersFromFpz: AI功能测试 tag 检测到，将放宽 Number 参数范围')
+    }
+    // END 临时代码
     const fontSettings = file.fontSettings
     const fileUUID = file.uuid
     const total = decoded.toc.length
@@ -553,6 +621,7 @@ export class ProjectLoader {
         fontSettings,
         glyphLibrary,
         fangYuanWiden,
+        aiWiden,
       )
 
       // MARK: 临时代码 — 将字符组件树中所有字形组件的内联脚本清除，改为引用 stroke_glyphs 中对应脚本
@@ -560,6 +629,23 @@ export class ProjectLoader {
         replaceCharacterComponentsGlyphScriptRefs_private_v1(characterLite.components, strokeGlyphNameToUuid)
       }
       // END 临时代码
+
+      // 临时诊断：第一个字符写入 IDB 前确认参数值
+      if (aiWiden && i === 0 && import.meta.env.DEV) {
+        for (const comp of characterLite.components) {
+          if (comp.type !== 'glyph') continue
+          const gv = comp.value as any
+          const params = Array.isArray(gv?.parameters)
+            ? gv.parameters
+            : gv?.parameters?.parameters
+          if (!Array.isArray(params)) continue
+          for (const p of params) {
+            if (p.type === 0 || p.type === 'Number' || p.type === 'number') {
+              console.log(`[aiWiden] 写入IDB前确认 — 字符「${characterLite.character?.text}」参数 "${p.name}": min=${p.min} max=${p.max}`)
+            }
+          }
+        }
+      }
 
       const key = `character_${fileUUID}_${characterLite.uuid}`
       await indexedDBManager.set(key, characterLite)
@@ -809,18 +895,19 @@ export class ProjectLoader {
     fontSettings?: any,
     glyphLibrary?: ICustomGlyph[],
     fangYuanWidenParams = false,
+    aiWidenParams = false,
   ): Promise<ICharacterFileLite> {
     const raw = character.components
     const hasComponents = Array.isArray(raw) && raw.length > 0
     const doHydrate = !!glyphLibrary?.length && hasComponents
+    const needClone = doHydrate || fangYuanWidenParams || aiWidenParams
 
     let components: IComponent[] = raw || []
-    if (doHydrate) {
+    if (needClone && hasComponents) {
       components = JSON.parse(JSON.stringify(raw)) as IComponent[]
-      hydrateGlyphComponentEnumOptionsFromLibrary(components, glyphLibrary)
-    } else if (fangYuanWidenParams && hasComponents) {
-      // 无库也要深拷贝后再放宽，避免改解压缓冲；且保证与「先同步再脚本」顺序一致（此处无 hydrate）
-      components = JSON.parse(JSON.stringify(raw)) as IComponent[]
+      if (doHydrate) {
+        hydrateGlyphComponentEnumOptionsFromLibrary(components, glyphLibrary)
+      }
     }
     if (fangYuanWidenParams) {
       widenFangYuanGlyphNumberParamBoundsInCharacterComponents(components)
@@ -832,6 +919,11 @@ export class ProjectLoader {
       }
       // END 临时代码
     }
+    // MARK: 临时代码 — AI 功能测试：放宽 Number 参数范围
+    if (aiWidenParams) {
+      widenAiTestNumberParamBoundsInCharacterComponents(components)
+    }
+    // END 临时代码
 
     const characterLite: ICharacterFileLite = {
       uuid: character.uuid,

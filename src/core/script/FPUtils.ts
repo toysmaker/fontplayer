@@ -31,6 +31,13 @@ interface IGetContoursOption {
 	capTransitionRatio?: number; // 方头到法线的过渡比例，默认0.1（前10%和后10%使用方头方向）
 }
 
+const clonePoint = (point: IPoint) => {
+	return {
+		x: point.x,
+		y: point.y,
+	}
+}
+
 const getLineContours = (name, skeleton, weight, options: IGetContoursOption) => {
 	// 确保 weight 是数字类型（如果 getParam 正确解析了 Constant 类型，这应该已经是数字）
 	if (typeof weight !== 'number') {
@@ -2647,6 +2654,7 @@ const FP = {
 	getControlPoint,
 	parseColorToHex,
 	getSegmentOnCurveByPercentage,
+	clonePoint,
 }
 
 const suggestion_items = [

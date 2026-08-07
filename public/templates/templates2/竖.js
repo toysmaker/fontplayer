@@ -16,7 +16,8 @@ const global_params = {
   turn_style_type: glyph.getParam('转角风格'),
   turn_style_value: glyph.getParam('转角数值'),
   bending_degree: glyph.getParam('弯曲程度'),
-  weight: glyph.getParam('字重') || 40,
+  weight: glyph.getParam('字重') * glyph.getParam('字重比率') || 40,
+  originalWeight: glyph.getParam('字重'),
 }
 
 const refline = (p1, p2, type) => {
@@ -236,7 +237,12 @@ const getComponents = (skeleton) => {
   const start_style = getStartStyle(start_style_type, start_style_value)
 
   // 根据骨架计算轮廓关键点
-  const { start, end } = skeleton
+  let { start, end } = skeleton
+
+  start = FP.clonePoint(start)
+  end = FP.clonePoint(end)
+  start = FP.goStraight(end, start, global_params.originalWeight * 0.5)
+  end = FP.goStraight(start, end, global_params.originalWeight * 0.5)
 
   // out指左侧（外侧）轮廓线
   // in指右侧（内侧）轮廓线

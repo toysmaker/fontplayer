@@ -334,6 +334,20 @@ export const useCharacterStore = defineStore('character', () => {
         componentsCount: editingCharacter.value.components.length,
         orderedListCount: editingCharacter.value.orderedList.length
       })
+      // 临时诊断：打印前 5 个 glyph 组件的 Number 参数
+      for (const comp of editingCharacter.value.components) {
+        if (comp.type !== 'glyph') continue
+        const gv = comp.value as any
+        const params = Array.isArray(gv?.parameters)
+          ? gv.parameters
+          : gv?.parameters?.parameters
+        if (!Array.isArray(params)) continue
+        for (const p of params) {
+          if (p.type === 0 || p.type === 'Number' || p.type === 'number') {
+            console.log(`[CharacterStore] 字符「${character?.character?.text ?? uuid}」glyph 参数 "${p.name}": min=${p.min} max=${p.max}`)
+          }
+        }
+      }
     }
 
     ensureCharacterInfoGridSettings(editingCharacter.value)

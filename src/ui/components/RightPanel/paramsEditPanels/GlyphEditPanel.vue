@@ -75,6 +75,7 @@ function getGlyphNameForRestrict(): string {
 }
 
 function getRestrictedMinMax(paramName: string): { min?: number; max?: number } | null {
+  if (!isRestrictProject.value) return null
   if (!paramRestrictEnabled.value) return null
   const glyphName = getGlyphNameForRestrict()
   if (!glyphName) return null
@@ -86,6 +87,7 @@ function getRestrictedMinMax(paramName: string): { min?: number; max?: number } 
 }
 
 function applyRestrictToParameters() {
+  if (!isRestrictProject.value) return
   const glyphName = getGlyphNameForRestrict()
   if (!glyphName) return
   const rule = rule1.find((r: any) => r.name === glyphName)

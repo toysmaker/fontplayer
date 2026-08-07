@@ -25,6 +25,7 @@ import { updateHeightComponentsContrast } from '@/features/advancedEdit/scripts/
 import { updateHorizontalComponentsRatio } from '@/features/advancedEdit/scripts/horizontal_components_ratio'
 import { updateVerticalComponentsRatio } from '@/features/advancedEdit/scripts/vertical_components_ratio'
 import { componentsScriptsArr } from '@/features/advancedEdit/scripts/components_scripts'
+import { defaultGridItem } from '@/stores/character'
 import type { ICharacterFileLite } from '@/core/types'
 
 const advancedEdit = useAdvancedEditStore()
@@ -91,6 +92,11 @@ const globalScripts = [
     name: '纵向部件占地步比',
     parameters: [{ name: '对比度', value: 1.5, min: 0.1, max: 2, type: ParameterType.Number }],
   },
+  {
+    id: 'freeLayout',
+    name: '自由布局',
+    parameters: [],
+  },
 ]
 
 onMounted(() => {
@@ -132,6 +138,14 @@ function guardDecomposition(): boolean {
   }
   const bad = list.find((ch) => !characterHasDecompositionScriptData(ch))
   if (bad) {
+    if (import.meta.env.DEV) {
+      const text = bad.character?.text ?? bad.uuid
+      const matchesVal: unknown = (bad as any).matches
+      const decompVal: unknown = (bad as any).decomposition
+      const hasMatches = Array.isArray(matchesVal)
+      const matchesLen = hasMatches ? (matchesVal as any[]).length : 'N/A'
+      console.warn(`[decomposition] guardDecomposition: 字符「${text}」缺少数据 — matches: ${hasMatches ? `array[${matchesLen}]` : typeof matchesVal}, decomposition: ${decompVal === undefined ? 'undefined' : decompVal === null ? 'null' : `string(${(decompVal as string).slice(0, 30)}...)`}`)
+    }
     message.warning(
       `样例「${bad.character?.text ?? bad.uuid}」缺少可用的 decomposition / matches（未写入或仅旧工程无此数据）。若为默认模板工程，请确认打开时已成功加载部件字典并完成分解写入。`,
     )
@@ -141,6 +155,7 @@ function guardDecomposition(): boolean {
 }
 
 function updateScript() {
+  if (activeScript.value === 'freeLayout') return
   if (needsDecomposition(activeScript.value) && !guardDecomposition()) return
 
   const origin = advancedEdit.originSampleCharactersList
@@ -175,18 +190,76 @@ function handleChangeParameter(parameter: (typeof parameters.value)[0], value: n
   updateScript()
 }
 
+// ---- 自由布局 ----
+const freeLayoutEditingTarget = ref<'initialGrid' | 'currentGrid'>('currentGrid')
+
+function onFreeLayoutGridParamChange() {
+  if (import.meta.env.DEV) {
+    console.log('[freeLayout] onFreeLayoutGridParamChange: currentGrid.dy2 =', advancedEdit.freeLayoutCurrentGrid.dy2)
+  }
+  applyFreeLayoutToSamples()
+}
+
+function applyFreeLayoutToSamples() {
+  // 恢复原始样例（不做组件修改），通过 grid 参数传递给 renderCharacterPreview 以非破坏性方式在轮廓计算时应用变换
+  advancedEdit.sampleCharactersList = R.clone(advancedEdit.originSampleCharactersList)
+  const grid = {
+    initialGrid: advancedEdit.freeLayoutInitialGrid,
+    currentGrid: advancedEdit.freeLayoutCurrentGrid,
+  }
+  advancedEdit.updateCharactersAndPreview(grid)
+}
+
+function resetFreeLayoutGrid() {
+  const def = defaultGridItem()
+  advancedEdit.freeLayoutInitialGrid = R.clone(def)
+  advancedEdit.freeLayoutCurrentGrid = R.clone(def)
+  freeLayoutEditingTarget.value = 'currentGrid'
+  applyFreeLayoutToSamples()
+}
+
+function editFreeLayoutInitialGrid() {
+  freeLayoutEditingTarget.value = 'initialGrid'
+}
+
+function editFreeLayoutCurrentGrid() {
+  advancedEdit.freeLayoutCurrentGrid = R.clone(advancedEdit.freeLayoutInitialGrid)
+  freeLayoutEditingTarget.value = 'currentGrid'
+  applyFreeLayoutToSamples()
+}
+
+function resetFreeLayoutCurrentGrid() {
+  advancedEdit.freeLayoutCurrentGrid = R.clone(advancedEdit.freeLayoutInitialGrid)
+  applyFreeLayoutToSamples()
+}
+
 function handleSelectScript(script: { id: string; parameters: typeof parameters.value }) {
+  if (script.id === 'freeLayout') {
+    activeScript.value = 'freeLayout'
+    parameters.value = []
+    applyFreeLayoutToSamples()
+    return
+  }
   activeScript.value = script.id
   parameters.value = R.clone(script.parameters)
   updateScript()
 }
 
 function backToScriptSelection() {
+  if (activeScript.value === 'freeLayout') {
+    // 离开自由布局：恢复原始样例
+    advancedEdit.sampleCharactersList = R.clone(advancedEdit.originSampleCharactersList)
+    advancedEdit.updateCharactersAndPreview()
+  }
   activeScript.value = ''
   parameters.value = []
 }
 
 async function applyScriptToEntireProject() {
+  if (activeScript.value === 'freeLayout') {
+    await advancedEdit.applyFreeLayoutToEntireProject()
+    return
+  }
   const file = projectStore.selectedFile
   if (!file || !activeScript.value) {
     message.warning('请先选择脚本')
@@ -339,8 +412,11 @@ async function applyScriptToEntireProject() {
           v-if="zoomedIndex !== null"
           :characters="advancedEdit.sampleCharactersList"
           :model-value="zoomedIndex"
+          :show-grid="activeScript === 'freeLayout'"
+          :grid-props="activeScript === 'freeLayout' ? advancedEdit.freeLayoutCurrentGrid : null"
           @update:model-value="zoomedIndex = $event"
           @close="zoomedIndex = null"
+          @grid-change="(g) => { advancedEdit.freeLayoutCurrentGrid = g; applyFreeLayoutToSamples() }"
         />
         <div v-else class="characters" id="advanced-edit-characters-list">
           <div
@@ -372,7 +448,110 @@ async function applyScriptToEntireProject() {
               <n-button block type="primary" @click="handleSelectScript(script)">{{ script.name }}</n-button>
             </div>
           </div>
-          <div v-if="activeScript" class="parameters-wrap">
+          <div v-if="activeScript === 'freeLayout'" class="parameters-wrap free-layout-panel">
+            <div class="section-title">当前布局 (Current Grid)</div>
+            <n-form-item label="dx" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.dx" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dy" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.dy" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dx1" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.dx1" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dx2" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.dx2" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dx3" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.dx3" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dx4" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.dx4" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dy1" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.dy1" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dy2" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.dy2" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dy3" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.dy3" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dy4" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.dy4" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="ox" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.ox" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="oy" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.oy" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="width" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.width" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="height" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.height" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="centerSquareScale" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutCurrentGrid.centerSquareScale" :min="0" :max="1" :step="0.05" :precision="2" :show-button="false" :disabled="freeLayoutEditingTarget === 'initialGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-button block style="margin-bottom: 6px" @click="editFreeLayoutCurrentGrid">编辑当前布局</n-button>
+            <n-button block style="margin-bottom: 6px" :disabled="freeLayoutEditingTarget === 'initialGrid'" @click="resetFreeLayoutCurrentGrid">重置当前布局</n-button>
+
+            <div class="section-title">初始布局 (Initial Grid)</div>
+            <n-form-item label="dx" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.dx" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dy" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.dy" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dx1" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.dx1" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dx2" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.dx2" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dx3" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.dx3" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dx4" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.dx4" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dy1" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.dy1" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dy2" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.dy2" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dy3" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.dy3" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="dy4" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.dy4" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="ox" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.ox" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="oy" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.oy" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="width" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.width" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="height" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.height" :min="-1000" :max="1000" :precision="1" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-form-item label="centerSquareScale" label-placement="left" label-width="60">
+              <n-input-number v-model:value="advancedEdit.freeLayoutInitialGrid.centerSquareScale" :min="0" :max="1" :step="0.05" :precision="2" :show-button="false" :disabled="freeLayoutEditingTarget === 'currentGrid'" @update:value="onFreeLayoutGridParamChange" />
+            </n-form-item>
+            <n-button block style="margin-bottom: 6px" @click="editFreeLayoutInitialGrid">编辑初始布局</n-button>
+
+            <n-button block style="margin-bottom: 12px" @click="resetFreeLayoutGrid">重置全部布局</n-button>
+            <n-button type="primary" block style="margin-top: 12px" @click="backToScriptSelection">
+              返回脚本选择
+            </n-button>
+          </div>
+          <div v-else-if="activeScript" class="parameters-wrap">
             <n-form-item
               v-for="parameter in parameters"
               :key="parameter.name"
@@ -514,5 +693,18 @@ async function applyScriptToEntireProject() {
 }
 .parameters-wrap :deep(.enum-param-select .n-base-selection) {
   width: 100%;
+}
+.free-layout-panel {
+  padding: 8px 4px;
+}
+.free-layout-panel .section-title {
+  height: 32px;
+  line-height: 32px;
+  padding: 0 8px;
+  margin: 8px 0 4px;
+  border-bottom: 1px solid var(--light-5);
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.85;
 }
 </style>

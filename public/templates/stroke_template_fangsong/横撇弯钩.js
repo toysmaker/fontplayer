@@ -9,7 +9,8 @@ const global_params = {
   turn_style_type: glyph.getParam('转角风格'),
   turn_style_value: glyph.getParam('转角数值'),
   bending_degree: glyph.getParam('弯曲程度'),
-  weight: glyph.getParam('字重') || 40,
+  weight: glyph.getParam('字重') * glyph.getParam('字重比率') || 40,
+  originalWeight: glyph.getParam('字重'),
 }
 const params = {
   heng_horizontalSpan: glyph.getParam('横-水平延伸'),
@@ -261,7 +262,7 @@ const updateGlyphByParams = (params, global_params) => {
     wangou_bendDegree,
     skeletonRefPos,
   } = params
-  const { weight } = global_params
+  let { weight } = global_params
 
   // 横
   let heng_start, heng_end
@@ -449,7 +450,7 @@ const getComponents = (skeleton) => {
   }
   
   const getRadiusPoint = (options) => {
-    const { start, end, radius } = options
+    let { start, end, radius } = options
     const angle = Math.atan2(end.y - start.y, end.x - start.x)
     const point = {
       x: start.x + Math.cos(angle) * radius,
@@ -459,7 +460,7 @@ const getComponents = (skeleton) => {
   }
 
   // 根据骨架计算轮廓关键点
-  const {
+  let {
     heng_start,
     heng_end,
     pie_start,
@@ -468,6 +469,10 @@ const getComponents = (skeleton) => {
     wangou_bend,
     wangou_end,
   } = skeleton
+  heng_start = FP.clonePoint(heng_start)
+  wangou_end = FP.clonePoint(wangou_end)
+  heng_start = FP.goStraight(heng_end, heng_start, global_params.originalWeight * 0.5)
+  wangou_end = FP.goStraight(wangou_bend, wangou_end, global_params.originalWeight * 0.5)
 
   const radius = 5
   const _wangou_weight = weight * 1.2

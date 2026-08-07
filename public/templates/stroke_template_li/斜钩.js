@@ -9,7 +9,8 @@ const global_params = {
   turn_style_type: glyph.getParam('转角风格'),
   turn_style_value: glyph.getParam('转角数值'),
   bending_degree: glyph.getParam('弯曲程度'),
-  weight: glyph.getParam('字重') || 40,
+  weight: glyph.getParam('字重') * glyph.getParam('字重比率') || 40,
+  originalWeight: glyph.getParam('字重'),
 }
 const params = {
   xie_horizontalSpan: glyph.getParam('斜-水平延伸'),
@@ -186,7 +187,7 @@ const computeParamsByJoints = (jointsMap) => {
 }
 
 const updateGlyphByParams = (params, global_params) => {
-  const {
+  let {
     xie_horizontalSpan,
     xie_verticalSpan,
     xie_bendCursor,
@@ -272,7 +273,7 @@ const updateGlyphByParams = (params, global_params) => {
 }
 
 const getComponents = (skeleton) => {
-  const {
+  let {
     weights_variation_power,
     start_style_type,
     start_style_value,
@@ -298,13 +299,17 @@ const getComponents = (skeleton) => {
   }
 
   // 根据骨架计算轮廓关键点
-  const {
+  let {
     xie_start,
     xie_bend,
     xie_end,
     gou_start,
     gou_end,
   } = skeleton
+  xie_start = FP.clonePoint(xie_start)
+  gou_end = FP.clonePoint(gou_end)
+  xie_start = FP.goStraight(xie_bend, xie_start, global_params.originalWeight * 0.5)
+  gou_end = FP.goStraight(gou_start, gou_end, global_params.originalWeight * 0.5)
 
   const _weight = weight * 1.5
 

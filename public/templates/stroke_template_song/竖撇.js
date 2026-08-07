@@ -17,7 +17,8 @@ const global_params = {
   turn_style_type: glyph.getParam('转角风格'),
   turn_style_value: glyph.getParam('转角数值'),
   bending_degree: glyph.getParam('弯曲程度'),
-  weight: glyph.getParam('字重') || 40,
+  weight: glyph.getParam('字重') * glyph.getParam('字重比率') || 40,
+  originalWeight: glyph.getParam('字重'),
 }
 
 const refline = (p1, p2, type) => {
@@ -187,7 +188,7 @@ const updateGlyphByParams = (params, global_params) => {
     pie_bendCursor,
     skeletonRefPos,
   } = params
-  const { weight } = global_params
+  let { weight } = global_params
 
   // 竖
   let shu_start, shu_end
@@ -313,7 +314,7 @@ const updateGlyphByParams = (params, global_params) => {
 }
 
 const getComponents = (skeleton) => {
-  const {
+  let {
     weights_variation_power,
     start_style_type,
     start_style_value,
@@ -344,13 +345,17 @@ const getComponents = (skeleton) => {
   const start_style = getStartStyle(start_style_type, start_style_value)
 
   // 根据骨架计算轮廓关键点
-  const {
+  let {
     shu_start,
     shu_end,
     pie_start,
     pie_end,
     pie_bend,
   } = skeleton
+  shu_start = FP.clonePoint(shu_start)
+  pie_end = FP.clonePoint(pie_end)
+  shu_start = FP.goStraight(shu_end, shu_start, global_params.originalWeight * 0.5)
+  pie_end = FP.goStraight(pie_bend, pie_end, global_params.originalWeight * 0.5)
 
   // 竖横比，竖的厚度比横的厚度
   const stress_ratio = 3

@@ -12,7 +12,7 @@ import { buildStrokeUuidGroupsFromOrderedComponents } from '@/features/decomposi
 export interface CharacterDecompositionRow {
   character: string
   decomposition: string | null
-  /** 与 character_list_final_v8 一致；部件 id 匹配（如带下划线的 component name）时用到 */
+  /** 与 character_list_final_v2 一致；部件 id 匹配（如带下划线的 component name）时用到 */
   decomposition2?: string | null
   matches: (number[] | null)[]
 }
@@ -35,11 +35,9 @@ async function readRowsFromIdb(): Promise<CharacterDecompositionRow[] | null> {
 }
 
 /**
- * 拉取（若 IDB 无则 fetch）并缓存 character_list_final_v8；更新 decompositionData store。
+ * 拉取（若 IDB 无则 fetch）并缓存 character_list_final_v2；更新 decompositionData store。
  */
 export async function loadDecompositionData(): Promise<void> {
-  // MARK: 暂时禁用
-  return
   if (loadInFlight) {
     return loadInFlight
   }
@@ -49,12 +47,14 @@ export async function loadDecompositionData(): Promise<void> {
     try {
       const existing = await readRowsFromIdb()
       if (existing) {
+        if (import.meta.env.DEV) console.log(`[decomposition] loadDecompositionData: IDB 命中，${existing.length} 条记录`)
         setCache(existing)
         store.markReady()
         return
       }
+      if (import.meta.env.DEV) console.log('[decomposition] loadDecompositionData: IDB 无缓存，尝试 fetch /data/character_list_final_v2.json ...')
 
-      const res = await fetch('/data/character_list_final_v8.json')
+      const res = await fetch('/data/character_list_final_v2.json')
       if (!res.ok) {
         throw new Error(`[decomposition] fetch failed: ${res.status}`)
       }
@@ -62,6 +62,7 @@ export async function loadDecompositionData(): Promise<void> {
       if (!Array.isArray(json) || json.length === 0) {
         throw new Error('[decomposition] invalid JSON payload')
       }
+      if (import.meta.env.DEV) console.log(`[decomposition] loadDecompositionData: fetch 成功，${json.length} 条记录，写入 IDB`)
       await indexedDBManager.set(DECOMPOSITION_CHARACTER_LIST_IDB_KEY, json)
       setCache(json)
       store.markReady()
@@ -98,7 +99,15 @@ export async function tryEnsureDecompositionLookup(): Promise<Map<string, Charac
     console.error('[decomposition] tryEnsureDecompositionLookup: load failed', e)
     return null
   }
-  return ensureLookup()
+  const map = await ensureLookup()
+  if (import.meta.env.DEV) {
+    if (map) {
+      console.log(`[decomposition] tryEnsureDecompositionLookup: 成功，map.size=${map.size}`)
+    } else {
+      console.warn('[decomposition] tryEnsureDecompositionLookup: ensureLookup 返回 null（内存缓存和 IDB 均无数据）')
+    }
+  }
+  return map
 }
 
 /**
@@ -125,17 +134,30 @@ export async function buildDecompositionForOpenedProjectCharacters(
     }
     map = await ensureLookup()
   }
-  if (metadataList.length === 0 || !map) return
+  if (metadataList.length === 0 || !map) {
+    if (import.meta.env.DEV) console.log(`[decomposition] buildDecompositionForOpenedProjectCharacters: skip — metaList=${metadataList.length}, map=${!!map}`)
+    return
+  }
 
   const total = metadataList.length
   const yieldToMain = options?.yieldToMain
+  let foundCount = 0
+  let missingCount = 0
+  let noStrokesCount = 0
 
   for (let i = 0; i < metadataList.length; i++) {
     const meta = metadataList[i]!
     const ch = await characterDataManager.loadCharacter(fileUuid, meta.uuid)
     if (ch) {
-      await buildDecompositionForCharacter(ch, map)
-      await characterDataManager.updateCharacter(fileUuid, ch)
+      const ok = await buildDecompositionForCharacter(ch, map)
+      if (ok) {
+        foundCount++
+        await characterDataManager.updateCharacter(fileUuid, ch)
+      } else {
+        noStrokesCount++
+      }
+    } else {
+      missingCount++
     }
     const done = i + 1
     if (done % 10 === 0 || done === total) {
@@ -144,6 +166,9 @@ export async function buildDecompositionForOpenedProjectCharacters(
     if (yieldToMain && done % 50 === 0) {
       await yieldToMain()
     }
+  }
+  if (import.meta.env.DEV) {
+    console.log(`[decomposition] buildDecompositionForOpenedProjectCharacters: 完成 — total=${total}, found=${foundCount}, missingChar=${missingCount}, noStrokes=${noStrokesCount}`)
   }
 }
 
@@ -170,13 +195,19 @@ export async function buildDecompositionForCharacter(
     const map = await ensureLookup()
     dic = map?.get(charText)
   }
-  if (!dic) return false
+  if (!dic) {
+    // 不在字典中的字符静默跳过（非错误：字典只覆盖常见汉字）
+    return false
+  }
 
   const strokes = buildStrokeUuidGroupsFromOrderedComponents(
     character.components ?? [],
     character.orderedList ?? [],
   )
-  if (!strokes) return false
+  if (!strokes) {
+    if (import.meta.env.DEV) console.log(`[decomposition] buildDecompositionForCharacter: "${charText}" strokes 构建失败（orderedList 可能为空）`)
+    return false
+  }
 
   character.decomposition = dic.decomposition
 

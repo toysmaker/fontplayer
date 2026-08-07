@@ -21,7 +21,13 @@ import { useGlyphStore } from '@/stores/glyph'
 import { EditStatus } from '@/core/types'
 import { ConstantsMap } from '@/core/script/ConstantsMap'
 import { getGlobalConstantsMap, setGlobalConstantsMap } from '@/core/script/ParametersMap'
-import { orderedListWithItemsForCharacterFile } from '@/features/editor/services/FormatGlyphService'
+import {
+  orderedListWithItemsForCharacterFile,
+  formatContainerGlyphComponents,
+  formatGridComponents,
+} from '@/features/editor/services/FormatGlyphService'
+import { defaultGridItem, ensureCharacterInfoGridSettings } from '@/stores/character'
+import type { IGridItem } from '@/core/types'
 import { ContourConverter } from '@/core/font/converter'
 import { renderAdvancedEditPreview, renderZoomedCharacterPreview as renderZoomedPreviewCanvas } from '@/core/canvas/advancedEditPreview'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
@@ -73,6 +79,7 @@ export const PanelType = {
   StrokeReplace: 'strokeReplace',
   StyleSwitch: 'styleSwitch',
   FangYuanStyleDesign: 'fangYuanStyleDesign',
+  FreeLayout: 'freeLayout',
 } as const
 
 export type PanelTypeId = (typeof PanelType)[keyof typeof PanelType]
@@ -217,6 +224,11 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
   const sampleCharactersList = ref<ICharacterFileLite[]>([])
   const originSampleCharactersList = ref<ICharacterFileLite[]>([])
 
+  // 自由布局：共享的九宫格参数（改变一个 sample 的布局 → 联动所有 sample）
+  const freeLayoutInitialGrid = ref<IGridItem>(defaultGridItem())
+  const freeLayoutCurrentGrid = ref<IGridItem>(defaultGridItem())
+  const freeLayoutGridEditTarget = ref<'initialGrid' | 'currentGrid'>('currentGrid')
+
   const strokeMap = new Map<string, ICustomGlyph>()
   const strokeList = ref<
     Array<{
@@ -284,7 +296,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     }
   }
 
-  function renderCharacterPreview(char: ICharacterFileLite, canvas: HTMLCanvasElement) {
+  function renderCharacterPreview(char: ICharacterFileLite, canvas: HTMLCanvasElement, grid?: { initialGrid: IGridItem; currentGrid: IGridItem } | null) {
     const m = getFontMetrics()
     runWithAdvancedConstantsMap(() => {
       const ordered = orderedListWithItemsForCharacterFile(char)
@@ -295,6 +307,8 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
           preview: true,
           forceUpdate: true,
           advancedEdit: true,
+          grid: grid || undefined,
+          useSkeletonGrid: grid ? true : undefined,
         },
         { x: 0, y: 0 },
       )
@@ -308,7 +322,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     })
   }
 
-  function renderZoomedCharacterPreview(char: ICharacterFileLite, canvas: HTMLCanvasElement) {
+  function renderZoomedCharacterPreview(char: ICharacterFileLite, canvas: HTMLCanvasElement, grid?: { initialGrid: IGridItem; currentGrid: IGridItem } | null) {
     const m = getFontMetrics()
     runWithAdvancedConstantsMap(() => {
       const ordered = orderedListWithItemsForCharacterFile(char)
@@ -319,6 +333,8 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
           preview: false,
           forceUpdate: true,
           advancedEdit: true,
+          grid: grid || undefined,
+          useSkeletonGrid: grid ? true : undefined,
         },
         { x: 0, y: 0 },
       )
@@ -347,13 +363,13 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     originSampleCharactersList.value = R.clone(list)
   }
 
-  function updateCharactersAndPreview() {
+  function updateCharactersAndPreview(grid?: { initialGrid: IGridItem; currentGrid: IGridItem } | null) {
     for (const character of sampleCharactersList.value) {
       const canvas = document.getElementById(
         `advanced-edit-preview-canvas-${character.uuid}`,
       ) as HTMLCanvasElement | null
       if (!canvas) continue
-      renderCharacterPreview(character, canvas)
+      renderCharacterPreview(character, canvas, grid)
     }
   }
 
@@ -753,6 +769,61 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
       projectStore.markFileUnsaved(file.uuid)
       await characterStore.invalidateAllCachedCharacterPreviews()
       await refreshStrokeReplacePreviews()
+      bulkCompleted = true
+    } finally {
+      projectStore.loading = false
+      projectStore.loadingProgress = 0
+      projectStore.loadingTotal = 0
+      projectStore.loadingMessage = ''
+    }
+    if (bulkCompleted) await afterBulkMutateMainList()
+  }
+
+  /**
+   * 自由布局：将共享的 initialGrid → currentGrid 变换批量应用到工程全部字符。
+   * 复用 formatContainerGlyphComponents + formatGridComponents，与字符编辑器「应用布局变换」逻辑一致。
+   */
+  async function applyFreeLayoutToEntireProject() {
+    const file = projectStore.selectedFile
+    if (!file) return
+    const list = file.characterList ?? []
+    const n = Math.max(1, list.length)
+    projectStore.loading = true
+    projectStore.loadingTotal = n
+    projectStore.loadingProgress = 0
+    projectStore.loadingMessage = '正在将自由布局写入全部字符…'
+    let lastYield = performance.now()
+    let bulkCompleted = false
+    try {
+      const grid = {
+        initialGrid: freeLayoutInitialGrid.value,
+        currentGrid: freeLayoutCurrentGrid.value,
+      }
+      for (let i = 0; i < list.length; i++) {
+        const meta = list[i]
+        const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
+        if (!ch) continue
+        ensureCharacterInfoGridSettings(ch)
+        formatContainerGlyphComponents(ch)
+        formatGridComponents(orderedListWithItemsForCharacterFile(ch), {
+          grid,
+          offset: { x: 0, y: 0 },
+          useSkeletonGrid: true,
+        })
+        await characterDataManager.updateCharacter(file.uuid, ch)
+        projectStore.loadingProgress = i + 1
+        const now = performance.now()
+        if (now - lastYield >= 16) {
+          await new Promise<void>((r) => setTimeout(r, 0))
+          lastYield = performance.now()
+        }
+      }
+      projectStore.markFileUnsaved(file.uuid)
+      await characterStore.invalidateAllCachedCharacterPreviews()
+      // 重置自由布局状态
+      freeLayoutInitialGrid.value = defaultGridItem()
+      freeLayoutCurrentGrid.value = defaultGridItem()
+      await refreshAdvancedEditSamplesAfterBulk({ redrawStrokeSidebar: strokeList.value.length > 0 })
       bulkCompleted = true
     } finally {
       projectStore.loading = false
@@ -1478,6 +1549,10 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     advancedConstantsMap,
     sampleCharactersList,
     originSampleCharactersList,
+    freeLayoutInitialGrid,
+    freeLayoutCurrentGrid,
+    freeLayoutGridEditTarget,
+    applyFreeLayoutToEntireProject,
     updateSampleCharactersList,
     updatePreviewList,
     updateCharactersAndPreview,

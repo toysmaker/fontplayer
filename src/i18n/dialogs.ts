@@ -102,6 +102,9 @@ const dialogs = {
 			placeholder: '可选，用于区分或检索工程',
 			confirm: '确定',
 			cancel: '取消',
+			partialCharExport: '导出部分字符',
+			partialCharExportTip: '选择一个 .txt 文本文件，文件中包含的字符将被导出，未包含的字符将跳过导出。',
+			viewSelectedChars: '查看已选字符',
 		},
 		addIconDialog: {
 			title: '添加图标',
@@ -413,6 +416,9 @@ const dialogs = {
 			placeholder: 'Optional, for identification or search',
 			confirm: 'OK',
 			cancel: 'Cancel',
+			partialCharExport: 'Export partial characters',
+			partialCharExportTip: 'Select a .txt file containing the characters to export. Characters not in the file will be skipped.',
+			viewSelectedChars: 'View selected characters',
 		},
 		addIconDialog: {
 			title: 'Add Icon',

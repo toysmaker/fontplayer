@@ -115,23 +115,35 @@ export const useDialogsStore = defineStore('dialogs', () => {
     exportColorFontDialogVisible.value = false
   }
 
-  /** 保存/导出工程前：填写 tag */
+  /** 保存/导出工程前：填写 tag + 可选的部分字符过滤 */
   const projectTagPromptVisible = ref(false)
   const projectTagDraft = ref('')
-  let projectTagResolve: ((value: string | null) => void) | null = null
+  const projectTagSelectedChars = ref<string[]>([])
+  const projectTagSelectedFile = ref<File | null>(null)
+  let projectTagResolve: ((value: { tag: string | null; selectedChars: string[] } | null) => void) | null = null
 
-  function openProjectTagPrompt(defaultTag: string): Promise<string | null> {
+  function openProjectTagPrompt(
+    defaultTag: string,
+  ): Promise<{ tag: string | null; selectedChars: string[] } | null> {
     return new Promise((resolve) => {
       projectTagDraft.value = defaultTag ?? ''
+      projectTagSelectedChars.value = []
+      projectTagSelectedFile.value = null
       projectTagResolve = resolve
       projectTagPromptVisible.value = true
     })
   }
 
+  function setProjectTagSelectedChars(chars: string[], file: File | null) {
+    projectTagSelectedChars.value = chars
+    projectTagSelectedFile.value = file
+  }
+
   function confirmProjectTagPrompt() {
     projectTagPromptVisible.value = false
-    const v = projectTagDraft.value.trim()
-    projectTagResolve?.(v)
+    const tag = projectTagDraft.value.trim()
+    const chars = [...projectTagSelectedChars.value]
+    projectTagResolve?.({ tag: tag || null, selectedChars: chars })
     projectTagResolve = null
   }
 
@@ -175,7 +187,10 @@ export const useDialogsStore = defineStore('dialogs', () => {
 
     projectTagPromptVisible,
     projectTagDraft,
+    projectTagSelectedChars,
+    projectTagSelectedFile,
     openProjectTagPrompt,
+    setProjectTagSelectedChars,
     confirmProjectTagPrompt,
     cancelProjectTagPrompt,
   }

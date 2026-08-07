@@ -10,7 +10,8 @@ const global_params = {
   turn_style_type: glyph.getParam('转角风格'),
   turn_style_value: glyph.getParam('转角数值'),
   bending_degree: glyph.getParam('弯曲程度'),
-  weight: glyph.getParam('字重') || 40,
+  weight: glyph.getParam('字重') * glyph.getParam('字重比率') || 40,
+  originalWeight: glyph.getParam('字重'),
 }
 const params = {
   pie_horizontalSpan: glyph.getParam('撇-水平延伸'),
@@ -349,7 +350,7 @@ const getComponents = (skeleton) => {
   } = global_params
 
   // 根据骨架计算轮廓关键点
-  const {
+  let {
     pie_start,
     pie_bend,
     pie_end,
@@ -357,6 +358,11 @@ const getComponents = (skeleton) => {
     dian_bend,
     dian_end,
   } = skeleton
+
+  pie_start = FP.clonePoint(pie_start)
+  dian_end = FP.clonePoint(dian_end)
+  pie_start = FP.goStraight(pie_bend, pie_start, global_params.originalWeight * 0.5)
+  dian_end = FP.goStraight(dian_bend, dian_end, global_params.originalWeight * 0.5)
 
   // out指左侧（外侧）轮廓线
   // in指右侧（内侧）轮廓线

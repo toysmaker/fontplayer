@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import type { ICharacterFileLite } from '@/core/types'
+import type { ICharacterFileLite, IGridItem } from '@/core/types'
 import { useAdvancedEditStore } from '@/stores/advancedEdit'
+import GridControllerFree from '@/ui/components/Widgets/GridControllerFree.vue'
 
 const props = defineProps<{
   characters: ICharacterFileLite[]
   modelValue: number
+  showGrid?: boolean
+  gridProps?: IGridItem | null
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [index: number]
   close: []
+  gridChange: [IGridItem]
 }>()
 
 const advancedEdit = useAdvancedEditStore()
@@ -22,7 +26,13 @@ function render() {
   const canvas = canvasRef.value
   const char = currentChar.value
   if (!canvas || !char) return
-  advancedEdit.renderZoomedCharacterPreview(char, canvas)
+  const grid = props.showGrid && props.gridProps
+    ? {
+        initialGrid: advancedEdit.freeLayoutInitialGrid,
+        currentGrid: advancedEdit.freeLayoutCurrentGrid,
+      }
+    : null
+  advancedEdit.renderZoomedCharacterPreview(char, canvas, grid)
 }
 
 function goToPrev() {
@@ -35,6 +45,10 @@ function goToNext() {
   const len = props.characters.length
   if (len === 0) return
   emit('update:modelValue', (props.modelValue + 1) % len)
+}
+
+function onGridChange(next: IGridItem) {
+  emit('gridChange', next)
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -81,12 +95,20 @@ onUnmounted(() => {
     </div>
     <div class="zoom-canvas-area">
       <div class="zoom-char-label">{{ currentChar?.character?.text || '' }}</div>
-      <canvas
-        ref="canvasRef"
-        width="2000"
-        height="2000"
-        class="zoom-canvas"
-      />
+      <div class="zoom-canvas-wrapper">
+        <canvas
+          ref="canvasRef"
+          width="2000"
+          height="2000"
+          class="zoom-canvas"
+        />
+        <div v-if="showGrid && gridProps" class="zoom-grid-overlay">
+          <GridControllerFree
+            v-bind="gridProps"
+            @change="onGridChange"
+          />
+        </div>
+      </div>
       <div class="zoom-close-btn" @click="emit('close')">
         <font-awesome-icon :icon="['fas', 'xmark']" />
       </div>
@@ -147,12 +169,25 @@ onUnmounted(() => {
   user-select: none;
 }
 
+.zoom-canvas-wrapper {
+  position: relative;
+  width: 500px;
+  height: 500px;
+}
+
 .zoom-canvas {
   width: 500px;
   height: 500px;
   display: block;
   border: 1px solid var(--light-5);
   background: white;
+}
+
+.zoom-grid-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
 }
 
 .zoom-close-btn {

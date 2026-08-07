@@ -22,7 +22,8 @@ const global_params = {
   end_style_type: glyph.getParam('收笔风格'),
   end_style_value: glyph.getParam('收笔数值'),
   bending_degree: glyph.getParam('弯曲程度'),
-  weight: glyph.getParam('字重') || 40,
+  weight: glyph.getParam('字重') * glyph.getParam('字重比率') || 40,
+  originalWeight: glyph.getParam('字重'),
 }
 
 const refline = (p1, p2, type) => {
@@ -287,7 +288,7 @@ const updateGlyphByParams = (params, global_params) => {
     gou_verticalSpan,
     skeletonRefPos,
   } = params
-  const { weight } = global_params
+  let { weight } = global_params
 
   const _weight = weight * 1.0
 
@@ -485,7 +486,7 @@ const getComponents = (skeleton) => {
   }
   
   const getRadiusPoint = (options) => {
-    const { start, end, radius } = options
+    let { start, end, radius } = options
     const angle = Math.atan2(end.y - start.y, end.x - start.x)
     const point = {
       x: start.x + Math.cos(angle) * radius,
@@ -495,7 +496,7 @@ const getComponents = (skeleton) => {
   }
 
   // 根据骨架计算轮廓关键点
-  const {
+  let {
     shu_start,
     shu_end,
     zhe1_start,
@@ -505,6 +506,10 @@ const getComponents = (skeleton) => {
     gou_start,
     gou_end,
   } = skeleton
+  shu_start = FP.clonePoint(shu_start)
+  gou_end = FP.clonePoint(gou_end)
+  shu_start = FP.goStraight(shu_end, shu_start, global_params.originalWeight * 0.5)
+  gou_end = FP.goStraight(gou_start, gou_end, global_params.originalWeight * 0.5)
 
   const turn_angle_1 = FP.degreeToRadius(10)
   const turn_angle_2 = FP.degreeToRadius(15)
