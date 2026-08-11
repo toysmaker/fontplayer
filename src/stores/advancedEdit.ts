@@ -1581,6 +1581,8 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     refreshStyleSwitchPreviews,
     applyStyleToEntireProject,
     getGlyphByUUID,
+    switchStyle2OnCharacterWithScripts,
+    getStrokeListByStyle,
     fangYuanStyleItems,
     fangYuanStyleSelections,
     fangYuanStyleNumericValues,

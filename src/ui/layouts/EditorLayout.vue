@@ -137,6 +137,9 @@ onMounted(() => {
     window.addEventListener('show-save-char-pngs-dialog', (e: Event) => {
       window.dispatchEvent(new CustomEvent('editor-show-save-char-pngs-dialog', { detail: (e as CustomEvent).detail }))
     })
+    window.addEventListener('show-stroke-training-data-dialog', () => {
+      window.dispatchEvent(new CustomEvent('editor-show-stroke-training-data-dialog'))
+    })
   }
 })
 

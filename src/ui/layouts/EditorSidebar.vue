@@ -82,6 +82,7 @@
     <PreferenceSettingsDialog v-model:show="showPreferenceSettingsDialog" />
     <LanguageSettingsDialog v-model:show="showLanguageSettingsDialog" />
     <SaveCharPngsDialog v-if="isDev" v-model:show="showSaveCharPngsDialog" :total="saveCharPngsTotal" @confirm="onSaveCharPngsConfirm" />
+    <StrokeTrainingDataDialog v-if="isDev" v-model:show="showStrokeTrainingDataDialog" />
     <ExportFontDialog />
     <ExportVarFontDialog />
     <ExportColorFontDialog />
@@ -115,6 +116,7 @@ import FontSettingsMoreDialog from '@/ui/dialogs/FontSettingsMoreDialog.vue'
 import PreferenceSettingsDialog from '@/ui/dialogs/PreferenceSettingsDialog.vue'
 import LanguageSettingsDialog from '@/ui/dialogs/LanguageSettingsDialog.vue'
 import SaveCharPngsDialog from '@/ui/dialogs/SaveCharPngsDialog.vue'
+import StrokeTrainingDataDialog from '@/ui/dialogs/StrokeTrainingDataDialog.vue'
 import ExportFontDialog from '@/ui/dialogs/ExportFontDialog.vue'
 import ExportVarFontDialog from '@/ui/dialogs/ExportVarFontDialog.vue'
 import ExportColorFontDialog from '@/ui/dialogs/ExportColorFontDialog.vue'
@@ -141,6 +143,7 @@ const showAddGlyphDialog = ref(false)
 const addGlyphCategory = ref<'glyphs' | 'stroke_glyphs' | 'radical_glyphs' | 'comp_glyphs'>('glyphs')
 const dialogsStore = useDialogsStore()
 const showSaveCharPngsDialog = ref(false)
+const showStrokeTrainingDataDialog = ref(false)
 const onSaveCharPngsConfirm = () => {
 	  window.dispatchEvent(new CustomEvent('save-char-pngs-count', { detail: saveCharPngsCount.value }))
 	}
@@ -528,6 +531,9 @@ onMounted(() => {
       const detail = (e as CustomEvent).detail as { total: number }
       saveCharPngsTotal.value = detail.total
       showSaveCharPngsDialog.value = true
+    })
+    window.addEventListener('editor-show-stroke-training-data-dialog', () => {
+      showStrokeTrainingDataDialog.value = true
     })
   }
   window.addEventListener('editor-language-settings', onLanguageSettings)

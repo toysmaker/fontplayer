@@ -261,6 +261,34 @@ export async function initTauriMenu() {
       URL.revokeObjectURL(url)
     })
 
+    // 生成训练数据 v1
+    listen('generate-training-data-v1', async () => {
+      if (import.meta.env.DEV) console.log('[tauri-menu] generate-training-data-v1 triggered')
+      try {
+        const { generateTrainingDataV1 } = await import(
+          '@/features/advancedEdit/scripts/trainingDataV1'
+        )
+        await generateTrainingDataV1()
+      } catch (err) {
+        console.error('generate-training-data-v1 failed:', err)
+        alert('生成训练数据失败: ' + (err as Error).message)
+      }
+    })
+
+    // 生成训练数据 v2（宋体/仿宋字重强制改为 50）
+    listen('generate-training-data-v2', async () => {
+      if (import.meta.env.DEV) console.log('[tauri-menu] generate-training-data-v2 triggered')
+      try {
+        const { generateTrainingDataV2 } = await import(
+          '@/features/advancedEdit/scripts/trainingDataV2'
+        )
+        await generateTrainingDataV2()
+      } catch (err) {
+        console.error('generate-training-data-v2 failed:', err)
+        alert('生成训练数据v2失败: ' + (err as Error).message)
+      }
+    })
+
     listen('export-stroke-pngs', async () => {
       try {
         const { useProjectStore } = await import('@/stores/project')
@@ -335,6 +363,133 @@ export async function initTauriMenu() {
       } catch (err) {
         console.error('Export stroke PNGs failed:', err)
         alert('导出失败: ' + (err as Error).message)
+      }
+    })
+
+    // 保存笔画训练数据：按风格标签分组，使用指定字重
+    listen('save-stroke-training-data', async () => {
+      if (import.meta.env.DEV) console.log('[tauri-menu] save-stroke-training-data triggered')
+      try {
+        const { useProjectStore } = await import('@/stores/project')
+        const file = useProjectStore().selectedFile
+        if (!file || !file.stroke_glyphs?.length) {
+          alert('当前工程没有笔画字形')
+          return
+        }
+
+        // 弹出字重输入对话框
+        const weight: number = await new Promise((resolve) => {
+          const handler = (e: Event) => {
+            window.removeEventListener('stroke-training-data-weight', handler)
+            resolve((e as CustomEvent).detail || 50)
+          }
+          window.addEventListener('stroke-training-data-weight', handler)
+          window.dispatchEvent(new CustomEvent('show-stroke-training-data-dialog'))
+        })
+        if (weight <= 0) return
+
+        // 选择输出根目录
+        const { open } = await import('@tauri-apps/plugin-dialog')
+        const rootPath = await open({ directory: true, title: '选择笔画训练数据输出根目录' })
+        if (!rootPath) return
+
+        const { mkdir, writeFile } = await import('@tauri-apps/plugin-fs')
+        const { RenderEngine } = await import('@/core/font/renderer')
+        const { ContourConverter } = await import('@/core/font/converter')
+        const { executeGlyphScript } = await import('@/core/script/ScriptExecutor')
+        const { instanceManager } = await import('@/core/instance')
+        const { CustomGlyph } = await import('@/core/instance/CustomGlyph')
+        const { parameterRowsForGlyph } = await import('@/core/utils/glyph')
+
+        // 按风格标签分组
+        const styleGroups = new Map<string, typeof file.stroke_glyphs>()
+        for (const glyph of file.stroke_glyphs) {
+          const tag = glyph.style || '未分类'
+          if (!styleGroups.has(tag)) styleGroups.set(tag, [])
+          styleGroups.get(tag)!.push(glyph)
+        }
+
+        const SIZE = 1000
+        let totalProcessed = 0
+        const totalGlyphs = file.stroke_glyphs.length
+
+        if (import.meta.env.DEV) {
+          console.log('[save-stroke-training-data] style groups:', Array.from(styleGroups.keys()))
+          console.log('[save-stroke-training-data] weight:', weight)
+        }
+
+        for (const [styleTag, glyphs] of styleGroups) {
+          // 为每个风格标签创建子目录
+          const safeTag = styleTag.replace(/[\/\\:*?"<>|]/g, '_')
+          const styleDir = `${rootPath}/${safeTag}`
+          await mkdir(styleDir, { recursive: true })
+
+          for (const glyph of glyphs) {
+            // 克隆字形，避免修改原数据
+            const clonedGlyph = JSON.parse(JSON.stringify(glyph))
+
+            // 强制设置字重
+            const params = parameterRowsForGlyph(clonedGlyph)
+            if (params) {
+              const weightParam = params.find((p: any) => p.name === '字重')
+              if (weightParam) {
+                weightParam.value = weight
+              }
+            }
+
+            // 释放旧实例（清除 tempData 缓存）
+            instanceManager.releaseTemporaryInstance(clonedGlyph.uuid)
+
+            const canvas = document.createElement('canvas')
+            canvas.width = SIZE
+            canvas.height = SIZE
+
+            try {
+              // 执行脚本（使用指定字重）
+              executeGlyphScript(clonedGlyph, clonedGlyph.uuid)
+
+              const inst = instanceManager.acquireTemporaryInstance(
+                clonedGlyph.uuid,
+                () => new CustomGlyph(clonedGlyph),
+                'glyph',
+              ) as any
+
+              const components = inst?.components || clonedGlyph.components || []
+              const allContours = ContourConverter.componentsToContoursEditing(
+                components,
+                { x: 0, y: 0 },
+              )
+
+              RenderEngine.renderPreview(canvas, allContours, {
+                fillColor: '#000',
+                backgroundColor: 'rgba(0,0,0,0)',
+                previewStyle: 'black',
+                scale: 1,
+                offset: { x: 0, y: 0 },
+              })
+
+              const blob: Blob = await new Promise(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
+              const arr = new Uint8Array(await blob.arrayBuffer())
+              await writeFile(`${styleDir}/${glyph.name}.png`, arr)
+            } finally {
+              // 及时释放实例，避免内存堆积
+              instanceManager.releaseTemporaryInstance(clonedGlyph.uuid)
+            }
+
+            totalProcessed++
+          }
+        }
+
+        alert(
+          `笔画训练数据导出完成！\n` +
+          `字重: ${weight}\n` +
+          `共 ${totalProcessed} 个笔画字形\n` +
+          `风格分组: ${styleGroups.size} 组\n` +
+          `输出目录: ${rootPath}`,
+        )
+      } catch (err) {
+        console.error('Save stroke training data failed:', err)
+        alert('保存笔画训练数据失败: ' + (err as Error).message)
       }
     })
 

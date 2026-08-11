@@ -109,6 +109,9 @@ struct TestMenuTexts {
     test: &'static str,
     export_json: &'static str,
     export_stroke_pngs: &'static str,
+    generate_training_data_v1: &'static str,
+    generate_training_data_v2: &'static str,
+    save_stroke_training_data: &'static str,
 }
 
 fn get_menu_texts(lang: &str) -> MenuTexts {
@@ -184,6 +187,9 @@ fn get_menu_texts(lang: &str) -> MenuTexts {
                 test: "Test",
                 export_json: "Export JSON",
                 export_stroke_pngs: "Export Stroke PNGs",
+                generate_training_data_v1: "Generate Training Data v1",
+                generate_training_data_v2: "Generate Training Data v2",
+                save_stroke_training_data: "Save Stroke Training Data",
             },
         },
         _ => MenuTexts {
@@ -257,6 +263,9 @@ fn get_menu_texts(lang: &str) -> MenuTexts {
                 test: "测试",
                 export_json: "导出JSON",
                 export_stroke_pngs: "导出笔画字形图片",
+                generate_training_data_v1: "生成训练数据v1",
+                generate_training_data_v2: "生成训练数据v2",
+                save_stroke_training_data: "保存笔画训练数据",
             },
         },
     }
@@ -573,6 +582,9 @@ fn build_menu_enabled_map() -> HashMap<String, Box<dyn Fn(&str) -> bool>> {
     map.insert("test-export-json".to_string(), Box::new(enable));
     map.insert("export-stroke-pngs".to_string(), Box::new(enable));
     map.insert("save-char-pngs".to_string(), Box::new(enable));
+    map.insert("generate-training-data-v1".to_string(), Box::new(enable));
+    map.insert("generate-training-data-v2".to_string(), Box::new(enable));
+    map.insert("save-stroke-training-data".to_string(), Box::new(enable));
     map
 }
 
@@ -729,6 +741,9 @@ fn get_menu_item_text<'a>(id: &str, texts: &'a MenuTexts) -> Option<&'a str> {
         "format-current-character" => Some(texts.tools.format_current_character),
         "test-export-json" => Some(texts.test.export_json),
         "export-stroke-pngs" => Some(texts.test.export_stroke_pngs),
+        "generate-training-data-v1" => Some(texts.test.generate_training_data_v1),
+        "generate-training-data-v2" => Some(texts.test.generate_training_data_v2),
+        "save-stroke-training-data" => Some(texts.test.save_stroke_training_data),
         _ => None,
     }
 }
@@ -1052,6 +1067,15 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>, texts: &MenuTexts) -> Resul
                     &MenuItemBuilder::with_id("save-char-pngs", "保存字符图片")
                         .build(app)
                         ?,
+                    &MenuItemBuilder::with_id("generate-training-data-v1", texts.test.generate_training_data_v1)
+                        .build(app)
+                        ?,
+                    &MenuItemBuilder::with_id("generate-training-data-v2", texts.test.generate_training_data_v2)
+                        .build(app)
+                        ?,
+                    &MenuItemBuilder::with_id("save-stroke-training-data", texts.test.save_stroke_training_data)
+                        .build(app)
+                        ?,
                 ],
             )
             ?,
@@ -1243,6 +1267,9 @@ pub fn run() {
                     "test-export-json" => { let _ = app.app_handle().emit("test-export-json", ()); }
                     "export-stroke-pngs" => { let _ = app.app_handle().emit("export-stroke-pngs", ()); }
                     "save-char-pngs" => save_char_pngs(app.app_handle().clone()),
+                    "generate-training-data-v1" => { let _ = app.app_handle().emit("generate-training-data-v1", ()); }
+                    "generate-training-data-v2" => { let _ = app.app_handle().emit("generate-training-data-v2", ()); }
+                    "save-stroke-training-data" => { let _ = app.app_handle().emit("save-stroke-training-data", ()); }
                     _ => {}
                 }
             });
