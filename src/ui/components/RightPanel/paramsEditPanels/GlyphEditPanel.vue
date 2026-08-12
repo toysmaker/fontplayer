@@ -42,6 +42,7 @@ import { orderedListWithItemsForGlyph } from '@/core/utils/glyph'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import { skeletonFreeEdit, enterSkeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
 import { toolManager } from '@/features/tools/base/ToolManager'
+import { useToolStore } from '@/stores/tool'
 import { getEditCanvasContext } from '@/features/editor/editCanvas'
 import { expandGlyphComponent } from '@/features/editor/services/FormatGlyphService'
 import { precisionFromParamMax, roundToPrecision } from '@/utils/number'
@@ -212,8 +213,9 @@ async function handleEnterFreeEdit() {
   }
   enterSkeletonFreeEdit(innerPen.uuid, selectedComponent.value.uuid)
 
-  // 自动切换到选择工具，完成后触发画布重绘以显示钢笔轮廓控件
-  await toolManager.switchTool('select')
+  // 切换到参数工具（'params'），轮廓编辑在此工具下进行
+  const toolStore = useToolStore()
+  toolStore.setTool('params')
   await nextTick()
   const ctx = getEditCanvasContext()
   if (ctx) ctx.onRender()
@@ -274,9 +276,11 @@ async function handleRebind() {
     const updatedGlyphValue = { ...glyphValue, skeleton: updatedSkeleton, components: updatedComponents }
     modifyComponent({ value: updatedGlyphValue })
 
-    // 清理工具
+    // 清理工具并切回选择工具
     PenSelectTool.skeletonFreeEditContext = null
     exitSkeletonFreeEdit()
+    const toolStore = useToolStore()
+    toolStore.setTool('select')
 
     // 刷新画布并完整初始化实例（此时 bindData 已是新的，updateSkeletonTransformation 为恒等变换）
     await nextTick()
@@ -1330,6 +1334,14 @@ const handleFormatGlyphComponent = () => {
     positiveText: '确定',
     negativeText: '取消',
     onPositiveClick: async () => {
+      // 如果在轮廓编辑中，先清理自由编辑状态
+      if (skeletonFreeEdit.value) {
+        PenSelectTool.skeletonFreeEditContext = null
+        exitSkeletonFreeEdit()
+        const toolStore = useToolStore()
+        toolStore.setTool('select')
+      }
+
       if (editStatus.value === EditStatus.Edit) {
         characterStore.replaceGlyphComponentWithComponents(
           glyphComponent.uuid,
@@ -1802,17 +1814,28 @@ const handleFormatGlyphComponent = () => {
           v-if="!skeletonFreeEditMode"
           block
           @click="handleEnterFreeEdit"
+          @pointerup="handleEnterFreeEdit"
         >
-          {{ t('panels.paramsPanel.skeletonBinding.freeEditOutline') }}
+          {{ t('panels.paramsPanel.skeletonBinding.editOutline') }}
         </n-button>
-        <n-button
-          v-else
-          type="primary"
-          block
-          @click="handleRebind"
-        >
-          {{ t('panels.paramsPanel.skeletonBinding.doneRebind') }}
-        </n-button>
+        <template v-else>
+          <n-button
+            type="primary"
+            block
+            @click="handleRebind"
+            @pointerup="handleRebind"
+          >
+            {{ t('panels.paramsPanel.skeletonBinding.doneRebind') }}
+          </n-button>
+          <n-button
+            block
+            style="margin-top: 8px"
+            @click="handleFormatGlyphComponent"
+            @pointerup="handleFormatGlyphComponent"
+          >
+            {{ t('panels.paramsPanel.skeletonBinding.formatGlyph') }}
+          </n-button>
+        </template>
       </div>
     </template>
 

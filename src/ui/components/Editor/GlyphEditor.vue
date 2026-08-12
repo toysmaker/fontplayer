@@ -94,6 +94,7 @@ import { setEditCanvasContext, clearEditCanvasContext } from '@/features/editor/
 import { useToolStore } from '@/stores/tool'
 import { useDialogsStore } from '@/stores/dialogs'
 import { initSkeletonDragger, renderSkeletonSelector, renderBoneAndWeight } from '@/features/tools/skeletonBind'
+import { initContourEditOverlay, renderContourEditOverlay } from '@/features/tools/skeletonBind/contourEditOverlay'
 import { onSkeletonBind, onSkeletonDragging, onWeightSetting, skeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import type { ToolType } from '@/features/tools'
@@ -311,6 +312,11 @@ function runRenderCanvasSync() {
     if (onWeightSetting.value) {
       renderBoneAndWeight(canvasRef.value)
     }
+  }
+
+  // 轮廓编辑覆盖层（骨架自由编辑模式下的钢笔轮廓编辑）
+  if (canvasRef.value && skeletonFreeEdit.value) {
+    renderContourEditOverlay(canvasRef.value)
   }
 
   // 清除上下文残留的复合路径。外部组件渲染与脚本内置组件渲染均会将
@@ -627,6 +633,8 @@ onUnmounted(() => {
   clearEditCanvasContext()
   closeSkeletonDragger && closeSkeletonDragger()
   closeSkeletonDragger = null
+  closeContourOverlay && closeContourOverlay()
+  closeContourOverlay = null
   // 清理selectControl检查定时器
   if (selectControlCheckInterval) {
     clearInterval(selectControlCheckInterval)
@@ -857,7 +865,8 @@ watch([() => editorPreference.background, () => editorPreference.grid], () => {
 })
 
 let closeSkeletonDragger: null | (() => void) = null
-watch([onSkeletonDragging, () => toolStore.tool], async ([dragging, tool]) => {
+let closeContourOverlay: null | (() => void) = null
+watch([onSkeletonDragging, skeletonFreeEdit, () => toolStore.tool], async ([dragging, freeEdit, tool]) => {
   if (!canvasRef.value) return
 
   // only enable in params tool
@@ -866,7 +875,40 @@ watch([onSkeletonDragging, () => toolStore.tool], async ([dragging, tool]) => {
       closeSkeletonDragger()
       closeSkeletonDragger = null
     }
+    if (closeContourOverlay) {
+      closeContourOverlay()
+      closeContourOverlay = null
+    }
     return
+  }
+
+  // 轮廓编辑模式（params 工具 + skeletonFreeEdit 激活）
+  if (freeEdit && !dragging) {
+    if (closeSkeletonDragger) {
+      closeSkeletonDragger()
+      closeSkeletonDragger = null
+    }
+    if (!closeContourOverlay) {
+      closeContourOverlay = initContourEditOverlay(canvasRef.value, {
+        canvas: canvasRef.value,
+        mode: 'glyph' as const,
+        getCoord: (coord: number) => {
+          const currentZoom = editingGlyph.value?.view?.zoom || 100
+          return getCoord(coord, 'glyph', currentZoom)
+        },
+        onRender: () => {
+          renderCanvas()
+        },
+      })
+    }
+    renderCanvas()
+    return
+  }
+
+  // 清理轮廓编辑覆盖层（如果不再需要）
+  if (closeContourOverlay && !freeEdit) {
+    closeContourOverlay()
+    closeContourOverlay = null
   }
 
   if (dragging) {
@@ -893,8 +935,8 @@ watch([onSkeletonDragging, () => toolStore.tool], async ([dragging, tool]) => {
 watch(() => toolStore.tool, async (newTool) => {
   if (!canvasRef.value) return
 
-  // 骨架自由编辑模式下的工具切换警告
-  if (skeletonFreeEdit.value && newTool && newTool !== 'select') {
+  // 骨架自由编辑模式下的工具切换警告（阻止切换到任何工具）
+  if (skeletonFreeEdit.value && newTool && newTool !== 'params') {
     const { useDialog } = await import('naive-ui')
     const { useI18n } = await import('vue-i18n')
     const dialog = useDialog()

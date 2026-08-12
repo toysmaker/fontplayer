@@ -3,6 +3,23 @@ import { CustomGlyph } from "@/core/instance/CustomGlyph";
 import { instanceManager } from "@/core/instance/InstanceManager";
 import { executeGlyphScript } from "@/core/script/ScriptExecutor";
 import type { IPenComponent, IGlyphComponent, ICustomGlyph, IRefLine, IJoint } from "@/core/types";
+import {
+  buildSampledBindData,
+  ensurePointsBonesMap,
+  invalidatePointsBonesMap,
+  getTransformBuffer,
+  getSamplePoint,
+  toPersistableBindData,
+  SAMPLE_TOTAL,
+  type Bone,
+  type SampledSkeletonBindData,
+  type SampledPointBinding,
+} from "./skeletonSampling";
+import {
+  fitComponentFromSamples,
+  applyFittedSamplesToComponents,
+  transformSamplesWithBones,
+} from "./skeletonFitting";
 
 // 导入所有笔画的skeletonToBones函数
 import { skeletonToBones_heng } from "@/templates/kai/横"
@@ -37,37 +54,15 @@ import { skeletonToBones_heng_zhe_zhe_pie } from "@/templates/kai/横折折撇"
 import { skeletonToBones_shu_zhe_zhe_gou } from "@/templates/kai/竖折折钩"
 import { skeletonToBones_shu_gou } from "@/templates/kai/竖钩"
 import { skeletonToBones_wan_gou } from "@/templates/kai/弯钩"
-import * as R from "ramda";
 
 // 与原工程 stores/global.ts 保持一致
 const maxSegment = 5
 const minSegment = 3
 const skeletonThreshold = 1
 
-// 骨骼定义
-interface Bone {
-  id: string;
-  start: { x: number; y: number };
-  end: { x: number; y: number };
-  length: number;
-  bindLength: number;
-  uAxis: { x: number; y: number }; // 骨骼方向向量
-  vAxis: { x: number; y: number }; // 垂直方向向量
-  parent?: string;
-  children: string[];
-  bindMatrix: number[]; // 绑定时的变换矩阵
-  currentMatrix: number[]; // 当前的变换矩阵
-}
-
-// 控制点绑定信息
-interface PointBinding {
-  pointIndex: number;
-  bones: Array<{
-    boneIndex: number;
-    weight: number;
-    localCoords: { u: number; v: number };
-  }>;
-}
+// Bone 和 SampledPointBinding 类型从 skeletonSampling 导入
+// 保持 PointBinding 别名用于向后兼容
+type PointBinding = SampledPointBinding
 
 // 骨架类型
 type SkeletonType = 'line' | 'curve' | 'heng' | 'shu' | 'pie' | 'na' |
@@ -93,60 +88,49 @@ const glyphSkeletonBind = (glyph: CustomGlyph) => {
   // 阶段一：骨架分析
   const bones = skeletonToBones(skeleton);
 
-  // 阶段二：收集所有笔组件的控制点，记录每个组件的点范围
-  const allPoints: Array<{ x: number; y: number }> = [];
-  const componentPointRanges: Array<{ componentUUID: string; start: number; end: number }> = [];
+  // 阶段二：密集采样 + 构建绑定数据
+  const bindData = buildSampledBindData(penComponents, bones, SAMPLE_TOTAL);
 
-  for (const comp of penComponents) {
-    const compPoints = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>;
-    if (!compPoints || compPoints.length === 0) continue;
-    const start = allPoints.length;
-    for (const p of compPoints) {
-      allPoints.push({ x: p.x, y: p.y });
-    }
-    componentPointRanges.push({
-      componentUUID: comp.uuid,
-      start,
-      end: allPoints.length,
-    });
-  }
-
-  if (allPoints.length === 0) {
-    console.warn('No pen component points found');
+  if (bindData.samplePoints.length === 0) {
+    console.warn('No pen component points found for sampling');
     return;
   }
 
-  const pointsBonesMap = allPoints.map((point, index) => {
-    const binding = calculatePointBones(point, bones, index);
-    return binding;
-  });
+  // 惰性计算骨骼绑定映射
+  const pointsBonesMap = ensurePointsBonesMap(bindData, calculatePointBones);
 
-  const originalPoints = allPoints.map(p => ({ x: p.x, y: p.y }));
+  // 构建向后兼容的存储结构
+  // originalPoints: 将扁平数组展开为对象数组（供 weightSetting 等读取）
+  const originalPoints: Array<{ x: number; y: number }> = []
+  for (let i = 0; i < bindData.samplePoints.length / 2; i++) {
+    originalPoints.push(getSamplePoint(bindData.samplePoints, i))
+  }
 
-  // 存储绑定信息到glyph对象中，供后续变形使用
-  (glyph as any).skeletonBindData = {
+  const skeletonType = detectSkeletonType(skeleton)
+
+  // 存储绑定信息（向后兼容字段名）
+  const storedBindData = {
     bones,
     pointsBonesMap,
     originalPoints,
-    skeletonType: detectSkeletonType(skeleton),
-    componentPointRanges,
-  };
+    skeletonType,
+    componentPointRanges: bindData.componentSampleRanges,
+    // 新增：采样绑定数据内部引用
+    _sampleBindData: bindData,
+  }
 
-  // 存储绑定信息到glyph对象中，供后续变形使用
-  if((glyph as any)._glyph.skeleton) {
-    (glyph as any)._glyph.skeleton.skeletonBindData = {
-      bones,
-      pointsBonesMap,
-      originalPoints,
-      skeletonType: detectSkeletonType(skeleton),
-      componentPointRanges,
-    };
+  // 存储到 glyph wrapper
+  ;(glyph as any).skeletonBindData = storedBindData
+
+  // 存储到 raw glyph skeleton
+  if ((glyph as any)._glyph.skeleton) {
+    ;(glyph as any)._glyph.skeleton.skeletonBindData = storedBindData
   }
 
   return {
     bones,
-    pointsBonesMap
-  };
+    pointsBonesMap,
+  }
 };
 
 // 检测骨架类型
@@ -1258,147 +1242,100 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
     return;
   }
 
-  const bindData = (glyph as any)._glyph?.skeleton?.skeletonBindData
-  if (!bindData?.originalPoints || !Array.isArray(bindData.originalPoints) || bindData.originalPoints.length === 0) {
+  const storedBindData = (glyph as any)._glyph?.skeleton?.skeletonBindData
+  if (!storedBindData?._sampleBindData) {
     if (import.meta.env.DEV) {
-      console.warn('applySkeletonTransformation: no skeletonBindData.originalPoints, skip transformation')
+      console.warn('[SampledBind] no _sampleBindData, skip transformation' +
+        ' hasStoredBindData=' + !!storedBindData +
+        ' hasSkeletonBindData=' + !!((glyph as any)._glyph?.skeleton?.skeletonBindData) +
+        ' hasGlyphSkeletonBindData=' + !!((glyph as any)._glyph?.skeleton?.glyphSkeletonBindData))
     }
     return
   }
 
-  const { originalPoints, componentPointRanges } = bindData
-  const weightedOriginalPoints = R.clone(originalPoints)
+  const bindData: SampledSkeletonBindData = storedBindData._sampleBindData
+  const { bones } = bindData
 
-  // 更新字重
-  if ((glyph as any)._glyph?.skeleton?.dynamicWeight) {
+  // 更新骨骼当前矩阵
+  updateBoneMatrices(bones, newSkeleton)
+
+  // 处理字重动态偏移
+  const rawGlyph = (glyph as any)._glyph
+  const hasDynamicWeight = !!(rawGlyph?.skeleton?.dynamicWeight)
+  let weightD = 0
+  let originWeight = 0
+  if (hasDynamicWeight) {
     const weight = glyph.getParam('字重') as number
-    const originWeight = (glyph as any)._glyph.skeleton.originWeight
+    originWeight = rawGlyph.skeleton.originWeight
     if (weight && weight !== originWeight) {
-      const d = (weight - originWeight) / 2
-      const points = originalPoints
-      for (let i = 0; i < points.length - 1; i+=3) {
-        const bezier = [points[i], points[i+1], points[i+2], points[i+3]]
-        const angle1 = Math.atan2(bezier[1].y - bezier[0].y, bezier[1].x - bezier[0].x)
-        const angle2 = Math.atan2(bezier[3].y - bezier[2].y, bezier[3].x - bezier[2].x)
-        const p1 = { x: bezier[0].x - Math.sin(angle1) * d, y: bezier[0].y + Math.cos(angle1) * d }
-        const p2 = { x: bezier[1].x - Math.sin(angle1) * d, y: bezier[1].y + Math.cos(angle1) * d }
-        const p3 = { x: bezier[2].x - Math.sin(angle2) * d, y: bezier[2].y + Math.cos(angle2) * d }
-        const p4 = { x: bezier[3].x - Math.sin(angle2) * d, y: bezier[3].y + Math.cos(angle2) * d }
-        weightedOriginalPoints[i].x = p1.x
-        weightedOriginalPoints[i].y = p1.y
-        weightedOriginalPoints[i+1].x = p2.x
-        weightedOriginalPoints[i+1].y = p2.y
-        weightedOriginalPoints[i+2].x = p3.x
-        weightedOriginalPoints[i+2].y = p3.y
-        weightedOriginalPoints[i+3].x = p4.x
-        weightedOriginalPoints[i+3].y = p4.y
-      };
+      weightD = (weight - originWeight) / 2
     }
   }
 
-  let transformedPoints = calculateTransformedPoints(glyph, newSkeleton, weightedOriginalPoints);
+  // 获取变换缓冲区
+  const outBuffer = getTransformBuffer(bindData)
 
-  // Build a lookup of pen components by UUID for fast access
-  const componentMap = new Map<string, IGlyphComponent>()
-  for (const comp of penComponents) {
-    componentMap.set(comp.uuid, comp)
+  // 变换：采样点 LBS 加权混合
+  transformSamplesWithBones(bindData, outBuffer, (bd) => ensurePointsBonesMap(bd, calculatePointBones), transformPointToWorld)
+
+  if (import.meta.env.DEV) {
+    // 检查变换是否产生了实际差异
+    let maxDiff = 0
+    for (let i = 0; i < Math.min(bindData.samplePoints.length / 2, outBuffer.length / 2); i++) {
+      const dx = outBuffer[i * 2] - bindData.samplePoints[i * 2]
+      const dy = outBuffer[i * 2 + 1] - bindData.samplePoints[i * 2 + 1]
+      const d = Math.sqrt(dx * dx + dy * dy)
+      if (d > maxDiff) maxDiff = d
+    }
+    console.log('[SampledBind] maxSampleDiff=' + maxDiff.toFixed(2) + ' bones=' + bindData.bones.length + ' samples=' + (bindData.samplePoints.length / 2))
   }
 
-  // If we have componentPointRanges, write back to each component individually
-  const ranges: Array<{ componentUUID: string; start: number; end: number }> = componentPointRanges
-  if (ranges && ranges.length > 0) {
-    let anyPointChanged = false
-    for (const range of ranges) {
-      const comp = componentMap.get(range.componentUUID)
-      if (!comp) continue
-      const pts = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>
-      if (!pts || range.end - range.start !== pts.length) continue
+  // 应用字重偏移（对变换后的采样点进行法向偏移）
+  if (weightD !== 0) {
+    const { samplePoints: origSamples, componentSegmentMeta } = bindData
+    let sampleIdx = 0
+    for (const meta of componentSegmentMeta) {
+      const totalInComp = meta.samplesPerSegment.reduce((a: number, b: number) => a + b, 0)
+      for (let seg = 0; seg < meta.samplesPerSegment.length; seg++) {
+        const segCount = meta.samplesPerSegment[seg]
+        // 对段内相邻采样点计算切线方向
+        for (let s = 0; s < segCount; s++) {
+          const idx = sampleIdx + s
+          const nextIdx = s < segCount - 1 ? idx + 1 : idx // 最后一个点用前一个点的方向
+          const prevIdx = s > 0 ? idx - 1 : idx
 
-      for (let i = 0; i < pts.length; i++) {
-        const point = pts[i]
-        const newPoint = transformedPoints[range.start + i]
-        if (!newPoint) continue
-        if (skeletonCoordChanged(point.x, newPoint.x) || skeletonCoordChanged(point.y, newPoint.y)) {
-          point.x = newPoint.x
-          point.y = newPoint.y
-          anyPointChanged = true
+          const dx = outBuffer[nextIdx * 2] - outBuffer[prevIdx * 2]
+          const dy = outBuffer[nextIdx * 2 + 1] - outBuffer[prevIdx * 2 + 1]
+          const len = Math.sqrt(dx * dx + dy * dy) || 1
+          const nx = -dy / len
+          const ny = dx / len
+
+          outBuffer[idx * 2] += nx * weightD
+          outBuffer[idx * 2 + 1] += ny * weightD
         }
-      }
-
-      const bound = getBound(pts)
-      const pc = comp as any
-      if (
-        skeletonCoordChanged(pc.x ?? 0, bound.x) ||
-        skeletonCoordChanged(pc.y ?? 0, bound.y) ||
-        skeletonCoordChanged(pc.w ?? 0, bound.w) ||
-        skeletonCoordChanged(pc.h ?? 0, bound.h)
-      ) {
-        pc.x = bound.x
-        pc.y = bound.y
-        pc.w = bound.w
-        pc.h = bound.h
+        sampleIdx += segCount
       }
     }
+  }
 
-    if (!anyPointChanged) {
-      return
-    }
-  } else {
-    // Fallback: no componentPointRanges, treat all points as belonging to first pen component (backward compat)
-    const penComponent = penComponents[0]
-    if (transformedPoints.length === (penComponent.value as unknown as IPenComponent).points.length) {
-      const pts = (penComponent.value as unknown as IPenComponent).points
-      let anyPointChanged = false
-      for (let index = 0; index < pts.length; index++) {
-        const point = pts[index]
-        const newPoint = transformedPoints[index]
-        if (skeletonCoordChanged(point.x, newPoint.x) || skeletonCoordChanged(point.y, newPoint.y)) {
-          point.x = newPoint.x
-          point.y = newPoint.y
-          anyPointChanged = true
-        }
-      }
-
-      if (!anyPointChanged) {
-        return
-      }
-
-      const bound = getBound(pts)
-      const pc = penComponent as any
-      if (
-        skeletonCoordChanged(pc.x ?? 0, bound.x) ||
-        skeletonCoordChanged(pc.y ?? 0, bound.y) ||
-        skeletonCoordChanged(pc.w ?? 0, bound.w) ||
-        skeletonCoordChanged(pc.h ?? 0, bound.h)
-      ) {
-        pc.x = bound.x
-        pc.y = bound.y
-        pc.w = bound.w
-        pc.h = bound.h
-      }
-    } else {
-      console.warn('Transformed points length mismatch:',
-        transformedPoints.length,
-        (penComponent.value as unknown as IPenComponent).points.length);
-    }
+  // 拟合采样点 → 贝塞尔曲线 → 写回组件
+  const anyChanged = applyFittedSamplesToComponents(penComponents, outBuffer, bindData)
+  if (import.meta.env.DEV) {
+    console.log('[SampledBind] anyChangedAfterFit=' + anyChanged)
+  }
+  if (!anyChanged) {
+    return
   }
 
   // 对可变参数的关键帧图层也应用同一套骨架变形
-  // 将变形后的锚点存入 variableKeyframeBinds[kfUuid].deformedPoints,
-  // 由 interpolateGlyphOutline 读取以计算图层间差值。
-  // 不原地修改 reactive 数据以避免触发 Vue deep watcher 死循环。
-  const rawGlyph = (glyph as any)._glyph
   if (rawGlyph?.variables?.length && rawGlyph?.skeleton?.skeletonBindData) {
     const layers: Record<string, string[]> = rawGlyph.layers || {}
-    const { bones } = rawGlyph.skeleton.skeletonBindData
-    if (!bones?.length) return
 
     if (!rawGlyph.skeleton.variableKeyframeBinds) {
       rawGlyph.skeleton.variableKeyframeBinds = {}
     }
     const vkb: Record<string, any> = rawGlyph.skeleton.variableKeyframeBinds
 
-    // 先为所有关键帧图层计算并存储 deformedPoints
     const processedLayers = new Set<string>()
 
     for (const variable of rawGlyph.variables) {
@@ -1409,7 +1346,24 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
         const layerUUIDs = new Set(layers[kf.layer] || [])
         if (layerUUIDs.size === 0) continue
 
-        // 获取或初始化绑定数据
+        // 从 bindData 切片获取该图层的分量
+        const sliced = (() => {
+          const ranges = bindData.componentSampleRanges.filter(r => layerUUIDs.has(r.componentUUID))
+          if (ranges.length === 0) return null
+          const minStart = Math.min(...ranges.map(r => r.start))
+          const maxEnd = Math.max(...ranges.map(r => r.end))
+          const count = maxEnd - minStart
+          const pts: Array<{x:number;y:number}> = new Array(count)
+          for (let i = 0; i < count; i++) {
+            const bi = (minStart + i) * 2
+            pts[i] = { x: outBuffer[bi], y: outBuffer[bi + 1] }
+          }
+          return pts
+        })()
+
+        if (!sliced) continue
+
+        // 获取或初始化该关键帧的绑定数据
         let kfBind = vkb[kf.uuid]
         if (!kfBind?.originalPoints?.length) {
           const pts: Array<{ x: number; y: number }> = []
@@ -1425,38 +1379,24 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
           vkb[kf.uuid] = kfBind
         }
 
-        if (!kfBind.pointsBonesMap) {
-          kfBind.pointsBonesMap = kfBind.originalPoints.map((point: any, index: number) =>
-            calculatePointBones(point, bones, index),
-          )
-        }
-
-        // 应用骨架变换，两个条件才更新：
-        // 1. 变换结果与原始锚点有实质差异（骨架确实被拖动了）
-        // 2. 变换结果与已有 deformedPoints 不同（不是重复计算产生的漂移）
-        const dp = calculateTransformedPoints(
-          glyph, newSkeleton, [...kfBind.originalPoints], kfBind.pointsBonesMap,
-        )
-        const changedFromOrig = dp.length === kfBind.originalPoints.length &&
-          dp.some((p: any, i: number) =>
+        // 存储 deformedPoints（从单次变换 buffer 切片，而非每层独立变换）
+        const changedFromOrig = sliced.length === kfBind.originalPoints.length &&
+          sliced.some((p: any, i: number) =>
             skeletonCoordChanged(p.x, kfBind.originalPoints[i].x) ||
             skeletonCoordChanged(p.y, kfBind.originalPoints[i].y),
           )
         const existing = kfBind.deformedPoints as Array<{x:number;y:number}> | undefined
-        const diffFromExisting = !existing || existing.length !== dp.length ||
-          dp.some((p: any, i: number) =>
+        const diffFromExisting = !existing || existing.length !== sliced.length ||
+          sliced.some((p: any, i: number) =>
             skeletonCoordChanged(p.x, existing[i].x) ||
             skeletonCoordChanged(p.y, existing[i].y),
           )
         if (changedFromOrig && diffFromExisting) {
-          kfBind.deformedPoints = dp
+          kfBind.deformedPoints = sliced
         }
       }
     }
   }
-
-  // 强制触发重新渲染
-  // emitter.emit('renderCharacter')
 }
 
 // ==================== glyphSkeleton：从参考字形辅助线生成骨骼并绑定 ====================
@@ -1581,39 +1521,28 @@ export function glyphSkeletonBindFromRefGlyph(
     bone.currentMatrix = [...bone.bindMatrix]
   })
 
-  // 3. 收集当前字形所有普通钢笔组件的控制点
+  // 3. 采样所有钢笔组件的贝塞尔曲线 + 构建绑定数据
   const penComponents = rawGlyph.components?.filter((c: any) => c.type === 'pen') as IGlyphComponent[] || []
   if (penComponents.length === 0) {
     console.warn('[glyphSkeleton] No pen components in current glyph')
     return false
   }
 
-  const allPoints: Array<{ x: number; y: number }> = []
-  const componentPointRanges: Array<{ componentUUID: string; start: number; end: number }> = []
+  const sampledBindData = buildSampledBindData(penComponents, bones, SAMPLE_TOTAL)
 
-  for (const comp of penComponents) {
-    const compPoints = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>
-    if (!compPoints || compPoints.length === 0) continue
-    const start = allPoints.length
-    for (const p of compPoints) {
-      allPoints.push({ x: p.x, y: p.y })
-    }
-    componentPointRanges.push({
-      componentUUID: comp.uuid,
-      start,
-      end: allPoints.length,
-    })
-  }
-
-  if (allPoints.length === 0) {
-    console.warn('[glyphSkeleton] No pen component points found')
+  if (sampledBindData.samplePoints.length === 0) {
+    console.warn('[glyphSkeleton] No pen component points found for sampling')
     return false
   }
 
-  // 4. 计算每个控制点的骨骼绑定
-  const pointsBonesMap: PointBinding[] = allPoints.map((point, index) =>
-    calculatePointBones(point, bones, index),
-  )
+  // 4. 计算骨骼绑定（惰性）
+  const pointsBonesMap = ensurePointsBonesMap(sampledBindData, calculatePointBones)
+
+  // 构建 originalPoints（对象数组，向后兼容）
+  const originalPoints: Array<{ x: number; y: number }> = []
+  for (let i = 0; i < sampledBindData.samplePoints.length / 2; i++) {
+    originalPoints.push(getSamplePoint(sampledBindData.samplePoints, i))
+  }
 
   // 5. 存储绑定数据到 skeleton.glyphSkeletonBindData
   if (!rawGlyph.skeleton) {
@@ -1624,8 +1553,9 @@ export function glyphSkeletonBindFromRefGlyph(
   skeleton.glyphSkeletonBindData = {
     bones,
     pointsBonesMap,
-    originalPoints: allPoints.map(p => ({ x: p.x, y: p.y })),
-    componentPointRanges,
+    originalPoints,
+    componentPointRanges: sampledBindData.componentSampleRanges,
+    _sampleBindData: sampledBindData,
   }
   skeleton.cachedRefLines = reflines
 
@@ -1643,18 +1573,21 @@ export function applyGlyphSkeletonTransformation(glyphInstance: CustomGlyph): vo
   const skeleton = (glyphInstance._glyph as any)?.skeleton
   if (!skeleton?.glyphSkeletonBindData) return
 
-  const { bones, pointsBonesMap, originalPoints, componentPointRanges } = skeleton.glyphSkeletonBindData
-  if (!originalPoints?.length || !bones?.length) return
+  const storedBindData = skeleton.glyphSkeletonBindData
+  const bindData: SampledSkeletonBindData | undefined = storedBindData._sampleBindData
+  if (!bindData) return
+
+  const { bones } = bindData
+  if (!bindData.samplePoints?.length || !bones?.length) return
 
   // 更新骨骼的 currentMatrix: newMatrix * scale * inv(bindMatrix)
-  // scale 沿 uAxis（骨骼方向），骨骼端点位移由 newMatrix 的平移分量捕获
   let anyBoneChanged = false
   bones.forEach((bone: Bone) => {
     const newMatrix = calculateBoneMatrix(bone)
     const bindLen = typeof bone.bindLength === 'number' && bone.bindLength > 0.001 ? bone.bindLength : bone.length
     const curLen = bone.length > 0.001 ? bone.length : bindLen
     const scale = curLen / bindLen
-    if (scale < 0.01 || scale > 100) return // 异常值跳过
+    if (scale < 0.01 || scale > 100) return
     const scaleMatrix = [scale, 0, 0, 1, 0, 0]
     const invBind = invertMatrix(bone.bindMatrix)
     bone.currentMatrix = multiplyMatrices(multiplyMatrices(newMatrix, scaleMatrix), invBind)
@@ -1667,66 +1600,19 @@ export function applyGlyphSkeletonTransformation(glyphInstance: CustomGlyph): vo
     }
   })
   if (import.meta.env.DEV) {
-    console.log('[applyGlyphSkeletonTransformation]', {
-      bonesCount: bones.length,
-      anyBoneChanged,
-      firstBoneMatrix: bones[0]?.currentMatrix,
-    })
+    console.log('[SampledBind] applyGlyphSkeleton bonesCount=' + bones.length +
+      ' anyBoneChanged=' + anyBoneChanged +
+      ' firstMatrix=' + JSON.stringify(bones[0]?.currentMatrix?.slice(0, 4)))
   }
 
-  // 计算变换后的点：用增量矩阵变换原始世界坐标点
-  const transformedPoints = originalPoints.map((point: { x: number; y: number }, index: number) => {
-    const binding = pointsBonesMap?.[index]
-    if (!binding?.bones?.length) return { x: point.x, y: point.y }
+  // 变换采样点（使用 LBS 加权混合）
+  const outBuffer = getTransformBuffer(bindData)
+  transformSamplesWithBones(bindData, outBuffer, (bd) => ensurePointsBonesMap(bd, calculatePointBones), transformPointToWorld)
 
-    let newX = 0, newY = 0
-    binding.bones.forEach(({ boneIndex, weight }: { boneIndex: number; weight: number }) => {
-      const bone = bones[boneIndex]
-      if (!bone?.currentMatrix) return
-      const tp = transformPointToWorld(point, bone.currentMatrix)
-      newX += weight * tp.x
-      newY += weight * tp.y
-    })
-    return { x: newX, y: newY }
-  })
-
-  // 写回各组件
+  // 拟合采样点 → 贝塞尔曲线 → 写回各组件
   const rawGlyph = glyphInstance._glyph
   const penComponents = rawGlyph.components?.filter((c: any) => c.type === 'pen') as IGlyphComponent[] || []
-  const componentMap = new Map<string, IGlyphComponent>()
-  for (const comp of penComponents) {
-    componentMap.set(comp.uuid, comp)
-  }
-
-  const ranges: Array<{ componentUUID: string; start: number; end: number }> = componentPointRanges
-  if (ranges) {
-    for (const range of ranges) {
-      const comp = componentMap.get(range.componentUUID)
-      if (!comp) continue
-      const pts = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>
-      if (!pts || range.end - range.start !== pts.length) continue
-
-      let anyPointChanged = false
-      for (let i = 0; i < pts.length; i++) {
-        const newPoint = transformedPoints[range.start + i]
-        if (!newPoint) continue
-        if (skeletonCoordChanged(pts[i].x, newPoint.x) || skeletonCoordChanged(pts[i].y, newPoint.y)) {
-          pts[i].x = newPoint.x
-          pts[i].y = newPoint.y
-          anyPointChanged = true
-        }
-      }
-
-      if (anyPointChanged) {
-        const bound = getBound(pts)
-        const pc = comp as any
-        pc.x = bound.x
-        pc.y = bound.y
-        pc.w = bound.w
-        pc.h = bound.h
-      }
-    }
-  }
+  applyFittedSamplesToComponents(penComponents, outBuffer, bindData)
 }
 
 /**
@@ -1736,7 +1622,7 @@ export function applyGlyphSkeletonTransformation(glyphInstance: CustomGlyph): vo
 export function glyphSkeletonRebind(glyphInstance: CustomGlyph): void {
   const skeleton = (glyphInstance._glyph as any)?.skeleton
   if (!skeleton?.glyphSkeletonBindData) {
-    if (import.meta.env.DEV) console.warn('[glyphSkeletonRebind] No glyphSkeletonBindData, skipping')
+    if (import.meta.env.DEV) console.warn('[SampledBind] glyphSkeletonRebind: no glyphSkeletonBindData')
     return
   }
 
@@ -1775,8 +1661,13 @@ export function glyphSkeletonRebind(glyphInstance: CustomGlyph): void {
   }
 
   bindData.bones = newBones
-  // 注意：不重算 pointsBonesMap，保持初始绑定时的骨骼-控制点对应关系
-  // 重算会导致拖拽后控制点绑定到不同骨骼，产生不一致的变形
+
+  // 清除惰性缓存：骨骼变了，_pointsBonesMap 需要重算
+  const sampledData: SampledSkeletonBindData | undefined = bindData._sampleBindData
+  if (sampledData) {
+    sampledData.bones = newBones
+    invalidatePointsBonesMap(sampledData)
+  }
 
   skeleton.cachedRefLines = reflines
 

@@ -106,6 +106,7 @@ import { reexecuteAllGlyphScriptsInEditingCharacter } from '@/features/editor/gl
 import { executeCharacterScript } from '@/core/script/ScriptExecutor'
 import { rebuildCharacterListPreviewAfterExitEdit } from '@/features/editor/listPreview/rebuildListPreviewAfterEditorExit'
 import { skeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
+import { renderContourEditOverlay } from '@/features/tools/skeletonBind/contourEditOverlay'
 import { useEffectStore } from '@/features/effects/effectStore'
 import { getStrokeWidth } from '@/utils/canvas-utils'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
@@ -323,6 +324,11 @@ function runRenderCanvasSync() {
     renderCharacterSkeleton(canvasRef.value, editingCharacter.value.skeleton)
   }
   // ============ 骨架渲染结束 ============
+
+  // 轮廓编辑覆盖层（骨架自由编辑模式下的钢笔轮廓编辑）
+  if (skeletonFreeEdit.value) {
+    renderContourEditOverlay(canvasRef.value)
+  }
 
   // 渲染关键点和辅助线（在主要渲染之后）
   // 如果当前选中的组件被设置为不可见（visible === false），则不渲染其关键点和辅助线
@@ -869,7 +875,7 @@ watch(() => toolStore.tool, async (newTool) => {
   }
 
   // 骨架自由编辑模式下的工具切换警告
-  if (skeletonFreeEdit.value && newTool && newTool !== 'select') {
+  if (skeletonFreeEdit.value && newTool && newTool !== 'params') {
     const { useDialog } = await import('naive-ui')
     const { useI18n } = await import('vue-i18n')
     const dialog = useDialog()

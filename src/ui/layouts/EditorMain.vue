@@ -72,6 +72,7 @@ import { useI18n } from 'vue-i18n'
 import { useEditorStore } from '@/stores/editor'
 import { EditStatus } from '@/core/types'
 import { skeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
+import { forceCleanupOverlay } from '@/features/tools/skeletonBind/contourEditOverlay'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import VirtualCharacterList from '@/ui/components/VirtualList/CharacterList/VirtualCharacterList.vue'
 import VirtualGlyphList from '@/ui/components/VirtualList/GlyphList/VirtualGlyphList.vue'
@@ -109,6 +110,7 @@ const handleTabChange = (status: EditStatus) => {
       onPositiveClick: () => {
         exitSkeletonFreeEdit()
         PenSelectTool.skeletonFreeEditContext = null
+        forceCleanupOverlay()
         editorStore.setEditStatus(status)
       },
     })
