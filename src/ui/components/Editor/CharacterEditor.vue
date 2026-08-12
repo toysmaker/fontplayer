@@ -106,7 +106,7 @@ import { reexecuteAllGlyphScriptsInEditingCharacter } from '@/features/editor/gl
 import { executeCharacterScript } from '@/core/script/ScriptExecutor'
 import { rebuildCharacterListPreviewAfterExitEdit } from '@/features/editor/listPreview/rebuildListPreviewAfterEditorExit'
 import { skeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
-import { renderContourEditOverlay } from '@/features/tools/skeletonBind/contourEditOverlay'
+import { renderContourEditOverlay, initContourEditOverlay, forceCleanupOverlay } from '@/features/tools/skeletonBind/contourEditOverlay'
 import { useEffectStore } from '@/features/effects/effectStore'
 import { getStrokeWidth } from '@/utils/canvas-utils'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
@@ -676,6 +676,8 @@ onUnmounted(() => {
     exitSkeletonFreeEdit()
     PenSelectTool.skeletonFreeEditContext = null
   }
+  if (closeContourOverlay) { closeContourOverlay(); closeContourOverlay = null }
+  forceCleanupOverlay()
   clearEditCanvasContext()
   characterGridEditStore.resetToCurrent()
   // 离开字符编辑时勿保留 metrics/grid，避免 GlyphEditor 等场景 tool 无效
@@ -861,6 +863,28 @@ watch(
     renderCanvas()
   },
 )
+
+// 轮廓编辑覆盖层：params 工具 + skeletonFreeEdit 时激活
+let closeContourOverlay: null | (() => void) = null
+watch([skeletonFreeEdit, () => toolStore.tool], async ([freeEdit, tool]) => {
+  if (!canvasRef.value) return
+  if (tool !== 'params' || !freeEdit) {
+    if (closeContourOverlay) { closeContourOverlay(); closeContourOverlay = null }
+    return
+  }
+  if (!closeContourOverlay) {
+    closeContourOverlay = initContourEditOverlay(canvasRef.value, {
+      canvas: canvasRef.value,
+      mode: 'character' as const,
+      getCoord: (coord: number) => {
+        const currentZoom = editingCharacter.value?.view?.zoom || 100
+        return getCoord(coord, 'character', currentZoom)
+      },
+      onRender: () => { renderCanvas() },
+    })
+    renderCanvas()
+  }
+})
 
 // 监听工具切换
 watch(() => toolStore.tool, async (newTool) => {

@@ -28,10 +28,6 @@ const SKELETON_TRANSFORM_EPS = 1e-4
 // ==================== 单段拟合 ====================
 
 /**
- * 将一组采样点拟合为单段三次贝塞尔曲线
- * 保证返回恰好 4 个控制点 [P0, P1, P2, P3]
- */
-/**
  * 拟合一组采样点为贝塞尔曲线数组
  * 使用 fitCurve（自适应分割 + 重参数化优化）
  * @returns 贝塞尔曲线数组，每条曲线为 [P0,P1,P2,P3]
@@ -58,7 +54,8 @@ export function fitSamplesToBeziers(
     return [[first, first, first, first]]
   }
 
-  const input: FitIPoint[] = samples.map((p) => ({ x: p.x, y: p.y }))
+  // 结构类型与 FitIPoint 完全一致，直接传入避免每帧冗余拷贝
+  const input: FitIPoint[] = samples as FitIPoint[]
 
   if (import.meta.env.DEV) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
@@ -72,6 +69,7 @@ export function fitSamplesToBeziers(
   }
 
   try {
+    // 使用 fitCurve：自适应分割 + 重参数化优化（最多20次迭代）
     const result = fitCurve(input, maxError)
     if (result && result.length > 0) {
       const beziers: Array<[{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }]> = []
@@ -83,7 +81,7 @@ export function fitSamplesToBeziers(
       if (beziers.length > 0) {
         if (import.meta.env.DEV) {
           console.log(LOG, 'fitSamples OK curves=' + beziers.length +
-            (beziers.length > 1 ? ' (SPLIT!)' : '') +
+            (beziers.length > 1 ? ' (SPLIT)' : '') +
             ' P0=(' + beziers[0][0].x.toFixed(1) + ',' + beziers[0][0].y.toFixed(1) + ')' +
             ' P3=(' + beziers[beziers.length - 1][3].x.toFixed(1) + ',' + beziers[beziers.length - 1][3].y.toFixed(1) + ')')
         }
@@ -118,26 +116,39 @@ export function fitSamplesToBeziers(
 // ==================== 组件拟合 ====================
 
 export function fitComponentFromSamples(
-  samples: Array<{ x: number; y: number }>,
-  meta: ComponentSegmentMeta,
+  outBuffer: Float64Array,
+  rangeStart: number,
+  rangeEnd: number,
+  meta: ComponentSegmentMeta | undefined,
 ): Array<{ x: number; y: number }> {
+  if (!meta || !Array.isArray(meta.samplesPerSegment) || meta.samplesPerSegment.length === 0) {
+    if (import.meta.env.DEV) {
+      console.warn(LOG, 'fitComponent: meta missing or empty, skipping (rangeStart=' + rangeStart + ')')
+    }
+    return []
+  }
   const { samplesPerSegment, closePath } = meta
-  if (samplesPerSegment.length === 0 || samples.length === 0) return []
 
   const points: Array<{ x: number; y: number }> = []
   let sampleOffset = 0
   let isFirstCurve = true
+  const totalCount = rangeEnd - rangeStart
 
   if (import.meta.env.DEV) {
     console.log(LOG, 'fitComponent segs=' + samplesPerSegment.length +
-      ' totalSamples=' + samples.length +
+      ' totalSamples=' + totalCount +
       ' perSeg=[' + samplesPerSegment.join(',') + ']' +
       ' closePath=' + closePath)
   }
 
   for (let seg = 0; seg < samplesPerSegment.length; seg++) {
     const count = samplesPerSegment[seg]
-    const segSamples = samples.slice(sampleOffset, sampleOffset + count)
+    // 直接从 Float64Array 构造段内采样点（无中间大数组拷贝）
+    const segSamples: Array<{ x: number; y: number }> = new Array(count)
+    for (let s = 0; s < count; s++) {
+      const bi = (rangeStart + sampleOffset + s) * 2
+      segSamples[s] = { x: outBuffer[bi], y: outBuffer[bi + 1] }
+    }
     sampleOffset += count
 
     // fitCurve 自适应分割：一个原始段可能被拟合成多条贝塞尔曲线
@@ -146,7 +157,6 @@ export function fitComponentFromSamples(
     for (let b = 0; b < beziers.length; b++) {
       const bez = beziers[b]
       if (isFirstCurve) {
-        // 第一条曲线：写入全部4个控制点
         points.push(
           { x: bez[0].x, y: bez[0].y },
           { x: bez[1].x, y: bez[1].y },
@@ -155,7 +165,6 @@ export function fitComponentFromSamples(
         )
         isFirstCurve = false
       } else {
-        // 后续曲线：仅写入 P1, P2, P3（P0 缝合到前一曲线的 P3）
         points.push(
           { x: bez[1].x, y: bez[1].y },
           { x: bez[2].x, y: bez[2].y },
@@ -207,7 +216,6 @@ export function transformSamplesWithBones(
   bindData: SampledSkeletonBindData,
   outBuffer: Float64Array,
   ensurePointsBonesMap: (bd: SampledSkeletonBindData) => SampledPointBinding[],
-  transformPointToWorld: (point: { x: number; y: number }, matrix: number[]) => { x: number; y: number },
 ): void {
   const pointsBonesMap = ensurePointsBonesMap(bindData)
   const { samplePoints, bones } = bindData
@@ -221,15 +229,22 @@ export function transformSamplesWithBones(
       continue
     }
 
+    // 内联矩阵变换，避免每帧分配 1000 个 {x,y} 临时对象
+    const ox = samplePoints[i * 2]
+    const oy = samplePoints[i * 2 + 1]
     let newX = 0, newY = 0
-    const originalPt = getSamplePoint(samplePoints, i)
 
-    for (const { boneIndex, weight } of binding.bones) {
+    const boneList = binding.bones
+    for (let b = 0; b < boneList.length; b++) {
+      const { boneIndex, weight } = boneList[b]
       const bone = bones[boneIndex]
       if (!bone?.currentMatrix) continue
-      const tp = transformPointToWorld(originalPt, bone.currentMatrix)
-      newX += weight * tp.x
-      newY += weight * tp.y
+      const m = bone.currentMatrix
+      // currentMatrix 格式 [a, b, c, d, tx, ty]
+      const tx = m[0] * ox + m[1] * oy + m[4]
+      const ty = m[2] * ox + m[3] * oy + m[5]
+      newX += weight * tx
+      newY += weight * ty
     }
 
     outBuffer[i * 2] = newX
@@ -302,16 +317,17 @@ export function applyFittedSamplesToComponents(
     if (!meta && rangeIdx < componentSegmentMeta.length) {
       meta = componentSegmentMeta[rangeIdx]
     }
-    if (!meta) continue
-
-    const sampleCount = range.end - range.start
-    const compSamples: Array<{ x: number; y: number }> = new Array(sampleCount)
-    for (let i = 0; i < sampleCount; i++) {
-      const idx = (range.start + i) * 2
-      compSamples[i] = { x: outBuffer[idx], y: outBuffer[idx + 1] }
+    if (!meta) {
+      if (import.meta.env.DEV) {
+        console.warn(LOG, 'meta missing for uuid=' + range.componentUUID +
+          ' rangeIdx=' + rangeIdx + ' metaCount=' + componentSegmentMeta.length +
+          ' SKIPPING (prevents crash)')
+      }
+      continue
     }
 
-    const fittedPoints = fitComponentFromSamples(compSamples, meta)
+    // 直接从 Float64Array 拟合（不构造中间数组）
+    const fittedPoints = fitComponentFromSamples(outBuffer, range.start, range.end, meta)
     if (fittedPoints.length === 0) continue
 
     // DEV: 输出原始 vs 拟合的控制点数量对比
@@ -321,34 +337,42 @@ export function applyFittedSamplesToComponents(
         (fittedPoints.length !== pts.length ? ' (SEGMENT COUNT CHANGED!)' : ''))
     }
 
-    // 直接替换整个 points 数组（fitCurve 可能改变段数）
-    if (fittedPoints.length > 0) {
-      // 检查是否有实质变化
-      let hasChanged = fittedPoints.length !== pts.length
-      if (!hasChanged) {
-        for (let i = 0; i < pts.length; i++) {
-          if (
-            skeletonCoordChanged(pts[i].x, fittedPoints[i].x) ||
-            skeletonCoordChanged(pts[i].y, fittedPoints[i].y)
-          ) {
-            hasChanged = true
-            break
-          }
+    // 检查是否有实质变化
+    let hasChanged = fittedPoints.length !== pts.length
+    if (!hasChanged) {
+      for (let i = 0; i < pts.length; i++) {
+        if (
+          skeletonCoordChanged(pts[i].x, fittedPoints[i].x) ||
+          skeletonCoordChanged(pts[i].y, fittedPoints[i].y)
+        ) {
+          hasChanged = true
+          break
         }
-      }
-
-      if (hasChanged) {
-        // 替换整个数组
-        pts.length = 0
-        for (const p of fittedPoints) {
-          pts.push({ x: p.x, y: p.y })
-        }
-        anyPointChanged = true
       }
     }
 
+    if (hasChanged) {
+      if (fittedPoints.length === pts.length) {
+        // 长度一致：原地覆写坐标（零对象分配，最少响应式触发）
+        for (let i = 0; i < pts.length; i++) {
+          pts[i].x = fittedPoints[i].x
+          pts[i].y = fittedPoints[i].y
+        }
+      } else {
+        // 段数变化：整体替换数组（单次响应式触发）
+        const newPts: Array<{ x: number; y: number }> = new Array(fittedPoints.length)
+        for (let i = 0; i < fittedPoints.length; i++) {
+          newPts[i] = { x: fittedPoints[i].x, y: fittedPoints[i].y }
+        }
+        ;(comp.value as unknown as IPenComponent).points = newPts
+      }
+      anyPointChanged = true
+    }
+
     if (anyPointChanged) {
-      const bound = getBound(pts)
+      // 重新读取 points（段数变化时数组已被整体替换）
+      const curPts = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>
+      const bound = getBound(curPts)
       const pc = comp as any
       if (
         skeletonCoordChanged(pc.x ?? 0, bound.x) ||

@@ -144,6 +144,13 @@ export class ScriptExecutor {
         glyphInstance.onSkeletonDrag(event)
         // glyphSkeleton: 脚本重新生成关节后重新应用 ox/oy 偏移
         const skel = (glyphInstance._glyph as any)?.skeleton
+        if (import.meta.env.DEV) {
+          console.log('[SampledBind] executeDrag after onSkeletonDrag:' +
+            ' skeletonType=' + (skel?.type || 'none') +
+            ' hasSkeletonBindData=' + !!skel?.skeletonBindData +
+            ' hasSampleBindData=' + !!skel?.skeletonBindData?._sampleBindData +
+            ' hasGlyphSkeletonBindData=' + !!skel?.glyphSkeletonBindData)
+        }
         if (skel?.type === 'glyphSkeleton') {
           const ox = skel.ox || 0, oy = skel.oy || 0
           if (ox !== 0 || oy !== 0) {

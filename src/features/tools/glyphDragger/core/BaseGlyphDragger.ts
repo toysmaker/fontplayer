@@ -78,6 +78,13 @@ export abstract class BaseGlyphDragger {
           parameters: [...(glyphInstance._glyph.parameters || [])],
         }
 
+        if (import.meta.env.DEV) {
+          const params = updatedGlyphValue.parameters as any[]
+          console.log('[SampledBind] syncSkeletonGlyphValueToStore triggerRender=' + triggerRender +
+            ' params=' + params.map((p: any) => p.name + '=' + p.value).join(',') +
+            ' componentsCount=' + ((updatedGlyphValue.components as any)?.length || 0))
+        }
+
         const comp = this.context.component as IComponent
         if ((this.config as any).characterStore) {
           ;(this.config as any).characterStore.modifyComponent(comp.uuid, {

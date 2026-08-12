@@ -137,6 +137,13 @@ export class CharacterGlyphDragger extends BaseGlyphDragger {
           ...glyphInstance._glyph, // 使用实例的 _glyph，确保包含所有最新数据
           parameters: [...(glyphInstance._glyph.parameters || [])], // 创建新数组以触发响应式更新
         }
+
+        if (import.meta.env.DEV) {
+          const params = updatedGlyphValue.parameters as any[]
+          console.log('[SampledBind] handleDragEnd sync params=' +
+            params.map((p: any) => p.name + '=' + p.value).join(',') +
+            ' componentsCount=' + ((updatedGlyphValue.components as any)?.length || 0))
+        }
         
         if (import.meta.env.DEV) {
           // 详细比较参数值，看看是否真的发生了变化

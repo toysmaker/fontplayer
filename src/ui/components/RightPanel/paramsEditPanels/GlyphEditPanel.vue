@@ -188,37 +188,63 @@ function findInnerPenComponent(glyphValue: ICustomGlyph): IGlyphComponent | null
 }
 
 async function handleEnterFreeEdit() {
-  if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return
-  const glyphValue = selectedComponent.value.value as ICustomGlyph
-  const innerPen = findInnerPenComponent(glyphValue)
-  if (!innerPen) {
-    message.warning(t('panels.paramsPanel.skeletonBinding.noPenComponent'))
-    return
+  try {
+    if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return
+    const glyphValue = selectedComponent.value.value as ICustomGlyph
+    const innerPen = findInnerPenComponent(glyphValue)
+    if (!innerPen) {
+      message.warning(t('panels.paramsPanel.skeletonBinding.noPenComponent'))
+      return
+    }
+
+    if (import.meta.env.DEV) {
+      console.log('[SampledBind] enterFreeEdit glyphUUID=' + selectedComponent.value.uuid +
+        ' penUUID=' + innerPen.uuid +
+        ' components=' + (glyphValue.components?.length || 0) +
+        ' hasSkeleton=' + !!glyphValue.skeleton)
+    }
+
+    const penValue = { ...innerPen.value, editMode: true } as any
+    const updatedComponents = glyphValue.components.map((c: any) =>
+      c.uuid === innerPen.uuid ? { ...c, value: penValue } : c,
+    )
+
+    const updatedGlyphValue = { ...glyphValue, components: updatedComponents }
+    modifyComponent({ value: updatedGlyphValue })
+
+    if (import.meta.env.DEV) {
+      console.log('[SampledBind] enterFreeEdit modifyComponent done, selectedComponent still:',
+        !!selectedComponent.value, selectedComponent.value?.type)
+    }
+
+    await nextTick()
+
+    if (import.meta.env.DEV) {
+      console.log('[SampledBind] enterFreeEdit after nextTick, selectedComponent:',
+        !!selectedComponent.value, selectedComponent.value?.type)
+    }
+
+    PenSelectTool.skeletonFreeEditContext = {
+      glyphComponent: selectedComponent.value,
+      penComponent: penValue,
+      penUUID: innerPen.uuid,
+    }
+    enterSkeletonFreeEdit(innerPen.uuid, selectedComponent.value.uuid)
+
+    // 切换到参数工具（'params'），轮廓编辑在此工具下进行
+    const toolStore = useToolStore()
+    toolStore.setTool('params')
+    await nextTick()
+    const ctx = getEditCanvasContext()
+    if (import.meta.env.DEV) {
+      console.log('[SampledBind] enterFreeEdit ctx:', !!ctx)
+    }
+    if (ctx) ctx.onRender()
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.error('[SampledBind] enterFreeEdit ERROR:', err)
+    }
   }
-
-  const penValue = { ...innerPen.value, editMode: true } as any
-  const updatedComponents = glyphValue.components.map((c: any) =>
-    c.uuid === innerPen.uuid ? { ...c, value: penValue } : c,
-  )
-
-  const updatedGlyphValue = { ...glyphValue, components: updatedComponents }
-  modifyComponent({ value: updatedGlyphValue })
-
-  await nextTick()
-
-  PenSelectTool.skeletonFreeEditContext = {
-    glyphComponent: selectedComponent.value,
-    penComponent: penValue,
-    penUUID: innerPen.uuid,
-  }
-  enterSkeletonFreeEdit(innerPen.uuid, selectedComponent.value.uuid)
-
-  // 切换到参数工具（'params'），轮廓编辑在此工具下进行
-  const toolStore = useToolStore()
-  toolStore.setTool('params')
-  await nextTick()
-  const ctx = getEditCanvasContext()
-  if (ctx) ctx.onRender()
 }
 
 async function handleRebind() {
@@ -1087,12 +1113,17 @@ const handleChangeParameter = async (parameter: IParameter, value: number | stri
     try {
       const ranAll = runGlyphScriptsOnAllConstantUsagesInEditingScope(constantUUID)
       if (!ranAll && selectedComponent.value) {
+        // 用 store 合并后的最新值（modifyComponent 会深拷贝替换 value）
         const gv = selectedComponent.value.value as ICustomGlyph
-        if (gv) executeGlyphScript({ ...gv, parameters: [...(gv.parameters || [])] }, selectedComponent.value.uuid)
+        if (gv) executeGlyphScript(gv, selectedComponent.value.uuid)
       }
     } catch (error) {
       console.error('Error executing glyph script after constant change:', error)
     }
+
+    // 常量修改后显式触发画布重绘
+    const ctx = getEditCanvasContext()
+    ctx?.onRender()
     return
   }
 
@@ -1128,12 +1159,20 @@ const handleChangeParameter = async (parameter: IParameter, value: number | stri
       glyphStore.modifyComponent(comp.uuid, { value: updatedGlyphValue })
     }
 
+    // 关键：modifyComponent 内部会对 value 做 R.clone 深拷贝替换，
+    // 必须用 store 合并后的最新值执行脚本，否则 LBS 写回的是已脱离 store 的旧组件对象
+    const mergedValue = (comp.value as ICustomGlyph) || updatedGlyphValue
+
     try {
-      executeGlyphScript(updatedGlyphValue, comp.uuid)
+      executeGlyphScript(mergedValue, comp.uuid)
     } catch (error) {
       console.error('Error executing glyph script after parameter change:', error)
     }
   }
+
+  // 参数修改后显式触发画布重绘（store 深层变更不一定触发编辑器 watcher）
+  const ctx = getEditCanvasContext()
+  ctx?.onRender()
 }
 
 const handleChangeOX = (ox: number | null) => {

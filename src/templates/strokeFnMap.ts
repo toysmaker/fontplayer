@@ -35,6 +35,12 @@ import { updateParamsByJoints as updateParamsByJoints_ping_na, computeParamsByJo
 
 const updateSkeletonTransformation = (glyph: CustomGlyph) => {
   const skeleton = glyph.getSkeleton()
+  if (import.meta.env.DEV) {
+    const sk = skeleton as any
+    console.log('[SampledBind] updateSkeletonTransformation skeleton=' +
+      JSON.stringify({ start: sk?.start, end: sk?.end, bend: sk?.bend }) +
+      ' hasBindData=' + !!((glyph as any)._glyph?.skeleton?.skeletonBindData))
+  }
   applySkeletonTransformation(glyph, skeleton)
 }
 

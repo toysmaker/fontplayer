@@ -6,7 +6,6 @@ import type { IPenComponent, IGlyphComponent, ICustomGlyph, IRefLine, IJoint } f
 import {
   buildSampledBindData,
   ensurePointsBonesMap,
-  invalidatePointsBonesMap,
   getTransformBuffer,
   getSamplePoint,
   toPersistableBindData,
@@ -16,7 +15,6 @@ import {
   type SampledPointBinding,
 } from "./skeletonSampling";
 import {
-  fitComponentFromSamples,
   applyFittedSamplesToComponents,
   transformSamplesWithBones,
 } from "./skeletonFitting";
@@ -1276,7 +1274,7 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
   const outBuffer = getTransformBuffer(bindData)
 
   // 变换：采样点 LBS 加权混合
-  transformSamplesWithBones(bindData, outBuffer, (bd) => ensurePointsBonesMap(bd, calculatePointBones), transformPointToWorld)
+  transformSamplesWithBones(bindData, outBuffer, (bd) => ensurePointsBonesMap(bd, calculatePointBones))
 
   if (import.meta.env.DEV) {
     // 检查变换是否产生了实际差异
@@ -1319,7 +1317,14 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
   }
 
   // 拟合采样点 → 贝塞尔曲线 → 写回组件
-  const anyChanged = applyFittedSamplesToComponents(penComponents, outBuffer, bindData)
+  let anyChanged = false
+  try {
+    anyChanged = applyFittedSamplesToComponents(penComponents, outBuffer, bindData)
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[SampledBind] applyFittedSamplesToComponents threw:', err)
+    }
+  }
   if (import.meta.env.DEV) {
     console.log('[SampledBind] anyChangedAfterFit=' + anyChanged)
   }
@@ -1607,12 +1612,18 @@ export function applyGlyphSkeletonTransformation(glyphInstance: CustomGlyph): vo
 
   // 变换采样点（使用 LBS 加权混合）
   const outBuffer = getTransformBuffer(bindData)
-  transformSamplesWithBones(bindData, outBuffer, (bd) => ensurePointsBonesMap(bd, calculatePointBones), transformPointToWorld)
+  transformSamplesWithBones(bindData, outBuffer, (bd) => ensurePointsBonesMap(bd, calculatePointBones))
 
   // 拟合采样点 → 贝塞尔曲线 → 写回各组件
   const rawGlyph = glyphInstance._glyph
   const penComponents = rawGlyph.components?.filter((c: any) => c.type === 'pen') as IGlyphComponent[] || []
-  applyFittedSamplesToComponents(penComponents, outBuffer, bindData)
+  try {
+    applyFittedSamplesToComponents(penComponents, outBuffer, bindData)
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[SampledBind] applyGlyphSkeleton: applyFittedSamplesToComponents threw:', err)
+    }
+  }
 }
 
 /**
@@ -1662,11 +1673,11 @@ export function glyphSkeletonRebind(glyphInstance: CustomGlyph): void {
 
   bindData.bones = newBones
 
-  // 清除惰性缓存：骨骼变了，_pointsBonesMap 需要重算
+  // 注意：不重算 _pointsBonesMap，保持初始绑定时的骨骼-采样点对应关系
+  // 重算会导致拖拽后采样点绑定到不同骨骼，产生不一致的变形
   const sampledData: SampledSkeletonBindData | undefined = bindData._sampleBindData
   if (sampledData) {
     sampledData.bones = newBones
-    invalidatePointsBonesMap(sampledData)
   }
 
   skeleton.cachedRefLines = reflines
