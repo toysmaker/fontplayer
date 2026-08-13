@@ -868,6 +868,11 @@ export class PenSelectTool extends BaseTool {
   ): void {
     const { penComponent, penUUID, bounds } = skCtx
     const { points } = penComponent
+    if (import.meta.env.DEV) {
+      console.log('[SampledBind] renderForSkeletonContext: points=' + (points?.length || 0) +
+        ' bounds=(' + bounds.x + ',' + bounds.y + ' ' + bounds.w + 'x' + bounds.h + ')' +
+        ' canvasSize=' + canvas.width + 'x' + canvas.height)
+    }
     if (!points || points.length === 0) return
 
     const { x, y, w, h, rotation } = bounds

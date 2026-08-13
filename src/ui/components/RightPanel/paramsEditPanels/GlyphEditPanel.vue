@@ -4,7 +4,7 @@
  * 支持字符和字形两种编辑模式
  */
 
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onErrorCaptured } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   NInputNumber,
@@ -36,6 +36,7 @@ import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { glyphSkeletonBind, glyphSkeletonRebind } from '@/features/glyphSkeletonBind'
+import { releaseStoredBindRuntimeData } from '@/features/skeletonSampling'
 import { rule1 } from '@/templates/config/restrict'
 import { DEFAULT_TEMPLATE_PROJECT_TAG } from '@/features/editor/services/ProjectLoader'
 import { orderedListWithItemsForGlyph } from '@/core/utils/glyph'
@@ -204,7 +205,35 @@ async function handleEnterFreeEdit() {
         ' hasSkeleton=' + !!glyphValue.skeleton)
     }
 
-    const penValue = { ...innerPen.value, editMode: true } as any
+    // 模板脚本生成的钢笔点没有 type/uuid/origin 属性，而 PenSelectTool 的
+    // 锚点渲染与命中检测依赖这些属性，需要补充。
+    // 三次贝塞尔点结构 [anchor, control1, control2, anchor, ...]：
+    // - 锚点在 i % 3 === 0
+    // - control1（i % 3 === 1）属于前一锚点 (i-1)
+    // - control2（i % 3 === 2）属于后一锚点 (i+1)
+    const rawPoints = (innerPen.value as any)?.points
+    let enrichedPoints = rawPoints
+    if (Array.isArray(rawPoints)) {
+      const uuids = rawPoints.map(() => genUUID())
+      enrichedPoints = rawPoints.map((p: any, i: number) => {
+        const isAnchor = i % 3 === 0
+        let origin: string | null = null
+        if (!isAnchor) {
+          origin = i % 3 === 1
+            ? uuids[i - 1]
+            : uuids[Math.min(i + 1, rawPoints.length - 1)]
+        }
+        return {
+          ...p,
+          type: p.type || (isAnchor ? 'anchor' : 'control'),
+          uuid: p.uuid || uuids[i],
+          isShow: p.isShow !== undefined ? p.isShow : isAnchor,
+          origin: p.origin !== undefined ? p.origin : origin,
+        }
+      })
+    }
+
+    const penValue = { ...innerPen.value, points: enrichedPoints, editMode: true } as any
     const updatedComponents = glyphValue.components.map((c: any) =>
       c.uuid === innerPen.uuid ? { ...c, value: penValue } : c,
     )
@@ -249,14 +278,66 @@ async function handleEnterFreeEdit() {
 
 async function handleRebind() {
   if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return
-  const glyphValue = selectedComponent.value.value as ICustomGlyph
+  let glyphValue = selectedComponent.value.value as ICustomGlyph
   const innerPen = findInnerPenComponent(glyphValue)
   if (!innerPen) return
 
-  const penValue = innerPen.value as any
   const instanceKey = selectedComponent.value.uuid
 
   try {
+    // 关键：编辑操作写入的是骨架自由编辑上下文中的 penComponent，
+    // 必须先同步编辑后的贝塞尔曲线控制点回 glyphValue，否则采样的是编辑前的旧曲线
+    const skCtx = PenSelectTool.skeletonFreeEditContext
+    let editedPenValue: any = null
+    if (skCtx?.penComponent?.points && Array.isArray(skCtx.penComponent.points)) {
+      // 清理编辑会话属性（type/uuid/origin/isShow），仅保留 x/y 坐标
+      const cleanPoints = skCtx.penComponent.points.map((p: any) => ({ x: p.x, y: p.y }))
+      editedPenValue = { ...skCtx.penComponent, points: cleanPoints }
+      // 关键：同步更新钢笔组件的包围盒（x/y/w/h）。
+      // 渲染时 transformPoints 会把钢笔点映射到组件包围盒坐标系，
+      // 若包围盒还是编辑前的旧值，编辑后的点会被压缩回旧包围盒 → 视觉上压扁
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+      for (const p of cleanPoints) {
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x
+        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y
+      }
+      const penBound = {
+        x: minX, y: minY,
+        w: (maxX - minX) || 0, h: (maxY - minY) || 0,
+      }
+      const syncedComponents = glyphValue.components.map((c: any) =>
+        c.uuid === skCtx.penUUID
+          ? {
+              ...c,
+              x: penBound.x,
+              y: penBound.y,
+              w: penBound.w,
+              h: penBound.h,
+              value: editedPenValue,
+            }
+          : c,
+      )
+      glyphValue = { ...glyphValue, components: syncedComponents }
+    }
+    const penValue = editedPenValue || (innerPen.value as any)
+
+    if (import.meta.env.DEV) {
+      const boundsOf = (pts: any[]) => {
+        let minY = Infinity, maxY = -Infinity, minX = Infinity, maxX = -Infinity
+        for (const p of pts) {
+          if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x
+          if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y
+        }
+        return 'x[' + minX.toFixed(1) + ',' + maxX.toFixed(1) + '] y[' + minY.toFixed(1) + ',' + maxY.toFixed(1) + ']'
+      }
+      console.log('[SampledBind] rebind step1 editedPoints n=' + (skCtx?.penComponent?.points?.length || 0) +
+        ' ' + boundsOf(skCtx?.penComponent?.points || []))
+      console.log('[SampledBind] rebind step2 syncedGlyphPen n=' + (penValue?.points?.length || 0) +
+        ' ' + boundsOf(penValue?.points || []))
+      console.log('[SampledBind] rebind step3 storePenBeforeBind n=' + ((innerPen.value as any)?.points?.length || 0) +
+        ' ' + boundsOf((innerPen.value as any)?.points || []))
+    }
+
     // 在临时克隆上调用 instanceBasicGlyph，仅为了获取 getSkeleton 函数，
     // 避免在真实实例上触发 updateSkeletonTransformation（会用旧 bindData 覆盖编辑后的点）
     const clonedForSkeleton = JSON.parse(JSON.stringify(glyphValue))
@@ -283,7 +364,9 @@ async function handleRebind() {
       ;(glyphInstance as any).getSkeleton = (tempGlyph as any).getSkeleton
     }
 
-    // 执行重新绑定：从当前 skeleton 和编辑后的 pen 轮廓重新计算骨骼绑定
+    // 执行重新绑定：glyphSkeletonBind 内部会
+    // 1. 对编辑后的所有贝塞尔曲线段重新采样 1000 个点（buildSampledBindData）
+    // 2. 对这 1000 个采样点计算骨骼绑定（ensurePointsBonesMap）
     glyphSkeletonBind(glyphInstance as any)
 
     const newBindData = (glyphInstance as any)._glyph?.skeleton?.skeletonBindData
@@ -312,6 +395,23 @@ async function handleRebind() {
     await nextTick()
     executeGlyphScript(updatedGlyphValue, instanceKey, { ignoreTempDataGuard: true })
 
+    if (import.meta.env.DEV) {
+      const storePen = (selectedComponent.value?.value as any)?.components?.find((c: any) => c.type === 'pen')
+      const pts = storePen?.value?.points || []
+      let minY = Infinity, maxY = -Infinity, minX = Infinity, maxX = -Infinity
+      for (const p of pts) {
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x
+        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y
+      }
+      console.log('[SampledBind] rebind step4 storePenAfterAll n=' + pts.length +
+        ' x[' + minX.toFixed(1) + ',' + maxX.toFixed(1) + '] y[' + minY.toFixed(1) + ',' + maxY.toFixed(1) + ']')
+    }
+
+    // 重新绑定完成，释放采样绑定运行时缓存（下次拖拽/权重绘制时惰性重建）
+    // 注意：modifyComponent 会 R.clone 深拷贝绑定数据，store 中的拷贝也要释放
+    releaseStoredBindRuntimeData(updatedGlyphValue.skeleton?.skeletonBindData)
+    releaseStoredBindRuntimeData((selectedComponent.value?.value as any)?.skeleton?.skeletonBindData)
+
     message.success(t('panels.paramsPanel.skeletonBinding.rebindSuccess'))
   } catch (error) {
     console.error('[GlyphEditPanel] Rebind failed:', error)
@@ -327,6 +427,28 @@ const projectStore = useProjectStore()
 const characterGridEditStore = useCharacterGridEditStore()
 const editorConstantsSession = useEditorConstantsSessionStore()
 const { draftVersion } = storeToRefs(editorConstantsSession)
+
+// ============ 诊断：追踪面板清空问题 ============
+if (import.meta.env.DEV) {
+  watch(selectedComponent, (comp) => {
+    if (comp) {
+      console.log('[SampledBind] Panel selectedComponent CHANGED: type=' + comp.type +
+        ' uuid=' + comp.uuid +
+        ' hasValue=' + !!comp.value +
+        ' hasParameters=' + !!(comp.value as any)?.parameters?.length +
+        ' skeletonType=' + ((comp.value as any)?.skeleton?.type || 'none'))
+    } else {
+      console.log('[SampledBind] Panel selectedComponent CHANGED: null')
+    }
+  })
+
+  onErrorCaptured((err, instance, info) => {
+    const instAny = instance as any
+    console.error('[SampledBind] Panel RENDER ERROR:', err, 'info=' + info,
+      'component=' + (instAny?.$options?.name || instAny?.type?.name || instAny?.type?.__name || 'unknown'))
+    return false
+  })
+}
 
 /** 与 VirtualCharacterList / VirtualGlyphList 约定：detail.done 在刷新完成后调用（可能多个 listener 共享同一 done） */
 function dispatchForceListRefresh(eventName: string): Promise<void> {

@@ -1,5 +1,6 @@
 import { ref } from "vue"
-import { pointToBoneDistance } from "@/features/glyphSkeletonBind"
+import { pointToBoneDistance, calculatePointBones } from "@/features/glyphSkeletonBind"
+import { ensureStoredBindRuntimeData } from "@/features/skeletonSampling"
 import { mapCanvasX, mapCanvasY } from "@/utils/canvas"
 import { useGlyphStore } from "@/stores/glyph"
 import {
@@ -11,9 +12,13 @@ import {
 
 type GetCoord = (coord: number) => number
 
-/** 获取骨架绑定数据（兼容 glyphSkeletonBindData 和 skeletonBindData） */
+/** 获取骨架绑定数据（兼容 glyphSkeletonBindData 和 skeletonBindData），并惰性重建运行时缓存 */
 function getSkeletonBindData(glyph: any) {
-  return glyph?.skeleton?.glyphSkeletonBindData || glyph?.skeleton?.skeletonBindData || null
+  const stored = glyph?.skeleton?.glyphSkeletonBindData || glyph?.skeleton?.skeletonBindData || null
+  if (stored?._sampleBindData) {
+    ensureStoredBindRuntimeData(stored, calculatePointBones)
+  }
+  return stored
 }
 
 const currentBone = ref<any>(null)

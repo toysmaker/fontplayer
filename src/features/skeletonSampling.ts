@@ -393,6 +393,57 @@ export function invalidatePointsBonesMap(bindData: SampledSkeletonBindData): voi
 }
 
 /**
+ * 惰性确保存储包装层的运行时数据（pointsBonesMap + originalPoints 对象数组）
+ * 这些数据只服务于权重绘制等交互流程，不随字形持久化；
+ * 释放后（releaseStoredBindRuntimeData）由本函数按需重建。
+ */
+export function ensureStoredBindRuntimeData(
+  stored: any,
+  calculatePointBones: (
+    point: { x: number; y: number },
+    bones: Bone[],
+    pointIndex: number,
+  ) => SampledPointBinding,
+): void {
+  if (!stored?._sampleBindData) return
+  const sampled: SampledSkeletonBindData = stored._sampleBindData
+
+  if (!sampled._pointsBonesMap) {
+    sampled._pointsBonesMap = ensurePointsBonesMap(sampled, calculatePointBones)
+  }
+  if (!stored.pointsBonesMap) {
+    stored.pointsBonesMap = sampled._pointsBonesMap
+  }
+  if (!stored.originalPoints) {
+    const flat = sampled.samplePoints
+    const pts: Array<{ x: number; y: number }> = []
+    for (let i = 0; i < flat.length / 2; i++) {
+      pts.push({ x: flat[i * 2], y: flat[i * 2 + 1] })
+    }
+    stored.originalPoints = pts
+  }
+}
+
+/**
+ * 释放存储包装层与采样数据的运行时缓存：
+ * - _pointsBonesMap（~100KB，1000 条骨骼绑定）拖拽结束后不再需要，下次按需重算
+ * - originalPoints（1000 个 {x,y} 对象）同样释放
+ * - _transformBuffer（Float64Array 2000）释放
+ *
+ * 持久化数据（bones / 扁平 samplePoints / componentSegmentMeta）保留不受影响。
+ */
+export function releaseStoredBindRuntimeData(stored: any): void {
+  if (!stored) return
+  const sampled: SampledSkeletonBindData | undefined = stored._sampleBindData
+  if (sampled) {
+    sampled._pointsBonesMap = undefined
+    sampled._transformBuffer = undefined
+  }
+  stored.pointsBonesMap = undefined
+  stored.originalPoints = undefined
+}
+
+/**
  * 获取或创建变换缓冲区（惰性分配，复用）
  * 返回的 Float64Array 长度为 SAMPLE_TOTAL * 2
  */

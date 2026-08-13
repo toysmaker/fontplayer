@@ -9,6 +9,7 @@ import {
   getTransformBuffer,
   getSamplePoint,
   toPersistableBindData,
+  releaseStoredBindRuntimeData,
   SAMPLE_TOTAL,
   type Bone,
   type SampledSkeletonBindData,
@@ -88,6 +89,28 @@ const glyphSkeletonBind = (glyph: CustomGlyph) => {
 
   // 阶段二：密集采样 + 构建绑定数据
   const bindData = buildSampledBindData(penComponents, bones, SAMPLE_TOTAL);
+
+  if (import.meta.env.DEV) {
+    const boundsOf = (pts: any[]) => {
+      let minY = Infinity, maxY = -Infinity, minX = Infinity, maxX = -Infinity
+      for (const p of pts) {
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x
+        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y
+      }
+      return 'x[' + minX.toFixed(1) + ',' + maxX.toFixed(1) + '] y[' + minY.toFixed(1) + ',' + maxY.toFixed(1) + ']'
+    }
+    for (const pc of penComponents) {
+      const pts = (pc.value as any)?.points
+      console.log('[SampledBind] glyphSkeletonBind sampling pen ' + pc.uuid +
+        ' n=' + (pts?.length || 0) + ' ' + boundsOf(pts || []))
+    }
+    const flat = bindData.samplePoints
+    const samplePts: Array<{x:number;y:number}> = []
+    for (let i = 0; i < flat.length / 2; i++) {
+      samplePts.push({ x: flat[i * 2], y: flat[i * 2 + 1] })
+    }
+    console.log('[SampledBind] glyphSkeletonBind samples n=' + (flat.length / 2) + ' ' + boundsOf(samplePts))
+  }
 
   if (bindData.samplePoints.length === 0) {
     console.warn('No pen component points found for sampling');
@@ -1276,16 +1299,28 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
   // 变换：采样点 LBS 加权混合
   transformSamplesWithBones(bindData, outBuffer, (bd) => ensurePointsBonesMap(bd, calculatePointBones))
 
+  // 计算变换后的采样点与原始采样点的最大差异
+  let maxDiff = 0
+  for (let i = 0; i < Math.min(bindData.samplePoints.length / 2, outBuffer.length / 2); i++) {
+    const dx = outBuffer[i * 2] - bindData.samplePoints[i * 2]
+    const dy = outBuffer[i * 2 + 1] - bindData.samplePoints[i * 2 + 1]
+    const d = Math.sqrt(dx * dx + dy * dy)
+    if (d > maxDiff) maxDiff = d
+  }
   if (import.meta.env.DEV) {
-    // 检查变换是否产生了实际差异
-    let maxDiff = 0
-    for (let i = 0; i < Math.min(bindData.samplePoints.length / 2, outBuffer.length / 2); i++) {
-      const dx = outBuffer[i * 2] - bindData.samplePoints[i * 2]
-      const dy = outBuffer[i * 2 + 1] - bindData.samplePoints[i * 2 + 1]
-      const d = Math.sqrt(dx * dx + dy * dy)
-      if (d > maxDiff) maxDiff = d
-    }
     console.log('[SampledBind] maxSampleDiff=' + maxDiff.toFixed(2) + ' bones=' + bindData.bones.length + ' samples=' + (bindData.samplePoints.length / 2))
+  }
+
+  // 骨架未移动（恒等变换）且无字重偏移时跳过拟合写回：
+  // 拟合是有损的，即使采样点完全相同也会产生不同的控制点，
+  // 导致重新绑定后轮廓被近似结果覆盖（笔画变扁塌缩）。
+  if (weightD === 0 && maxDiff < 0.01) {
+    if (import.meta.env.DEV) {
+      console.log('[SampledBind] identity transform, skip fit writeback')
+    }
+    // 恒等变换不产生变形，立即释放刚构建的运行时缓存，避免内存滞留
+    releaseStoredBindRuntimeData(storedBindData)
+    return
   }
 
   // 应用字重偏移（对变换后的采样点进行法向偏移）
@@ -1613,6 +1648,23 @@ export function applyGlyphSkeletonTransformation(glyphInstance: CustomGlyph): vo
   // 变换采样点（使用 LBS 加权混合）
   const outBuffer = getTransformBuffer(bindData)
   transformSamplesWithBones(bindData, outBuffer, (bd) => ensurePointsBonesMap(bd, calculatePointBones))
+
+  // 恒等变换时跳过拟合写回（拟合有损，会覆盖当前轮廓）
+  let maxDiff = 0
+  for (let i = 0; i < Math.min(bindData.samplePoints.length / 2, outBuffer.length / 2); i++) {
+    const dx = outBuffer[i * 2] - bindData.samplePoints[i * 2]
+    const dy = outBuffer[i * 2 + 1] - bindData.samplePoints[i * 2 + 1]
+    const d = Math.sqrt(dx * dx + dy * dy)
+    if (d > maxDiff) maxDiff = d
+  }
+  if (import.meta.env.DEV) {
+    console.log('[SampledBind] applyGlyphSkeleton maxSampleDiff=' + maxDiff.toFixed(2))
+  }
+  if (maxDiff < 0.01) {
+    // 恒等变换：释放刚构建的运行时缓存，避免内存滞留
+    releaseStoredBindRuntimeData(storedBindData)
+    return
+  }
 
   // 拟合采样点 → 贝塞尔曲线 → 写回各组件
   const rawGlyph = glyphInstance._glyph

@@ -14,6 +14,7 @@ import {
   movingJoint,
   editGlyphOnDragging,
 } from "@/stores/skeletonDragger"
+import { releaseStoredBindRuntimeData } from "@/features/skeletonSampling"
 import * as R from "ramda"
 
 type GetCoord = (coord: number) => number
@@ -159,6 +160,11 @@ export const initSkeletonDragger = (
         deltaY: dy,
       })
     }
+
+    // 拖拽结束释放采样绑定运行时缓存（下次拖拽惰性重建）
+    const skel = (instance as any)?._glyph?.skeleton
+    releaseStoredBindRuntimeData(skel?.skeletonBindData)
+    releaseStoredBindRuntimeData(skel?.glyphSkeletonBindData)
 
     window.removeEventListener("mouseup", onMouseUp)
     setEditing(false)

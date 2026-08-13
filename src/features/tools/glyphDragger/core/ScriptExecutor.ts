@@ -10,6 +10,7 @@ import type { ICustomGlyph } from '@/core/types'
 import type { IDragEvent, IJoint } from './types'
 import { updateSkeletonTransformation } from '@/templates/strokeFnMap'
 import { glyphSkeletonRebind } from '@/features/glyphSkeletonBind'
+import { releaseStoredBindRuntimeData } from '@/features/skeletonSampling'
 
 export class ScriptExecutor {
   /**
@@ -249,6 +250,11 @@ export class ScriptExecutor {
 
         // 拖拽结束后清理 tempData，避免后续 executeGlyphScript 因 tempData 而跳过（导致参数修改不生效）。
         glyphInstance.tempData = null
+
+        // 释放采样绑定的运行时缓存（_pointsBonesMap ~100KB / _transformBuffer），
+        // 下次拖拽时由 ensurePointsBonesMap 惰性重建（~5ms）
+        releaseStoredBindRuntimeData(skel?.skeletonBindData)
+        releaseStoredBindRuntimeData(skel?.glyphSkeletonBindData)
         
         if (import.meta.env.DEV) {
           const paramsAfter = glyphInstance._glyph.parameters?.map((p: any) => ({ name: p.name, value: p.value })) || []

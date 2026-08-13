@@ -6,6 +6,7 @@
 
 import type { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { glyphSkeletonRebind } from '@/features/glyphSkeletonBind'
+import { releaseStoredBindRuntimeData } from '@/features/skeletonSampling'
 
 type CoordFn = (coord: number) => number
 
@@ -258,6 +259,10 @@ export class GlyphSkeletonDragger {
     if (skeleton?.glyphSkeletonBindData) {
       glyphSkeletonRebind(this.glyphInstance)
     }
+
+    // 拖拽结束释放采样绑定运行时缓存（下次拖拽惰性重建）
+    releaseStoredBindRuntimeData(skeleton?.skeletonBindData)
+    releaseStoredBindRuntimeData(skeleton?.glyphSkeletonBindData)
 
     this.glyphInstance.tempData = null
     this.draggingJoint = null

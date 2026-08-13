@@ -25,12 +25,29 @@ export function initContourEditOverlay(
     deactivateOverlay()
   }
 
-  const tool = PenSelectTool.getInstance(canvas, config)
-  tool.resetInitialBounds()
-  tool.activate()
+  try {
+    const tool = PenSelectTool.getInstance(canvas, config)
+    const skCtx = PenSelectTool.skeletonFreeEditContext
+    if (import.meta.env.DEV) {
+      console.log('[SampledBind] initContourEditOverlay: mode=' + config.mode +
+        ' hasSkeletonCtx=' + !!skCtx +
+        ' penUUID=' + (skCtx?.penUUID || 'none') +
+        ' penPoints=' + (skCtx?.penComponent?.points?.length || 0) +
+        ' editMode=' + (skCtx?.penComponent?.editMode))
+    }
+    tool.resetInitialBounds()
+    tool.activate()
+    if (import.meta.env.DEV) {
+      console.log('[SampledBind] initContourEditOverlay: activated, toolActive=' + tool.isToolActive())
+    }
 
-  activeOverlayCanvas = canvas
-  isActive = true
+    activeOverlayCanvas = canvas
+    isActive = true
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.error('[SampledBind] initContourEditOverlay FAILED:', e)
+    }
+  }
 
   return () => {
     deactivateOverlay()
@@ -56,16 +73,24 @@ function deactivateOverlay(): void {
  * 渲染轮廓编辑覆盖层
  * 幂等：无激活覆盖层时 no-op
  */
+let renderCallCount = 0
 export function renderContourEditOverlay(canvas: HTMLCanvasElement): void {
   if (!isActive || canvas !== activeOverlayCanvas) return
+
+  if (import.meta.env.DEV && renderCallCount === 0) {
+    console.log('[SampledBind] renderContourEditOverlay: first render, isActive=' + isActive)
+  }
+  renderCallCount++
 
   try {
     const tool = PenSelectTool.getInstance(canvas, {} as IToolConfig)
     if (typeof (tool as any).render === 'function') {
       ;(tool as any).render(canvas)
     }
-  } catch (_e) {
-    // 忽略渲染错误
+  } catch (e) {
+    if (import.meta.env.DEV && renderCallCount <= 3) {
+      console.error('[SampledBind] renderContourEditOverlay error:', e)
+    }
   }
 }
 

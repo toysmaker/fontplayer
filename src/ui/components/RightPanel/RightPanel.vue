@@ -11,6 +11,7 @@ import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from './composables/useComponentEditor'
 import { EditStatus } from '@/core/types'
 import { useToolStore } from '@/stores/tool'
+import { skeletonFreeEdit } from '@/stores/skeletonDragger'
 // 导入各个参数编辑面板
 import PenEditPanel from './paramsEditPanels/PenEditPanel.vue'
 import EllipseEditPanel from './paramsEditPanels/EllipseEditPanel.vue'
@@ -63,13 +64,13 @@ if (import.meta.env.DEV) {
     <layout-grid-edit-panel
       v-else-if="editStatus === EditStatus.Edit && tool === 'grid'"
     />
-    <!-- 字符编辑 params 工具：显示字符参数面板 -->
+    <!-- 字符编辑 params 工具：显示字符参数面板（轮廓编辑期间保持字形面板） -->
     <character-params-panel
-      v-else-if="editStatus === EditStatus.Edit && tool === 'params'"
+      v-else-if="editStatus === EditStatus.Edit && tool === 'params' && !skeletonFreeEdit"
     />
     <!-- 字形编辑 params 工具：显示字形参数面板（骨架绑定等） -->
     <glyph-params-panel
-      v-else-if="editStatus === EditStatus.Glyph && tool === 'params'"
+      v-else-if="editStatus === EditStatus.Glyph && tool === 'params' && !skeletonFreeEdit"
     />
     <!-- 基础组件面板（不区分字符/字形） -->
     <pen-edit-panel
