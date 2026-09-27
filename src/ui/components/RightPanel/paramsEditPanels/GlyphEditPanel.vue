@@ -166,11 +166,13 @@ const glyphInstanceFillColor = computed(() => {
 const handleGlyphInstanceFillColor = (color: string | null) => {
   if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return
   const trimmed = color?.trim()
-  if (trimmed) {
-    modifyComponent({ fillColor: trimmed })
-  } else {
-    modifyComponent({ fillColor: undefined })
-  }
+  const glyphValue = selectedComponent.value.value as ICustomGlyph
+  if (!glyphValue) return
+
+  // 写入字形对象本身（component.value.fillColor），而非外层 component。
+  // 同时传 fillColor: undefined 清除旧数据中外层 component 上的 fillColor（向后兼容迁移）
+  const updated = { ...glyphValue, fillColor: trimmed || undefined }
+  modifyComponent({ value: updated, fillColor: undefined })
 }
 
 // --- 骨架绑定自由编辑 ---

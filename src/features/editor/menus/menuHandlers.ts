@@ -154,6 +154,7 @@ export function createDisabledRules(ctx: {
     'test-export-skeleton-params': enable,
     'test-import-from-params': enable,
     'test-import-from-skeleton': enable,
+    'test-print-character-info': enableAtCharacterEdit,
 
     // effects
     'effect-adjust-weight': enableAtCharacterEdit,

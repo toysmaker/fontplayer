@@ -137,6 +137,7 @@ const getWebMenu = (): Array<IMenu> => {
 				{ label: '导出骨架与参数', key: 'test-export-skeleton-params', click: (handlers: IHandlerMap) => { handlers['test-export-skeleton-params']() } },
 				{ label: '根据参数生成字符列表', key: 'test-import-from-params', click: (handlers: IHandlerMap) => { handlers['test-import-from-params']() } },
 				{ label: '根据骨架生成字符列表', key: 'test-import-from-skeleton', click: (handlers: IHandlerMap) => { handlers['test-import-from-skeleton']() } },
+				{ label: tm('menus.test.print_character_info'), key: 'test-print-character-info', click: (handlers: IHandlerMap) => { handlers['test-print-character-info']() } },
 			]
 		}] : []),
 	]

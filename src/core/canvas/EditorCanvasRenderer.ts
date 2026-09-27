@@ -980,11 +980,28 @@ export function render(
                     hasRender: !!component.render
                   })
                 }
+                const hasOwnColor = fontRenderStyle.value === 'color' && !!component.fillColor
+                if (hasOwnColor) {
+                  // 先把此前累积的无色组件路径按父字形色冲刷掉，
+                  // 否则无色组件会被错误填成下一个有色组件的颜色
+                  ctx.fillStyle = scriptTint
+                  ctx.fill('nonzero')
+                  ctx.closePath()
+                  ctx.beginPath()
+                }
+                // 内置组件自身 fillColor 优先于字形 fillColor（scriptTint）
                 component.render(canvas, {
                   offset: { x: 0, y: 0 },
                   scale: 1,
-                  fillColor: fontRenderStyle.value === 'black' ? '#000' : scriptTint,
+                  fillColor: fontRenderStyle.value === 'black' ? '#000' : (component.fillColor || scriptTint),
                 })
+                // 彩色模式：内置组件有自己的 fillColor 时立即按该颜色填充并隔离路径
+                if (hasOwnColor) {
+                  ctx.fillStyle = component.fillColor
+                  ctx.fill('nonzero')
+                  ctx.closePath()
+                  ctx.beginPath()
+                }
               } else {
                 if (import.meta.env.DEV) {
                   console.warn(`[EditorCanvasRenderer] Internal component ${index} has no render method:`, {

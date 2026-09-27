@@ -28,9 +28,15 @@ class PenComponent {
 	public contour: Array<ILine | IQuadraticBezierCurve | ICubicBezierCurve> = []
 	public contour2: Array<ILine | IQuadraticBezierCurve | ICubicBezierCurve> = []
 	public preview: Array<ILine | IQuadraticBezierCurve | ICubicBezierCurve> = []
+	public fillColor?: string
 
 	public constructor () {
 
+	}
+
+	/** 设置内置组件的分色；不传或传空则清除（回退到父字形 fillColor） */
+	public setFillColor (color?: string) {
+		this.fillColor = color
 	}
 
 	public beginPath () {
@@ -234,7 +240,7 @@ class PenComponent {
 			}
 
 			const ctx = canvas.getContext('2d') as CanvasRenderingContext2D
-			ctx.strokeStyle = options.fillColor || '#000'
+			ctx.strokeStyle = this.fillColor || options.fillColor || '#000'
 			ctx.lineWidth = getStrokeWidth()
 			ctx.translate(mapCanvasX(options.offset.x) * scale, mapCanvasY(options.offset.y) * scale)
 			ctx.moveTo(mapCanvasX(this.points[0].x) * scale, mapCanvasY(this.points[0].y) * scale)
@@ -274,7 +280,7 @@ class PenComponent {
 		const scale = options.scale
 		if (this.points.length >= 4) {
 			const ctx = canvas.getContext('2d') as CanvasRenderingContext2D
-			ctx.strokeStyle = '#000'
+			ctx.strokeStyle = this.fillColor || options.fillColor || '#000'
 			ctx.lineWidth = getStrokeWidth()
 			if (fontRenderStyle.value === 'color') {
 				ctx.beginPath()
@@ -308,6 +314,7 @@ class PenComponent {
 			usedInCharacter: this.usedInCharacter,
 			contour: R.clone(this.contour),
 			preview: R.clone(this.preview),
+			fillColor: this.fillColor,
 		}
 	}
 
@@ -322,6 +329,9 @@ class PenComponent {
 		}
 		if (data.preview) {
 			this.preview = R.clone(data.preview)
+		}
+		if (data.fillColor !== undefined) {
+			this.fillColor = data.fillColor
 		}
 	}
 

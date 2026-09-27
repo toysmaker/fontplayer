@@ -83,6 +83,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { NCard, NEmpty } from 'naive-ui'
 import { useCharacterStore } from '@/stores/character'
 import { useProjectStore } from '@/stores/project'
+import i18n from '@/i18n'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { DraggerManager, getOrCreateDragger } from '@/features/tools/glyphDragger'
 import type { BaseGlyphDragger } from '@/features/tools/glyphDragger'
@@ -702,22 +703,33 @@ onUnmounted(() => {
     // 离开前用已提交的全局常量重算顶层字形脚本，避免「未提交草稿」或仅局部重算导致的内存几何
     // 被写回列表/IDB，列表预览与再次进入时的参数不一致。
     const ch = (characterStore as any).editingCharacter as ICharacterFileLite | null
-    // 先执行字符脚本（生成字形组件），再执行字形脚本
-    if (ch?.script) {
-      executeCharacterScript(ch, ch.uuid)
-    }
-    reexecuteAllGlyphScriptsInEditingCharacter(ch)
-    ;(characterStore as any).updateCharacterListFromEditFile()
-
-
-    void rebuildCharacterListPreviewAfterExitEdit(editingCharacterUUID).catch((e) => {
-      if (import.meta.env.DEV) {
-        console.error('[CharacterEditor] rebuildCharacterListPreviewAfterExitEdit', e)
+    // 返回字符列表时的脚本重算较重（梵高笔触丛等），先显示 loading，
+    // 下一帧再执行同步重计算，避免界面卡住无反馈
+    projectStore.loading = true
+    projectStore.loadingMessage = i18n.global.t('panels.loading.updatingCharacterPreview')
+    requestAnimationFrame(() => {
+      // 先执行字符脚本（生成字形组件），再执行字形脚本
+      if (ch?.script) {
+        executeCharacterScript(ch, ch.uuid)
       }
+      reexecuteAllGlyphScriptsInEditingCharacter(ch)
+      ;(characterStore as any).updateCharacterListFromEditFile()
+
+
+      void rebuildCharacterListPreviewAfterExitEdit(editingCharacterUUID).catch((e) => {
+        if (import.meta.env.DEV) {
+          console.error('[CharacterEditor] rebuildCharacterListPreviewAfterExitEdit', e)
+        }
+      })
+      instanceManager.unmarkEditing(editingCharacterUUID)
+      instanceManager.releaseInstance(editingCharacterUUID)
+      ;(characterStore as any).resetEditCharacterFile()
+      // 等下一帧绘制完成后再关闭 loading
+      requestAnimationFrame(() => {
+        projectStore.loading = false
+        projectStore.loadingMessage = ''
+      })
     })
-    instanceManager.unmarkEditing(editingCharacterUUID)
-    instanceManager.releaseInstance(editingCharacterUUID)
-    ;(characterStore as any).resetEditCharacterFile()
   }
 })
 

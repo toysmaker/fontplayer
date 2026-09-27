@@ -120,7 +120,6 @@ import StrokeTrainingDataDialog from '@/ui/dialogs/StrokeTrainingDataDialog.vue'
 import ExportFontDialog from '@/ui/dialogs/ExportFontDialog.vue'
 import ExportVarFontDialog from '@/ui/dialogs/ExportVarFontDialog.vue'
 import ExportColorFontDialog from '@/ui/dialogs/ExportColorFontDialog.vue'
-import { exportFontLibraryNativeDefaults } from '@/features/editor/services/ExportFontService'
 import { getWebMenu, traverse_web_menu } from '@/features/editor/menus/web_menus'
 import { templateHandlers } from '@/features/editor/menus/templatesHandlers'
 import { createDebouncedHandler } from '@/utils/debounce-click'
@@ -393,20 +392,14 @@ const handleExportSvgNative = async () => {
   web_handlers['export-svg']?.()
 }
 
-const handleExportFontNative = async () => {
+const handleExportFontNative = () => {
+  // 原生菜单导出与侧边栏一致：打开导出设置对话框（轮廓存储方式 + 去除重叠等选项）
   const file = projectStore.selectedFile
   if (!file) {
     message.warning(t('dialogs.exportFontDialog.needProject'))
     return
   }
-  await exportFontLibraryNativeDefaults({
-    file,
-    editingCharacterUUID: characterStore.editingCharacterUUID,
-    editingCharacter: characterStore.editingCharacter,
-    message,
-    t,
-    projectStore,
-  })
+  dialogsStore.openExportFontDialog()
 }
 
 const handleExportVarFontNative = () => {

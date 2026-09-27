@@ -88,6 +88,8 @@ const menus = {
 			test: "测试",
 			export_json: "导出为json工程",
 			exportFailed: "导出 JSON 工程失败",
+			print_character_info: "打印当前字符信息",
+			no_editing_character: "当前未在编辑字符",
 		},
   },
   en: {
@@ -179,6 +181,8 @@ const menus = {
 			test: "Test",
 			export_json: "Export as JSON",
 			exportFailed: "Export JSON failed",
+			print_character_info: "Print Current Character Info",
+			no_editing_character: "No editing character",
 		},
   },
 }

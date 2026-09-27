@@ -122,22 +122,22 @@ const strokes = [
         max: 1000,
       },
       {
-        name: '竖直延伸',
+        name: '弯—水平延伸',
         default: 150,
         min: 0,
         max: 1000,
       },
       {
-        name: '弯曲游标',
-        default: 0.2,
-        min: 0,
-        max: 0.5,
-      },
-      {
-        name: '弯曲度',
+        name: '弯—竖直延伸',
         default: 150,
         min: 0,
         max: 500,
+      },
+      {
+        name: '弯—弯曲度',
+        default: 1.5,
+        min: 1,
+        max: 2,
       },
       {
         name: '字重',
@@ -366,6 +366,55 @@ const strokes = [
         max: 1000,
       },
       {
+        name: '挑-竖直延伸',
+        default: 160,
+        min: 0,
+        max: 1000,
+      },
+      {
+        name: '挑-弯曲度',
+        default: 1.5,
+        min: 1,
+        max: 2,
+      },
+      {
+        name: '字重',
+        default: 50,
+        min: 0,
+        max: 200,
+      },
+    ]
+  },
+  {
+    name: '竖捺',
+    uuid: genUUID(),
+    params: [
+      {
+        name: '竖-竖直延伸',
+        default: 500,
+        min: 0,
+        max: 1000,
+        originParam: '竖-长度',
+      },
+      {
+        name: '捺-水平延伸',
+        default: 160,
+        min: 0,
+        max: 1000,
+      },
+      {
+        name: '捺-竖直延伸',
+        default: 160,
+        min: 0,
+        max: 1000,
+      },
+      {
+        name: '捺-弯曲度',
+        default: 1.5,
+        min: 1,
+        max: 2,
+      },
+      {
         name: '字重',
         default: 50,
         min: 0,
@@ -421,6 +470,18 @@ const strokes = [
         default: 130,
         min: 0,
         max: 300,
+      },
+      {
+        name: '钩-竖直延伸',
+        default: 130,
+        min: 0,
+        max: 300,
+      },
+      {
+        name: '钩-弯曲度',
+        default: 1.5,
+        min: 1,
+        max: 2,
       },
       {
         name: '字重',
@@ -523,6 +584,18 @@ const strokes = [
         max: 300,
       },
       {
+        name: '钩-竖直延伸',
+        default: 130,
+        min: 0,
+        max: 300,
+      },
+      {
+        name: '钩-弯曲度',
+        default: 1.5,
+        min: 1,
+        max: 2,
+      },
+      {
         name: '字重',
         default: 50,
         min: 0,
@@ -552,6 +625,67 @@ const strokes = [
         default: 130,
         min: 0,
         max: 300,
+      },
+      {
+        name: '钩-竖直延伸',
+        default: 130,
+        min: 0,
+        max: 300,
+      },
+      {
+        name: '钩-弯曲度',
+        default: 1.5,
+        min: 1,
+        max: 2,
+      },
+      {
+        name: '字重',
+        default: 50,
+        min: 0,
+        max: 200,
+      },
+    ]
+  },
+  {
+    name: '可倾斜横折钩',
+    uuid: genUUID(),
+    params: [
+      {
+        name: '横-水平延伸',
+        default: 500,
+        min: 0,
+        max: 1000,
+        originParam: '横-长度',
+      },
+      {
+        name: '横-竖直延伸',
+        default: -100,
+        min: -500,
+        max: 500,
+      },
+      {
+        name: '折-竖直延伸',
+        default: 300,
+        min: 0,
+        max: 1000,
+      },
+      {
+        name: '钩-水平延伸',
+        default: 130,
+        min: 0,
+        max: 300,
+      },
+      {
+        name: '钩-竖直延伸',
+        default: 130,
+        min: 0,
+        max: 300,
+      },
+      {
+        name: '钩-弯曲度',
+        default: 1.5,
+        min: 1,
+        max: 2,
       },
       {
         name: '字重',
@@ -731,6 +865,18 @@ const strokes = [
         default: 130,
         min: 0,
         max: 300,
+      },
+      {
+        name: '钩-竖直延伸',
+        default: 130,
+        min: 0,
+        max: 300,
+      },
+      {
+        name: '钩-弯曲度',
+        default: 1.5,
+        min: 1,
+        max: 2,
       },
       {
         name: '字重',

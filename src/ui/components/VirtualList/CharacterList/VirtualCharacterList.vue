@@ -38,6 +38,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { ICharacterFileLite, ICharacterFileMetadata } from '@/core/types'
 import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
@@ -58,6 +59,7 @@ import {
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
 const characterStore = useCharacterStore()
+const { t } = useI18n()
 
 // 渲染队列和缓存
 const renderQueue = ref<string[]>([])
@@ -355,17 +357,37 @@ const _handleItemClick = async (character: ICharacterFileLite) => {
       orderedListCount: character.orderedList?.length || 0
     })
   }
-  // 等待加载完整字符数据
-  await characterStore.setEditCharacterFileByUUID(character.uuid)
-  // 等待 nextTick 确保 editingCharacter 已设置
-  await nextTick()
-  if (import.meta.env.DEV) {
-    console.log('[VirtualCharacterList] after setEditCharacterFileByUUID:', {
-      editingCharacter: !!characterStore.editingCharacter,
-      componentsCount: characterStore.editingCharacter?.components?.length || 0
-    })
+  // 图标字符脚本计算量大（梵高笔触丛等），打开时先显示 loading，避免界面长时间无响应
+  const showLoading = character.type === 'icon'
+  if (showLoading) {
+    projectStore.loading = true
+    projectStore.loadingMessage = t('panels.loading.openingCharacter')
+    // 先让 loading 面板渲染并绘制，再执行同步重计算
+    await nextTick()
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
   }
-  editorStore.setEditStatus(EditStatus.Edit)
+  try {
+    // 等待加载完整字符数据
+    await characterStore.setEditCharacterFileByUUID(character.uuid)
+    // 等待 nextTick 确保 editingCharacter 已设置
+    await nextTick()
+    if (import.meta.env.DEV) {
+      console.log('[VirtualCharacterList] after setEditCharacterFileByUUID:', {
+        editingCharacter: !!characterStore.editingCharacter,
+        componentsCount: characterStore.editingCharacter?.components?.length || 0
+      })
+    }
+    editorStore.setEditStatus(EditStatus.Edit)
+    // 等待编辑器挂载/重渲染中的同步脚本执行完并完成绘制后再关闭 loading
+    await nextTick()
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+    await nextTick()
+  } finally {
+    if (showLoading) {
+      projectStore.loading = false
+      projectStore.loadingMessage = ''
+    }
+  }
 }
 
 // 使用防重复调用包装，通过UUID区分不同的项

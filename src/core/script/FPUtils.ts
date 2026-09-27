@@ -11,6 +11,8 @@ import * as R from 'ramda'
 import * as PenComponentOps from './FPUtils/PenComponentOps'
 import { parseColorToHex } from '../utils/color'
 import { SeededRandom, seededRandom } from './FPUtils/SeededRandom'
+import { fbm, valueNoise } from './FPUtils/Noise'
+import * as VanGoghCluster from './FPUtils/VanGoghCluster'
 
 interface IGetContoursOption {
 	unticlockwise?: boolean;
@@ -327,6 +329,26 @@ const leafFn = (x: number, speed: number = 1.0) : number => {
 	return getYFromMultiBezierByX(bezier, x, speed)
 }
 
+const cloudFn = (x: number, speed: number = 1.0) : number => {
+	const bezier = [
+		{ x: 0, y: 1 },
+		{ x: 0, y: 1 },
+		{ x: 1, y: 1 },
+		{ x: 1, y: 1 },
+	]
+	return getYFromMultiBezierByX(bezier, x, speed)
+}
+
+const strokeFn = (x: number, speed: number = 1.0) : number => {
+	const bezier = [
+		{ x: 0, y: 1 },
+		{ x: 0, y: 1 },
+		{ x: 1, y: 1 },
+		{ x: 1, y: 1 },
+	]
+	return getYFromMultiBezierByX(bezier, x, speed)
+}
+
 const getBezierFn = (type: string) => {
   if (type === 'bezier1') {
 		return bezier1Fn
@@ -336,6 +358,10 @@ const getBezierFn = (type: string) => {
 		return multiBezierFn1
 	} else if (type === 'leaf') {
 		return leafFn
+	} else if (type === 'cloud') {
+		return cloudFn
+	} else if (type === 'stroke') {
+		return strokeFn
 	}
 	return bezierFn
 }
@@ -1127,6 +1153,10 @@ const getCurveContours2 = (name, skeleton, weight, options: IGetContoursOption) 
 					const f = fn(j / (n * beziers.length), speed)
 					in_weights.push(weight / 2 * f)
 					out_weights.push(weight / 2 * f)
+				} else if (options.weightsVariationFnType && options.weightsVariationSpeed) {
+					const f = fn(j / (n * beziers.length), speed)
+					in_weights.push(weight / 2 * f)
+					out_weights.push(weight / 2 * f)
 				} else {
 					const f = fn(j / (n * beziers.length))
 					in_weights.push(in_endWeight + (in_startWeight - in_endWeight) * f)
@@ -1139,7 +1169,11 @@ const getCurveContours2 = (name, skeleton, weight, options: IGetContoursOption) 
 					const f = fn(i / (n * beziers.length), speed)
 					in_weights.push(weight / 2 * f)
 					out_weights.push(weight / 2 * f)
-				}  else if (options.weightsVariationFnType === 'leaf') {
+				} else if (options.weightsVariationFnType === 'leaf') {
+					const f = fn(i / (n * beziers.length), speed)
+					in_weights.push(weight / 2 * f)
+					out_weights.push(weight / 2 * f)
+				} else if (options.weightsVariationFnType && options.weightsVariationSpeed) {
 					const f = fn(i / (n * beziers.length), speed)
 					in_weights.push(weight / 2 * f)
 					out_weights.push(weight / 2 * f)
@@ -2462,7 +2496,11 @@ const getControlPoint = (start, end, ratio, length) => {
 
 const getPointOnCurveByPercentage = (curve, percentage) => {
 	const points = getCurvesPoints(curve)
-	const index = Math.floor(percentage * points.length)
+	// 钳制索引：percentage=1 时 Math.floor(1 * length) 会越界返回 undefined
+	const index = Math.min(
+		points.length - 1,
+		Math.max(0, Math.floor(percentage * points.length)),
+	)
 	const point = points[index]
 	const curve1 = fitCurvesByPoints(points.slice(0, index))
 	const curve2 = fitCurvesByPoints(points.slice(index))
@@ -2597,6 +2635,8 @@ const getSegmentOnCurveByPercentage = (curves, startPercent, endPercent) => {
 	}
 }
 
+// 噪声与 FBM（详见 FPUtils/Noise.ts）
+
 const FP = {
 	EllipseComponent,
 	PenComponent,
@@ -2651,6 +2691,17 @@ const FP = {
 	unionOp: PenComponentOps.unionOp,
 	SeededRandom,
 	seededRandom,
+	valueNoise,
+	fbm,
+	// 梵高油画笔触丛复刻（详见 FPUtils/VanGoghCluster.ts）
+	buildVanGoghClustersData: (config, x, y, w, h) =>
+		VanGoghCluster.buildVanGoghClustersData(FP, config, x, y, w, h),
+	buildVanGoghPaintingCluster: (config, cluster) =>
+		VanGoghCluster.buildVanGoghPaintingCluster(FP, config, cluster),
+	buildVanGoghClustersInQuad: (config, leftTop, rightTop, leftBottom, rightBottom) =>
+		VanGoghCluster.buildVanGoghClustersInQuad(FP, config, leftTop, rightTop, leftBottom, rightBottom),
+	buildVanGoghClusters: (config, a, b, c, d) =>
+		VanGoghCluster.buildVanGoghClusters(FP, config, a, b, c, d),
 	getControlPoint,
 	parseColorToHex,
 	getSegmentOnCurveByPercentage,

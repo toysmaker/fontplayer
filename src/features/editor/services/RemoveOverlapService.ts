@@ -103,9 +103,14 @@ function mergePathsWithPrecision(paths: paper.Path[]): paper.Path | null {
   if (paths.length === 1) return paths[0]
 
   paper.settings.precision = OVERLAP_REMOVAL_CONFIG.PATH_PRECISION
-  let unitedPath = paths[0].clone()
+  let unitedPath: paper.Path | null = paths[0].clone()
   for (let i = 1; i < paths.length; i++) {
-    unitedPath = unitedPath.unite(paths[i]) as paper.Path
+    const next = unitedPath!.unite(paths[i]) as paper.Path | null
+    if (next && next !== unitedPath) {
+      // 及时移除中间 union 结果，避免 paper project 累积路径导致内存溢出（批量导出大量字符时尤为关键）
+      unitedPath!.remove()
+      unitedPath = next
+    }
   }
   return unitedPath
 }
@@ -158,18 +163,27 @@ export function removeOverlapFromContours(
     } else {
       unitedPath = outerPaths[0].clone()
       for (let i = 1; i < outerPaths.length; i++) {
-        const result = unitedPath!.unite(outerPaths[i]) as paper.Path
+        const result = unitedPath!.unite(outerPaths[i]) as paper.Path | null
         if (result && result.area && Math.abs(result.area) > 1e-6) {
-          unitedPath = result
+          // 及时移除中间 union 结果，避免 paper project 累积路径导致内存溢出
+          if (result !== unitedPath) {
+            unitedPath!.remove()
+            unitedPath = result
+          }
         }
       }
       for (const inner of innerPaths) {
-        const result = unitedPath!.exclude(inner) as paper.Path
+        const result = unitedPath!.exclude(inner) as paper.Path | null
         if (result && result.area && Math.abs(result.area) > 1e-6) {
-          unitedPath = result
+          // 及时移除中间 exclude 结果，避免 paper project 累积路径导致内存溢出
+          if (result !== unitedPath) {
+            unitedPath!.remove()
+            unitedPath = result
+          }
         }
       }
       if (!unitedPath || !unitedPath.area || Math.abs(unitedPath.area) < 1e-6) {
+        if (unitedPath) unitedPath.remove()
         unitedPath = mergePathsWithPrecision(paths)
       }
     }

@@ -142,7 +142,7 @@ function plainCharacterWithContours(character: any): any {
 }
 
 export function createTestHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
-  const { message, t, projectStore } = ctx
+  const { message, t, projectStore, characterStore } = ctx
 
   const handleExportDevJson = async () => {
     const file = projectStore.selectedFile
@@ -547,10 +547,21 @@ export function createTestHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
     input.click()
   }
 
+  const handlePrintCharacterInfo = () => {
+    const character = characterStore.editingCharacter
+    if (!character) {
+      message.error(t('menus.test.no_editing_character'))
+      return
+    }
+    // 直接打印当前编辑字符对象（不做字段遍历）
+    console.log(character)
+  }
+
   return {
     'test-export-json': handleExportDevJson,
     'test-export-skeleton-params': handleExportSkeletonParams,
     'test-import-from-params': handleImportFromParams,
     'test-import-from-skeleton': handleImportFromSkeleton,
+    'test-print-character-info': handlePrintCharacterInfo,
   }
 }

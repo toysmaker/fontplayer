@@ -15,6 +15,11 @@ body {
   height: 100%;
 }
 
+div, span {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 :root {
   --dark-0: #1d1d1d;
   --dark-1: #242424;

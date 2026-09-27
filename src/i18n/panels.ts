@@ -359,6 +359,8 @@ const panels = {
 			loading: '正在加载...',
 			initializing: '正在初始化...',
 			loadingProject: '正在加载工程文件...',
+			openingCharacter: '正在打开字符...',
+			updatingCharacterPreview: '正在生成字符预览...',
 		},
 		editorSidebar: {
 			onlyOneProjectWarning: '目前字玩仅支持同时编辑一个工程，请关闭当前工程再新建。注意，关闭工程前请保存工程以避免数据丢失。',
@@ -729,6 +731,8 @@ const panels = {
 			loading: 'Loading...',
 			initializing: 'Initializing...',
 			loadingProject: 'Loading project file...',
+			openingCharacter: 'Opening character...',
+			updatingCharacterPreview: 'Generating character preview...',
 		},
 		editorSidebar: {
 			onlyOneProjectWarning: 'FontPlayer currently only supports editing one project at a time. Please close the current project before creating a new one. Note: Please save the project before closing to avoid data loss.',

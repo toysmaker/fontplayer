@@ -90,20 +90,31 @@ function generateColorFontLayers(
     forceUpdate: false,
   }
   for (const component of flatComponents) {
+    // 传入 fillColorsOut 获取每个轮廓对应的颜色（脚本内置组件 setFillColor 的颜色在此体现）
+    const fillColors: string[] = []
     const contours = ContourConverter.componentsToContours(
       [component] as IComponent[],
       opts,
-      { x: 0, y: 0 }
+      { x: 0, y: 0 },
+      undefined,
+      fillColors,
     )
     const componentFillColor =
       (component as { fillColor?: string }).fillColor ||
       (component.value as { fillColor?: string } | undefined)?.fillColor
-    const fillColor = componentFillColor || 'rgba(0, 0, 0, 1)'
-    layers.push({
-      fillColor,
-      contours: contours as ICharacter['contours'],
-      contourNum: contours.length,
-    })
+    const defaultColor = componentFillColor || 'rgba(0, 0, 0, 1)'
+
+    if (contours.length === 0) continue
+
+    // 逐轮廓分层：内置组件各有颜色时按各自颜色分到不同图层
+    for (let i = 0; i < contours.length; i++) {
+      const contourColor = fillColors[i] && fillColors[i] !== '#000' ? fillColors[i] : defaultColor
+      layers.push({
+        fillColor: contourColor,
+        contours: [contours[i]] as ICharacter['contours'],
+        contourNum: 1,
+      })
+    }
   }
   return layers
 }

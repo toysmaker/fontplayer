@@ -120,6 +120,15 @@ export class CustomGlyph implements IInstance {
   }
 
   /**
+   * 获取当前字形对象（glyph value，非实例）上的 fillColor
+   * 兼容旧数据：外层 component 上的 fillColor 由调用方（渲染器）优先读取
+   */
+  getFillColor(): string | undefined {
+    const f = (this._glyph as { fillColor?: string } | undefined)?.fillColor
+    return f && String(f).trim() ? String(f).trim() : undefined
+  }
+
+  /**
    * 获取所有关节
    */
   getJoints(): Array<any> {
@@ -342,11 +351,28 @@ export class CustomGlyph implements IInstance {
         if (import.meta.env.DEV) console.log('[render] drawEditContour glyph=' + this._glyph.name + ' offset=(' + offset.x + ',' + offset.y + ')')
         this.drawEditContour(ctx, component.contour as IContour, offset, scale)
       } else if (component.render) {
+        const hasOwnColor = fontRenderStyle.value === 'color' && !!component.fillColor
+        if (hasOwnColor) {
+          // 有自身颜色的组件：先把此前累积的无色组件路径按父字形色冲刷掉，
+          // 否则无色组件会被错误填成下一个有色组件的颜色
+          ctx.fillStyle = fillColor || '#000'
+          ctx.fill("nonzero")
+          ctx.closePath()
+          ctx.beginPath()
+        }
+        // 内置组件自身 fillColor 优先于父字形 fillColor
         component.render(canvas, {
           offset,
           scale: scale,
-          fillColor: fillColor,
+          fillColor: component.fillColor || fillColor,
         })
+        if (hasOwnColor) {
+          // 按自身颜色立即填充并隔离路径，避免与后续组件路径混入同一复合填充
+          ctx.fillStyle = component.fillColor
+          ctx.fill("nonzero")
+          ctx.closePath()
+          ctx.beginPath()
+        }
       } else {
         if (import.meta.env.DEV) {
           console.warn(`[CustomGlyph.render] _component ${index} has no render method:`, {
@@ -455,11 +481,28 @@ export class CustomGlyph implements IInstance {
       if (component._postProcessed && component.contour?.length) {
         this.drawEditContour(ctx, component.contour as IContour, offset, scale)
       } else if (component.render) {
+        const hasOwnColor = fontRenderStyle.value === 'color' && !!component.fillColor
+        if (hasOwnColor) {
+          // 先把此前累积的无色组件路径按父字形色冲刷掉，
+          // 否则无色组件会被错误填成下一个有色组件的颜色
+          ctx.fillStyle = fillColor || '#000'
+          ctx.fill("nonzero")
+          ctx.closePath()
+          ctx.beginPath()
+        }
+        // 内置组件自身 fillColor 优先于父字形 fillColor
         component.render(canvas, {
           offset,
           scale: scale,
-          fillColor: fillColor,
+          fillColor: component.fillColor || fillColor,
         })
+        // 彩色模式：内置组件有自己的 fillColor 时立即按该颜色填充并隔离路径
+        if (hasOwnColor) {
+          ctx.fillStyle = component.fillColor
+          ctx.fill("nonzero")
+          ctx.closePath()
+          ctx.beginPath()
+        }
       }
     })
     }
@@ -549,7 +592,23 @@ export class CustomGlyph implements IInstance {
           if (component._postProcessed && component.contour?.length) {
             this.drawEditContour(ctx, component.contour as IContour, offset, scale)
           } else if (component.render) {
-            component.render(canvas, { offset, scale, fillColor: fillColorForComps })
+            const hasOwnColor = fontRenderStyle.value === 'color' && !!component.fillColor
+            if (hasOwnColor) {
+              // 先把此前累积的无色组件路径按父字形色冲刷掉
+              ctx.fillStyle = fillColorForComps
+              ctx.fill('nonzero')
+              ctx.closePath()
+              ctx.beginPath()
+            }
+            // 内置组件自身 fillColor 优先于父字形 fillColor
+            component.render(canvas, { offset, scale, fillColor: component.fillColor || fillColorForComps })
+            // 彩色模式：内置组件有自己的 fillColor 时立即按该颜色填充并隔离路径
+            if (hasOwnColor) {
+              ctx.fillStyle = component.fillColor
+              ctx.fill('nonzero')
+              ctx.closePath()
+              ctx.beginPath()
+            }
           }
         })
       } else {
@@ -641,11 +700,28 @@ export class CustomGlyph implements IInstance {
         if (fontRenderStyle.value === 'color') {
           ctx.beginPath()
         }
+        const fillColorForComps = fontRenderStyle.value === 'black' ? '#000' : (fillColor || '#000')
         this._components.forEach((component: any) => {
           if (component._postProcessed && component.contour?.length) {
             this.drawEditContour(ctx, component.contour as IContour, offset, scale)
           } else if (component.render_grid) {
-            component.render_grid(canvas, { offset, scale, grid })
+            const hasOwnColor = fontRenderStyle.value === 'color' && !!component.fillColor
+            if (hasOwnColor) {
+              // 先把此前累积的无色组件路径按父字形色冲刷掉
+              ctx.fillStyle = fillColorForComps
+              ctx.fill('nonzero')
+              ctx.closePath()
+              ctx.beginPath()
+            }
+            // 内置组件自身 fillColor 优先于父字形 fillColor
+            component.render_grid(canvas, { offset, scale, grid, fillColor: component.fillColor || fillColorForComps })
+            // 彩色模式：内置组件有自己的 fillColor 时立即按该颜色填充并隔离路径
+            if (hasOwnColor) {
+              ctx.fillStyle = component.fillColor
+              ctx.fill('nonzero')
+              ctx.closePath()
+              ctx.beginPath()
+            }
           }
         })
       } else {

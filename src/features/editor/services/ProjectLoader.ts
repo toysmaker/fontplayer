@@ -17,7 +17,7 @@ import { useProjectStore } from '@/stores/project'
 import { projectMigrator, ProjectMigrator } from './ProjectMigrator'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
-import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+import { executeGlyphScript, setGlyphScriptLookupExtras } from '@/core/script/ScriptExecutor'
 import { ContourConverter } from '@/core/font/converter'
 import {
   buildDecompositionForOpenedProjectCharacters,
@@ -34,9 +34,12 @@ import {
   replaceGlyphScript_private_v1,
   replaceGlyphScript_templates2,
   replaceCharacterComponentsGlyphScriptRefs_private_v1,
+  buildStrokeGlyphNameToUuid,
   addDianGlyphParams_private_v1,
   fixDaoZhiJiaoPieJianTouOptionValue_private_v1,
   widenFangYuanGlyphNumberParamBoundsInCharacterComponents,
+  syncFangYuanCharacterComponentParamsToLatest_private_v1,
+  syncFangYuanGlyphParamsToLatest_private_v1,
   widenAiTestNumberParamBoundsInCharacterComponents,
   widenAiTestNumberParamBoundsInGlyphDefinitions,
   expandFangYuanGlyphEnumOptionsInCharacterComponents,
@@ -47,6 +50,7 @@ import {
   dedupCharacterComponentOptions,
 } from '@/features/temporaryScripts/fileProcessing'
 import { addMissingFangYuanStrokes } from '@/features/temporaryScripts/addMissingFangYuanStrokes'
+import { mergeFangYuanStrokePairsInCharacter } from '@/features/temporaryScripts/fangYuanStrokePairMerge'
 
 /** 带此 tag 的工程在加载完成后会为字符列表补全部件分解数据（高级编辑「脚本」Tab 亦仅在此 tag 下显示） */
 export const DEFAULT_TEMPLATE_PROJECT_TAG = '字玩默认模板工程'
@@ -476,6 +480,16 @@ export class ProjectLoader {
       }
       // END 临时代码
 
+      // MARK: 临时代码 — 将 stroke_glyphs 参数同步为最新笔画规则（补全缺失参数 + 合并最新 Enum options）
+      if (import.meta.env.DEV && projectTag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG && data.stroke_glyphs?.length) {
+        try {
+          syncFangYuanGlyphParamsToLatest_private_v1(data.stroke_glyphs as ICustomGlyph[])
+        } catch (e) {
+          console.error('[ProjectLoader] syncFangYuanGlyphParamsToLatest failed', e)
+        }
+      }
+      // END 临时代码
+
       // MARK: 临时代码 — 将风格为"字玩标准黑体"的 stroke_glyphs 脚本替换为 public/templates/templates2/${name}.js
       // 仅 dev 模式生效；后续需整段移除
       if (import.meta.env.DEV && projectTag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG && data.stroke_glyphs?.length) {
@@ -518,14 +532,10 @@ export class ProjectLoader {
 
       const decoded = decodedFp as unknown as DecodedFpz
 
-      // MARK: 临时代码 — 构建 stroke_glyphs name→uuid 映射，供字符组件脚本引用
+      // MARK: 临时代码 — 构建 stroke_glyphs name→uuid 映射，供字符组件脚本引用（优先带脚本的定义）
       let strokeGlyphNameToUuid: Map<string, string> | undefined
       if (import.meta.env.DEV && projectTag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG && data.stroke_glyphs?.length) {
-        strokeGlyphNameToUuid = new Map<string, string>()
-        for (const g of data.stroke_glyphs as ICustomGlyph[]) {
-          const name = g.name?.trim()
-          if (name) strokeGlyphNameToUuid.set(name, g.uuid)
-        }
+        strokeGlyphNameToUuid = buildStrokeGlyphNameToUuid(data.stroke_glyphs as ICustomGlyph[])
       }
       // END 临时代码
 
@@ -612,6 +622,8 @@ export class ProjectLoader {
 
     if (strokeGlyphNameToUuid && strokeGlyphNameToUuid.size > 0 && import.meta.env.DEV) {
       console.log('[ProjectLoader] 同步字符列表中字形组件脚本引用 (private/v1)…')
+      // 加载中途 store 尚未就绪，注册字形库以解析 script_reference（供笔画组合合并执行脚本用）
+      setGlyphScriptLookupExtras(glyphLibrary)
     }
 
     for (let i = 0; i < total; i++) {
@@ -628,6 +640,16 @@ export class ProjectLoader {
       if (strokeGlyphNameToUuid && strokeGlyphNameToUuid.size > 0 && import.meta.env.DEV) {
         replaceCharacterComponentsGlyphScriptRefs_private_v1(characterLite.components, strokeGlyphNameToUuid)
       }
+      // END 临时代码
+
+      // MARK: 临时代码 — 笔画组合替换（直角捺+横→平捺 等 6 条规则），仅 .fp + 字玩方圆黑体 tag
+      // if (import.meta.env.DEV && strokeGlyphNameToUuid && strokeGlyphNameToUuid.size > 0) {
+      //   try {
+      //     mergeFangYuanStrokePairsInCharacter(characterLite, strokeGlyphNameToUuid)
+      //   } catch (e) {
+      //     console.error('[ProjectLoader] mergeFangYuanStrokePairsInCharacter failed', e)
+      //   }
+      // }
       // END 临时代码
 
       // 临时诊断：第一个字符写入 IDB 前确认参数值
@@ -670,6 +692,12 @@ export class ProjectLoader {
 
     this.updateProgress(total, progressMsg || '存储字符数据到IndexedDB...')
     file.characterList = metadataList
+
+    // MARK: 临时代码 — 释放 script_reference 解析用字形库
+    if (import.meta.env.DEV && strokeGlyphNameToUuid && strokeGlyphNameToUuid.size > 0) {
+      setGlyphScriptLookupExtras(null)
+    }
+    // END 临时代码
   }
 
   /**
@@ -910,6 +938,12 @@ export class ProjectLoader {
       }
     }
     if (fangYuanWidenParams) {
+      // MARK: 临时代码 — 将字符组件参数同步为最新笔画规则；
+      // 必须在 widen 之前执行，保证新增参数的 min/max 也会被正常放宽
+      if (import.meta.env.DEV) {
+        syncFangYuanCharacterComponentParamsToLatest_private_v1(components)
+      }
+      // END 临时代码
       widenFangYuanGlyphNumberParamBoundsInCharacterComponents(components)
       // MARK: 临时代码 — 重命名风格标签 + 参数去重 + 扩展 Enum 参数 options
       if (import.meta.env.DEV) {

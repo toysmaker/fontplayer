@@ -275,6 +275,8 @@ export interface ICustomGlyphComponent {
   layers?: Record<string, string[]>
   /** 后处理规则列表 */
   postProcessRules?: PostProcessRule[]
+  /** 字形分色（彩色字体图层）；设置在字形对象本身，而非外层 component */
+  fillColor?: string
   // ... 其他属性
 }
 
@@ -490,6 +492,8 @@ export interface ICustomGlyph {
   variables?: IVariable[]
   /** 后处理规则列表 */
   postProcessRules?: PostProcessRule[]
+  /** 字形分色（彩色字体图层）；设置在字形对象本身，而非外层 component */
+  fillColor?: string
   // ... 其他属性
 }
 

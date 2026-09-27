@@ -27,6 +27,7 @@ class RectangleComponent {
 	public contour: Array<ILine | IQuadraticBezierCurve | ICubicBezierCurve> = []
 	public contour2: Array<ILine | IQuadraticBezierCurve | ICubicBezierCurve> = []
 	public preview: Array<ILine | IQuadraticBezierCurve | ICubicBezierCurve> = []
+	public fillColor?: string
 
 	constructor (x: number, y: number, width: number, height: number) {
 		this.x = x
@@ -35,13 +36,18 @@ class RectangleComponent {
 		this.height = height
 	}
 
+	/** 设置内置组件的分色；不传或传空则清除（回退到父字形 fillColor） */
+	public setFillColor (color?: string) {
+		this.fillColor = color
+	}
+
 	public render (canvas: HTMLCanvasElement, options: IOption = {
 		offset: { x: 0, y: 0 },
 		scale: 1
 	}) {
 		const scale = options.scale
 		const ctx = canvas.getContext('2d') as CanvasRenderingContext2D
-		ctx.strokeStyle = options.fillColor || '#000'
+		ctx.strokeStyle = this.fillColor || options.fillColor || '#000'
 		ctx.lineWidth = getStrokeWidth()
 		ctx.translate(mapCanvasX(options.offset.x) * scale, mapCanvasY(options.offset.y) * scale)
 		ctx.rect(mapCanvasX(this.x) * scale, mapCanvasY(this.y) * scale, mapCanvasX(this.width) * scale, mapCanvasY(this.height) * scale)
@@ -68,7 +74,7 @@ class RectangleComponent {
 		)
 		const scale = options.scale
 		const ctx = canvas.getContext('2d') as CanvasRenderingContext2D
-		ctx.strokeStyle = '#000'
+		ctx.strokeStyle = this.fillColor || options.fillColor || '#000'
 		ctx.lineWidth = getStrokeWidth()
 		ctx.beginPath()
 		const start = computeCoords(options.grid, translate({ x: points[0].x, y: points[0].y }))
@@ -93,6 +99,7 @@ class RectangleComponent {
 			usedInCharacter: this.usedInCharacter,
 			contour: R.clone(this.contour),
 			preview: R.clone(this.preview),
+			fillColor: this.fillColor,
 		}
 	}
 
@@ -108,6 +115,9 @@ class RectangleComponent {
 		}
 		if (data.preview) {
 			this.preview = R.clone(data.preview)
+		}
+		if (data.fillColor !== undefined) {
+			this.fillColor = data.fillColor
 		}
 	}
 
