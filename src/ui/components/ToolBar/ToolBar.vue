@@ -196,6 +196,19 @@
           </n-tooltip>
         </template>
 
+        <!-- 信息按钮 - 仅在字符编辑模式显示 -->
+        <template v-if="editStatus === EditStatus.Edit">
+          <div class="boolean-separator"></div>
+          <n-icon
+            class="tool-icon"
+            :class="{ 'selected': tool === 'info' }"
+            size="40"
+            @click="switchTool('info')"
+            @pointerup="switchTool('info')">
+            <font-awesome-icon :icon="['fas', 'circle-info']" />
+          </n-icon>
+        </template>
+
         <!-- 骨架提取按钮 - 仅在字符编辑模式显示 -->
         <template v-if="editStatus === EditStatus.Edit">
           <div class="boolean-separator"></div>

@@ -1,5 +1,5 @@
 import * as R from 'ramda'
-import type { IFile, ICharacterFileLite, IFontSettings, IPenComponent } from '@/core/types'
+import type { IFile, ICharacterFileLite, ICharacterFileMetadata, IFontSettings, IPenComponent } from '@/core/types'
 import type { IContours, IContour } from '@/core/font/types'
 import { ContourConverter } from '@/core/font/converter'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
@@ -343,6 +343,51 @@ export async function exportFontLibrary(params: {
     projectStore.loadingProgress = 0
     projectStore.loadingTotal = 0
     projectStore.loadingMessage = ''
+  }
+}
+
+/**
+ * 预览专用：为单个字符构建 OTF ArrayBuffer（信息面板「预览」使用）。
+ * - 复用 buildExportFontBuffer 的完整管线，与最终导出的字库效果一致
+ * - characterList 仅含目标字符（.notdef/空格由 buildExportFontBuffer 自动补齐）
+ * - familyName 用 ASCII 合成名，避免中文名每次构建触发拼音转换开销
+ * - 构建期间临时静音 console.log（fontManager 内部大量日志，Tauri webview 输出慢）
+ * - 纯内存操作，无磁盘/Tauri 依赖，web 端同样可用
+ */
+export async function buildCharacterPreviewFontBuffer(
+  file: IFile,
+  meta: ICharacterFileMetadata,
+  editingCharacter: ICharacterFileLite | null,
+  removeOverlap: boolean,
+): Promise<ArrayBuffer> {
+  const unicodeRaw = meta.character?.unicode ?? ''
+  const unicode = parseInt(unicodeRaw.replace(/^U\+/i, ''), 16)
+  if (!unicodeRaw || Number.isNaN(unicode)) {
+    throw new Error('Character has no valid unicode')
+  }
+
+  const previewFile: IFile = {
+    ...file,
+    name: 'FPPreview',
+    characterList: [meta],
+  }
+
+  const originalLog = console.log
+  console.log = () => { /* 静音 fontManager 构建日志 */ }
+  try {
+    return await buildExportFontBuffer(
+      previewFile,
+      {
+        editingCharacterUUID: meta.uuid,
+        editingCharacter,
+      },
+      {
+        contourStorage: 'cff',
+        removeOverlap,
+      },
+    )
+  } finally {
+    console.log = originalLog
   }
 }
 

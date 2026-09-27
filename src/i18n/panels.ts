@@ -335,6 +335,18 @@ const panels = {
 		toolBar: {
 			characterList: '字符列表',
 		},
+		infoPanel: {
+			title: '信息',
+			preview: {
+				title: '预览',
+				fontSize: '字号',
+				removeOverlap: '去除重叠',
+				generating: '正在生成预览字体...',
+				noCharacter: '当前未在编辑字符',
+				invalidUnicode: '该字符没有有效编码',
+				buildFailed: '预览字体生成失败',
+			},
+		},
 		skeletonPanel: {
 			title: '骨架提取',
 			extract: '提取骨架',
@@ -706,6 +718,18 @@ const panels = {
 		},
 		toolBar: {
 			characterList: 'Character List',
+		},
+		infoPanel: {
+			title: 'Info',
+			preview: {
+				title: 'Preview',
+				fontSize: 'Font Size',
+				removeOverlap: 'Remove Overlap',
+				generating: 'Generating preview font...',
+				noCharacter: 'No editing character',
+				invalidUnicode: 'Character has no valid unicode',
+				buildFailed: 'Failed to build preview font',
+			},
 		},
 		skeletonPanel: {
 			title: 'Skeleton Extraction',
