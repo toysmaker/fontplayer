@@ -689,7 +689,9 @@ export const useCharacterStore = defineStore('character', () => {
    */
   function setSelection(uuid: string) {
     if (!editingCharacter.value) return
-    
+    // 组件选择发生（含点击同一组件）时，信息面板自然让位给组件参数面板
+    editorStore.hideInfoPanel()
+
     const characterFile = editingCharacter.value
     if (!characterFile.selectedComponentsUUIDs) {
       characterFile.selectedComponentsUUIDs = []

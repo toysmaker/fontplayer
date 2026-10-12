@@ -11,6 +11,7 @@ import { useI18n } from 'vue-i18n'
 import { useComponentEditor } from './composables/useComponentEditor'
 import { EditStatus } from '@/core/types'
 import { useToolStore } from '@/stores/tool'
+import { useEditorStore } from '@/stores/editor'
 import { skeletonFreeEdit } from '@/stores/skeletonDragger'
 // 导入各个参数编辑面板
 import PenEditPanel from './paramsEditPanels/PenEditPanel.vue'
@@ -34,7 +35,23 @@ const { t } = useI18n()
 const { selectedComponent, selectedComponentUUID, editStatus } = useComponentEditor()
 const toolStore = useToolStore()
 const { tool } = storeToRefs(toolStore)
+const editorStore = useEditorStore()
+const { infoPanelVisible } = storeToRefs(editorStore)
 const effectStore = useEffectStore()
+
+// 信息面板自动让位：切换工具 / 激活效果滤镜 / 离开编辑态时收起（选中组件让位由 characterStore.setSelection 处理）
+watch(tool, () => {
+  editorStore.hideInfoPanel()
+})
+watch(
+  () => effectStore.isActive,
+  (active) => {
+    if (active) editorStore.hideInfoPanel()
+  },
+)
+watch(editStatus, () => {
+  editorStore.hideInfoPanel()
+})
 
 // 调试信息
 if (import.meta.env.DEV) {
@@ -52,8 +69,6 @@ if (import.meta.env.DEV) {
   <div class="right-panel" data-testid="parameter-panel">
     <!-- 效果滤镜参数面板（最高优先级，在其他任何面板之前显示） -->
     <effect-params-panel v-if="effectStore.isActive" />
-    <!-- 信息面板（字符编辑 + info 工具） -->
-    <info-panel v-else-if="editStatus === EditStatus.Edit && tool === 'info'" />
     <picture-import-params-panel v-else-if="editStatus === EditStatus.Pic" />
     <!-- 骨架提取面板 -->
     <skeleton-panel
@@ -74,6 +89,10 @@ if (import.meta.env.DEV) {
     <!-- 字形编辑 params 工具：显示字形参数面板（骨架绑定等） -->
     <glyph-params-panel
       v-else-if="editStatus === EditStatus.Glyph && tool === 'params' && !skeletonFreeEdit"
+    />
+    <!-- 信息面板：独立 flag（不抢占工具）；选中组件/切换工具/离开编辑态时自动让位 -->
+    <info-panel
+      v-else-if="editStatus === EditStatus.Edit && infoPanelVisible"
     />
     <!-- 基础组件面板（不区分字符/字形） -->
     <pen-edit-panel

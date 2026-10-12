@@ -40,6 +40,9 @@ export const useEditorStore = defineStore('editor', () => {
   // 可变参数预览模式（仅在字形编辑界面有效）
   const variablePreviewEnabled = ref<boolean>(false)
 
+  // 信息面板可见性（独立于工具状态：打开时不抢占当前工具，拖拽编辑不受影响）
+  const infoPanelVisible = ref<boolean>(false)
+
   // 用于跨组件触发 canvas 重绘的计数器（GlyphEditPanel 修改后递增，Editor watch 它）
   const componentRenderTick = ref(0)
 
@@ -138,6 +141,20 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   /**
+   * 切换信息面板（不改变当前工具）
+   */
+  function toggleInfoPanel() {
+    infoPanelVisible.value = !infoPanelVisible.value
+  }
+
+  /**
+   * 隐藏信息面板
+   */
+  function hideInfoPanel() {
+    infoPanelVisible.value = false
+  }
+
+  /**
    * 设置字符搜索关键词
    */
   function setCharacterSearchKeyword(keyword: string) {
@@ -195,6 +212,7 @@ export const useEditorStore = defineStore('editor', () => {
     checkRefLines,
     variablePreviewEnabled,
     componentRenderTick,
+    infoPanelVisible,
 
     // Actions
     setEditStatus,
@@ -202,6 +220,8 @@ export const useEditorStore = defineStore('editor', () => {
     toggleRightPanel,
     toggleToolbar,
     toggleBottomBar,
+    toggleInfoPanel,
+    hideInfoPanel,
     setCharacterSearchKeyword,
     setIsCharacterSearching,
     setEditPanelCompFilter,

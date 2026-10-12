@@ -196,15 +196,15 @@
           </n-tooltip>
         </template>
 
-        <!-- 信息按钮 - 仅在字符编辑模式显示 -->
+        <!-- 信息按钮 - 仅在字符编辑模式显示（toggle 展示信息面板，不抢占当前工具） -->
         <template v-if="editStatus === EditStatus.Edit">
           <div class="boolean-separator"></div>
           <n-icon
             class="tool-icon"
-            :class="{ 'selected': tool === 'info' }"
+            :class="{ 'selected': editorStore.infoPanelVisible }"
             size="40"
-            @click="switchTool('info')"
-            @pointerup="switchTool('info')">
+            @click="handleInfoToggle"
+            @pointerup="handleInfoToggle">
             <font-awesome-icon :icon="['fas', 'circle-info']" />
           </n-icon>
         </template>
@@ -379,6 +379,12 @@ const handlePictureTool = async () => {
   }
 }
 const switchTool = createDebouncedHandler(_switchTool, 'ToolBar.switchTool', (args) => args[0])
+
+// ---- 信息面板：toggle 展示，不改变当前工具（拖拽编辑不受影响） ----
+const _handleInfoToggle = () => {
+  editorStore.toggleInfoPanel()
+}
+const handleInfoToggle = createDebouncedHandler(_handleInfoToggle, 'ToolBar.infoToggle')
 
 // ---- 布尔运算：通过 window 事件触发，由 EditorSidebar 统一处理 ----
 const _handleBooleanOp = (op: BooleanOp) => {
