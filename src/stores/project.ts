@@ -25,6 +25,11 @@ export const useProjectStore = defineStore('project', () => {
   // 预览渲染模式（字符/字形列表）
   const fontPreviewStyle = ref<'black' | 'color'>('black')
 
+  // 纯文本预览模式（字符列表排版预览：仅显示 canvas，无文本/unicode 卡片与间隔）
+  const isPlainTextPreview = ref(false)
+  // 纯文本预览字号（canvas 边长，单位 px）
+  const plainTextFontSize = ref(80)
+
   // Getters
   const selectedFile = computed(() => {
     return files.value.find(f => f.uuid === selectedFileUUID.value) || null
@@ -149,6 +154,8 @@ export const useProjectStore = defineStore('project', () => {
     loadingMessage,
     constantsMap,
     fontPreviewStyle,
+    isPlainTextPreview,
+    plainTextFontSize,
     
     // Getters
     selectedFile,

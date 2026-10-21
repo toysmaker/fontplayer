@@ -37,6 +37,32 @@
           <n-radio value="black">{{ t('panels.settingsPanel.render.black') }}</n-radio>
           <n-radio value="color">{{ t('panels.settingsPanel.render.color') }}</n-radio>
         </n-radio-group>
+        <!-- 纯文本预览：独立 checkbox，状态与黑白/彩色 radio 完全分离，互不影响 -->
+        <div class="plain-text-option">
+          <!-- 仅借用 v-model 让 n-checkbox 自行管理点击事件（修复勾选后无法取消的问题）；
+               逻辑上仍是独立的 isPlainTextPreview 状态，与 fontPreviewStyle 无关 -->
+          <n-checkbox v-model:checked="isPlainTextPreview" size="small">
+            {{ t('panels.filesBar.plainText') }}
+          </n-checkbox>
+          <div class="font-size-stepper" :class="{ disabled: !isPlainTextPreview }">
+            <span
+              class="font-size-step up"
+              :title="t('panels.filesBar.fontSizeUp')"
+              @click="handleFontSizeIncrease"
+              @pointerup="handleFontSizeIncrease"
+            >
+              <font-awesome-icon :icon="['fas', 'chevron-up']" />
+            </span>
+            <span
+              class="font-size-step down"
+              :title="t('panels.filesBar.fontSizeDown')"
+              @click="handleFontSizeDecrease"
+              @pointerup="handleFontSizeDecrease"
+            >
+              <font-awesome-icon :icon="['fas', 'chevron-down']" />
+            </span>
+          </div>
+        </div>
       </div>
       <div class="right-btns" v-if="selectedFile" style="margin-left: auto;">
         <font-awesome-icon 
@@ -125,7 +151,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { NButton, NPopover, NModal, NInput, NRadioGroup, NRadio, useMessage, useDialog } from 'naive-ui'
+import { NButton, NPopover, NModal, NInput, NRadioGroup, NRadio, NCheckbox, useMessage, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
@@ -212,6 +238,46 @@ const fontPreviewStyle = computed({
 const handlePreviewStyleChange = () => {
   // 全局变量已更新，列表将在下次渲染时使用新样式
 }
+
+// 纯文本预览（仅作用于字符列表，与黑白/彩色渲染逻辑独立）
+// 通过 v-model 绑定，由 n-checkbox 自身管理点击与状态更新
+const isPlainTextPreview = computed({
+  get: () => projectStore.isPlainTextPreview,
+  set: (val) => { projectStore.isPlainTextPreview = val },
+})
+
+// 纯文本预览字号调节范围与 InfoPanel 字号一致
+const PLAIN_TEXT_FONT_SIZE_MIN = 12
+const PLAIN_TEXT_FONT_SIZE_MAX = 200
+const PLAIN_TEXT_FONT_SIZE_STEP = 8
+
+const _handleFontSizeIncrease = () => {
+  // 未勾选纯文本时无法调整字号
+  if (!projectStore.isPlainTextPreview) return
+  projectStore.plainTextFontSize = Math.min(
+    PLAIN_TEXT_FONT_SIZE_MAX,
+    projectStore.plainTextFontSize + PLAIN_TEXT_FONT_SIZE_STEP
+  )
+}
+
+const handleFontSizeIncrease = createDebouncedHandler(
+  _handleFontSizeIncrease,
+  'FilesBar.fontSizeIncrease'
+)
+
+const _handleFontSizeDecrease = () => {
+  // 未勾选纯文本时无法调整字号
+  if (!projectStore.isPlainTextPreview) return
+  projectStore.plainTextFontSize = Math.max(
+    PLAIN_TEXT_FONT_SIZE_MIN,
+    projectStore.plainTextFontSize - PLAIN_TEXT_FONT_SIZE_STEP
+  )
+}
+
+const handleFontSizeDecrease = createDebouncedHandler(
+  _handleFontSizeDecrease,
+  'FilesBar.fontSizeDecrease'
+)
 
 async function openAdvancedEdit() {
   if (
@@ -437,6 +503,48 @@ const cancelSearch = createDebouncedHandler(_cancelSearch, 'FilesBar.cancelSearc
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.plain-text-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 字号调节：上下两个箭头竖排，紧跟在“纯文本”选项右侧 */
+.font-size-stepper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.font-size-step {
+  width: 16px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--primary-0);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background-color 0.2s ease;
+}
+
+.font-size-step:hover {
+  background-color: var(--primary-5);
+}
+
+.font-size-step svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* 未勾选纯文本时禁用字号调节 */
+.font-size-stepper.disabled .font-size-step {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .style-selection-title {

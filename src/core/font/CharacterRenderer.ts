@@ -214,10 +214,12 @@ export class CharacterRenderer {
       // 使用实际字体坐标空间渲染，保持与编辑界面一致的位置关系
       // preview_points 已按 100/unitsPerEm 缩放，坐标范围与 canvas（100×100）对齐
       // offsetX = offsetY = 0 时，组件出现在 em-square 中的真实位置
+      // 纯文本预览模式下 canvas 尺寸随字号变化，按 canvas 实际边长缩放（默认 100×100 时 scale=1）
+      const previewScale = canvas.width / 100
       RenderEngine.renderPreview(canvas, nonzeroContours || [], {
         fillColors,
         previewStyle,
-        scale: 1,
+        scale: previewScale,
         offset: { x: 0, y: 0 },
         solidContours,
       })

@@ -58,6 +58,8 @@ import {
 	faArrowDown,
 	faChevronLeft,
 	faChevronRight,
+	faChevronUp,
+	faChevronDown,
 	faEllipsisVertical,
 } from '@fortawesome/free-solid-svg-icons'
 
@@ -203,6 +205,8 @@ library.add(
 	faArrowDown,
 	faChevronLeft,
 	faChevronRight,
+	faChevronUp,
+	faChevronDown,
 	faEllipsisVertical,
 	faTrash,
 )

@@ -1,17 +1,18 @@
 <template>
-  <div class="character" :class="`character-${character.uuid}`">
+  <div class="character" :class="[`character-${character.uuid}`, { 'plain-text': isPlainText }]">
     <span class="preview">
       <div v-if="showEmptyLines" class="empty-line-1"></div>
       <div v-if="showEmptyLines" class="empty-line-2"></div>
       <canvas
         ref="canvasRef"
         :data-uuid="character.uuid"
-        :width="canvasWidth"
-        :height="canvasHeight"
+        :width="canvasSize"
+        :height="canvasSize"
         class="preview-canvas"
       />
     </span>
-    <span class="info">
+    <!-- 纯文本模式：不显示文本/unicode 卡片与操作图标 -->
+    <span v-if="!isPlainText" class="info">
       <!-- icon 类型仅显示 unicode，避免长名称溢出 -->
       <template v-if="character.type === 'icon'">
         <span class="text icon-text">{{ formatUnicode(character.character.unicode) }}</span>
@@ -23,7 +24,7 @@
         </span>
       </template>
     </span>
-    <span class="icon-group">
+    <span v-if="!isPlainText" class="icon-group">
       <span class="copy-icon" @click.stop @pointerup.stop="handleCopy">
         <font-awesome-icon :icon="['fas', 'copy']" />
       </span>
@@ -80,12 +81,16 @@ const props = defineProps<{
 }>()
 
 const canvasRef = ref<HTMLCanvasElement>()
-const canvasWidth = 100
-const canvasHeight = 100
 const projectStore = useProjectStore()
 const characterStore = useCharacterStore()
 const dialog = useDialog()
 const message = useMessage()
+
+// 纯文本预览模式：canvas 尺寸随字号变化；默认 100（CSS 缩放为 80px 显示）
+const isPlainText = computed(() => projectStore.isPlainTextPreview)
+const canvasSize = computed(() =>
+  isPlainText.value ? projectStore.plainTextFontSize : 100
+)
 
 // 检查是否应该显示空字符红线
 const showEmptyLines = computed(() => {
@@ -586,24 +591,57 @@ onUnmounted(() => {
 
 .empty-line-1 {
   position: absolute;
-  top: 0;
-  left: -10px;
-  right: 0;
-  width: 100px;
-  transform: translateY(40px) rotate(-45deg);
-  border-bottom: 2px solid #bd6565;
+  top: 50%;
+  left: -10%;
+  width: 120%;
+  height: 2px;
+  margin-top: -1px;
+  background-color: #bd6565;
+  transform: rotate(-45deg);
   pointer-events: none;
 }
 
 .empty-line-2 {
   position: absolute;
-  top: 0;
-  left: -10px;
-  right: 0;
-  width: 100px;
-  transform: translateY(40px) rotate(45deg);
-  border-bottom: 2px solid #bd6565;
+  top: 50%;
+  left: -10%;
+  width: 120%;
+  height: 2px;
+  margin-top: -1px;
+  background-color: #bd6565;
+  transform: rotate(45deg);
   pointer-events: none;
+}
+
+/* 纯文本模式：整项仅 canvas，无边框、无卡片，尺寸由父级 item 决定（随字号变化） */
+.character.plain-text {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border: none;
+}
+
+.character.plain-text:hover {
+  border: none;
+}
+
+.character.plain-text .preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  flex: none;
+}
+
+.character.plain-text .preview-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 纯文本模式悬停高亮：使用 outline 避免改变布局引起相邻 canvas 抖动 */
+.character.plain-text:hover .preview-canvas {
+  outline: 2px solid var(--primary-1);
+  outline-offset: -2px;
 }
 
 .preview-canvas {

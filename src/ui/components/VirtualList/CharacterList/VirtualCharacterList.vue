@@ -7,7 +7,7 @@
     <div
       ref="gridContentRef"
       class="virtual-list-content"
-      :style="{ transform: `translateY(${offsetY}px)` }"
+      :style="{ ...gridContentStyle, transform: `translateY(${offsetY}px)` }"
     >
       <!-- Vue 3 会智能复用相同 key 的组件，减少DOM操作 -->
       <div
@@ -15,6 +15,7 @@
         :key="item.uuid"
         :ref="el => setItemRef(el, item.uuid)"
         class="character-item"
+        :style="itemSizeStyle"
         data-testid="character-item"
         @click="handleItemClick(item)"
         @pointerup="handleItemClick(item)"
@@ -26,6 +27,7 @@
       <div
         v-if="showAddButton"
         class="character-item default-character"
+        :style="itemSizeStyle"
         data-testid="character-add-item"
         @click="handleAddCharacter"
         @pointerup="handleAddCharacter"
@@ -75,12 +77,34 @@ const props = defineProps<{
   overscan?: number
 }>()
 
+// 纯文本预览模式：仅显示 canvas，无文本/unicode 卡片，无间隔，canvas 大小随字号变化
+const isPlainText = computed(() => projectStore.isPlainTextPreview)
+const plainTextSize = computed(() => projectStore.plainTextFontSize)
+
 // 配置
-const itemHeight = props.itemHeight || 118 // 字符项高度：80px preview + 32px info + 3px border * 2
-const itemWidth = props.itemWidth || 86 // 字符项宽度：80px + 3px border * 2
-const gap = props.gap || 10 // 网格间距
+// 字符项高度：默认 80px preview + 32px info + 3px border * 2；纯文本模式 = 字号
+const itemHeight = computed(() =>
+  isPlainText.value ? plainTextSize.value : (props.itemHeight || 118)
+)
+// 字符项宽度：默认 80px + 3px border * 2；纯文本模式 = 字号
+const itemWidth = computed(() =>
+  isPlainText.value ? plainTextSize.value : (props.itemWidth || 86)
+)
+const gap = computed(() => (isPlainText.value ? 0 : (props.gap || 10))) // 网格间距（纯文本模式无间隔）
 const padding = props.padding || 10 // 容器内边距
 const overscan = props.overscan || 2 // 预加载的行数
+
+// 网格布局样式（列宽与间隔随纯文本模式/字号动态变化）
+const gridContentStyle = computed(() => ({
+  gridTemplateColumns: `repeat(auto-fill, ${itemWidth.value}px)`,
+  gap: `${gap.value}px`,
+}))
+
+// 字符项尺寸（纯文本模式为正方形 canvas 尺寸）
+const itemSizeStyle = computed(() => ({
+  width: `${itemWidth.value}px`,
+  height: `${itemHeight.value}px`,
+}))
 
 /** 外层 .virtual-character-list 与 .virtual-list-content 水平 padding 之和（与 scoped CSS 一致） */
 const gridScrollPadX = padding * 4
@@ -136,7 +160,7 @@ const loadFullCharacter = async (metadata: ICharacterFileMetadata): Promise<ICha
 }
 
 const colsPerRow = computed(() =>
-  columnsFromTrackInnerWidth(effectiveTrackWidth.value, itemWidth, gap)
+  columnsFromTrackInnerWidth(effectiveTrackWidth.value, itemWidth.value, gap.value)
 )
 
 const addReservedCell = computed(() => {
@@ -153,7 +177,7 @@ const gridRowCount = computed(() => {
 
 // 计算行高（包括间距）
 const rowHeight = computed(() => {
-  return itemHeight + gap
+  return itemHeight.value + gap.value
 })
 
 // 计算可见范围（考虑网格布局）
@@ -283,7 +307,7 @@ watch(visibleRange, () => {
 const totalHeight = computed(() => {
   const rows = gridRowCount.value
   if (rows <= 0) return 0
-  return rows * rowHeight.value - gap + padding * 2
+  return rows * rowHeight.value - gap.value + padding * 2
 })
 
 // 偏移量（考虑网格布局）
@@ -596,6 +620,22 @@ watch(() => projectStore.fontPreviewStyle, () => {
   scheduleRender()
 })
 
+// 监听纯文本模式与字号变化：canvas 尺寸改变后旧缓存尺寸不匹配，需失效并重新渲染可见项
+// 必须逐个 invalidateCache：同时清除 contentVersions，避免 needsRerender 为 false 从旧 ImageData 恢复
+watch(
+  [() => projectStore.isPlainTextPreview, () => projectStore.plainTextFontSize],
+  async () => {
+    renderCache.clear()
+    for (const item of visibleItems.value) {
+      CanvasManager.invalidateCache(item.uuid)
+    }
+    // 先等待 Vue 将 canvas 的 width/height 属性更新为新尺寸，
+    // 否则渲染仍按旧尺寸绘制，随后属性更新会清空画布导致预览空白
+    await nextTick()
+    scheduleRender()
+  }
+)
+
 // 监听字符列表更新信号（退出编辑时触发），强制刷新被编辑项的预览
 watch(() => characterStore.characterListVersion, async () => {
   const uuid = characterStore.lastUpdatedCharacterUUID
@@ -808,8 +848,7 @@ const processRenderQueue = async () => {
   left: 0;
   right: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, 86px);
-  gap: 10px;
+  /* 列宽与间隔由 gridContentStyle 动态控制（纯文本模式随字号变化） */
   padding: 0 10px; /* 额外的左右内边距，避免 item 紧贴容器左右边缘 */
   box-sizing: border-box;
   /* 使用 will-change 提示浏览器优化 */
@@ -819,8 +858,7 @@ const processRenderQueue = async () => {
 }
 
 .character-item {
-  width: 86px;
-  height: 118px; /* 与 itemHeight 保持一致：80px preview + 32px info + 3px border * 2 */
+  /* 尺寸由 itemSizeStyle 动态控制（默认：80px preview + 32px info + 3px border * 2） */
   contain: layout;
 }
 

@@ -331,6 +331,9 @@ const panels = {
 			searchPlaceholder: '请输入要搜索的字符（1-100个字符）',
 			searchWarning: '请输入搜索关键词（1-100个字符）',
 			searchWarningTooLong: '搜索关键词不能超过100个字符',
+			plainText: '纯文本',
+			fontSizeUp: '增大字号',
+			fontSizeDown: '减小字号',
 		},
 		toolBar: {
 			characterList: '字符列表',
@@ -715,6 +718,9 @@ const panels = {
 			searchPlaceholder: 'Please enter characters to search (1-100 characters)',
 			searchWarning: 'Please enter search keyword (1-100 characters)',
 			searchWarningTooLong: 'Search keyword cannot exceed 100 characters',
+			plainText: 'Plain Text',
+			fontSizeUp: 'Increase font size',
+			fontSizeDown: 'Decrease font size',
 		},
 		toolBar: {
 			characterList: 'Character List',

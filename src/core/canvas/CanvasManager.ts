@@ -546,6 +546,16 @@ export class CanvasManager {
   static restoreFromCache(canvas: HTMLCanvasElement, uuid: string): boolean {
     const cached = this.renderCache.get(uuid)
     if (!cached) return false
+
+    // 纯文本预览字号变化后，canvas 尺寸与缓存 ImageData 不一致，
+    // 直接 putImageData 会因脏矩形越界报错，此时应重新渲染
+    if (
+      !cached.imageData ||
+      cached.imageData.width !== canvas.width ||
+      cached.imageData.height !== canvas.height
+    ) {
+      return false
+    }
     
     // 检查 Canvas 是否已经被标记为渲染过这个 UUID
     const previousUUID = this.canvasUUIDMap.get(canvas)
@@ -588,6 +598,11 @@ export class CanvasManager {
   static async restoreFromCacheAsync(canvas: HTMLCanvasElement, uuid: string): Promise<boolean> {
     const imageData = await this.getRenderCache(uuid)
     if (!imageData) return false
+
+    // 纯文本预览字号变化后，缓存 ImageData 尺寸与 canvas 不一致，需重新渲染
+    if (imageData.width !== canvas.width || imageData.height !== canvas.height) {
+      return false
+    }
     
     // 检查 Canvas 是否已经被标记为渲染过这个 UUID
     const previousUUID = this.canvasUUIDMap.get(canvas)
@@ -719,7 +734,13 @@ export class CanvasManager {
     }
     
     // Canvas 之前渲染过这个 UUID，检查缓存和内容
-    const hasCache = this.renderCache.has(uuid)
+    // 缓存尺寸必须与 canvas 一致（纯文本预览字号变化后需重新渲染）
+    const cached = this.renderCache.get(uuid)
+    const hasCache =
+      !!cached &&
+      !!cached.imageData &&
+      cached.imageData.width === canvas.width &&
+      cached.imageData.height === canvas.height
     const hasContent = this.hasContent(canvas)
     
     const canSkip = hasCache && hasContent
