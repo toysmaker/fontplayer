@@ -161,6 +161,10 @@ export async function initTauriMenu() {
       window.dispatchEvent(new CustomEvent('editor-remove-overlap'))
     })
 
+    listen('typesetting-preview', () => {
+      window.dispatchEvent(new CustomEvent('editor-typesetting-preview'))
+    })
+
     listen('component-union', () => {
       window.dispatchEvent(new CustomEvent('editor-component-boolean', { detail: { operation: 'union' } }))
     })

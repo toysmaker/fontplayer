@@ -5,7 +5,7 @@ import { ContourConverter } from '@/core/font/converter'
 import { removeOverlapFromContours, pathToEditingPenComponents } from '@/features/editor/services/RemoveOverlapService'
 
 export function createToolsHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
-  const { projectStore, dialog, formatContainerGlyphComponents, message, characterStore, editorStore, glyphStore } = ctx
+  const { projectStore, dialog, formatContainerGlyphComponents, message, characterStore, editorStore, glyphStore, t } = ctx
 
   const handleRemoveOverlap = async () => {
     const file = projectStore.selectedFile
@@ -175,6 +175,23 @@ export function createToolsHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
   function handleComponentBoolean(op: string) {
     window.dispatchEvent(new CustomEvent('editor-component-boolean', { detail: { operation: op } }))
   }
+
+  const handleTypesettingPreview = async () => {
+    const file = projectStore.selectedFile
+    if (!file) return
+    if (!file.characterList || file.characterList.length === 0) {
+      message.info(t('typesetting.noCharacters'))
+      return
+    }
+    try {
+      const { openTypesettingPreviewWindow } = await import('@/features/typesettingPreview/typesettingPreviewBridge')
+      await openTypesettingPreviewWindow()
+    } catch (err) {
+      console.error('Open typesetting preview failed:', err)
+      message.error(t('typesetting.buildFailed'))
+    }
+  }
+
   return {
     'remove_overlap': handleRemoveOverlap,
     'format-all-characters': handleFormatAllCharacters,
@@ -182,6 +199,7 @@ export function createToolsHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
     'component-union': () => handleComponentBoolean('union'),
     'component-intersect': () => handleComponentBoolean('intersect'),
     'component-subtract': () => handleComponentBoolean('subtract'),
+    'typesetting-preview': handleTypesettingPreview,
   }
 }
 

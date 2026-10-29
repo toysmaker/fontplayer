@@ -72,6 +72,7 @@ const menus = {
 			tools: '工具',
 			format_all_characters: '一键格式化所有字符',
 			format_current_character: '一键格式化当前字符',
+			typesetting_preview: '排版预览',
 		},
 		effects: {
 			effects: '效果',
@@ -165,6 +166,7 @@ const menus = {
 			tools: 'Tools',
 			format_all_characters: 'Format All Characters',
 			format_current_character: 'Format Current Character',
+			typesetting_preview: 'Typesetting Preview',
 		},
 		effects: {
 			effects: 'Effects',

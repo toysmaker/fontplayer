@@ -110,6 +110,7 @@ const getWebMenu = (): Array<IMenu> => {
 				{ label: tm('menus.tools.remove_overlap'), key: 'remove_overlap', click: (handlers: IHandlerMap) => { handlers['remove_overlap']() } },
 				{ label: tm('menus.tools.format_all_characters'), key: 'format-all-characters', click: (handlers: IHandlerMap) => { handlers['format-all-characters']() } },
 				{ label: tm('menus.tools.format_current_character'), key: 'format-current-character', click: (handlers: IHandlerMap) => { handlers['format-current-character']() } },
+				{ label: tm('menus.tools.typesetting_preview'), key: 'typesetting-preview', click: (handlers: IHandlerMap) => { handlers['typesetting-preview']() } },
 				{ label: '并集', key: 'component-union', click: (h: IHandlerMap) => { h['component-union']() } },
 				{ label: '交集', key: 'component-intersect', click: (h: IHandlerMap) => { h['component-intersect']() } },
 				{ label: '差集', key: 'component-subtract', click: (h: IHandlerMap) => { h['component-subtract']() } },

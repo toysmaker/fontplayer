@@ -6,6 +6,7 @@ import { menus } from './menus'
 import { welcome } from './welcome'
 import { programming } from './programming'
 import { effects } from './effects'
+import { typesetting } from './typesetting'
 
 const messages = {
 	zh: {
@@ -15,6 +16,7 @@ const messages = {
 		welcome: welcome.zh,
 		programming: programming.zh,
 		effects: effects.zh,
+		typesetting: typesetting.zh,
 	},
 	en: {
 		menus: menus.en,
@@ -23,6 +25,7 @@ const messages = {
 		welcome: welcome.en,
 		programming: programming.en,
 		effects: effects.en,
+		typesetting: typesetting.en,
 	},
 }
 

@@ -3,6 +3,7 @@ import WelcomeLayout from '../ui/layouts/WelcomeLayout.vue'
 import EditorLayout from '../ui/layouts/EditorLayout.vue'
 import GlyphProgrammingEditor from '../ui/views/programming/GlyphProgrammingEditor.vue'
 import CharacterProgrammingEditor from '../ui/views/programming/CharacterProgrammingEditor.vue'
+import TypesettingPreviewPage from '../ui/views/typesetting/TypesettingPreviewPage.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -26,6 +27,11 @@ const router = createRouter({
       path: '/character-programming-editor',
       name: 'character-programming-editor',
       component: CharacterProgrammingEditor,
+    },
+    {
+      path: '/typesetting-preview',
+      name: 'typesetting-preview',
+      component: TypesettingPreviewPage,
     },
   ],
 })

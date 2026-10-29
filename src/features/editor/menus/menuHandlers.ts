@@ -148,6 +148,7 @@ export function createDisabledRules(ctx: {
     'component-subtract': enableAtEdit,
     'format-all-characters': enableAtList,
     'format-current-character': enableAtCharacterEdit,
+    'typesetting-preview': enableAtList,
 
     // test (DEV only)
     'test-export-json': enable,

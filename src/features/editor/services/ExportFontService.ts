@@ -185,12 +185,14 @@ export async function buildExportFontBuffer(
       contours = contoursForCharacterFile(ch, file, fs, options.removeOverlap)
     }
     const ndMetrics = ch?.info?.metrics
+    // file.width/height 缺失时回退 unitsPerEm，避免 Math.max(undefined, undefined) 产生 NaN 导致字库无效
+    const defaultAdvanceWidth = Math.max(file.width ?? unitsPerEm, file.height ?? unitsPerEm)
     fontChars.push({
       unicode: 0,
       name: '.notdef',
       contours: contours as ICharacter['contours'],
       contourNum: contours.length,
-      advanceWidth: ndMetrics?.advanceWidth ?? Math.max(file.width, file.height),
+      advanceWidth: ndMetrics?.advanceWidth ?? defaultAdvanceWidth,
       leftSideBearing: ndMetrics?.lsb ?? 0,
     })
   } else {
@@ -199,7 +201,7 @@ export async function buildExportFontBuffer(
       name: '.notdef',
       contours: [[]],
       contourNum: 0,
-      advanceWidth: Math.max(file.width, file.height),
+      advanceWidth: Math.max(file.width ?? unitsPerEm, file.height ?? unitsPerEm),
       leftSideBearing: 0,
     })
   }

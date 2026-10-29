@@ -5,7 +5,8 @@
   "windows": [
     "main",
     "character-script",
-    "glyph-script"
+    "glyph-script",
+    "typesetting-preview"
   ],
   "remote": {
     "urls": [
