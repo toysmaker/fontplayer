@@ -9,6 +9,7 @@ import * as R from 'ramda'
 import type { IFile, ICharacterFileLite } from '@/core/types'
 import { indexedDBManager } from '@/core/storage/IndexedDBManager'
 import { ConstantsMap } from '@/core/script/ConstantsMap'
+import { markSessionSnapshotDirty } from '@/features/sessionSnapshot/dirtyFlag'
 
 export const useProjectStore = defineStore('project', () => {
   // 状态
@@ -66,6 +67,7 @@ export const useProjectStore = defineStore('project', () => {
     if (!selectedFileUUID.value) {
       selectedFileUUID.value = file.uuid
     }
+    markSessionSnapshotDirty()
     return true
   }
 
@@ -76,12 +78,13 @@ export const useProjectStore = defineStore('project', () => {
     const index = files.value.findIndex(f => f.uuid === uuid)
     if (index !== -1) {
       files.value.splice(index, 1)
-      
+
       // 如果删除的是当前选中的文件，切换到其他文件
       if (selectedFileUUID.value === uuid) {
         selectedFileUUID.value = files.value.length > 0 ? files.value[0].uuid : ''
       }
-      
+
+      markSessionSnapshotDirty()
       return true
     }
     return false
@@ -106,6 +109,7 @@ export const useProjectStore = defineStore('project', () => {
     const file = files.value.find(f => f.uuid === uuid)
     if (file) {
       Object.assign(file, updates)
+      markSessionSnapshotDirty()
       return true
     }
     return false
@@ -131,6 +135,7 @@ export const useProjectStore = defineStore('project', () => {
   function clearFiles() {
     files.value = []
     selectedFileUUID.value = ''
+    markSessionSnapshotDirty()
   }
 
   /**

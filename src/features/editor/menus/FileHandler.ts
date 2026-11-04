@@ -22,6 +22,7 @@ import {
   type EncodeFpTocMeta,
 } from '@/features/editor/services/projectArchive/fpProjectFormat'
 import { encryptFile, getPublicKey } from '@/core/encryption'
+import { stripGlyphArray, stripGlyphComponents } from '@/features/sessionSnapshot/snapshotSerializer'
 import { genUUID } from '@/utils/uuid'
 import * as R from 'ramda'
 import {
@@ -1042,36 +1043,14 @@ export class FileHandler {
     }
   }
 
-  /** 清理组件运行时缓存字段（contour / preview 等） */
+  /** 清理组件运行时缓存字段（contour / preview 等）——共享实现见 snapshotSerializer */
   private cleanupGlyphComponents(components: any[]): any[] {
-    return (components || []).map((component: any) => {
-      if (!component) return component
-      const cleanComponent: any = { ...component }
-      if (cleanComponent.value) {
-        const value = { ...cleanComponent.value }
-        delete value.contour
-        delete value.preview
-        delete value.contour2
-        if (cleanComponent.type === 'glyph' && value.components) {
-          value.components = this.cleanupGlyphComponents(value.components)
-        }
-        cleanComponent.value = value
-      }
-      // No `_o` instance field is persisted; InstanceManager owns instances.
-      return cleanComponent
-    })
+    return stripGlyphComponents(components)
   }
 
-  /** 清理字形数组运行时缓存字段 */
+  /** 清理字形数组运行时缓存字段——共享实现见 snapshotSerializer */
   private cleanupGlyphArray(glyphs: any[] | undefined): any[] {
-    return (glyphs || []).map((glyph: any) => {
-      const cleanGlyph: any = { ...glyph }
-      if (cleanGlyph.components) {
-        cleanGlyph.components = this.cleanupGlyphComponents(cleanGlyph.components)
-      }
-      // No `_o` instance field is persisted; InstanceManager owns instances.
-      return cleanGlyph
-    })
+    return stripGlyphArray(glyphs)
   }
 
   /**

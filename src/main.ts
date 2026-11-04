@@ -230,7 +230,20 @@ document.addEventListener('keydown', async (e) => {
 })
 // END-MARK-DEVTOOLS
 
-app.mount('#app')
+// 白屏重载恢复：webview 进程死亡后页面会带着 hash 重载（正常打开 app 无 hash），
+// 此时若 hash 在 #/editor 且 store 为空，先从 IndexedDB 快照恢复会话再挂载，
+// 避免空 store 白屏闪烁。恢复失败静默进入正常流程。
+void (async () => {
+  if (location.hash.startsWith('#/editor')) {
+    try {
+      const { restoreLastSession } = await import('@/features/sessionSnapshot/restoreSession')
+      await restoreLastSession({ auto: true })
+    } catch {
+      /* 恢复失败静默进入正常流程 */
+    }
+  }
+  app.mount('#app')
+})()
 
 // ---- 全局修复 WKWebView 双击问题（macOS Tauri） ----
 // 根因：WKWebView 在 mousedown 后触发 input blur，导致后续 click 事件丢失
@@ -312,6 +325,11 @@ document.addEventListener('visibilitychange', async () => {
     try {
       const { invoke } = await import('@tauri-apps/api/core')
       await invoke('log_diagnostic', { msg: 'visibility hidden (app minimized / background)' })
+    } catch {}
+    // 隐藏前立即快照会话（防最小化期间进程被杀丢数据）
+    try {
+      const { flushSnapshotNow } = await import('@/features/sessionSnapshot/SessionSnapshotService')
+      flushSnapshotNow()
     } catch {}
   } else if (document.visibilityState === 'visible') {
     handleAppRestored()

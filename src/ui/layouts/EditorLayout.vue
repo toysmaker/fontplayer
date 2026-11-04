@@ -33,6 +33,7 @@ import EditorMain from './EditorMain.vue'
 import LoadingProgress from '@/ui/components/LoadingProgress.vue'
 import { isTauri, getEnv } from '@/utils/env'
 import { initTauriMenu } from '@/utils/tauri-menu'
+import { startSessionSnapshot, stopSessionSnapshot, flushSnapshotNow } from '@/features/sessionSnapshot/SessionSnapshotService'
 import { useGlyphStore } from '@/stores/glyph'
 import { useCharacterStore } from '@/stores/character'
 
@@ -130,7 +131,10 @@ onMounted(() => {
   window.addEventListener('beforeunload', handleBeforeUnload)
   document.addEventListener('keydown', onKeyDown)
   document.addEventListener('keyup', onKeyUp)
-  
+
+  // 启动会话快照服务（每 30s 把会话状态快照到 IndexedDB，白屏重载后可恢复）
+  startSessionSnapshot()
+
   if (isTauri()) {
     initTauriMenu()
     window.addEventListener('show-new-project-dialog', handleShowNewProjectDialog)
@@ -148,7 +152,11 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onKeyDown)
   document.removeEventListener('keyup', onKeyUp)
   setMultiSelectFromShift(false)
-  
+
+  // 离开编辑器前立即快照一次
+  flushSnapshotNow()
+  stopSessionSnapshot()
+
   if (isTauri()) {
     window.removeEventListener('show-new-project-dialog', handleShowNewProjectDialog)
   }

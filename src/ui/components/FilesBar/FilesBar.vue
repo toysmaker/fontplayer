@@ -156,6 +156,7 @@ import { useI18n } from 'vue-i18n'
 import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
 import { EditStatus } from '@/core/types'
+import { removeFileSnapshot } from '@/features/sessionSnapshot/SessionSnapshotService'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import { isTauri } from '@/utils/env'
 import { confirmLeaveGlyphEditIfDirty } from '@/stores/editorConstantsSession'
@@ -312,6 +313,8 @@ const closeFile = (uuid: string) => {
   }
 
   projectStore.removeFile(uuid)
+  // 同步清理该工程的会话快照
+  void removeFileSnapshot(uuid)
 }
 
 // 搜索文件功能

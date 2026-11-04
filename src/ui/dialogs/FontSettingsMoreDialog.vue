@@ -155,6 +155,7 @@ function _handleConfirm() {
       },
     },
   })
+  projectStore.markFileUnsaved(file.uuid)
   visible.value = false
 }
 

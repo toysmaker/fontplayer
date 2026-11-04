@@ -151,6 +151,7 @@ function _handleConfirm() {
       descender: formData.value.descender,
     },
   })
+  projectStore.markFileUnsaved(file.uuid)
   visible.value = false
 }
 

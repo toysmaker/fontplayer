@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 use std::io::Write;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::fs;
 use std::path::PathBuf;
@@ -1133,8 +1134,72 @@ fn focus_gap_description() -> String {
     desc
 }
 
+/// 往返存活检测：向页面注入 invoke('log_diagnostic', alive-ping)，
+/// 1.5s 内未收到回报则判定 web 进程死亡并 reload（带冷却防护）。
+/// 只有 JS 真正执行并完成 IPC 往返才会递增 ALIVE_PING_COUNT，
+/// 因此对"内容进程死亡、eval 被静默丢弃"的场景依然可靠。
+fn spawn_alive_ping_check(w: tauri::WebviewWindow, handle: AppHandle) {
+    std::thread::spawn(move || {
+        let before = ALIVE_PING_COUNT.load(Ordering::SeqCst);
+        let w_eval = w.clone();
+        let h_eval = handle.clone();
+        let _ = h_eval.run_on_main_thread(move || {
+            let _ = w_eval.eval(
+                "window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke && window.__TAURI_INTERNALS__.invoke('log_diagnostic', { msg: 'alive-ping' })",
+            );
+        });
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        let after = ALIVE_PING_COUNT.load(Ordering::SeqCst);
+        if after > before {
+            append_diag_log("alive-ping received, webview alive");
+            return;
+        }
+        append_diag_log("alive-ping NOT received, webview dead, reloading");
+        if !allow_white_screen_reload() {
+            append_diag_log("reload skipped (cooldown / max attempts)");
+            return;
+        }
+        let w_reload = w.clone();
+        let _ = handle.run_on_main_thread(move || {
+            if let Err(e) = w_reload.reload() {
+                append_diag_log(&format!("webview reload failed: {:?}", e));
+            }
+        });
+    });
+}
+
+/// 白屏兜底 reload 防护：10 秒冷却 + 单次运行最多 3 次，防止循环 reload
+fn allow_white_screen_reload() -> bool {
+    static LAST_RELOAD: std::sync::OnceLock<Mutex<Option<std::time::Instant>>> = std::sync::OnceLock::new();
+    static RELOAD_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+    let now = std::time::Instant::now();
+    let mutex = LAST_RELOAD.get_or_init(|| Mutex::new(None));
+    let mut last = match mutex.lock() {
+        Ok(l) => l,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    let in_cooldown = last.map_or(false, |t| {
+        now.duration_since(t) < std::time::Duration::from_secs(10)
+    });
+    let count = RELOAD_COUNT.load(std::sync::atomic::Ordering::SeqCst);
+    if in_cooldown || count >= 3 {
+        return false;
+    }
+    RELOAD_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    *last = Some(now);
+    true
+}
+
+/// 前端存活 ping 计数：eval 会静默丢弃，只有真正执行到 invoke 才会递增
+static ALIVE_PING_COUNT: AtomicU64 = AtomicU64::new(0);
+
 #[tauri::command]
 fn log_diagnostic(msg: String) {
+    if msg == "alive-ping" {
+        ALIVE_PING_COUNT.fetch_add(1, Ordering::SeqCst);
+        return; // 存活回报，不写日志避免刷屏
+    }
     append_diag_log(&format!("[FRONTEND] {}", msg));
 }
 
@@ -1204,7 +1269,10 @@ pub fn run() {
                 std::mem::forget(activity);
             }
 
-            // 窗口恢复时检测 webview 是否存活，分层恢复
+            // 窗口恢复时检测 webview 是否存活，分层恢复：
+            // 1) eval 成功 → 合成器自检（前端 window-focus-restored）
+            // 2) eval 失败（web 进程死亡）→ 800ms 重试 → 仍失败则原生 reload
+            //    （重载后前端从 IndexedDB 会话快照自动恢复）
             let handle = app.handle().clone();
             if let Some(window) = app.get_webview_window("main") {
                 let w = window.clone();
@@ -1216,9 +1284,35 @@ pub fn run() {
                             Ok(_) => {
                                 append_diag_log("eval('true') OK, emitting window-focus-restored");
                                 let _ = handle.emit("window-focus-restored", ());
+                                // eval 成功不可靠：内容进程死亡时调用会被静默丢弃仍返回成功，
+                                // 再做一次往返 ping 检测确认页面真的存活
+                                spawn_alive_ping_check(w.clone(), handle.clone());
                             }
                             Err(e) => {
-                                append_diag_log(&format!("eval('true') FAILED: {:?}", e));
+                                append_diag_log(&format!("eval('true') FAILED: {:?}, will retry then reload", e));
+                                let w_retry = w.clone();
+                                let handle_retry = handle.clone();
+                                std::thread::spawn(move || {
+                                    std::thread::sleep(std::time::Duration::from_millis(800));
+                                    // macOS 上 WKWebView 操作必须在主线程执行
+                                    let _ = handle_retry.run_on_main_thread(move || {
+                                        match w_retry.eval("true") {
+                                            Ok(_) => {
+                                                append_diag_log("retry eval OK (webview recovered)");
+                                            }
+                                            Err(e2) => {
+                                                append_diag_log(&format!("retry eval FAILED: {:?}, reloading webview", e2));
+                                                if allow_white_screen_reload() {
+                                                    if let Err(e3) = w_retry.reload() {
+                                                        append_diag_log(&format!("webview reload failed: {:?}", e3));
+                                                    }
+                                                } else {
+                                                    append_diag_log("reload skipped (cooldown / max attempts)");
+                                                }
+                                            }
+                                        }
+                                    });
+                                });
                             }
                         }
                     }

@@ -50,7 +50,18 @@
         </div>
       </div>
     </div>
-    
+
+    <!-- 会话恢复入口：页面最底部居中的灰色小字，不影响主布局 -->
+    <div
+      v-if="hasSnapshot && !projectStore.hasFiles"
+      class="restore-hint"
+      data-testid="restore-session-button"
+      @click="handleRestoreSession"
+      @pointerup="handleRestoreSession"
+    >
+      {{ t('welcome.restore.name') }}
+    </div>
+
     <NewProjectDialog
       v-model:show="showNewProjectDialog"
       @confirm="handleProjectCreated"
@@ -59,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMessage, useDialog } from 'naive-ui'
@@ -72,6 +83,8 @@ import { useCharacterStore } from '@/stores/character'
 import { runFontLibraryImportPicker } from '@/features/editor/services/FontLibraryImportService'
 import { isTauri } from '@/utils/env'
 import { importBundledDefaultTemplate } from '@/features/editor/services/DefaultTemplateImportService'
+import { hasRestorableSession } from '@/features/sessionSnapshot/SessionSnapshotService'
+import { restoreLastSession } from '@/features/sessionSnapshot/restoreSession'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -82,6 +95,29 @@ const characterStore = useCharacterStore()
 
 const router = useRouter()
 const showNewProjectDialog = ref(false)
+
+// 会话恢复入口：存在未过期快照时显示
+const hasSnapshot = ref(false)
+onMounted(() => {
+  void (async () => {
+    hasSnapshot.value = await hasRestorableSession()
+  })()
+})
+
+const _handleRestoreSession = async () => {
+  if (projectStore.hasFiles) {
+    router.push('/editor')
+    return
+  }
+  const ok = await restoreLastSession()
+  if (ok) {
+    message.success(t('welcome.restore.success'))
+    router.push('/editor')
+  } else {
+    message.warning(t('welcome.restore.failed'))
+  }
+}
+const handleRestoreSession = createDebouncedHandler(_handleRestoreSession, 'WelcomeLayout.restoreSession')
 
 const _handleNewProject = () => {
   showNewProjectDialog.value = true
@@ -222,6 +258,7 @@ const handleProjectCreated = () => {
   align-items: center;
   justify-content: center;
   background-color: var(--dark-0);
+  position: relative;
 }
 
 .welcome .main-panel {
@@ -279,6 +316,24 @@ const handleProjectCreated = () => {
   color: var(--light-2);
   font-size: 14px;
   text-align: center;
+}
+
+/* 会话恢复入口：页面最底部居中的灰色小字，不影响主布局 */
+.welcome .restore-hint {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  color: #8a8a8a;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.welcome .restore-hint:hover {
+  color: var(--primary-0);
+  text-decoration: underline;
 }
 
 .welcome .items-wrapper {
