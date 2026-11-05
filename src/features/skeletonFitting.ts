@@ -349,6 +349,95 @@ export interface RibbonOutline {
   arcSigns: number[]
 }
 
+/** 曲线带子采样点数 (二次贝塞尔细分) */
+const CURVE_SAMPLES = 40
+
+function quadraticPoint(p0: { x: number; y: number }, p1: { x: number; y: number }, p2: { x: number; y: number }, t: number) {
+  const mt = 1 - t
+  return {
+    x: mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x,
+    y: mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y,
+  }
+}
+
+/**
+ * 曲线型带子: 二次贝塞尔 (start, bend, end) 采样 + 法向偏移 + 圆帽。
+ * 段结构只依赖采样点数, 绑定与拖拽一致。
+ */
+function buildCurvedRibbon(
+  start: { x: number; y: number },
+  bend: { x: number; y: number },
+  end: { x: number; y: number },
+  half: number,
+  arcSigns?: number[],
+): RibbonOutline {
+  const n = CURVE_SAMPLES
+  const curve: Array<{ x: number; y: number }> = []
+  for (let i = 0; i <= n; i++) curve.push(quadraticPoint(start, bend, end, i / n))
+
+  // 每点法向 (切向垂线)
+  const normals: Array<{ x: number; y: number }> = []
+  for (let i = 0; i <= n; i++) {
+    const prev = curve[Math.max(0, i - 1)]
+    const next = curve[Math.min(n, i + 1)]
+    let dx = next.x - prev.x
+    let dy = next.y - prev.y
+    const len = Math.hypot(dx, dy) || 1
+    dx /= len
+    dy /= len
+    normals.push({ x: -dy, y: dx })
+  }
+  const sideA = curve.map((p, i) => ({ x: p.x + normals[i].x * half, y: p.y + normals[i].y * half }))
+  const sideB = curve.map((p, i) => ({ x: p.x - normals[i].x * half, y: p.y - normals[i].y * half }))
+
+  const outline: Array<{ x: number; y: number }> = []
+  const usedSigns: number[] = []
+  const arcPointSet = new Set<number>()
+  const pushArc = (center: { x: number; y: number }, fromAngle: number, toAngle: number) => {
+    let sweep = ((toAngle - fromAngle + Math.PI * 3) % (Math.PI * 2)) - Math.PI
+    const override = arcSigns?.[usedSigns.length]
+    if (override !== undefined && sweep !== 0) {
+      if (override > 0 && sweep < 0) sweep += Math.PI * 2
+      else if (override < 0 && sweep > 0) sweep -= Math.PI * 2
+    }
+    usedSigns.push(sweep >= 0 ? 1 : -1)
+    for (let s = 1; s <= CAP_SEGMENTS; s++) {
+      const a = fromAngle + (sweep * s) / CAP_SEGMENTS
+      arcPointSet.add(outline.length)
+      outline.push({ x: center.x + Math.cos(a) * half, y: center.y + Math.sin(a) * half })
+    }
+  }
+  for (const p of sideA) outline.push(p)
+  pushArc(curve[n], Math.atan2(normals[n].y, normals[n].x), Math.atan2(-normals[n].y, -normals[n].x))
+  for (let i = sideB.length - 1; i >= 0; i--) outline.push(sideB[i])
+  pushArc(curve[0], Math.atan2(-normals[0].y, -normals[0].x), Math.atan2(normals[0].y, normals[0].x))
+
+  const segments: FlatSegment[] = []
+  const total = outline.length
+  for (let i = 0; i < total; i++) {
+    const a = outline[i]
+    const b = outline[(i + 1) % total]
+    const sampled: Array<{ x: number; y: number }> = new Array(OUTLINE_SUBDIV + 1)
+    for (let s = 0; s <= OUTLINE_SUBDIV; s++) {
+      const t = s / OUTLINE_SUBDIV
+      sampled[s] = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }
+    }
+    const normalsSeg: Array<{ x: number; y: number }> = new Array(OUTLINE_SUBDIV + 1)
+    for (let s = 0; s <= OUTLINE_SUBDIV; s++) {
+      const prev = sampled[Math.max(0, s - 1)]
+      const next = sampled[Math.min(OUTLINE_SUBDIV, s + 1)]
+      let dx = next.x - prev.x
+      let dy = next.y - prev.y
+      const len = Math.hypot(dx, dy) || 1
+      dx /= len
+      dy /= len
+      normalsSeg[s] = { x: -dy, y: dx }
+    }
+    segments.push({ compIdx: 0, segIdx: i, kind: 'side', pts: sampled, normals: normalsSeg })
+  }
+  return { segments, arcSigns: usedSigns }
+}
+
 /**
  * 构建参数化带子轮廓。
  * @param arcSigns 绑定时刻的弧线方向 (拖拽时沿用, 保证角部凸凹翻转时边界不翻面);
@@ -388,28 +477,64 @@ export function buildRibbonOutline(
 
   const half = Math.max(weight / 2, 1)
 
-  // 每边法向
+  // 曲线型笔画 (中心链 start→bend→end): 用二次贝塞尔采样替代折线拐角 —
+  // 撇/捺等弯曲笔画在 bend 处的折线尖角会造成对应关系交错, 平滑曲线无此问题
+  if (deduped.length === 3 && jointMap.has('bend')) {
+    return buildCurvedRibbon(deduped[0], jointMap.get('bend')!, deduped[2], half, arcSigns)
+  }
+
+  // 构建中心线采样链: 每段参考线 — 有段级 bend 关节的用二次贝塞尔采样 (曲线段),
+  // 否则直线。曲线段的手绘细节随曲线平滑展开, 无折线尖角交错。
+  const centerline: Array<{ x: number; y: number }> = []
+  const curveSegSamples = 20
+  for (let i = 0; i < main.length; i++) {
+    const segStart = jointMap.get(main[i].start)
+    const segEnd = jointMap.get(main[i].end)
+    if (!segStart || !segEnd) continue
+    // 段名前缀 (如 'pie_start' → 'pie') 匹配段级 bend 关节
+    const segName = main[i].start.replace(/_start$|_end$/, '')
+    const bend = jointMap.get(`${segName}_bend`) ?? jointMap.get('bend')
+    if (i === 0) centerline.push(segStart)
+    if (bend) {
+      // 曲线段: 二次贝塞尔采样 (跳过首点避免重复)
+      for (let k = 1; k <= curveSegSamples; k++) {
+        centerline.push(quadraticPoint(segStart, bend, segEnd, k / curveSegSamples))
+      }
+    } else {
+      centerline.push(segEnd)
+    }
+  }
+  // 去重连续重复点
+  const ribbonChain: Array<{ x: number; y: number }> = [centerline[0]]
+  for (let i = 1; i < centerline.length; i++) {
+    const p = centerline[i]
+    const last = ribbonChain[ribbonChain.length - 1]
+    if (Math.hypot(p.x - last.x, p.y - last.y) > 0.01) ribbonChain.push(p)
+  }
+
+  // 每边法向 (链上相邻点的边)
   const edgeNormals: Array<{ x: number; y: number }> = []
-  for (let i = 0; i < deduped.length - 1; i++) {
-    let dx = deduped[i + 1].x - deduped[i].x
-    let dy = deduped[i + 1].y - deduped[i].y
+  for (let i = 0; i < ribbonChain.length - 1; i++) {
+    let dx = ribbonChain[i + 1].x - ribbonChain[i].x
+    let dy = ribbonChain[i + 1].y - ribbonChain[i].y
     const len = Math.hypot(dx, dy) || 1
     dx /= len
     dy /= len
     edgeNormals.push({ x: -dy, y: dx })
   }
 
-  // 轮廓点序: A 侧 (每边线 + 顶点圆角弧) → 末端圆帽 → B 侧 (倒走) → 起始圆帽
+  // 轮廓: A 侧 (边线 + 顶点圆角弧, 每顶点恒定存在保证段数稳定) → 末端圆帽 → B 侧倒走 → 起始圆帽。
+  // 曲线采样点处的弧近乎平角, 段间拐角处则为平滑圆角 — 无折线尖角交错。
   const outline: Array<{ x: number; y: number }> = []
+  const usedSigns: number[] = []
+  let arcIdx = 0
+  const arcPointSet = new Set<number>()
   const pushLine = (a: { x: number; y: number }, b: { x: number; y: number }) => {
     if (outline.length === 0 || Math.hypot(a.x - outline[outline.length - 1].x, a.y - outline[outline.length - 1].y) > 0.01) {
       outline.push(a)
     }
     outline.push(b)
   }
-  const usedSigns: number[] = []
-  let arcIdx = 0
-  const arcPointSet = new Set<number>()
   const pushJoinArc = (center: { x: number; y: number }, fromAngle: number, toAngle: number) => {
     let sweep = ((toAngle - fromAngle + Math.PI * 3) % (Math.PI * 2)) - Math.PI
     const override = arcSigns?.[arcIdx]
@@ -426,47 +551,43 @@ export function buildRibbonOutline(
     }
   }
 
-  // A 侧
-  for (let i = 0; i < deduped.length - 1; i++) {
+  for (let i = 0; i < ribbonChain.length - 1; i++) {
     const n = edgeNormals[i]
     pushLine(
-      { x: deduped[i].x + n.x * half, y: deduped[i].y + n.y * half },
-      { x: deduped[i + 1].x + n.x * half, y: deduped[i + 1].y + n.y * half },
+      { x: ribbonChain[i].x + n.x * half, y: ribbonChain[i].y + n.y * half },
+      { x: ribbonChain[i + 1].x + n.x * half, y: ribbonChain[i + 1].y + n.y * half },
     )
-    if (i < deduped.length - 2) {
-      pushJoinArc(deduped[i + 1], Math.atan2(n.y, n.x), Math.atan2(edgeNormals[i + 1].y, edgeNormals[i + 1].x))
+    if (i < ribbonChain.length - 2) {
+      pushJoinArc(ribbonChain[i + 1], Math.atan2(n.y, n.x), Math.atan2(edgeNormals[i + 1].y, edgeNormals[i + 1].x))
     }
   }
-  // 末端圆帽
   {
-    const last = deduped[deduped.length - 1]
+    const last = ribbonChain[ribbonChain.length - 1]
     const n = edgeNormals[edgeNormals.length - 1]
     pushJoinArc(last, Math.atan2(n.y, n.x), Math.atan2(-n.y, -n.x))
   }
-  // B 侧 (倒走)
-  for (let i = deduped.length - 2; i >= 0; i--) {
+  for (let i = ribbonChain.length - 2; i >= 0; i--) {
     const n = edgeNormals[i]
     pushLine(
-      { x: deduped[i + 1].x - n.x * half, y: deduped[i + 1].y - n.y * half },
-      { x: deduped[i].x - n.x * half, y: deduped[i].y - n.y * half },
+      { x: ribbonChain[i + 1].x - n.x * half, y: ribbonChain[i + 1].y - n.y * half },
+      { x: ribbonChain[i].x - n.x * half, y: ribbonChain[i].y - n.y * half },
     )
     if (i > 0) {
-      pushJoinArc(deduped[i], Math.atan2(-edgeNormals[i].y, -edgeNormals[i].x), Math.atan2(-edgeNormals[i - 1].y, -edgeNormals[i - 1].x))
+      pushJoinArc(ribbonChain[i], Math.atan2(-edgeNormals[i].y, -edgeNormals[i].x), Math.atan2(-edgeNormals[i - 1].y, -edgeNormals[i - 1].x))
     }
   }
-  // 起始圆帽
   {
-    const first = deduped[0]
+    const first = ribbonChain[0]
     const n = edgeNormals[0]
     pushJoinArc(first, Math.atan2(-n.y, -n.x), Math.atan2(n.y, n.x))
   }
 
   // 组成 line 段列表
   const segments: FlatSegment[] = []
-  const n = outline.length
-  for (let i = 0; i < n; i++) {
+  const total = outline.length
+  for (let i = 0; i < total; i++) {
     const a = outline[i]
-    const b = outline[(i + 1) % n]
+    const b = outline[(i + 1) % total]
     const sampled: Array<{ x: number; y: number }> = new Array(OUTLINE_SUBDIV + 1)
     for (let s = 0; s <= OUTLINE_SUBDIV; s++) {
       const t = s / OUTLINE_SUBDIV
