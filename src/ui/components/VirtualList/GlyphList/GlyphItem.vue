@@ -14,7 +14,7 @@
     <span class="info">
       <span class="name">{{ glyph.name }}</span>
     </span>
-    <span class="icon-group">
+    <span v-if="showActions !== false" class="icon-group">
       <span class="copy-icon" @click.stop @pointerup.stop="handleCopy">
         <font-awesome-icon :icon="['fas', 'copy']" />
       </span>
@@ -70,6 +70,11 @@ const props = defineProps<{
    * 仅注册 canvas，由父列表（如字形选择弹窗）统一调用 GlyphRenderer，避免与父级竞态（Tauri/WKWebView 上尤其明显）。
    */
   deferPreviewToParent?: boolean
+  /**
+   * 为 false 时隐藏右上角操作按钮（复制/编辑/删除），
+   * 选择字形弹窗等仅展示场景使用；字符/字形列表页保持默认展示。
+   */
+  showActions?: boolean
 }>()
 
 const canvasRef = ref<HTMLCanvasElement>()
@@ -656,7 +661,11 @@ onUnmounted(() => {
 }
 
 .glyph:hover {
-  border-color: var(--primary-0);
+  border-color: var(--primary-1);
+}
+
+.glyph:hover .info {
+  background-color: var(--primary-1);
 }
 
 .glyph .preview {
@@ -707,6 +716,7 @@ onUnmounted(() => {
   background-color: var(--primary-0);
   color: var(--light-0);
   font-size: 12px;
+  transition: background-color 0.2s ease;
 }
 
 .glyph .info .name {

@@ -14,7 +14,7 @@
         @click="handleSelect(item)"
         @pointerup="handleSelect(item)"
       >
-        <GlyphItem :glyph="item" :defer-preview-to-parent="true" />
+        <GlyphItem :glyph="item" :defer-preview-to-parent="true" :show-actions="false" />
       </div>
     </div>
   </div>
