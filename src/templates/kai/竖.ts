@@ -13,7 +13,7 @@ export const skeletonToBones_shu = (skeleton: any): any[] => {
   
   // 直线段
   const totalLength = Math.sqrt((end.x - start.x) ** 2 + (end.y - start.y) ** 2);
-  const segments = maxSegment//Math.max(minSegment, Math.ceil(totalLength / 20));
+  const segments = maxSegment;
   
   for (let i = 0; i < segments; i++) {
     const t1 = i / segments;

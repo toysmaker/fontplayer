@@ -13,7 +13,7 @@ export const skeletonToBones_heng_zhe_tiao = (skeleton: any): any[] => {
   
   // 横的部分 - 直线段
   const hengLength = Math.sqrt((heng_end.x - heng_start.x) ** 2 + (heng_end.y - heng_start.y) ** 2);
-  const hengSegments = maxSegment//Math.max(minSegment, Math.ceil(hengLength / 20));
+  const hengSegments = maxSegment;
   
   for (let i = 0; i < hengSegments; i++) {
     const t1 = i / hengSegments;
@@ -50,7 +50,7 @@ export const skeletonToBones_heng_zhe_tiao = (skeleton: any): any[] => {
   
   // 折的部分 - 直线段
   const zheLength = Math.sqrt((zhe_end.x - zhe_start.x) ** 2 + (zhe_end.y - zhe_start.y) ** 2);
-  const zheSegments = maxSegment//Math.max(minSegment, Math.ceil(zheLength / 20));
+  const zheSegments = maxSegment;
   
   for (let i = 0; i < zheSegments; i++) {
     const t1 = i / zheSegments;
@@ -91,7 +91,7 @@ export const skeletonToBones_heng_zhe_tiao = (skeleton: any): any[] => {
   
   // 挑的部分 - 直线段
   const tiaoLength = Math.sqrt((tiao_end.x - tiao_start.x) ** 2 + (tiao_end.y - tiao_start.y) ** 2);
-  const tiaoSegments = maxSegment//Math.max(minSegment, Math.ceil(tiaoLength / 20));
+  const tiaoSegments = maxSegment;
   
   for (let i = 0; i < tiaoSegments; i++) {
     const t1 = i / tiaoSegments;

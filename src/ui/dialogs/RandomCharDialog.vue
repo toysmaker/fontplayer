@@ -31,7 +31,7 @@
       </div>
       <div v-if="generating" class="progress-row">
         <template v-if="phase === 'inference'">
-          <n-spin size="small" />
+          <span class="ai-spinner" :style="{ borderTopColor: primaryColor }" />
           <span class="progress-text wide">{{ t('dialogs.randomCharDialog.runningModel') }}</span>
         </template>
         <template v-else>
@@ -59,10 +59,13 @@ import { NModal, NForm, NFormItem, NInput, NButton, NProgress, NSpin, useMessage
 import { useI18n } from 'vue-i18n'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import { isTauri } from '@/utils/env'
+import { getCSSVariable } from '@/utils/theme'
 import { generateCharGlyphs } from '@/features/aiGeneration/charGeneration'
 
 const { t, tm } = useI18n()
 const message = useMessage()
+
+const primaryColor = getCSSVariable('--primary-0', '#153063')
 
 const props = defineProps<{
   show: boolean
@@ -175,6 +178,9 @@ const _handleConfirm = async () => {
   generating.value = true
   progress.value = 0
   phase.value = 'inference'
+  // 让出主线程: 缓存全命中时从点击到推理的微任务链会让浏览器无机会绘制,
+  // spinner 显示不出来。rAF + 短延时保证 spinner 先渲染。
+  await new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve, 30)))
   try {
     const result = await generateCharGlyphs({
       chars,
@@ -257,6 +263,22 @@ const handleCancel = createDebouncedHandler(_handleCancel, 'RandomCharDialog.can
 
 .progress-text.wide {
   min-width: auto;
+}
+
+.ai-spinner {
+  display: inline-block;
+  width: 26px;
+  height: 26px;
+  border: 3px solid rgba(128, 128, 128, 0.25);
+  border-radius: 50%;
+  border-top-color: #2080f0;
+  animation: ai-spin 0.9s linear infinite;
+}
+
+@keyframes ai-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .dialog-footer {

@@ -52,7 +52,7 @@ test('AI 随机生成笔画端到端', async ({ page }) => {
   await genButton.click()
 
   // 推理阶段: 旋转 loading + 提示文案
-  await expect(dialog.locator('.n-spin')).toBeVisible({ timeout: 5000 })
+  await expect(dialog.locator('.ai-spinner')).toBeVisible({ timeout: 5000 })
   await expect(dialog.getByText(/正在运行模型/)).toBeVisible({ timeout: 5000 })
 
   // 等待生成完成 (模型加载+推理+轮廓识别+骨架绑定, 放宽超时)

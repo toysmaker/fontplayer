@@ -100,6 +100,8 @@ function loadImageFromBlob(blob: Blob): Promise<HTMLImageElement> {
 
 /** 批量推理: 骨架批量 + 1 个风格向量 → 字形批量 */
 async function runCharInference(masks: Float32Array[], z: Float32Array): Promise<Float32Array> {
+  // 让出主线程: 缓存全命中时推理前的微任务链会阻塞 UI 绘制 (spinner/进度)
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
   const { data, dims } = stackMasks(masks, CHAR_IMAGE_SIZE)
   const session = await getAiSession('char')
   const feeds = {

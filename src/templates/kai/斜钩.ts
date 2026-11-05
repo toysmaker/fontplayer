@@ -42,7 +42,7 @@ export const skeletonToBones_xie_gou = (skeleton: any): any[] => {
   
   // 钩的部分 - 直线段
   const gouLength = Math.sqrt((gou_end.x - gou_start.x) ** 2 + (gou_end.y - gou_start.y) ** 2);
-  const gouSegments = maxSegment//Math.max(minSegment, Math.ceil(gouLength / 20));
+  const gouSegments = maxSegment;
   
   for (let i = 0; i < gouSegments; i++) {
     const t1 = i / gouSegments;

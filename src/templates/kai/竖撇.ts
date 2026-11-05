@@ -14,7 +14,7 @@ export const skeletonToBones_shu_pie = (skeleton: any): any[] => {
   
   // 竖的部分 - 直线段
   const shuLength = Math.sqrt((shu_end.x - shu_start.x) ** 2 + (shu_end.y - shu_start.y) ** 2);
-  const shuSegments = maxSegment//Math.max(minSegment, Math.ceil(shuLength / 20));
+  const shuSegments = maxSegment;
   
   for (let i = 0; i < shuSegments; i++) {
     const t1 = i / shuSegments;

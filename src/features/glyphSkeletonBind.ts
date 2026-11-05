@@ -10,6 +10,7 @@ import {
   getSamplePoint,
   toPersistableBindData,
   releaseStoredBindRuntimeData,
+  invalidatePointsBonesMap,
   SAMPLE_TOTAL,
   type Bone,
   type SampledSkeletonBindData,
@@ -18,6 +19,11 @@ import {
 import {
   applyFittedSamplesToComponents,
   applyPolylineSamplesToComponents,
+  applyOutlineOffsetDeformation,
+  buildOutlineOffsetBindData,
+  buildRibbonOutline,
+  migrateOutlineOffsetBindData,
+  smoothSamplePositions,
   transformSamplesWithBones,
 } from "./skeletonFitting";
 
@@ -142,6 +148,14 @@ const glyphSkeletonBind = (glyph: CustomGlyph) => {
 
   const skeletonType = detectSkeletonType(skeleton)
 
+  // 参数化轮廓细节迁移绑定: 由骨架参考线 + 字重构建圆帽带子轮廓
+  const reflines = (glyph as any).getRefLines?.() ?? []
+  const joints = (glyph as any).getJoints?.() ?? []
+  const weight = (glyph as any).getParam?.('字重') || 50
+  const ribbon = buildRibbonOutline(reflines, joints, weight)
+  const outlineOffsetData =
+    ribbon.segments.length > 0 ? buildOutlineOffsetBindData(bindData.samplePoints, ribbon) : null
+
   // 存储绑定信息（向后兼容字段名）
   const storedBindData = {
     bones,
@@ -151,6 +165,8 @@ const glyphSkeletonBind = (glyph: CustomGlyph) => {
     componentPointRanges: bindData.componentSampleRanges,
     // 新增：采样绑定数据内部引用
     _sampleBindData: bindData,
+    // 新增：参数化轮廓细节迁移绑定 (存在时 applySkeletonTransformation 优先使用)
+    _outlineOffsetData: outlineOffsetData,
   }
 
   // 存储到 glyph wrapper
@@ -580,8 +596,10 @@ export function calculatePointBones(point: { x: number; y: number }, bones: Bone
       return;
     }
     
-    // 根据技术方案，使用骨骼长度的2.5倍作为影响阈值，确保更多点能绑定到多根骨骼
-    const threshold = bone.length * skeletonThreshold//2.5;
+    // 影响半径 = clamp(骨长 × 2, 25, 60):
+    // 下限 25 (笔画半宽) 保证细骨骼 (钩 20 单位) 也能覆盖轮廓;
+    // 上限 60 (约 1.2× 字重) 防止长骨骼影响域过大, 压缩段权重泄漏到相邻段轮廓
+    const threshold = Math.min(Math.max(bone.length * 2, 25), 60);
     
     if (distance <= threshold) {
       // 基于距离的权重计算
@@ -826,10 +844,14 @@ function calculateBoneTransformationMatrix(originalBone: Bone, newBone: Bone): n
   const targetLength = typeof newBone.length === 'number'
     ? newBone.length
     : bindLength;
-  const scale =
+  let scale =
     bindLength && Math.abs(bindLength) > 0.001
       ? targetLength / bindLength
       : 1;
+  // 钳制缩放: 段长被拖到接近 0 时骨骼完全塌缩, 采样点折叠成尖锐毛刺
+  // (与 applyGlyphSkeletonTransformation 的 0.01~100 钳制保持一致)
+  if (scale < 0.01) scale = 0.01
+  if (scale > 100) scale = 100
   const scaleMatrix = [scale, 0, 0, 1, 0, 0];
   
   // 计算逆变换矩阵
@@ -911,8 +933,11 @@ export function calculateTransformedPoints(
     return originalPoints.map(p => ({ x: p.x, y: p.y })); // 返回原始点
   }
   
-  // 更新骨骼的当前变换矩阵
-  updateBoneMatrices(bones, newSkeleton);
+  // 更新骨骼的当前变换矩阵 (返回 true = 骨骼集已重建, 权重映射需重算)
+  const rebound = updateBoneMatrices(bones, newSkeleton);
+  if (rebound) {
+    invalidatePointsBonesMap(bindData as any)
+  }
   
   // 计算每个控制点的新位置
   const transformedPoints = pointsBonesMap.map((binding, index) => {
@@ -929,10 +954,10 @@ export function calculateTransformedPoints(
 }
 
 // 更新骨骼的变换矩阵
-function updateBoneMatrices(bones: Bone[], newSkeleton: any) {
+function updateBoneMatrices(bones: Bone[], newSkeleton: any): boolean {
   if (!newSkeleton) {
     console.warn('Invalid skeleton:', newSkeleton);
-    return;
+    return false;
   }
 
   bones.forEach(bone => {
@@ -940,18 +965,20 @@ function updateBoneMatrices(bones: Bone[], newSkeleton: any) {
       bone.bindLength = bone.length;
     }
   });
-  
+
   const skeletonType = detectSkeletonType(newSkeleton);
-  
+
   if (skeletonType === 'line') {
     // 直线骨架
     updateLinearBoneMatrices(bones, newSkeleton);
+    return false
   } else if (skeletonType === 'curve') {
     // 曲线骨架
     updateCurveBoneMatrices(bones, newSkeleton);
+    return false
   } else {
-    // 复合笔画 - 调用对应的处理函数
-    updateCompositeBoneMatrices(bones, newSkeleton, skeletonType);
+    // 复合笔画 - 调用对应的处理函数 (返回 true 表示骨骼集已重建, 需重算权重)
+    return updateCompositeBoneMatrices(bones, newSkeleton, skeletonType);
   }
 }
 
@@ -1057,26 +1084,35 @@ function updateCurveBoneMatrices(bones: Bone[], newSkeleton: any) {
 }
 
 // 更新复合笔画骨骼的变换矩阵
-function updateCompositeBoneMatrices(bones: Bone[], newSkeleton: any, skeletonType: SkeletonType) {
+function updateCompositeBoneMatrices(bones: Bone[], newSkeleton: any, skeletonType: SkeletonType): boolean {
   try {
     // 调用对应笔画的skeletonToBones函数获取新的骨骼结构
     const newBones = callStrokeSkeletonToBones(skeletonType, newSkeleton);
-    
+
     if (newBones.length === 0) {
       console.warn(`No bones generated for skeleton type: ${skeletonType}`);
-      return;
+      return false;
     }
-    
-    // 确保骨骼数量匹配
+
+    // 骨骼数量不匹配 (旧工程绑定数据 vs 新模板密度):
+    // 旧数据按 5 根/段, 新模板 10 根/段 — 按索引映射会错位。
+    // 以当前姿态重新建立绑定 (bind=current), 采样点不变, 权重惰性重算。
+    // 首次拖拽前显示的就是原始轮廓, 因此重建瞬间无视觉跳变。
     if (newBones.length !== bones.length) {
-      console.warn(`Bone count mismatch: expected ${bones.length}, got ${newBones.length}`);
-      // 调整骨骼数量
-      while (bones.length < newBones.length) {
-        bones.push(createDefaultBone(`extra_${bones.length}`));
+      if (import.meta.env.DEV) {
+        console.warn(`[SampledBind] Bone count mismatch: stored ${bones.length}, new ${newBones.length} — rebinding at current pose`)
       }
-      while (bones.length > newBones.length) {
-        bones.pop();
+      bones.length = 0
+      for (const nb of newBones) {
+        const bindMatrix = calculateBoneMatrix(nb)
+        bones.push({
+          ...nb,
+          bindLength: nb.length,
+          bindMatrix,
+          currentMatrix: [...bindMatrix],
+        })
       }
+      return true
     }
     
     // 更新每个骨骼
@@ -1103,11 +1139,12 @@ function updateCompositeBoneMatrices(bones: Bone[], newSkeleton: any, skeletonTy
       // 计算从原始骨骼到新骨骼的变换矩阵
       bone.currentMatrix = calculateBoneTransformationMatrix(originalBone, bone);
     }
-    
+    return false
   } catch (error) {
     console.warn(`Failed to update composite bone matrices for type ${skeletonType}:`, error);
     // 回退到默认处理
     updateLinearBoneMatrices(bones, newSkeleton);
+    return false
   }
 }
 
@@ -1290,29 +1327,53 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
   const bindData: SampledSkeletonBindData = storedBindData._sampleBindData
   const { bones } = bindData
 
-  // 更新骨骼当前矩阵
-  updateBoneMatrices(bones, newSkeleton)
-
-  // 处理字重动态偏移
-  const rawGlyph = (glyph as any)._glyph
-  const hasDynamicWeight = !!(rawGlyph?.skeleton?.dynamicWeight)
-  let weightD = 0
-  let originWeight = 0
-  if (hasDynamicWeight) {
-    const weight = glyph.getParam('字重') as number
-    originWeight = rawGlyph.skeleton.originWeight
-    if (weight && weight !== originWeight) {
-      weightD = (weight - originWeight) / 2
-    }
-  }
-
   // 获取变换缓冲区
   const outBuffer = getTransformBuffer(bindData)
+  let weightD = 0
+  const rawGlyph = (glyph as any)._glyph
 
-  // 变换：采样点 LBS 加权混合
-  transformSamplesWithBones(bindData, outBuffer, (bd) => ensurePointsBonesMap(bd, calculatePointBones))
+  // 变形方式: 优先参数化轮廓细节迁移 (绑定数据携带 _outlineOffsetData 时),
+  // 否则回退到 LBS。细节迁移通过骨架参考线+字重构建的带子重新放置采样点,
+  // 带子在任意关节姿态下合法, 角部不会折叠交叉。
+  const outlineOffsetData = (storedBindData as any)?._outlineOffsetData as
+    | import('./skeletonFitting').OutlineOffsetBindData
+    | undefined
+  // 旧版本保存的条目 (dx/dy/bindNormalAngle) 迁移到局部坐标格式 (幂等)
+  if (outlineOffsetData) {
+    migrateOutlineOffsetBindData(outlineOffsetData)
+  }
+  const dragReflines = (glyph as any).getRefLines?.() ?? []
+  const dragJoints = (glyph as any).getJoints?.() ?? []
+  const dragWeight = (glyph as any).getParam?.('字重') || 50
+  // 拖拽时沿用绑定时刻的弧线方向符号 (防止角部凸凹翻转时弧线翻面)
+  const ribbon = outlineOffsetData
+    ? buildRibbonOutline(dragReflines, dragJoints, dragWeight, outlineOffsetData.arcSigns)
+    : { segments: [] as any[], arcSigns: [] }
+  if (outlineOffsetData && ribbon.segments.length > 0) {
+    applyOutlineOffsetDeformation(outlineOffsetData, ribbon.segments, outBuffer)
+  } else {
+    // 更新骨骼当前矩阵 (返回 true = 骨骼集已重建, 权重映射需重算)
+    const rebound = updateBoneMatrices(bones, newSkeleton)
+    if (rebound) {
+      invalidatePointsBonesMap(bindData)
+    }
 
-  // 计算变换后的采样点与原始采样点的最大差异
+    // 处理字重动态偏移
+    const hasDynamicWeight = !!(rawGlyph?.skeleton?.dynamicWeight)
+    let originWeight = 0
+    if (hasDynamicWeight) {
+      const weight = glyph.getParam('字重') as number
+      originWeight = rawGlyph.skeleton.originWeight
+      if (weight && weight !== originWeight) {
+        weightD = (weight - originWeight) / 2
+      }
+    }
+
+    // 变换：采样点 LBS 加权混合
+    transformSamplesWithBones(bindData, outBuffer, (bd) => ensurePointsBonesMap(bd, calculatePointBones))
+  }
+
+  // 计算变换后的采样点与原始采样点的最大差异 (细节迁移恒等姿态精确还原, 无需独立基准)
   let maxDiff = 0
   for (let i = 0; i < Math.min(bindData.samplePoints.length / 2, outBuffer.length / 2); i++) {
     const dx = outBuffer[i * 2] - bindData.samplePoints[i * 2]
@@ -1360,6 +1421,9 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
       }
     }
   }
+
+  // 位置平滑: 消除压缩段角部折叠 (预览折线与最终拟合共用同一结果, 松手无跳变)
+  smoothSamplePositions(bindData, outBuffer)
 
   // 拟合采样点 → 贝塞尔曲线 → 写回组件 (拖拽预览模式下用折线, 松手后拟合)
   let anyChanged = false
@@ -1671,6 +1735,9 @@ export function applyGlyphSkeletonTransformation(glyphInstance: CustomGlyph): vo
     releaseStoredBindRuntimeData(storedBindData)
     return
   }
+
+  // 位置平滑: 消除压缩段角部折叠 (预览折线与最终拟合共用同一结果, 松手无跳变)
+  smoothSamplePositions(bindData, outBuffer)
 
   // 拟合采样点 → 贝塞尔曲线 → 写回各组件 (拖拽预览模式下用折线, 松手后拟合)
   const rawGlyph = glyphInstance._glyph

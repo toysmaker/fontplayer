@@ -13,7 +13,7 @@ export const skeletonToBones_shu_zhe_zhe_gou = (skeleton: any): any[] => {
   
   // 竖的部分 - 直线段
   const shuLength = Math.sqrt((shu_end.x - shu_start.x) ** 2 + (shu_end.y - shu_start.y) ** 2);
-  const shuSegments = maxSegment//Math.max(minSegment, Math.ceil(shuLength / 20));
+  const shuSegments = maxSegment;
   
   for (let i = 0; i < shuSegments; i++) {
     const t1 = i / shuSegments;
@@ -50,7 +50,7 @@ export const skeletonToBones_shu_zhe_zhe_gou = (skeleton: any): any[] => {
   
   // 折1的部分 - 直线段
   const zhe1Length = Math.sqrt((zhe1_end.x - zhe1_start.x) ** 2 + (zhe1_end.y - zhe1_start.y) ** 2);
-  const zhe1Segments = maxSegment//Math.max(minSegment, Math.ceil(zhe1Length / 20));
+  const zhe1Segments = maxSegment;
   
   for (let i = 0; i < zhe1Segments; i++) {
     const t1 = i / zhe1Segments;
@@ -91,7 +91,7 @@ export const skeletonToBones_shu_zhe_zhe_gou = (skeleton: any): any[] => {
   
   // 折2的部分 - 直线段
   const zhe2Length = Math.sqrt((zhe2_end.x - zhe2_start.x) ** 2 + (zhe2_end.y - zhe2_start.y) ** 2);
-  const zhe2Segments = maxSegment//Math.max(minSegment, Math.ceil(zhe2Length / 20));
+  const zhe2Segments = maxSegment;
   
   for (let i = 0; i < zhe2Segments; i++) {
     const t1 = i / zhe2Segments;
@@ -132,7 +132,7 @@ export const skeletonToBones_shu_zhe_zhe_gou = (skeleton: any): any[] => {
   
   // 钩的部分 - 直线段
   const gouLength = Math.sqrt((gou_end.x - gou_start.x) ** 2 + (gou_end.y - gou_start.y) ** 2);
-  const gouSegments = maxSegment//Math.max(minSegment, Math.ceil(gouLength / 20));
+  const gouSegments = maxSegment;
   
   for (let i = 0; i < gouSegments; i++) {
     const t1 = i / gouSegments;
@@ -412,22 +412,23 @@ const updateGlyphByParams = (params, glyph) => {
 
 const computeParamsByJoints = (jointsMap, glyph) => {
   const { shu_start, shu_end, zhe1_start, zhe1_end, zhe2_start, zhe2_end, gou_start, gou_end } = jointsMap
-  const shu_horizontal_span_range = glyph.getParamRange('竖-水平延伸')
-  const shu_vertical_span_range = glyph.getParamRange('竖-竖直延伸')
-  const zhe1_horizontal_span_range = glyph.getParamRange('折1-水平延伸')
-  const zhe1_vertical_span_range = glyph.getParamRange('折1-竖直延伸')
-  const zhe2_horizontal_span_range = glyph.getParamRange('折2-水平延伸')
-  const zhe2_vertical_span_range = glyph.getParamRange('折2-竖直延伸')
-  const gou_horizontal_span_range = glyph.getParamRange('钩-水平延伸')
-  const gou_vertical_span_range = glyph.getParamRange('钩-竖直延伸')
-  const shu_horizontalSpan = range(shu_end.x - shu_start.x, shu_horizontal_span_range)
-  const shu_verticalSpan = range(shu_end.y - shu_start.y, shu_vertical_span_range)
-  const zhe1_horizontalSpan = range(zhe1_end.x - zhe1_start.x, zhe1_horizontal_span_range)
-  const zhe1_verticalSpan = range(zhe1_start.y - zhe1_end.y, zhe1_vertical_span_range)
-  const zhe2_horizontalSpan = range(zhe2_start.x - zhe2_end.x, zhe2_horizontal_span_range)
-  const zhe2_verticalSpan = range(zhe2_end.y - zhe2_start.y, zhe2_vertical_span_range)
-  const gou_horizontalSpan = range(gou_start.x - gou_end.x, gou_horizontal_span_range)
-  const gou_verticalSpan = range(gou_end.y - gou_start.y, gou_vertical_span_range)
+  // 锁定区间 (min===max) 的参数是设计常量, 不参与重算 —
+  // 否则会把手绘轮廓拟合出的微调值 (如 竖-水平延伸=-10) 夹成 0, 拖拽任何关节时整竖跳动
+  const spanValue = (value, paramName) => {
+    const r = glyph.getParamRange(paramName)
+    if (r && r.min === r.max) {
+      return glyph.getParam(paramName) ?? r.min
+    }
+    return range(value, r)
+  }
+  const shu_horizontalSpan = spanValue(shu_end.x - shu_start.x, '竖-水平延伸')
+  const shu_verticalSpan = spanValue(shu_end.y - shu_start.y, '竖-竖直延伸')
+  const zhe1_horizontalSpan = spanValue(zhe1_end.x - zhe1_start.x, '折1-水平延伸')
+  const zhe1_verticalSpan = spanValue(zhe1_start.y - zhe1_end.y, '折1-竖直延伸')
+  const zhe2_horizontalSpan = spanValue(zhe2_start.x - zhe2_end.x, '折2-水平延伸')
+  const zhe2_verticalSpan = spanValue(zhe2_end.y - zhe2_start.y, '折2-竖直延伸')
+  const gou_horizontalSpan = spanValue(gou_start.x - gou_end.x, '钩-水平延伸')
+  const gou_verticalSpan = spanValue(gou_end.y - gou_start.y, '钩-竖直延伸')
   return {
     shu_horizontalSpan,
     shu_verticalSpan,

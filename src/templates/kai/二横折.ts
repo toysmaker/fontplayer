@@ -13,7 +13,7 @@ export const skeletonToBones_er_heng_zhe = (skeleton: any): any[] => {
   
   // 横1的部分 - 直线段
   const heng1Length = Math.sqrt((heng1_end.x - heng1_start.x) ** 2 + (heng1_end.y - heng1_start.y) ** 2);
-  const heng1Segments = maxSegment//Math.max(minSegment, Math.ceil(heng1Length / 20));
+  const heng1Segments = maxSegment;
   
   for (let i = 0; i < heng1Segments; i++) {
     const t1 = i / heng1Segments;
@@ -50,7 +50,7 @@ export const skeletonToBones_er_heng_zhe = (skeleton: any): any[] => {
   
   // 折1的部分 - 直线段
   const zhe1Length = Math.sqrt((zhe1_end.x - zhe1_start.x) ** 2 + (zhe1_end.y - zhe1_start.y) ** 2);
-  const zhe1Segments = maxSegment//Math.max(minSegment, Math.ceil(zhe1Length / 20));
+  const zhe1Segments = maxSegment;
   
   for (let i = 0; i < zhe1Segments; i++) {
     const t1 = i / zhe1Segments;
@@ -91,7 +91,7 @@ export const skeletonToBones_er_heng_zhe = (skeleton: any): any[] => {
   
   // 横2的部分 - 直线段
   const heng2Length = Math.sqrt((heng2_end.x - heng2_start.x) ** 2 + (heng2_end.y - heng2_start.y) ** 2);
-  const heng2Segments = maxSegment//Math.max(minSegment, Math.ceil(heng2Length / 20));
+  const heng2Segments = maxSegment;
   
   for (let i = 0; i < heng2Segments; i++) {
     const t1 = i / heng2Segments;
@@ -132,7 +132,7 @@ export const skeletonToBones_er_heng_zhe = (skeleton: any): any[] => {
   
   // 折2的部分 - 直线段
   const zhe2Length = Math.sqrt((zhe2_end.x - zhe2_start.x) ** 2 + (zhe2_end.y - zhe2_start.y) ** 2);
-  const zhe2Segments = maxSegment//Math.max(minSegment, Math.ceil(zhe2Length / 20));
+  const zhe2Segments = maxSegment;
   
   for (let i = 0; i < zhe2Segments; i++) {
     const t1 = i / zhe2Segments;

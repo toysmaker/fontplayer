@@ -92,6 +92,8 @@ function loadSkeletonMasks(): Promise<Map<string, Float32Array>> {
 
 /** 批量推理: 32 张骨架 + 1 个风格向量 → 32 张笔画图 */
 async function runStrokeInference(z: Float32Array): Promise<Float32Array> {
+  // 让出主线程: 缓存全命中时推理前的微任务链会阻塞 UI 绘制 (spinner/进度)
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
   const masks = await loadSkeletonMasks()
   const names = hei_strokes.map((s) => s.name)
   const { data, dims } = stackMasks(

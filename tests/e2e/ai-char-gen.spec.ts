@@ -36,7 +36,7 @@ test('AI 随机生成字符端到端', async ({ page }) => {
   await dialog.locator('.n-button--primary-type').filter({ hasText: /生成/ }).first().click()
 
   // 推理阶段 spinner
-  await expect(dialog.locator('.n-spin')).toBeVisible({ timeout: 5000 })
+  await expect(dialog.locator('.ai-spinner')).toBeVisible({ timeout: 5000 })
 
   // 等待完成
   await expect(dialog).toBeHidden({ timeout: 180000 })

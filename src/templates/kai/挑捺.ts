@@ -13,7 +13,7 @@ export const skeletonToBones_tiao_na = (skeleton: any): any[] => {
   
   // 挑的部分 - 直线段
   const tiaoLength = Math.sqrt((tiao_end.x - tiao_start.x) ** 2 + (tiao_end.y - tiao_start.y) ** 2);
-  const tiaoSegments = maxSegment//Math.max(minSegment, Math.ceil(tiaoLength / 20));
+  const tiaoSegments = maxSegment;
   
   for (let i = 0; i < tiaoSegments; i++) {
     const t1 = i / tiaoSegments;

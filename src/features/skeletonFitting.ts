@@ -41,6 +41,25 @@ export function fitSamplesToBeziers(
     return [[p, p, p, p]]
   }
 
+  // 塌缩段会产生近乎重合的相邻采样点, fitCurve 在退化段上会拟合出尖锐毛刺;
+  // 先合并距离过近的相邻点 (与 FIT_MAX_ERROR 同量级的阈值)
+  const deduped: typeof samples = []
+  const DEDUP_EPS = 0.5
+  for (const p of samples) {
+    const last = deduped[deduped.length - 1]
+    if (last && Math.hypot(p.x - last.x, p.y - last.y) < DEDUP_EPS) continue
+    deduped.push(p)
+  }
+  if (deduped.length >= 2) {
+    // 闭合环: 首尾点也应保持接近 (去重后末点可能与首点重合)
+    const firstD = deduped[0]
+    const lastD = deduped[deduped.length - 1]
+    if (Math.hypot(lastD.x - firstD.x, lastD.y - firstD.y) < DEDUP_EPS) {
+      deduped[deduped.length - 1] = { x: firstD.x, y: firstD.y }
+    }
+  }
+  samples = deduped
+
   // 检测退化
   const first = samples[0]
   let allSame = true
@@ -252,6 +271,394 @@ export function transformSamplesWithBones(
   }
 }
 
+// ==================== 参数化轮廓细节迁移绑定 ====================
+
+/**
+ * 替代 LBS 的绑定方式 (针对"手绘轮廓 + 参数化骨架"的笔画):
+ *
+ * LBS 在段长压缩时角部采样点会折叠交叉 (candy-wrapper), 这是线性混合的固有缺陷。
+ * 本方案利用笔画自身携带参数化模板 (getComponentsBySkeleton) — 模板在任何参数下
+ * 生成的轮廓都是合法的, 不会自交:
+ *
+ *   绑定时: 每个手绘采样点 → 在参数化轮廓上找最近点 → 存 (段, s, 切向/法向位移)
+ *   变形时: 用新参数重新生成参数化轮廓 → 采样点 = 新轮廓(s) + 切向位移×缩放比 + 法向位移
+ *
+ * 手绘的"纹理"(粗细变化/毛刺/风格)以偏移场形式保留; 切向位移随段长比例缩放
+ * (纹理随笔画压缩/拉伸), 法向不缩放 (笔画宽度不变)。恒等姿态精确还原。
+ */
+
+export interface OutlineOffsetEntry {
+  compIdx: number
+  bezierIdx: number
+  /** 带子采样点下标 (0..OUTLINE_SUBDIV) */
+  s: number
+  /** 采样点相对带子最近点的位移 — 绑定时刻段局部坐标: u=切向, v=法向 */
+  u: number
+  v: number
+  /** 绑定时刻所在段的长度 (拖拽时切向位移按 拖拽段长/绑定段长 缩放) */
+  bindSegLen: number
+}
+
+export interface OutlineOffsetBindData {
+  entries: OutlineOffsetEntry[]
+  /** 每个角部/端点弧线的绑定时刻方向符号 (+1 短弧逆时针 / -1 反射弧): 拖拽时沿用, 防止角凸凹翻转时弧线翻面 */
+  arcSigns: number[]
+}
+
+/**
+ * 迁移旧格式的细节迁移条目 (dx/dy/bindNormalAngle → u/v/bindSegLen)。
+ * 旧格式缺少 bindSegLen, 迁移后切向缩放比固定为 1 (新生成笔画不受影响)。
+ */
+export function migrateOutlineOffsetBindData(data: any): void {
+  if (!data || !Array.isArray(data.entries)) return
+  let migrated = false
+  for (const e of data.entries) {
+    if (e && e.u === undefined && typeof e.dx === 'number') {
+      const theta = typeof e.bindNormalAngle === 'number' ? e.bindNormalAngle : 0
+      const sinT = Math.sin(theta)
+      const cosT = Math.cos(theta)
+      e.u = -e.dx * sinT + e.dy * cosT
+      e.v = e.dx * cosT + e.dy * sinT
+      e.bindSegLen = -1
+      migrated = true
+    }
+  }
+  if (migrated && !Array.isArray(data.arcSigns)) {
+    data.arcSigns = []
+  }
+}
+
+const OUTLINE_SUBDIV = 6
+/** 圆帽端点的细分段数 */
+const CAP_SEGMENTS = 6
+
+interface FlatSegment {
+  compIdx: number
+  segIdx: number
+  /** 'side' 直线边 / 'arc' 角部与端点弧 */
+  kind: 'side' | 'arc'
+  /** 等分采样点 (subdiv+1 个) */
+  pts: Array<{ x: number; y: number }>
+  /** 每点法向 (平均相邻段方向) */
+  normals: Array<{ x: number; y: number }>
+}
+
+export interface RibbonOutline {
+  segments: FlatSegment[]
+  /** 弧线方向符号列表 (与构建顺序一致) */
+  arcSigns: number[]
+}
+
+/**
+ * 构建参数化带子轮廓。
+ * @param arcSigns 绑定时刻的弧线方向 (拖拽时沿用, 保证角部凸凹翻转时边界不翻面);
+ *                 缺省时按短弧构建并返回实际使用的符号。
+ */
+export function buildRibbonOutline(
+  reflines: Array<{ start: string; end: string; type?: string }>,
+  joints: Array<{ name: string; x: number; y: number }>,
+  weight: number,
+  arcSigns?: number[],
+): RibbonOutline {
+  const jointMap = new Map<string, { x: number; y: number }>()
+  for (const j of joints) {
+    jointMap.set(j.name, { x: typeof j.x === 'function' ? (j.x as any)() : j.x, y: typeof j.y === 'function' ? (j.y as any)() : j.y })
+  }
+  const main = reflines.filter((r) => r.type !== 'ref')
+  if (main.length === 0) return { segments: [], arcSigns: [] }
+
+  // 中心线点链
+  const chain: Array<{ x: number; y: number }> = []
+  for (let i = 0; i < main.length; i++) {
+    const s = jointMap.get(main[i].start)
+    if (!s) continue
+    if (i === 0) chain.push(s)
+    const e = jointMap.get(main[i].end)
+    if (e) chain.push(e)
+  }
+  if (chain.length < 2) return { segments: [], arcSigns: [] }
+  // 去重连续重复点
+  const deduped = [chain[0]]
+  for (let i = 1; i < chain.length; i++) {
+    const p = chain[i]
+    const last = deduped[deduped.length - 1]
+    if (Math.hypot(p.x - last.x, p.y - last.y) > 0.01) deduped.push(p)
+  }
+  if (deduped.length < 2) return { segments: [], arcSigns: [] }
+
+  const half = Math.max(weight / 2, 1)
+
+  // 每边法向
+  const edgeNormals: Array<{ x: number; y: number }> = []
+  for (let i = 0; i < deduped.length - 1; i++) {
+    let dx = deduped[i + 1].x - deduped[i].x
+    let dy = deduped[i + 1].y - deduped[i].y
+    const len = Math.hypot(dx, dy) || 1
+    dx /= len
+    dy /= len
+    edgeNormals.push({ x: -dy, y: dx })
+  }
+
+  // 轮廓点序: A 侧 (每边线 + 顶点圆角弧) → 末端圆帽 → B 侧 (倒走) → 起始圆帽
+  const outline: Array<{ x: number; y: number }> = []
+  const pushLine = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+    if (outline.length === 0 || Math.hypot(a.x - outline[outline.length - 1].x, a.y - outline[outline.length - 1].y) > 0.01) {
+      outline.push(a)
+    }
+    outline.push(b)
+  }
+  const usedSigns: number[] = []
+  let arcIdx = 0
+  const arcPointSet = new Set<number>()
+  const pushJoinArc = (center: { x: number; y: number }, fromAngle: number, toAngle: number) => {
+    let sweep = ((toAngle - fromAngle + Math.PI * 3) % (Math.PI * 2)) - Math.PI
+    const override = arcSigns?.[arcIdx]
+    if (override !== undefined && sweep !== 0) {
+      if (override > 0 && sweep < 0) sweep += Math.PI * 2
+      else if (override < 0 && sweep > 0) sweep -= Math.PI * 2
+    }
+    usedSigns.push(sweep >= 0 ? 1 : -1)
+    arcIdx++
+    for (let s = 1; s <= CAP_SEGMENTS; s++) {
+      const a = fromAngle + (sweep * s) / CAP_SEGMENTS
+      arcPointSet.add(outline.length)
+      outline.push({ x: center.x + Math.cos(a) * half, y: center.y + Math.sin(a) * half })
+    }
+  }
+
+  // A 侧
+  for (let i = 0; i < deduped.length - 1; i++) {
+    const n = edgeNormals[i]
+    pushLine(
+      { x: deduped[i].x + n.x * half, y: deduped[i].y + n.y * half },
+      { x: deduped[i + 1].x + n.x * half, y: deduped[i + 1].y + n.y * half },
+    )
+    if (i < deduped.length - 2) {
+      pushJoinArc(deduped[i + 1], Math.atan2(n.y, n.x), Math.atan2(edgeNormals[i + 1].y, edgeNormals[i + 1].x))
+    }
+  }
+  // 末端圆帽
+  {
+    const last = deduped[deduped.length - 1]
+    const n = edgeNormals[edgeNormals.length - 1]
+    pushJoinArc(last, Math.atan2(n.y, n.x), Math.atan2(-n.y, -n.x))
+  }
+  // B 侧 (倒走)
+  for (let i = deduped.length - 2; i >= 0; i--) {
+    const n = edgeNormals[i]
+    pushLine(
+      { x: deduped[i + 1].x - n.x * half, y: deduped[i + 1].y - n.y * half },
+      { x: deduped[i].x - n.x * half, y: deduped[i].y - n.y * half },
+    )
+    if (i > 0) {
+      pushJoinArc(deduped[i], Math.atan2(-edgeNormals[i].y, -edgeNormals[i].x), Math.atan2(-edgeNormals[i - 1].y, -edgeNormals[i - 1].x))
+    }
+  }
+  // 起始圆帽
+  {
+    const first = deduped[0]
+    const n = edgeNormals[0]
+    pushJoinArc(first, Math.atan2(-n.y, -n.x), Math.atan2(n.y, n.x))
+  }
+
+  // 组成 line 段列表
+  const segments: FlatSegment[] = []
+  const n = outline.length
+  for (let i = 0; i < n; i++) {
+    const a = outline[i]
+    const b = outline[(i + 1) % n]
+    const sampled: Array<{ x: number; y: number }> = new Array(OUTLINE_SUBDIV + 1)
+    for (let s = 0; s <= OUTLINE_SUBDIV; s++) {
+      const t = s / OUTLINE_SUBDIV
+      sampled[s] = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }
+    }
+    const normalsSeg: Array<{ x: number; y: number }> = new Array(OUTLINE_SUBDIV + 1)
+    for (let s = 0; s <= OUTLINE_SUBDIV; s++) {
+      const prev = sampled[Math.max(0, s - 1)]
+      const next = sampled[Math.min(OUTLINE_SUBDIV, s + 1)]
+      let dx = next.x - prev.x
+      let dy = next.y - prev.y
+      const len = Math.hypot(dx, dy) || 1
+      dx /= len
+      dy /= len
+      normalsSeg[s] = { x: -dy, y: dx }
+    }
+    segments.push({
+      compIdx: 0,
+      segIdx: i,
+      kind: arcPointSet.has(i) ? 'arc' : 'side',
+      pts: sampled,
+      normals: normalsSeg,
+    })
+  }
+  return { segments, arcSigns: usedSigns }
+}
+
+/**
+ * 构建细节迁移绑定: 每个采样点 → 参数化带子最近点 (段, s, 切向/法向位移)
+ */
+export function buildOutlineOffsetBindData(
+  samplePoints: number[],
+  ribbon: RibbonOutline,
+): OutlineOffsetBindData {
+  const count = samplePoints.length / 2
+  const entries: OutlineOffsetEntry[] = new Array(count)
+  for (let i = 0; i < count; i++) {
+    const px = samplePoints[i * 2]
+    const py = samplePoints[i * 2 + 1]
+    let best: OutlineOffsetEntry | null = null
+    let bestDist = Infinity
+    for (const sgm of ribbon.segments) {
+      for (let s = 0; s < sgm.pts.length; s++) {
+        const q = sgm.pts[s]
+        const d = Math.hypot(px - q.x, py - q.y)
+        if (d < bestDist) {
+          bestDist = d
+          // 段切向 (相邻采样点方向, 端点处取段端方向)
+          const prev = sgm.pts[Math.max(0, s - 1)]
+          const next = sgm.pts[Math.min(sgm.pts.length - 1, s + 1)]
+          let tx = next.x - prev.x
+          let ty = next.y - prev.y
+          const tl = Math.hypot(tx, ty) || 1
+          tx /= tl
+          ty /= tl
+          const nx = -ty
+          const ny = tx
+          const ddx = px - q.x
+          const ddy = py - q.y
+          const segLen = Math.hypot(
+            sgm.pts[sgm.pts.length - 1].x - sgm.pts[0].x,
+            sgm.pts[sgm.pts.length - 1].y - sgm.pts[0].y,
+          )
+          best = {
+            compIdx: sgm.compIdx,
+            bezierIdx: sgm.segIdx,
+            s,
+            u: ddx * tx + ddy * ty,
+            v: ddx * nx + ddy * ny,
+            bindSegLen: Math.max(segLen, 0.5),
+          }
+        }
+      }
+    }
+    entries[i] = best ?? { compIdx: -1, bezierIdx: -1, s: 0, u: 0, v: 0, bindSegLen: 1 }
+  }
+  return { entries, arcSigns: ribbon.arcSigns }
+}
+
+/**
+ * 应用细节迁移变形: 新参数化带子 + 存下的 (s, 切向/法向位移) → 采样点位置。
+ * 切向位移随段长比例缩放 (纹理随笔画压缩/拉伸), 法向不缩放 (笔画宽度不变)。
+ */
+export function applyOutlineOffsetDeformation(
+  bindData: OutlineOffsetBindData,
+  ribbon: FlatSegment[],
+  outBuffer: Float64Array,
+): boolean {
+  if (ribbon.length === 0) return false
+  const count = bindData.entries.length
+
+  // 段级缩放比: 拖拽段长/绑定段长
+  const segBindLen = new Float64Array(ribbon.length)
+  for (const e of bindData.entries) {
+    if (e.compIdx < 0) continue
+    if (!segBindLen[e.bezierIdx] && e.bindSegLen > 0) segBindLen[e.bezierIdx] = e.bindSegLen
+  }
+  const segRatios = ribbon.map((sgm, si) => {
+    const dragSegLen = Math.max(
+      Math.hypot(
+        sgm.pts[sgm.pts.length - 1].x - sgm.pts[0].x,
+        sgm.pts[sgm.pts.length - 1].y - sgm.pts[0].y,
+      ),
+      0.5,
+    )
+    const bindLen = segBindLen[si] || dragSegLen
+    return Math.min(Math.max(dragSegLen / Math.max(bindLen, 0.5), 0.05), 20)
+  })
+
+  // 逐采样点取所在段的缩放比, 沿轮廓平滑 (2 次)
+  const ratios = new Float64Array(count)
+  for (let i = 0; i < count; i++) {
+    const e = bindData.entries[i]
+    ratios[i] = e.compIdx < 0 ? 1 : (segRatios[e.bezierIdx] ?? 1)
+  }
+  for (let pass = 0; pass < 2; pass++) {
+    const src = Float64Array.from(ratios)
+    for (let i = 0; i < count; i++) {
+      const prev = i > 0 ? i - 1 : count - 1
+      const next = i < count - 1 ? i + 1 : 0
+      ratios[i] = 0.5 * src[i] + 0.25 * src[prev] + 0.25 * src[next]
+    }
+  }
+
+  let anyChanged = false
+  for (let i = 0; i < count; i++) {
+    const e = bindData.entries[i]
+    if (e.compIdx < 0) {
+      outBuffer[i * 2] = 0
+      outBuffer[i * 2 + 1] = 0
+      continue
+    }
+    const sgm = ribbon.find((x) => x.compIdx === e.compIdx && x.segIdx === e.bezierIdx)
+    if (!sgm) continue
+    const s = Math.min(e.s, OUTLINE_SUBDIV)
+    const q = sgm.pts[s]
+    // 段切向 (相邻采样点方向)
+    const prev = sgm.pts[Math.max(0, s - 1)]
+    const next = sgm.pts[Math.min(sgm.pts.length - 1, s + 1)]
+    let tx = next.x - prev.x
+    let ty = next.y - prev.y
+    const tl = Math.hypot(tx, ty) || 1
+    tx /= tl
+    ty /= tl
+    const nx = -ty
+    const ny = tx
+    // 切向位移随缩放比缩放 (纹理随笔画压缩/拉伸), 法向不缩放 (笔画宽度不变);
+    // 旧格式迁移条目无 bindSegLen (-1) → 不缩放切向
+    const ut = e.u * (e.bindSegLen && e.bindSegLen > 0 ? ratios[i] : 1)
+    outBuffer[i * 2] = q.x + tx * ut + nx * e.v
+    outBuffer[i * 2 + 1] = q.y + ty * ut + ny * e.v
+    anyChanged = true
+  }
+  return anyChanged
+}
+
+/**
+ * 对变换后的采样点做 1 次沿轮廓的邻域平滑 (0.5 自身 + 0.25 左右邻居):
+ * 消除压缩段角部采样点折叠产生的尖锐折返 (拖拽预览与最终拟合共用同一结果,
+ * 松手瞬间无跳变)。闭合轮廓首尾相连。
+ */
+export function smoothSamplePositions(
+  bindData: SampledSkeletonBindData,
+  outBuffer: Float64Array,
+): void {
+  const { samplePoints, componentSampleRanges, componentSegmentMeta } = bindData
+  const count = Math.min(samplePoints.length / 2, outBuffer.length / 2)
+
+  // 2 次平滑: 1 次消除相邻点突变, 第 2 次抚平压缩段端点(笔帽)附近的过渡扭结
+  let src = new Float64Array(outBuffer.subarray(0, count * 2))
+  for (let pass = 0; pass < 2; pass++) {
+    const dst = pass === 0 ? outBuffer : new Float64Array(count * 2)
+    for (let ri = 0; ri < componentSampleRanges.length; ri++) {
+      const range = componentSampleRanges[ri]
+      const lo = range.start
+      const hi = range.end
+      if (hi - lo < 2) continue
+      const closed = !!componentSegmentMeta[ri]?.closePath
+      for (let i = lo; i < hi; i++) {
+        const prev = i > lo ? i - 1 : closed ? hi - 1 : i
+        const next = i < hi - 1 ? i + 1 : closed ? lo : i
+        dst[i * 2] = 0.5 * src[i * 2] + 0.25 * src[prev * 2] + 0.25 * src[next * 2]
+        dst[i * 2 + 1] = 0.5 * src[i * 2 + 1] + 0.25 * src[prev * 2 + 1] + 0.25 * src[next * 2 + 1]
+      }
+    }
+    src = dst
+  }
+  if (src !== outBuffer) {
+    outBuffer.set(src.subarray(0, count * 2))
+  }
+}
+
 // ==================== 拟合写回 ====================
 
 /**
@@ -369,11 +776,12 @@ function polylineComponentFromSamples(
 
   for (let seg = 0; seg < samplesPerSegment.length; seg++) {
     const count = samplesPerSegment[seg]
-    // 每对相邻采样点构成一条直线段
+    // 每对相邻采样点构成一条直线段; 跳过过短的段 (塌缩段产生的点状毛刺)
     for (let s = 0; s < count - 1; s++) {
       const bi = (rangeStart + sampleOffset + s) * 2
       const p0 = { x: outBuffer[bi], y: outBuffer[bi + 1] }
       const p1 = { x: outBuffer[bi + 2], y: outBuffer[bi + 3] }
+      if (Math.hypot(p1.x - p0.x, p1.y - p0.y) < 0.5) continue
       if (isFirstCurve) {
         points.push(
           { x: p0.x, y: p0.y },

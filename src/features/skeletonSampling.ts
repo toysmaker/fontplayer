@@ -365,6 +365,93 @@ export function buildSampledBindData(
  * 确保 _pointsBonesMap 存在（惰性重算）
  * 需要从调用方注入 calculatePointBones 函数以避免循环依赖
  */
+/**
+ * 权重场平滑 (仿 Live2D 权重平滑思想):
+ * 沿轮廓采样序列对每个点的骨骼权重做 2 次邻域平均 (0.5 自身 + 0.25 左右邻居),
+ * 使相邻采样点的权重连续 — 消除逐点独立选骨造成的断裂 (压缩时相邻点各自变形 → 折叠毛刺)。
+ * 闭合轮廓首尾相连平滑。
+ */
+function smoothPointsBonesMap(
+  bindData: SampledSkeletonBindData,
+  raw: SampledPointBinding[],
+): SampledPointBinding[] {
+  const { bones, samplePoints, componentSampleRanges, componentSegmentMeta } = bindData
+  const count = samplePoints.length / 2
+  const boneCount = bones.length
+  if (boneCount === 0) return raw
+
+  // 稀疏 → 稠密
+  let dense = new Float64Array(count * boneCount)
+  for (let i = 0; i < count; i++) {
+    const b = raw[i]
+    if (!b?.bones) continue
+    const base = i * boneCount
+    for (const bb of b.bones) {
+      dense[base + bb.boneIndex] = bb.weight
+    }
+  }
+
+  // 逐组件范围做邻域平滑 (闭合轮廓首尾相连)
+  // 平滑次数: 1 次即可消除相邻点选骨突变; 过多会把压缩段权重泄漏到相邻段轮廓 (产生扭结)
+  const SMOOTH_PASSES = 1
+  let buf = new Float64Array(count * boneCount)
+  for (let pass = 0; pass < SMOOTH_PASSES; pass++) {
+    for (let ri = 0; ri < componentSampleRanges.length; ri++) {
+      const range = componentSampleRanges[ri]
+      const lo = range.start
+      const hi = range.end
+      if (hi - lo < 2) continue
+      const meta = componentSegmentMeta[ri]
+      const closed = !!meta?.closePath
+      for (let i = lo; i < hi; i++) {
+        const prev = i > lo ? i - 1 : closed ? hi - 1 : i
+        const next = i < hi - 1 ? i + 1 : closed ? lo : i
+        const base = i * boneCount
+        const pBase = prev * boneCount
+        const nBase = next * boneCount
+        for (let k = 0; k < boneCount; k++) {
+          buf[base + k] = 0.5 * dense[base + k] + 0.25 * dense[pBase + k] + 0.25 * dense[nBase + k]
+        }
+      }
+    }
+    const t = dense
+    dense = buf
+    buf = t
+  }
+
+  // 稠密 → 稀疏 (每点保留权重最高的 4 根骨, 重新归一化)
+  // localCoords 仅用于权重绘制等交互, 平滑后按骨骼取原始值的代表即可
+  const result: SampledPointBinding[] = new Array(count)
+  for (let i = 0; i < count; i++) {
+    const base = i * boneCount
+    const entries: Array<{ boneIndex: number; weight: number }> = []
+    let total = 0
+    for (let k = 0; k < boneCount; k++) {
+      const w = dense[base + k]
+      if (w <= 1e-6) continue
+      entries.push({ boneIndex: k, weight: w })
+      total += w
+    }
+    entries.sort((a, b) => b.weight - a.weight)
+    const top = entries.slice(0, 4)
+    if (total > 0) {
+      for (const e of top) e.weight /= total
+    }
+    // 从原始绑定中找回 localCoords (同骨骼的任一值)
+    const rawBones = raw[i]?.bones || []
+    const bones = top.map((e) => {
+      const src = rawBones.find((rb) => rb.boneIndex === e.boneIndex)
+      return {
+        boneIndex: e.boneIndex,
+        weight: e.weight,
+        localCoords: src?.localCoords ?? { u: 0, v: 0 },
+      }
+    })
+    result[i] = { pointIndex: i, bones }
+  }
+  return result
+}
+
 export function ensurePointsBonesMap(
   bindData: SampledSkeletonBindData,
   calculatePointBones: (
@@ -376,11 +463,12 @@ export function ensurePointsBonesMap(
   if (!bindData._pointsBonesMap) {
     const { samplePoints, bones } = bindData
     const count = samplePoints.length / 2
-    bindData._pointsBonesMap = new Array(count)
+    const raw: SampledPointBinding[] = new Array(count)
     for (let i = 0; i < count; i++) {
       const pt = getSamplePoint(samplePoints, i)
-      bindData._pointsBonesMap[i] = calculatePointBones(pt, bones, i)
+      raw[i] = calculatePointBones(pt, bones, i)
     }
+    bindData._pointsBonesMap = smoothPointsBonesMap(bindData, raw)
   }
   return bindData._pointsBonesMap
 }
@@ -448,7 +536,8 @@ export function releaseStoredBindRuntimeData(stored: any): void {
  * 长度按实际采样点数分配 (兼容旧工程中不同 SAMPLE_TOTAL 的绑定数据)
  */
 export function getTransformBuffer(bindData: SampledSkeletonBindData): Float64Array {
-  if (!bindData._transformBuffer) {
+  // 工程保存/加载经过 JSON 序列化, Float64Array 会变成键值对象 (fill 不存在) — 需重建
+  if (!(bindData._transformBuffer instanceof Float64Array)) {
     bindData._transformBuffer = new Float64Array(bindData.samplePoints.length)
   } else {
     // 清零复用（避免残留值干扰）
