@@ -1,5 +1,32 @@
 <template>
   <div class="info-panel">
+    <!-- 读音释义 section（最上方） -->
+    <div class="section">
+      <div class="section-title">{{ t('panels.infoPanel.reading.title') }}</div>
+      <template v-if="character">
+        <div class="char-row">
+          <span class="char-display">{{ characterText }}</span>
+          <n-tooltip trigger="hover">
+            <template #trigger>
+              <span class="copy-btn" @click="handleCopyCharacter" @pointerup="handleCopyCharacter">
+                <font-awesome-icon :icon="['fas', 'copy']" />
+              </span>
+            </template>
+            {{ t('panels.infoPanel.reading.copy') }}
+          </n-tooltip>
+        </div>
+        <div class="reading-line">
+          <span class="reading-label">{{ t('panels.infoPanel.reading.pinyin') }}</span>
+          {{ readingPinyin || '—' }}
+        </div>
+        <div class="reading-line">
+          <span class="reading-label">{{ t('panels.infoPanel.reading.definition') }}</span>
+          {{ readingDefinition || '—' }}
+        </div>
+      </template>
+      <n-empty v-else :description="t('panels.infoPanel.preview.noCharacter')" />
+    </div>
+
     <!-- 预览 section -->
     <div class="section">
       <div class="section-title">{{ t('panels.infoPanel.preview.title') }}</div>
@@ -54,21 +81,53 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NSlider, NInputNumber, NCheckbox, NSpin, NEmpty, NForm, NFormItem } from 'naive-ui'
+import { NSlider, NInputNumber, NCheckbox, NSpin, NEmpty, NForm, NFormItem, NTooltip, useMessage } from 'naive-ui'
 import { useCharacterStore } from '@/stores/character'
 import { useProjectStore } from '@/stores/project'
 import { buildCharacterPreviewFontBuffer } from '@/features/editor/services/ExportFontService'
+import { ensureDictionary, lookupByUnicode, type DictionaryIndex } from '@/features/dictionary/DictionaryService'
+import { copyTextToClipboard } from '@/features/dictionary/copyText'
 import type { ICharacterFileMetadata } from '@/core/types'
 
 const { t } = useI18n()
 const characterStore = useCharacterStore()
 const projectStore = useProjectStore()
+const message = useMessage()
 
 const fontSize = ref(72)
 const removeOverlap = ref(false)
 const building = ref(false)
 const error = ref('')
 const previewFamily = ref('')
+
+// ---- 读音释义 ----
+const readingPinyin = ref('')
+const readingDefinition = ref('')
+let dictIndex: DictionaryIndex | null = null
+// 防止快速切换字符时旧查询结果覆盖新结果
+let readingToken = 0
+
+const loadReading = async () => {
+  const ch = character.value
+  const token = ++readingToken
+  dictIndex = await ensureDictionary()
+  if (token !== readingToken) return // 已有更新的查询，丢弃本次结果
+  const entry = lookupByUnicode(dictIndex, ch?.character?.unicode ?? '')
+  readingPinyin.value = entry?.pinyin?.join('、') ?? ''
+  readingDefinition.value = entry?.definitionZh ?? ''
+}
+
+// 复制按钮同时绑定 click 与 pointerup，加防抖防止多重触发
+let lastCopyTime = 0
+const handleCopyCharacter = async () => {
+  const now = Date.now()
+  if (now - lastCopyTime < 300) return
+  lastCopyTime = now
+  const ok = await copyTextToClipboard(characterText.value)
+  message[ok ? 'success' : 'warning'](
+    ok ? t('panels.infoPanel.reading.copySuccess') : t('panels.infoPanel.reading.copyFailed'),
+  )
+}
 
 // 内存管理：始终只保留当前字符的 FontFace；重建前删除旧 face，组件卸载时再删一次
 let activeFace: FontFace | null = null
@@ -144,6 +203,7 @@ watch(
   () => characterStore.editingCharacter?.uuid,
   () => {
     void rebuild()
+    void loadReading()
   },
   { immediate: true },
 )
@@ -167,6 +227,43 @@ onUnmounted(() => {
   padding: 8px 12px;
   height: 100%;
   overflow-y: auto;
+}
+
+.char-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.char-display {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.copy-btn {
+  cursor: pointer;
+  font-size: 14px;
+  color: #888;
+  display: inline-flex;
+  align-items: center;
+}
+
+.copy-btn:hover {
+  color: var(--primary-0);
+}
+
+.reading-line {
+  font-size: 13px;
+  color: var(--light-4);
+  margin: 2px 0;
+  line-height: 1.5;
+}
+
+.reading-label {
+  color: #999;
+  margin-right: 4px;
 }
 .section {
   margin-bottom: 20px;

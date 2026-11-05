@@ -29,6 +29,7 @@ src-tauri/resources/.keydata
 playwright-report
 
 public/data/*
+!public/data/dictionary/
 public/templates/private
 
 .vite

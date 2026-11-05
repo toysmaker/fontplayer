@@ -5,6 +5,7 @@ import router from './router'
 import { setupNaiveUI } from './plugins/naive-ui'
 import { setupI18n } from './i18n'
 import './assets/main.css'
+import { warmupDictionary } from '@/features/dictionary/DictionaryService'
 
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -243,6 +244,17 @@ void (async () => {
     }
   }
   app.mount('#app')
+
+  // 空闲时预热读音释义数据（gzip 154KB，不阻塞启动）
+  if (typeof (window as any).requestIdleCallback === 'function') {
+    ;(window as any).requestIdleCallback(() => {
+      warmupDictionary()
+    }, { timeout: 3000 })
+  } else {
+    setTimeout(() => {
+      warmupDictionary()
+    }, 2000)
+  }
 })()
 
 // ---- 全局修复 WKWebView 双击问题（macOS Tauri） ----

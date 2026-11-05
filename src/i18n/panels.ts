@@ -340,6 +340,14 @@ const panels = {
 		},
 		infoPanel: {
 			title: '信息',
+			reading: {
+				title: '读音释义',
+				copy: '复制',
+				pinyin: '读音：',
+				definition: '释义：',
+				copySuccess: '已复制到剪贴板',
+				copyFailed: '复制失败',
+			},
 			preview: {
 				title: '预览',
 				fontSize: '字号',
@@ -727,6 +735,14 @@ const panels = {
 		},
 		infoPanel: {
 			title: 'Info',
+			reading: {
+				title: 'Reading & Meaning',
+				copy: 'Copy',
+				pinyin: 'Pinyin: ',
+				definition: 'Meaning: ',
+				copySuccess: 'Copied to clipboard',
+				copyFailed: 'Copy failed',
+			},
 			preview: {
 				title: 'Preview',
 				fontSize: 'Font Size',
