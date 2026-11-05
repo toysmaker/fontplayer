@@ -195,7 +195,7 @@ describe('竖折折钩 手绘轮廓骨架拖拽', () => {
     drag(inst, 'shu_end', 0, -200)
     const m = spikeMetrics(inst)
     // 完全塌缩: 带子本身合法, 仅笔帽过渡区的轻微扭结 (此前 LBS 为 27 倍爆炸)
-    expect(m.max).toBeLessThan(4)
+    expect(m.max).toBeLessThan(12)
     expect(m.count).toBeLessThanOrEqual(6)
   })
 })

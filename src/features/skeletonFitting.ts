@@ -295,6 +295,8 @@ export interface OutlineOffsetEntry {
   /** 采样点相对带子最近点的位移 — 绑定时刻段局部坐标: u=切向, v=法向 */
   u: number
   v: number
+  /** 法向位移的低频分量 (笔画宽度变化): 拖拽时不随段缩放, 高频部分 (小凸起/凹口) 随段缩放 */
+  vSmooth?: number
   /** 绑定时刻所在段的长度 (拖拽时切向位移按 拖拽段长/绑定段长 缩放) */
   bindSegLen: number
 }
@@ -623,11 +625,12 @@ export function buildOutlineOffsetBindData(
   ribbon: RibbonOutline,
 ): OutlineOffsetBindData {
   const count = samplePoints.length / 2
-  const entries: OutlineOffsetEntry[] = new Array(count)
+  // 第一步: 最近点匹配 (段, s)
+  const matches: Array<{ compIdx: number; bezierIdx: number; s: number }> = new Array(count)
   for (let i = 0; i < count; i++) {
     const px = samplePoints[i * 2]
     const py = samplePoints[i * 2 + 1]
-    let best: OutlineOffsetEntry | null = null
+    let best: { compIdx: number; bezierIdx: number; s: number } | null = null
     let bestDist = Infinity
     for (const sgm of ribbon.segments) {
       for (let s = 0; s < sgm.pts.length; s++) {
@@ -635,34 +638,98 @@ export function buildOutlineOffsetBindData(
         const d = Math.hypot(px - q.x, py - q.y)
         if (d < bestDist) {
           bestDist = d
-          // 段切向 (相邻采样点方向, 端点处取段端方向)
-          const prev = sgm.pts[Math.max(0, s - 1)]
-          const next = sgm.pts[Math.min(sgm.pts.length - 1, s + 1)]
-          let tx = next.x - prev.x
-          let ty = next.y - prev.y
-          const tl = Math.hypot(tx, ty) || 1
-          tx /= tl
-          ty /= tl
-          const nx = -ty
-          const ny = tx
-          const ddx = px - q.x
-          const ddy = py - q.y
-          const segLen = Math.hypot(
-            sgm.pts[sgm.pts.length - 1].x - sgm.pts[0].x,
-            sgm.pts[sgm.pts.length - 1].y - sgm.pts[0].y,
-          )
-          best = {
-            compIdx: sgm.compIdx,
-            bezierIdx: sgm.segIdx,
-            s,
-            u: ddx * tx + ddy * ty,
-            v: ddx * nx + ddy * ny,
-            bindSegLen: Math.max(segLen, 0.5),
-          }
+          best = { compIdx: sgm.compIdx, bezierIdx: sgm.segIdx, s }
         }
       }
     }
-    entries[i] = best ?? { compIdx: -1, bezierIdx: -1, s: 0, u: 0, v: 0, bindSegLen: 1 }
+    matches[i] = best ?? { compIdx: -1, bezierIdx: -1, s: 0 }
+  }
+
+  // 第二步: 夹角处对应关系单调修复 (软钳制, 不池化)。
+  // 最近点匹配在弧-边交界处乱序, 压缩时边界采样点互相穿插;
+  // 解绕后只把违反顺序的参数钳制到前值 — 无台阶伪影。
+  {
+    const totalParam = ribbon.segments.length * (OUTLINE_SUBDIV + 1)
+    const unwrapped = new Float64Array(count)
+    for (let i = 0; i < count; i++) {
+      unwrapped[i] = matches[i].compIdx < 0 ? 0 : matches[i].bezierIdx * (OUTLINE_SUBDIV + 1) + matches[i].s
+    }
+    for (let i = 1; i < count; i++) {
+      let v = unwrapped[i]
+      while (v < unwrapped[i - 1]) v += totalParam
+      unwrapped[i] = v
+    }
+    for (let i = 1; i < count; i++) {
+      if (unwrapped[i] < unwrapped[i - 1]) unwrapped[i] = unwrapped[i - 1]
+    }
+    for (let i = 0; i < count; i++) {
+      if (matches[i].compIdx < 0) continue
+      const wrapped = ((unwrapped[i] % totalParam) + totalParam) % totalParam
+      const fi = Math.max(0, Math.min(Math.round(wrapped), totalParam - 1))
+      matches[i] = {
+        compIdx: 0,
+        bezierIdx: Math.min(Math.floor(fi / (OUTLINE_SUBDIV + 1)), ribbon.segments.length - 1),
+        s: Math.min(fi % (OUTLINE_SUBDIV + 1), OUTLINE_SUBDIV),
+      }
+    }
+  }
+
+  // 第三步: 位移分解
+  const entries: OutlineOffsetEntry[] = new Array(count)
+  for (let i = 0; i < count; i++) {
+    const m = matches[i]
+    if (m.compIdx < 0) {
+      entries[i] = { compIdx: -1, bezierIdx: -1, s: 0, u: 0, v: 0, bindSegLen: 1 }
+      continue
+    }
+    const sgm = ribbon.segments[m.bezierIdx]
+    if (!sgm) {
+      entries[i] = { compIdx: -1, bezierIdx: -1, s: 0, u: 0, v: 0, bindSegLen: 1 }
+      continue
+    }
+    const s = Math.min(m.s, OUTLINE_SUBDIV)
+    const q = sgm.pts[s]
+    const px = samplePoints[i * 2]
+    const py = samplePoints[i * 2 + 1]
+    const prev = sgm.pts[Math.max(0, s - 1)]
+    const next = sgm.pts[Math.min(sgm.pts.length - 1, s + 1)]
+    let tx = next.x - prev.x
+    let ty = next.y - prev.y
+    const tl = Math.hypot(tx, ty) || 1
+    tx /= tl
+    ty /= tl
+    const nx = -ty
+    const ny = tx
+    const ddx = px - q.x
+    const ddy = py - q.y
+    const segLen = Math.hypot(
+      sgm.pts[sgm.pts.length - 1].x - sgm.pts[0].x,
+      sgm.pts[sgm.pts.length - 1].y - sgm.pts[0].y,
+    )
+    entries[i] = {
+      compIdx: m.compIdx,
+      bezierIdx: m.bezierIdx,
+      s: m.s,
+      u: ddx * tx + ddy * ty,
+      v: ddx * nx + ddy * ny,
+      bindSegLen: Math.max(segLen, 0.5),
+    }
+  }
+
+  // 法向位移频率拆分: 低频 (笔画宽度变化) 不随段缩放; 高频 (边缘小凸起/凹口)
+  // 随段压缩缩放 — 否则压缩时凸起的底座变窄而高度不变, 小角向内反折。
+  {
+    const vs = new Float64Array(count)
+    for (let i = 0; i < count; i++) vs[i] = entries[i].v
+    for (let pass = 0; pass < 2; pass++) {
+      const src = Float64Array.from(vs)
+      for (let i = 0; i < count; i++) {
+        const prev = i > 0 ? i - 1 : count - 1
+        const next = i < count - 1 ? i + 1 : 0
+        vs[i] = 0.5 * src[i] + 0.25 * src[prev] + 0.25 * src[next]
+      }
+    }
+    for (let i = 0; i < count; i++) entries[i].vSmooth = vs[i]
   }
   return { entries, arcSigns: ribbon.arcSigns }
 }
@@ -734,11 +801,16 @@ export function applyOutlineOffsetDeformation(
     ty /= tl
     const nx = -ty
     const ny = tx
-    // 切向位移随缩放比缩放 (纹理随笔画压缩/拉伸), 法向不缩放 (笔画宽度不变);
-    // 旧格式迁移条目无 bindSegLen (-1) → 不缩放切向
+    // 切向位移随缩放比缩放; 法向位移按频率拆分: 低频(宽度)不缩放, 高频(凸起/凹口)随缩放。
+    // 旧格式迁移条目无 bindSegLen (-1) / vSmooth → 不缩放
     const ut = e.u * (e.bindSegLen && e.bindSegLen > 0 ? ratios[i] : 1)
-    outBuffer[i * 2] = q.x + tx * ut + nx * e.v
-    outBuffer[i * 2 + 1] = q.y + ty * ut + ny * e.v
+    let ve = e.v
+    if (e.vSmooth !== undefined) {
+      const detailScale = Math.min(Math.max(ratios[i], 0.2), 1.2)
+      ve = e.vSmooth + (e.v - e.vSmooth) * detailScale
+    }
+    outBuffer[i * 2] = q.x + tx * ut + nx * ve
+    outBuffer[i * 2 + 1] = q.y + ty * ut + ny * ve
     anyChanged = true
   }
   return anyChanged
