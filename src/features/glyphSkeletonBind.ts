@@ -1338,9 +1338,10 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
   const outlineOffsetData = (storedBindData as any)?._outlineOffsetData as
     | import('./skeletonFitting').OutlineOffsetBindData
     | undefined
-  // 旧版本保存的条目 (dx/dy/bindNormalAngle) 迁移到局部坐标格式 (幂等)
+  // 旧版本保存的条目 (dx/dy/bindNormalAngle) 迁移到局部坐标格式 (幂等),
+  // 并为缺失 px/py 的条目从绑定时刻采样点补齐 (角部变形场平滑修复依赖)
   if (outlineOffsetData) {
-    migrateOutlineOffsetBindData(outlineOffsetData)
+    migrateOutlineOffsetBindData(outlineOffsetData, bindData.samplePoints)
   }
   const dragReflines = (glyph as any).getRefLines?.() ?? []
   const dragJoints = (glyph as any).getJoints?.() ?? []

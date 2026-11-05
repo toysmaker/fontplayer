@@ -198,4 +198,36 @@ describe('竖折折钩 手绘轮廓骨架拖拽', () => {
     expect(m.max).toBeLessThan(12)
     expect(m.count).toBeLessThanOrEqual(6)
   })
+
+  it('收缩折1 无角部交叉 (角部边界剪切阶跃由变形场平滑消除)', () => {
+    // 回归: test_strokes_09/10 收缩折1时折1末尾小凹陷前后点顺序翻转成交叉。
+    // 根因: 角部边界两侧锚点位移存在阶跃 (折1线段侧随压缩收缩, 折2侧随尾部刚性平移),
+    // 轮廓相邻采样点跨边界绑定时被拉开。修复: 总变形量 D=p'-p 沿轮廓迭代平滑至
+    // 相邻点差 < 2.5, 阶跃摊成渐变过渡带 (恒等姿态 D=0 精确还原, 手绘纹理不受影响)。
+    const { g, inst } = buildInstance()
+    drag(inst, 'zhe1_end', -200, 0)
+    const sbd = (g.skeleton as any).skeletonBindData
+    const samplePoints = sbd._sampleBindData.samplePoints as number[]
+    const reflines = (inst as any).getRefLines?.() ?? []
+    const joints = (inst as any).getJoints?.() ?? []
+    const ribbon = buildRibbonOutline(reflines, joints, 50, sbd._outlineOffsetData.arcSigns)
+    const out = new Float64Array(samplePoints.length)
+    applyOutlineOffsetDeformation(sbd._outlineOffsetData, ribbon.segments, out)
+
+    // 变形后采样点不应出现方向反转 (修复前折1角部为 4 处)
+    const n = samplePoints.length / 2
+    let folds = 0
+    for (let i = 0; i < n; i++) {
+      const a = { x: out[i * 2], y: out[i * 2 + 1] }
+      const b = { x: out[((i + 1) % n) * 2], y: out[((i + 1) % n) * 2 + 1] }
+      const c = { x: out[((i + 2) % n) * 2], y: out[((i + 2) % n) * 2 + 1] }
+      const v1 = { x: b.x - a.x, y: b.y - a.y }
+      const v2 = { x: c.x - b.x, y: c.y - b.y }
+      const l1 = Math.hypot(v1.x, v1.y), l2 = Math.hypot(v2.x, v2.y)
+      if (l1 < 2 || l2 < 2) continue
+      const cos = (v1.x * v2.x + v1.y * v2.y) / (l1 * l2)
+      if (cos < -0.5) folds++
+    }
+    expect(folds).toBe(0)
+  })
 })

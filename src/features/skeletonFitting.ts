@@ -299,6 +299,15 @@ export interface OutlineOffsetEntry {
   vSmooth?: number
   /** 绑定时刻所在段的长度 (拖拽时切向位移按 拖拽段长/绑定段长 缩放) */
   bindSegLen: number
+  /**
+   * 绑定时刻采样点位置 (原始手绘轮廓坐标)。拖拽时对总变形量 D = p' - p 沿轮廓平滑,
+   * 消除角部边界两侧 (线段压缩 vs 弧刚性平移) 的位移阶跃 —
+   * 否则角部附近手绘轮廓 (小凹陷) 的相邻采样点会被拉开而顺序翻转成交叉。
+   * D 在非角部位置本身平滑, 平滑近似恒等 (手绘纹理不受影响); 恒等姿态 D=0 精确还原。
+   * 旧格式条目无此字段 → 回退为不平滑 (保持旧行为)。
+   */
+  px?: number
+  py?: number
 }
 
 export interface OutlineOffsetBindData {
@@ -310,12 +319,15 @@ export interface OutlineOffsetBindData {
 /**
  * 迁移旧格式的细节迁移条目 (dx/dy/bindNormalAngle → u/v/bindSegLen)。
  * 旧格式缺少 bindSegLen, 迁移后切向缩放比固定为 1 (新生成笔画不受影响)。
+ * 同时为缺失 px/py 的条目从绑定时刻采样点补齐 (变形场平滑修复依赖)。
  */
-export function migrateOutlineOffsetBindData(data: any): void {
+export function migrateOutlineOffsetBindData(data: any, samplePoints?: number[]): void {
   if (!data || !Array.isArray(data.entries)) return
   let migrated = false
-  for (const e of data.entries) {
-    if (e && e.u === undefined && typeof e.dx === 'number') {
+  for (let i = 0; i < data.entries.length; i++) {
+    const e = data.entries[i]
+    if (!e) continue
+    if (e.u === undefined && typeof e.dx === 'number') {
       const theta = typeof e.bindNormalAngle === 'number' ? e.bindNormalAngle : 0
       const sinT = Math.sin(theta)
       const cosT = Math.cos(theta)
@@ -323,6 +335,10 @@ export function migrateOutlineOffsetBindData(data: any): void {
       e.v = e.dx * cosT + e.dy * sinT
       e.bindSegLen = -1
       migrated = true
+    }
+    if (e.px === undefined && samplePoints && i * 2 + 1 < samplePoints.length) {
+      e.px = samplePoints[i * 2]
+      e.py = samplePoints[i * 2 + 1]
     }
   }
   if (migrated && !Array.isArray(data.arcSigns)) {
@@ -713,6 +729,8 @@ export function buildOutlineOffsetBindData(
       u: ddx * tx + ddy * ty,
       v: ddx * nx + ddy * ny,
       bindSegLen: Math.max(segLen, 0.5),
+      px,
+      py,
     }
   }
 
@@ -779,9 +797,20 @@ export function applyOutlineOffsetDeformation(
     }
   }
 
+  const entries = bindData.entries
+  // 新格式绑定 (条目带 px/py) → 先按现有公式落点, 再对总变形量 D = p' - p 沿轮廓平滑。
+  // 角部边界两侧锚点位移存在阶跃 (线段侧随压缩向角部收缩, 弧侧随尾部刚性平移),
+  // 使角部附近相邻采样点的 D 出现阶跃, 顺序翻转成交叉 — 平滑把阶跃摊成渐变过渡带。
+  // D 在其余位置 (包括同段子分划边界 — 由 u 缩放精确补偿) 本身平滑, 平滑近似恒等,
+  // 手绘纹理不受影响; 恒等姿态 D=0 精确还原。旧格式条目无 px/py → 不平滑 (保持旧行为)。
+  const hasBindPoints =
+    entries.length > 0 && entries.every((e) => e.compIdx < 0 || e.px !== undefined)
+
   let anyChanged = false
+  const dispX = hasBindPoints ? new Float64Array(count) : null
+  const dispY = hasBindPoints ? new Float64Array(count) : null
   for (let i = 0; i < count; i++) {
-    const e = bindData.entries[i]
+    const e = entries[i]
     if (e.compIdx < 0) {
       outBuffer[i * 2] = 0
       outBuffer[i * 2 + 1] = 0
@@ -809,9 +838,44 @@ export function applyOutlineOffsetDeformation(
       const detailScale = Math.min(Math.max(ratios[i], 0.2), 1.2)
       ve = e.vSmooth + (e.v - e.vSmooth) * detailScale
     }
-    outBuffer[i * 2] = q.x + tx * ut + nx * ve
-    outBuffer[i * 2 + 1] = q.y + ty * ut + ny * ve
+    const rx = q.x + tx * ut + nx * ve
+    const ry = q.y + ty * ut + ny * ve
+    outBuffer[i * 2] = rx
+    outBuffer[i * 2 + 1] = ry
+    if (dispX && e.px !== undefined) {
+      dispX[i] = rx - e.px
+      dispY[i] = ry - e.py!
+    }
     anyChanged = true
+  }
+
+  if (dispX && dispY) {
+    // 迭代平滑直到相邻采样点位移差收敛: 角部阶跃 (可达 15-40 单位) 需要更多遍才能
+    // 摊平到相邻点差 < 2.5 (相邻采样间距 ~2), 否则最终拟合曲线在凹陷唇部仍会回折。
+    const MAX_DISP_PASSES = 12
+    const DISP_GAP_EPS = 2.5
+    for (let pass = 0; pass < MAX_DISP_PASSES; pass++) {
+      const src = Float64Array.from(dispX)
+      const srcY = Float64Array.from(dispY)
+      let maxGap = 0
+      for (let i = 0; i < count; i++) {
+        const prev = i > 0 ? i - 1 : count - 1
+        const next = i < count - 1 ? i + 1 : 0
+        dispX[i] = 0.5 * src[i] + 0.25 * src[prev] + 0.25 * src[next]
+        dispY[i] = 0.5 * srcY[i] + 0.25 * srcY[prev] + 0.25 * srcY[next]
+        const dx = dispX[i] - dispX[prev]
+        const dy = dispY[i] - dispY[prev]
+        const gap = Math.hypot(dx, dy)
+        if (gap > maxGap) maxGap = gap
+      }
+      if (maxGap < DISP_GAP_EPS) break
+    }
+    for (let i = 0; i < count; i++) {
+      const e = entries[i]
+      if (e.compIdx < 0 || e.px === undefined) continue
+      outBuffer[i * 2] = e.px + dispX[i]
+      outBuffer[i * 2 + 1] = e.py! + dispY[i]
+    }
   }
   return anyChanged
 }
