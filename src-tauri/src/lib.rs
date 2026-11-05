@@ -105,6 +105,8 @@ struct ToolsMenuTexts {
     format_all_characters: &'static str,
     format_current_character: &'static str,
     typesetting_preview: &'static str,
+    random_stroke_gen: &'static str,
+    random_char_gen: &'static str,
 }
 
 struct TestMenuTexts {
@@ -185,6 +187,8 @@ fn get_menu_texts(lang: &str) -> MenuTexts {
                 format_all_characters: "Format All Characters",
                 format_current_character: "Format Current Character",
                 typesetting_preview: "Typesetting Preview",
+                random_stroke_gen: "Random Stroke Generation",
+                random_char_gen: "Random Character Generation",
             },
             test: TestMenuTexts {
                 test: "Test",
@@ -262,6 +266,8 @@ fn get_menu_texts(lang: &str) -> MenuTexts {
                 format_all_characters: "一键格式化所有字符",
                 format_current_character: "一键格式化当前字符",
                 typesetting_preview: "排版预览",
+                random_stroke_gen: "随机生成笔画",
+                random_char_gen: "随机生成字符",
             },
             test: TestMenuTexts {
                 test: "测试",
@@ -496,6 +502,16 @@ fn typesetting_preview(app: AppHandle) {
     app.emit("typesetting-preview", ()).unwrap();
 }
 
+#[tauri::command]
+fn random_stroke_gen(app: AppHandle) {
+    app.emit("random-stroke-gen", ()).unwrap();
+}
+
+#[tauri::command]
+fn random_char_gen(app: AppHandle) {
+    app.emit("random-char-gen", ()).unwrap();
+}
+
 fn save_char_pngs(app: AppHandle) {
     println!("[RUST] save_char_pngs called");
     match app.emit("save-char-pngs", ()) {
@@ -589,6 +605,8 @@ fn build_menu_enabled_map() -> HashMap<String, Box<dyn Fn(&str) -> bool>> {
     map.insert("format-all-characters".to_string(), Box::new(enable_at_list));
     map.insert("format-current-character".to_string(), Box::new(enable_at_character_edit));
     map.insert("typesetting-preview".to_string(), Box::new(enable_at_list));
+    map.insert("random-stroke-gen".to_string(), Box::new(enable_at_list));
+    map.insert("random-char-gen".to_string(), Box::new(enable_at_list));
     map.insert("test-export-json".to_string(), Box::new(enable));
     map.insert("export-stroke-pngs".to_string(), Box::new(enable));
     map.insert("save-char-pngs".to_string(), Box::new(enable));
@@ -750,6 +768,8 @@ fn get_menu_item_text<'a>(id: &str, texts: &'a MenuTexts) -> Option<&'a str> {
         "format-all-characters" => Some(texts.tools.format_all_characters),
         "format-current-character" => Some(texts.tools.format_current_character),
         "typesetting-preview" => Some(texts.tools.typesetting_preview),
+        "random-stroke-gen" => Some(texts.tools.random_stroke_gen),
+        "random-char-gen" => Some(texts.tools.random_char_gen),
         "test-export-json" => Some(texts.test.export_json),
         "export-stroke-pngs" => Some(texts.test.export_stroke_pngs),
         "generate-training-data-v1" => Some(texts.test.generate_training_data_v1),
@@ -1049,6 +1069,14 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>, texts: &MenuTexts) -> Resul
                         .build(app)
                         ?,
                     &MenuItemBuilder::with_id("typesetting-preview", texts.tools.typesetting_preview)
+                        .enabled(false)
+                        .build(app)
+                        ?,
+                    &MenuItemBuilder::with_id("random-stroke-gen", texts.tools.random_stroke_gen)
+                        .enabled(false)
+                        .build(app)
+                        ?,
+                    &MenuItemBuilder::with_id("random-char-gen", texts.tools.random_char_gen)
                         .enabled(false)
                         .build(app)
                         ?,
@@ -1422,6 +1450,8 @@ pub fn run() {
                     "format-all-characters" => format_all_characters(app.app_handle().clone()),
                     "format-current-character" => format_current_character(app.app_handle().clone()),
                     "typesetting-preview" => typesetting_preview(app.app_handle().clone()),
+                    "random-stroke-gen" => random_stroke_gen(app.app_handle().clone()),
+                    "random-char-gen" => random_char_gen(app.app_handle().clone()),
                     "component-union" => component_union(app.app_handle().clone()),
                     "component-intersect" => component_intersect(app.app_handle().clone()),
                     "component-subtract" => component_subtract(app.app_handle().clone()),

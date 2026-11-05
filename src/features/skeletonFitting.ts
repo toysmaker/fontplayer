@@ -254,13 +254,15 @@ export function transformSamplesWithBones(
 
 // ==================== 拟合写回 ====================
 
-export function applyFittedSamplesToComponents(
+/**
+ * 组件/元数据解析器 (拟合与折线预览共用):
+ * 按 range.componentUUID 匹配组件, UUID 失效时按索引回退 (组件被重新生成后 UUID 会变)
+ */
+function createComponentResolver(
   penComponents: IGlyphComponent[],
-  outBuffer: Float64Array,
   bindData: SampledSkeletonBindData,
-): boolean {
+): (rangeIdx: number) => { comp: IGlyphComponent | undefined; meta: ComponentSegmentMeta | undefined } {
   const { componentSampleRanges, componentSegmentMeta } = bindData
-  if (!componentSampleRanges?.length) return false
 
   const componentMap = new Map<string, IGlyphComponent>()
   for (const comp of penComponents) {
@@ -272,21 +274,7 @@ export function applyFittedSamplesToComponents(
     metaMap.set(meta.componentUUID, meta)
   }
 
-  if (import.meta.env.DEV) {
-    console.log(LOG, 'applyFitted penComps=' + penComponents.length +
-      ' ranges=' + componentSampleRanges.length +
-      ' metas=' + componentSegmentMeta.length)
-    for (let ri = 0; ri < componentSampleRanges.length; ri++) {
-      const r = componentSampleRanges[ri]
-      console.log(LOG, '  range[' + ri + '] uuid=' + r.componentUUID +
-        ' start=' + r.start + ' end=' + r.end +
-        ' count=' + (r.end - r.start))
-    }
-  }
-
-  let anyPointChanged = false
-
-  for (let rangeIdx = 0; rangeIdx < componentSampleRanges.length; rangeIdx++) {
+  return (rangeIdx: number) => {
     const range = componentSampleRanges[rangeIdx]
     let comp = componentMap.get(range.componentUUID)
     let meta = metaMap.get(range.componentUUID)
@@ -294,9 +282,6 @@ export function applyFittedSamplesToComponents(
     // UUID 查找失败 → 按索引回退（组件被重新生成后 UUID 会变）
     if (!comp && rangeIdx < penComponents.length) {
       comp = penComponents[rangeIdx]
-      if (import.meta.env.DEV) {
-        console.log(LOG, 'UUID mismatch, index fallback: old=' + range.componentUUID + ' new=' + (comp?.uuid || 'none'))
-      }
       if (comp) {
         const oldUUID = range.componentUUID
         range.componentUUID = comp.uuid
@@ -310,13 +295,145 @@ export function applyFittedSamplesToComponents(
       }
     }
 
-    if (!comp) continue
-    const pts = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>
-    if (!pts || pts.length === 0) continue
-
-    if (!meta && rangeIdx < componentSegmentMeta.length) {
+    if (comp && !meta && rangeIdx < componentSegmentMeta.length) {
       meta = componentSegmentMeta[rangeIdx]
     }
+    return { comp, meta }
+  }
+}
+
+/** 新点写回组件: 长度一致原地覆写, 否则整体替换; 同步更新组件包围盒 */
+function updateComponentPoints(comp: IGlyphComponent, newPoints: Array<{ x: number; y: number }>): boolean {
+  const pts = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>
+  if (!pts || pts.length === 0) return false
+
+  // 检查是否有实质变化
+  let hasChanged = newPoints.length !== pts.length
+  if (!hasChanged) {
+    for (let i = 0; i < pts.length; i++) {
+      if (
+        skeletonCoordChanged(pts[i].x, newPoints[i].x) ||
+        skeletonCoordChanged(pts[i].y, newPoints[i].y)
+      ) {
+        hasChanged = true
+        break
+      }
+    }
+  }
+
+  if (hasChanged) {
+    if (newPoints.length === pts.length) {
+      // 长度一致：原地覆写坐标（零对象分配，最少响应式触发）
+      for (let i = 0; i < pts.length; i++) {
+        pts[i].x = newPoints[i].x
+        pts[i].y = newPoints[i].y
+      }
+    } else {
+      // 段数变化：整体替换数组（单次响应式触发）
+      const newPts: Array<{ x: number; y: number }> = new Array(newPoints.length)
+      for (let i = 0; i < newPoints.length; i++) {
+        newPts[i] = { x: newPoints[i].x, y: newPoints[i].y }
+      }
+      ;(comp.value as unknown as IPenComponent).points = newPts
+    }
+
+    // 重新读取 points（段数变化时数组已被整体替换）
+    const curPts = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>
+    const bound = getBound(curPts)
+    const pc = comp as any
+    if (
+      skeletonCoordChanged(pc.x ?? 0, bound.x) ||
+      skeletonCoordChanged(pc.y ?? 0, bound.y) ||
+      skeletonCoordChanged(pc.w ?? 0, bound.w) ||
+      skeletonCoordChanged(pc.h ?? 0, bound.h)
+    ) {
+      pc.x = bound.x; pc.y = bound.y; pc.w = bound.w; pc.h = bound.h
+    }
+  }
+
+  return hasChanged
+}
+
+/** 逐段把采样点串成退化贝塞尔 (控制点=端点) 直线序列: [P0,P0,P1,P1] + [P0,P1,P1]... */
+function polylineComponentFromSamples(
+  outBuffer: Float64Array,
+  rangeStart: number,
+  rangeEnd: number,
+  meta: ComponentSegmentMeta,
+): Array<{ x: number; y: number }> {
+  const { samplesPerSegment, closePath } = meta
+
+  const points: Array<{ x: number; y: number }> = []
+  let sampleOffset = 0
+  let isFirstCurve = true
+
+  for (let seg = 0; seg < samplesPerSegment.length; seg++) {
+    const count = samplesPerSegment[seg]
+    // 每对相邻采样点构成一条直线段
+    for (let s = 0; s < count - 1; s++) {
+      const bi = (rangeStart + sampleOffset + s) * 2
+      const p0 = { x: outBuffer[bi], y: outBuffer[bi + 1] }
+      const p1 = { x: outBuffer[bi + 2], y: outBuffer[bi + 3] }
+      if (isFirstCurve) {
+        points.push(
+          { x: p0.x, y: p0.y },
+          { x: p0.x, y: p0.y },
+          { x: p1.x, y: p1.y },
+          { x: p1.x, y: p1.y },
+        )
+        isFirstCurve = false
+      } else {
+        points.push(
+          { x: p0.x, y: p0.y },
+          { x: p1.x, y: p1.y },
+          { x: p1.x, y: p1.y },
+        )
+      }
+    }
+    sampleOffset += count
+  }
+
+  if (closePath && points.length >= 4) {
+    const firstP0 = points[0]
+    const lastP3 = points[points.length - 1]
+    if (
+      Math.abs(lastP3.x - firstP0.x) > FIT_MAX_ERROR ||
+      Math.abs(lastP3.y - firstP0.y) > FIT_MAX_ERROR
+    ) {
+      // 末段退化贝塞尔的 c2 与 p3 同值, 一并吸附保证闭合处视觉干净
+      lastP3.x = firstP0.x
+      lastP3.y = firstP0.y
+      const lastC2 = points[points.length - 2]
+      lastC2.x = firstP0.x
+      lastC2.y = firstP0.y
+    }
+  }
+
+  return points
+}
+
+export function applyFittedSamplesToComponents(
+  penComponents: IGlyphComponent[],
+  outBuffer: Float64Array,
+  bindData: SampledSkeletonBindData,
+): boolean {
+  const { componentSampleRanges, componentSegmentMeta } = bindData
+  if (!componentSampleRanges?.length) return false
+
+  if (import.meta.env.DEV) {
+    console.log(LOG, 'applyFitted penComps=' + penComponents.length +
+      ' ranges=' + componentSampleRanges.length +
+      ' metas=' + componentSegmentMeta.length)
+  }
+
+  const resolve = createComponentResolver(penComponents, bindData)
+  let anyPointChanged = false
+
+  for (let rangeIdx = 0; rangeIdx < componentSampleRanges.length; rangeIdx++) {
+    const range = componentSampleRanges[rangeIdx]
+    const { comp, meta } = resolve(rangeIdx)
+    if (!comp) continue
+
     if (!meta) {
       if (import.meta.env.DEV) {
         console.warn(LOG, 'meta missing for uuid=' + range.componentUUID +
@@ -332,56 +449,55 @@ export function applyFittedSamplesToComponents(
 
     // DEV: 输出原始 vs 拟合的控制点数量对比
     if (import.meta.env.DEV) {
+      const pts = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>
       console.log(LOG, 'writeback uuid=' + range.componentUUID +
         ' origCP=' + pts.length + ' fittedCP=' + fittedPoints.length +
         (fittedPoints.length !== pts.length ? ' (SEGMENT COUNT CHANGED!)' : ''))
     }
 
-    // 检查是否有实质变化
-    let hasChanged = fittedPoints.length !== pts.length
-    if (!hasChanged) {
-      for (let i = 0; i < pts.length; i++) {
-        if (
-          skeletonCoordChanged(pts[i].x, fittedPoints[i].x) ||
-          skeletonCoordChanged(pts[i].y, fittedPoints[i].y)
-        ) {
-          hasChanged = true
-          break
-        }
-      }
-    }
-
-    if (hasChanged) {
-      if (fittedPoints.length === pts.length) {
-        // 长度一致：原地覆写坐标（零对象分配，最少响应式触发）
-        for (let i = 0; i < pts.length; i++) {
-          pts[i].x = fittedPoints[i].x
-          pts[i].y = fittedPoints[i].y
-        }
-      } else {
-        // 段数变化：整体替换数组（单次响应式触发）
-        const newPts: Array<{ x: number; y: number }> = new Array(fittedPoints.length)
-        for (let i = 0; i < fittedPoints.length; i++) {
-          newPts[i] = { x: fittedPoints[i].x, y: fittedPoints[i].y }
-        }
-        ;(comp.value as unknown as IPenComponent).points = newPts
-      }
+    if (updateComponentPoints(comp, fittedPoints)) {
       anyPointChanged = true
     }
+  }
 
-    if (anyPointChanged) {
-      // 重新读取 points（段数变化时数组已被整体替换）
-      const curPts = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>
-      const bound = getBound(curPts)
-      const pc = comp as any
-      if (
-        skeletonCoordChanged(pc.x ?? 0, bound.x) ||
-        skeletonCoordChanged(pc.y ?? 0, bound.y) ||
-        skeletonCoordChanged(pc.w ?? 0, bound.w) ||
-        skeletonCoordChanged(pc.h ?? 0, bound.h)
-      ) {
-        pc.x = bound.x; pc.y = bound.y; pc.w = bound.w; pc.h = bound.h
+  return anyPointChanged
+}
+
+/**
+ * 拖拽预览写回: 与拟合写回结构一致, 但不调用 fitCurve,
+ * 直接把变换后的采样点串成直线段 (退化贝塞尔) 写入组件,
+ * 拖拽过程中以短折线渲染阶段性效果, 松手后由拟合写回恢复曲线。
+ */
+export function applyPolylineSamplesToComponents(
+  penComponents: IGlyphComponent[],
+  outBuffer: Float64Array,
+  bindData: SampledSkeletonBindData,
+): boolean {
+  const { componentSampleRanges, componentSegmentMeta } = bindData
+  if (!componentSampleRanges?.length) return false
+
+  const resolve = createComponentResolver(penComponents, bindData)
+  let anyPointChanged = false
+
+  for (let rangeIdx = 0; rangeIdx < componentSampleRanges.length; rangeIdx++) {
+    const range = componentSampleRanges[rangeIdx]
+    const { comp, meta } = resolve(rangeIdx)
+    if (!comp) continue
+
+    if (!meta) {
+      if (import.meta.env.DEV) {
+        console.warn(LOG, 'meta missing for uuid=' + range.componentUUID +
+          ' rangeIdx=' + rangeIdx + ' metaCount=' + componentSegmentMeta.length +
+          ' SKIPPING (prevents crash)')
       }
+      continue
+    }
+
+    const polyPoints = polylineComponentFromSamples(outBuffer, range.start, range.end, meta)
+    if (polyPoints.length === 0) continue
+
+    if (updateComponentPoints(comp, polyPoints)) {
+      anyPointChanged = true
     }
   }
 

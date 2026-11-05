@@ -1,9 +1,29 @@
 import { fileURLToPath, URL } from 'node:url'
+import { existsSync, readdirSync, unlinkSync } from 'node:fs'
 
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import copyPlugin from 'rollup-plugin-copy'
 import { visualizer } from 'rollup-plugin-visualizer'
+
+/**
+ * 删除 rollup 静态分析 onnxruntime-web 死代码 (webgpu jsep 路径) 时多余发出的 jsep wasm (~29MB)。
+ * 运行时 (numThreads=1, wasm EP) 不会请求这些文件。
+ */
+function cleanupOrtDeadAssets() {
+  return {
+    name: 'cleanup-ort-dead-assets',
+    writeBundle() {
+      const assetsDir = 'dist/assets'
+      if (!existsSync(assetsDir)) return
+      for (const f of readdirSync(assetsDir)) {
+        if (f.startsWith('ort-wasm-simd-threaded.jsep')) {
+          unlinkSync(`${assetsDir}/${f}`)
+        }
+      }
+    },
+  }
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -14,7 +34,8 @@ export default defineConfig({
     }),
     visualizer({
       open: false,
-    })
+    }),
+    cleanupOrtDeadAssets(),
   ].filter(Boolean),
   resolve: {
     alias: {
@@ -51,7 +72,10 @@ export default defineConfig({
           targets: [
             { src: 'lib/**/*', dest: 'dist/lib' },
             { src: 'public/overlap_wasm_bg.wasm', dest: 'dist' },
-            { src: 'public/overlap_wasm.js', dest: 'dist' }
+            { src: 'public/overlap_wasm.js', dest: 'dist' },
+            // onnxruntime-web 胶水与 wasm: 运行时按 chunk 相对路径 (dist/assets/) 解析
+            { src: 'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm', dest: 'dist/assets' },
+            { src: 'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs', dest: 'dist/assets' }
           ],
           hook: 'writeBundle',
         }),
@@ -70,6 +94,6 @@ export default defineConfig({
     Module: {}
   },
   optimizeDeps: {
-    exclude: ['overlap_wasm']
+    exclude: ['overlap_wasm', 'onnxruntime-web']
   }
 })

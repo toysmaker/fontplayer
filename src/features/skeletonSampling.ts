@@ -445,11 +445,11 @@ export function releaseStoredBindRuntimeData(stored: any): void {
 
 /**
  * 获取或创建变换缓冲区（惰性分配，复用）
- * 返回的 Float64Array 长度为 SAMPLE_TOTAL * 2
+ * 长度按实际采样点数分配 (兼容旧工程中不同 SAMPLE_TOTAL 的绑定数据)
  */
 export function getTransformBuffer(bindData: SampledSkeletonBindData): Float64Array {
   if (!bindData._transformBuffer) {
-    bindData._transformBuffer = new Float64Array(SAMPLE_TOTAL * 2)
+    bindData._transformBuffer = new Float64Array(bindData.samplePoints.length)
   } else {
     // 清零复用（避免残留值干扰）
     bindData._transformBuffer.fill(0)

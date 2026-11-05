@@ -5,7 +5,7 @@
  */
 
 import type { CustomGlyph } from '@/core/instance/CustomGlyph'
-import { glyphSkeletonRebind } from '@/features/glyphSkeletonBind'
+import { glyphSkeletonRebind, setSkeletonTransformPreview } from '@/features/glyphSkeletonBind'
 import { releaseStoredBindRuntimeData } from '@/features/skeletonSampling'
 
 type CoordFn = (coord: number) => number
@@ -101,6 +101,9 @@ export class GlyphSkeletonDragger {
     this.draggingJoint = closestJoint
     this.startDisplayX = e.clientX
     this.startDisplayY = e.clientY
+
+    // 拖拽开始: 进入预览模式 (拖拽过程中折线渲染, 松手后拟合恢复)
+    setSkeletonTransformPreview(true)
 
     // 调用脚本的 onSkeletonDragStart（保存所有关节位置快照到 tempData）
     if (this.glyphInstance.onSkeletonDragStart) {
@@ -228,6 +231,8 @@ export class GlyphSkeletonDragger {
   }
 
   private onMouseUp = (e: MouseEvent): void => {
+    // 先退出预览模式, 保证随后的 onSkeletonDragEnd/glyphSkeletonRebind 执行最终拟合
+    setSkeletonTransformPreview(false)
     if (!this.glyphInstance || !this.draggingJoint) return
 
     const displayDx = e.clientX - this.startDisplayX

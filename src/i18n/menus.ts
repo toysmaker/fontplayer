@@ -73,6 +73,8 @@ const menus = {
 			format_all_characters: '一键格式化所有字符',
 			format_current_character: '一键格式化当前字符',
 			typesetting_preview: '排版预览',
+			random_stroke_gen: '随机生成笔画',
+			random_char_gen: '随机生成字符',
 		},
 		effects: {
 			effects: '效果',
@@ -167,6 +169,8 @@ const menus = {
 			format_all_characters: 'Format All Characters',
 			format_current_character: 'Format Current Character',
 			typesetting_preview: 'Typesetting Preview',
+			random_stroke_gen: 'Random Stroke Generation',
+			random_char_gen: 'Random Character Generation',
 		},
 		effects: {
 			effects: 'Effects',

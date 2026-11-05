@@ -165,6 +165,14 @@ export async function initTauriMenu() {
       window.dispatchEvent(new CustomEvent('editor-typesetting-preview'))
     })
 
+    listen('random-stroke-gen', () => {
+      window.dispatchEvent(new CustomEvent('editor-random-stroke-gen'))
+    })
+
+    listen('random-char-gen', () => {
+      window.dispatchEvent(new CustomEvent('editor-random-char-gen'))
+    })
+
     listen('component-union', () => {
       window.dispatchEvent(new CustomEvent('editor-component-boolean', { detail: { operation: 'union' } }))
     })

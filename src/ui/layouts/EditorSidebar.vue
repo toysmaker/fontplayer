@@ -74,6 +74,8 @@
       :category="addGlyphCategory"
     />
     <GlyphComponentsDialog v-model:show="showGlyphComponentsDialog" />
+    <RandomStrokeDialog v-model:show="showRandomStrokeDialog" />
+    <RandomCharDialog v-model:show="showRandomCharDialog" />
     <FontSettingsDialog
       v-model:show="showFontSettingsDialog"
       @open-more="handleFontSettingsOpenMore"
@@ -110,6 +112,8 @@ import NewProjectDialog from '@/ui/dialogs/NewProjectDialog.vue'
 import AddCharacterDialog from '@/ui/dialogs/AddCharacterDialog.vue'
 import AddIconDialog from '@/ui/dialogs/AddIconDialog.vue'
 import AddGlyphDialog from '@/ui/dialogs/AddGlyphDialog.vue'
+import RandomStrokeDialog from '@/ui/dialogs/RandomStrokeDialog.vue'
+import RandomCharDialog from '@/ui/dialogs/RandomCharDialog.vue'
 import GlyphComponentsDialog from '@/ui/dialogs/GlyphComponentsDialog.vue'
 import FontSettingsDialog from '@/ui/dialogs/FontSettingsDialog.vue'
 import FontSettingsMoreDialog from '@/ui/dialogs/FontSettingsMoreDialog.vue'
@@ -137,6 +141,8 @@ const projectStore = useProjectStore()
 const editorStore = useEditorStore()
 const showNewProjectDialog = ref(false)
 const showAddCharacterDialog = ref(false)
+const showRandomStrokeDialog = ref(false)
+const showRandomCharDialog = ref(false)
 const showAddIconDialog = ref(false)
 const showAddGlyphDialog = ref(false)
 const addGlyphCategory = ref<'glyphs' | 'stroke_glyphs' | 'radical_glyphs' | 'comp_glyphs'>('glyphs')
@@ -311,6 +317,14 @@ const handleShowNewProjectDialog = () => {
 
 const handleShowAddCharacterDialog = () => {
   showAddCharacterDialog.value = true
+}
+
+const handleShowRandomStrokeDialog = () => {
+  showRandomStrokeDialog.value = true
+}
+
+const handleShowRandomCharDialog = () => {
+  showRandomCharDialog.value = true
 }
 
 const handleShowAddIconDialog = () => {
@@ -498,6 +512,8 @@ const onSaveAs = async () => { try { await fileHandler.saveProjectTauriAs() } ca
 onMounted(() => {
   window.addEventListener('editor-show-new-project-dialog', handleShowNewProjectDialog)
   window.addEventListener('editor-add-character', handleShowAddCharacterDialog)
+  window.addEventListener('editor-random-stroke-gen', handleShowRandomStrokeDialog)
+  window.addEventListener('editor-random-char-gen', handleShowRandomCharDialog)
   window.addEventListener('editor-add-icon', handleShowAddIconDialog)
   window.addEventListener('editor-add-glyph', handleShowAddGlyphDialog)
   window.addEventListener('show-warning-message', handleShowWarningMessage)
@@ -551,6 +567,8 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('editor-show-new-project-dialog', handleShowNewProjectDialog)
   window.removeEventListener('editor-add-character', handleShowAddCharacterDialog)
+  window.removeEventListener('editor-random-stroke-gen', handleShowRandomStrokeDialog)
+  window.removeEventListener('editor-random-char-gen', handleShowRandomCharDialog)
   window.removeEventListener('editor-add-icon', handleShowAddIconDialog)
   window.removeEventListener('editor-add-glyph', handleShowAddGlyphDialog)
   window.removeEventListener('show-warning-message', handleShowWarningMessage)

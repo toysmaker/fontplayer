@@ -17,8 +17,21 @@ import {
 } from "./skeletonSampling";
 import {
   applyFittedSamplesToComponents,
+  applyPolylineSamplesToComponents,
   transformSamplesWithBones,
 } from "./skeletonFitting";
+
+// ── 拖拽预览模式 ──
+// 拖拽过程中跳过曲线拟合, 用采样折线渲染阶段性效果; 松手后由 drag end 恢复拟合
+let _previewTransform = false
+
+export function setSkeletonTransformPreview(on: boolean): void {
+  _previewTransform = on
+}
+
+export function isSkeletonTransformPreview(): boolean {
+  return _previewTransform
+}
 
 // 导入所有笔画的skeletonToBones函数
 import { skeletonToBones_heng } from "@/templates/kai/横"
@@ -1307,9 +1320,6 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
     const d = Math.sqrt(dx * dx + dy * dy)
     if (d > maxDiff) maxDiff = d
   }
-  if (import.meta.env.DEV) {
-    console.log('[SampledBind] maxSampleDiff=' + maxDiff.toFixed(2) + ' bones=' + bindData.bones.length + ' samples=' + (bindData.samplePoints.length / 2))
-  }
 
   // 骨架未移动（恒等变换）且无字重偏移时跳过拟合写回：
   // 拟合是有损的，即使采样点完全相同也会产生不同的控制点，
@@ -1351,17 +1361,16 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
     }
   }
 
-  // 拟合采样点 → 贝塞尔曲线 → 写回组件
+  // 拟合采样点 → 贝塞尔曲线 → 写回组件 (拖拽预览模式下用折线, 松手后拟合)
   let anyChanged = false
   try {
-    anyChanged = applyFittedSamplesToComponents(penComponents, outBuffer, bindData)
+    anyChanged = isSkeletonTransformPreview()
+      ? applyPolylineSamplesToComponents(penComponents, outBuffer, bindData)
+      : applyFittedSamplesToComponents(penComponents, outBuffer, bindData)
   } catch (err) {
     if (import.meta.env.DEV) {
       console.warn('[SampledBind] applyFittedSamplesToComponents threw:', err)
     }
-  }
-  if (import.meta.env.DEV) {
-    console.log('[SampledBind] anyChangedAfterFit=' + anyChanged)
   }
   if (!anyChanged) {
     return
@@ -1657,20 +1666,21 @@ export function applyGlyphSkeletonTransformation(glyphInstance: CustomGlyph): vo
     const d = Math.sqrt(dx * dx + dy * dy)
     if (d > maxDiff) maxDiff = d
   }
-  if (import.meta.env.DEV) {
-    console.log('[SampledBind] applyGlyphSkeleton maxSampleDiff=' + maxDiff.toFixed(2))
-  }
   if (maxDiff < 0.01) {
     // 恒等变换：释放刚构建的运行时缓存，避免内存滞留
     releaseStoredBindRuntimeData(storedBindData)
     return
   }
 
-  // 拟合采样点 → 贝塞尔曲线 → 写回各组件
+  // 拟合采样点 → 贝塞尔曲线 → 写回各组件 (拖拽预览模式下用折线, 松手后拟合)
   const rawGlyph = glyphInstance._glyph
   const penComponents = rawGlyph.components?.filter((c: any) => c.type === 'pen') as IGlyphComponent[] || []
   try {
-    applyFittedSamplesToComponents(penComponents, outBuffer, bindData)
+    if (isSkeletonTransformPreview()) {
+      applyPolylineSamplesToComponents(penComponents, outBuffer, bindData)
+    } else {
+      applyFittedSamplesToComponents(penComponents, outBuffer, bindData)
+    }
   } catch (err) {
     if (import.meta.env.DEV) {
       console.warn('[SampledBind] applyGlyphSkeleton: applyFittedSamplesToComponents threw:', err)

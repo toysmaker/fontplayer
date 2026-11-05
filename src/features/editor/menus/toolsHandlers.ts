@@ -192,6 +192,14 @@ export function createToolsHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
     }
   }
 
+  const handleRandomStrokeGen = () => {
+    window.dispatchEvent(new CustomEvent('editor-random-stroke-gen'))
+  }
+
+  const handleRandomCharGen = () => {
+    window.dispatchEvent(new CustomEvent('editor-random-char-gen'))
+  }
+
   return {
     'remove_overlap': handleRemoveOverlap,
     'format-all-characters': handleFormatAllCharacters,
@@ -200,6 +208,8 @@ export function createToolsHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
     'component-intersect': () => handleComponentBoolean('intersect'),
     'component-subtract': () => handleComponentBoolean('subtract'),
     'typesetting-preview': handleTypesettingPreview,
+    'random-stroke-gen': handleRandomStrokeGen,
+    'random-char-gen': handleRandomCharGen,
   }
 }
 

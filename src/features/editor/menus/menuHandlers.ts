@@ -149,6 +149,8 @@ export function createDisabledRules(ctx: {
     'format-all-characters': enableAtList,
     'format-current-character': enableAtCharacterEdit,
     'typesetting-preview': enableAtList,
+    'random-stroke-gen': enableAtList,
+    'random-char-gen': enableAtList,
 
     // test (DEV only)
     'test-export-json': enable,

@@ -15,6 +15,7 @@ import {
   editGlyphOnDragging,
 } from "@/stores/skeletonDragger"
 import { releaseStoredBindRuntimeData } from "@/features/skeletonSampling"
+import { setSkeletonTransformPreview } from "@/features/glyphSkeletonBind"
 import * as R from "ramda"
 
 type GetCoord = (coord: number) => number
@@ -93,6 +94,8 @@ export const initSkeletonDragger = (
       const { x, y } = joints[i]
       if (distance(x, y, mouseDownX, mouseDownY) <= d) {
         draggingJoint.value = joints[i]
+        // 拖拽开始: 进入预览模式 (拖拽过程中折线渲染, 松手后拟合恢复)
+        setSkeletonTransformPreview(true)
         if ((instance as any).onSkeletonDragStart) {
           ;(instance as any).onSkeletonDragStart({
             draggingJoint: draggingJoint.value,
@@ -146,6 +149,8 @@ export const initSkeletonDragger = (
   }
 
   const onMouseUp = (e: MouseEvent) => {
+    // 先退出预览模式, 保证随后的 onSkeletonDragEnd 执行最终拟合
+    setSkeletonTransformPreview(false)
     const glyph = editGlyphOnDragging.value
     const instance =
       glyph?.uuid

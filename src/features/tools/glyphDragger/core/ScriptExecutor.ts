@@ -9,7 +9,7 @@ import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import type { ICustomGlyph } from '@/core/types'
 import type { IDragEvent, IJoint } from './types'
 import { updateSkeletonTransformation } from '@/templates/strokeFnMap'
-import { glyphSkeletonRebind } from '@/features/glyphSkeletonBind'
+import { glyphSkeletonRebind, setSkeletonTransformPreview } from '@/features/glyphSkeletonBind'
 import { releaseStoredBindRuntimeData } from '@/features/skeletonSampling'
 
 export class ScriptExecutor {
@@ -74,6 +74,8 @@ export class ScriptExecutor {
     componentUUID: string,
     joint: IJoint
   ): void {
+    // 拖拽开始: 进入预览模式 (拖拽过程中折线渲染, 松手后拟合恢复)
+    setSkeletonTransformPreview(true)
     const glyphInstance = this.getGlyphInstance(glyph, componentUUID)
     if (!glyphInstance) {
       console.warn('[ScriptExecutor.executeDragStart] No glyph instance found for', componentUUID)
@@ -129,29 +131,11 @@ export class ScriptExecutor {
       return
     }
     
-    if (import.meta.env.DEV) {
-      const componentsBefore = glyphInstance._components?.length || 0
-      console.log('[ScriptExecutor.executeDrag] Before onSkeletonDrag:', {
-        componentUUID,
-        hasOnSkeletonDrag: !!glyphInstance.onSkeletonDrag,
-        hasTempData: !!glyphInstance.tempData,
-        componentsCount: componentsBefore,
-        event: event
-      })
-    }
-    
     if (glyphInstance.onSkeletonDrag) {
       try {
         glyphInstance.onSkeletonDrag(event)
         // glyphSkeleton: 脚本重新生成关节后重新应用 ox/oy 偏移
         const skel = (glyphInstance._glyph as any)?.skeleton
-        if (import.meta.env.DEV) {
-          console.log('[SampledBind] executeDrag after onSkeletonDrag:' +
-            ' skeletonType=' + (skel?.type || 'none') +
-            ' hasSkeletonBindData=' + !!skel?.skeletonBindData +
-            ' hasSampleBindData=' + !!skel?.skeletonBindData?._sampleBindData +
-            ' hasGlyphSkeletonBindData=' + !!skel?.glyphSkeletonBindData)
-        }
         if (skel?.type === 'glyphSkeleton') {
           const ox = skel.ox || 0, oy = skel.oy || 0
           if (ox !== 0 || oy !== 0) {
@@ -162,26 +146,20 @@ export class ScriptExecutor {
             }
           }
         }
-        // 将骨架变化应用到笔形轮廓，使拖拽骨架时形状随动（before_bind 模板内未调用 updateSkeletonTransformation）
-        try {
-          updateSkeletonTransformation(glyphInstance)
-        } catch (err) {
-          if (import.meta.env.DEV) {
-            console.warn('[ScriptExecutor.executeDrag] updateSkeletonTransformation failed:', err)
+        // 将骨架变化应用到笔形轮廓（after_bind 监听器内部已调用, 这里只为
+        // before_bind / glyphSkeleton 模板补一次, 避免每帧双重变换）
+        if (!skel || skel.type === 'glyphSkeleton' || !!skel.onSkeletonBind) {
+          try {
+            updateSkeletonTransformation(glyphInstance)
+          } catch (err) {
+            if (import.meta.env.DEV) {
+              console.warn('[ScriptExecutor.executeDrag] updateSkeletonTransformation failed:', err)
+            }
           }
         }
         // glyphSkeleton 已绑定则应用 LBS 变形
         if (skel?.glyphSkeletonBindData) {
           glyphSkeletonRebind(glyphInstance)
-        }
-        
-        if (import.meta.env.DEV) {
-          const componentsAfter = glyphInstance._components?.length || 0
-          console.log('[ScriptExecutor.executeDrag] After onSkeletonDrag:', {
-            componentUUID,
-            componentsCount: componentsAfter,
-            componentsChanged: componentsAfter !== (glyphInstance._components?.length || 0)
-          })
         }
       } catch (error) {
         console.error('Error in onSkeletonDrag:', error)
@@ -201,6 +179,8 @@ export class ScriptExecutor {
     componentUUID: string,
     event: IDragEvent
   ): void {
+    // 先退出预览模式, 保证随后的 onSkeletonDragEnd/rebind 执行最终拟合
+    setSkeletonTransformPreview(false)
     const glyphInstance = this.getGlyphInstance(glyph, componentUUID)
     if (!glyphInstance) {
       if (import.meta.env.DEV) {
@@ -235,12 +215,15 @@ export class ScriptExecutor {
             }
           }
         }
-        // 确保轮廓与骨架一致（before_bind 模板内 onSkeletonDragEnd 未调用 updateSkeletonTransformation）
-        try {
-          updateSkeletonTransformation(glyphInstance)
-        } catch (err) {
-          if (import.meta.env.DEV) {
-            console.warn('[ScriptExecutor.executeDragEnd] updateSkeletonTransformation failed:', err)
+        // 确保轮廓与骨架一致（after_bind 监听器内部已调用, 这里只为
+        // before_bind / glyphSkeleton 模板补一次, 避免双重变换）
+        if (!skel || skel.type === 'glyphSkeleton' || !!skel.onSkeletonBind) {
+          try {
+            updateSkeletonTransformation(glyphInstance)
+          } catch (err) {
+            if (import.meta.env.DEV) {
+              console.warn('[ScriptExecutor.executeDragEnd] updateSkeletonTransformation failed:', err)
+            }
           }
         }
         // glyphSkeleton 已绑定则应用 LBS 变形

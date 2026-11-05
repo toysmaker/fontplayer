@@ -32,6 +32,9 @@ public/data/*
 !public/data/dictionary/
 public/templates/private
 
+# AI 模型与数据 (导出产物, 暂不入库)
+public/models/ai/
+
 .vite
 
 docs

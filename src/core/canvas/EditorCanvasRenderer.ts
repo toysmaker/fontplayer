@@ -493,7 +493,8 @@ export function renderCanvas(
         ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
       } else if (fontRenderStyle.value !== 'black') {
-        ctx.strokeStyle = eff
+        // 描边模式: 统一黑色, 不按组件 fillColor (避免镂空轮廓识别出的白色洞描成白边)
+        ctx.strokeStyle = '#000'
         ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
       } else {
@@ -552,7 +553,8 @@ export function renderCanvas(
         ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
       } else if (fontRenderStyle.value !== 'black') {
-        ctx.strokeStyle = effPoly
+        // 描边模式: 统一黑色, 不按组件 fillColor (避免镂空轮廓识别出的白色洞描成白边)
+        ctx.strokeStyle = '#000'
         ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
       } else {
@@ -598,7 +600,8 @@ export function renderCanvas(
         ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
       } else if (fontRenderStyle.value !== 'black') {
-        ctx.strokeStyle = effEll
+        // 描边模式: 统一黑色, 不按组件 fillColor (避免镂空轮廓识别出的白色洞描成白边)
+        ctx.strokeStyle = '#000'
         ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
       } else {
@@ -643,7 +646,8 @@ export function renderCanvas(
         ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
       } else if (fontRenderStyle.value !== 'black') {
-        ctx.strokeStyle = effRect
+        // 描边模式: 统一黑色, 不按组件 fillColor (避免镂空轮廓识别出的白色洞描成白边)
+        ctx.strokeStyle = '#000'
         ctx.stroke()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
       } else {

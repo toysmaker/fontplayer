@@ -31,7 +31,7 @@ function getScriptUrl(path: string): string {
   return TEMPLATES_BASE ? `${TEMPLATES_BASE}${path}` : path
 }
 
-function ensureStrokeGlyphs(file: any) {
+export function ensureStrokeGlyphs(file: any) {
   if (!file.stroke_glyphs) file.stroke_glyphs = []
 }
 function ensureGlyphs(file: any) {
@@ -41,7 +41,7 @@ function ensureCompGlyphs(file: any) {
   if (!file.comp_glyphs) file.comp_glyphs = []
 }
 
-function createBaseGlyph(name: string, style: string, script: string, parameters: IParameter[]): ICustomGlyph {
+export function createBaseGlyph(name: string, style: string, script: string, parameters: IParameter[]): ICustomGlyph {
   return {
     uuid: genUUID(),
     name,
@@ -129,14 +129,14 @@ function loadImageFromUrl(url: string): Promise<HTMLImageElement> {
   })
 }
 
-function appendPenComponentsToGlyph(glyph: ICustomGlyph, components: IGlyphComponent[]) {
+export function appendPenComponentsToGlyph(glyph: ICustomGlyph, components: IGlyphComponent[]) {
   for (const c of components) {
     glyph.components.push(c)
     glyph.orderedList.push({ type: 'component', uuid: c.uuid })
   }
 }
 
-function handDrawnTemplateParameters(stroke: (typeof hei_strokes)[number]): IParameter[] {
+export function handDrawnTemplateParameters(stroke: (typeof hei_strokes)[number]): IParameter[] {
   const parameters = paramsFromStroke(stroke)
   addRefPositionParam(parameters)
   parameters.push({
