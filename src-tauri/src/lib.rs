@@ -1210,6 +1210,58 @@ fn open_devtools_cmd(window: tauri::WebviewWindow) {
 }
 // END-MARK-DEVTOOLS
 
+/// 系统字体条目：family 用于 canvas ctx.font 渲染，display 为本地化显示名（中文系统下为中文名）
+#[derive(serde::Serialize)]
+struct SystemFontInfo {
+    family: String,
+    display: String,
+}
+
+/// 枚举系统可用字体族名（macOS CoreText；非 macOS 平台返回空列表）
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn list_system_fonts() -> Result<Vec<SystemFontInfo>, String> {
+    use core::ptr::null_mut;
+    use objc2_core_foundation::{CFArray, CFDictionary, CFRetained, CFString, CFType};
+    use objc2_core_text::{
+        CTFontDescriptor, CTFontManagerCopyAvailableFontFamilyNames, kCTFontDisplayNameAttribute,
+        kCTFontFamilyNameAttribute,
+    };
+
+    let families = unsafe { CTFontManagerCopyAvailableFontFamilyNames() };
+    // 生成的函数返回 CFArray<Opaque>（元素类型被擦除），实际元素均为 CFString，
+    // 先 cast_unchecked 转成 CFType 元素再逐个 downcast
+    let families: CFRetained<CFArray<CFType>> = unsafe { CFRetained::cast_unchecked(families) };
+    let mut out = Vec::new();
+    for item in families.iter() {
+        let Ok(family_cf) = item.downcast::<CFString>() else {
+            continue;
+        };
+        let family = family_cf.to_string();
+        // 通过 font descriptor 获取本地化显示名（中文系统下为中文名，如「苹方」）
+        let attrs = CFDictionary::<CFString, CFString>::from_slices(
+            &[unsafe { kCTFontFamilyNameAttribute }],
+            &[&family_cf],
+        );
+        let descriptor = unsafe { CTFontDescriptor::with_attributes(attrs.as_ref()) };
+        let display = unsafe {
+            descriptor.localized_attribute(kCTFontDisplayNameAttribute, null_mut())
+        }
+        .and_then(|v| v.downcast::<CFString>().ok())
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| family.clone());
+        out.push(SystemFontInfo { family, display });
+    }
+    Ok(out)
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn list_system_fonts() -> Result<Vec<SystemFontInfo>, String> {
+    Ok(Vec::new())
+}
+
 /// 从二值位图mask提取骨架折线段
 /// mask_b64: base64编码的8位灰度图数据（0=前景/ink, 255=背景/paper）
 /// width, height: 图像尺寸（1000x1000）
@@ -1400,6 +1452,7 @@ pub fn run() {
             log_diagnostic,
             open_devtools_cmd, // MARK-DEVTOOLS: 临时调试命令，日后删除
             extract_skeleton,
+            list_system_fonts,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -260,10 +260,14 @@ void (async () => {
 // ---- 全局修复 WKWebView 双击问题（macOS Tauri） ----
 // 根因：WKWebView 在 mousedown 后触发 input blur，导致后续 click 事件丢失
 // 修复：capture 阶段检测 input 聚焦时点击按钮，用微任务在 blur 完成后补发 click
+// 覆盖：模态关闭按钮（n-base-close）与 select 选项（n-base-select-option，filterable
+// select 的内部搜索 input 聚焦时同样会吃掉首次 click）
 document.addEventListener('mousedown', (e) => {
-  const target = (e.target as HTMLElement)?.closest?.('.n-base-close') as HTMLElement | null
+  const el = e.target as HTMLElement | null
+  if (!el?.closest) return
+  const target = (el.closest('.n-base-close') ?? el.closest('.n-base-select-option')) as HTMLElement | null
   if (!target) return
-  const tag = (e.target as HTMLElement)?.tagName
+  const tag = el.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
   const activeEl = document.activeElement
   if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {

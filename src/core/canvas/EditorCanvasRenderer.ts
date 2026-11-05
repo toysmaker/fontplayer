@@ -20,6 +20,7 @@ import { instanceManager } from '../instance/InstanceManager'
 import { editModeFixedBounds } from '@/features/tools/select/PenSelectTool'
 import type { ILayoutTransformGrid } from '../utils/grid'
 import { computeCoords } from '../utils/grid'
+import { useBackgroundFontStore } from '@/features/backgroundFont/backgroundFontStore'
 
 function applyLayoutTransformToPoints(
   options: IRenderOptions,
@@ -85,6 +86,37 @@ function clearCanvas(canvas: HTMLCanvasElement): void {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return
   ctx.clearRect(0, 0, canvas.width, canvas.height)
+}
+
+/** 背景字体提示：在背景之上、字符轮廓之下渲染淡灰色水印文本（仅字符模式） */
+function renderBackgroundFontHint(
+  canvas: HTMLCanvasElement,
+  character: ICharacterFileLite | undefined,
+): void {
+  const text = character?.character?.text?.trim()
+  if (!text) return
+
+  const backgroundFontStore = useBackgroundFontStore()
+  const config = backgroundFontStore.effectiveConfigFor(character)
+  if (!config.enabled) return
+  // 未选择字体时不渲染（不预设任何默认字体）
+  if (!config.fontFamily?.trim()) return
+
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return
+
+  ctx.save()
+  try {
+    // 字号按画布高度百分比（默认 85，基本占满画布）
+    const ratio = config.fontSizeRatio > 0 ? config.fontSizeRatio : 85
+    ctx.font = `600 ${Math.round((canvas.height * ratio) / 100)}px "${config.fontFamily}", sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = 'rgba(190, 190, 190, 0.55)'
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2)
+  } finally {
+    ctx.restore()
+  }
 }
 
 /**
@@ -720,7 +752,12 @@ export function render(
       ctx.fillRect(0, 0, canvas.width, canvas.height)
     }
   }
-  
+
+  // 背景字体提示：绘制在背景之上、字符轮廓之下
+  if (options.mode === 'character') {
+    renderBackgroundFontHint(canvas, options.character)
+  }
+
   if (options.mode === 'character') {
     if (options.components && options.components.length > 0) {
       if (import.meta.env.DEV) {

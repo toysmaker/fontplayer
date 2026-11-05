@@ -348,6 +348,16 @@ const panels = {
 				copySuccess: '已复制到剪贴板',
 				copyFailed: '复制失败',
 			},
+			backgroundFont: {
+				title: '背景字体',
+				enable: '背景字体',
+				scope: '作用范围',
+				applyToAll: '应用于全部字符',
+				applyToCurrent: '仅应用于当前字符',
+				font: '字体',
+				selectPlaceholder: '请选择字体',
+				fontSize: '文字大小',
+			},
 			preview: {
 				title: '预览',
 				fontSize: '字号',
@@ -742,6 +752,16 @@ const panels = {
 				definition: 'Meaning: ',
 				copySuccess: 'Copied to clipboard',
 				copyFailed: 'Copy failed',
+			},
+			backgroundFont: {
+				title: 'Background Font',
+				enable: 'Background font',
+				scope: 'Scope',
+				applyToAll: 'All characters',
+				applyToCurrent: 'Current character only',
+				font: 'Font',
+				selectPlaceholder: 'Select a font',
+				fontSize: 'Text Size',
 			},
 			preview: {
 				title: 'Preview',

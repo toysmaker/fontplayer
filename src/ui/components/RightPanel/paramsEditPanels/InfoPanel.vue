@@ -75,21 +75,75 @@
 
       <n-empty v-else :description="t('panels.infoPanel.preview.noCharacter')" />
     </div>
+
+    <!-- 背景字体 section（仅 Tauri 端支持，需枚举本地系统字体） -->
+    <div v-if="showBackgroundFontSection" class="section">
+      <div class="section-title">{{ t('panels.infoPanel.backgroundFont.title') }}</div>
+      <template v-if="character">
+        <n-form label-placement="left" size="small" :label-width="bgLabelWidth">
+          <n-form-item :label="t('panels.infoPanel.backgroundFont.enable')">
+            <n-switch v-model:value="bgEnabled" />
+          </n-form-item>
+          <n-form-item :label="t('panels.infoPanel.backgroundFont.scope')">
+            <n-space align="center" :size="8">
+              <n-switch v-model:value="bgScopeAll" />
+              <span class="bg-scope-hint">
+                {{ bgScopeAll
+                  ? t('panels.infoPanel.backgroundFont.applyToAll')
+                  : t('panels.infoPanel.backgroundFont.applyToCurrent') }}
+              </span>
+            </n-space>
+          </n-form-item>
+          <n-form-item :label="t('panels.infoPanel.backgroundFont.font')">
+            <n-select
+              class="bg-font-select"
+              v-model:value="bgFontFamily"
+              :options="fontOptions"
+              :loading="fontLoading"
+              filterable
+              :placeholder="t('panels.infoPanel.backgroundFont.selectPlaceholder')"
+              style="width: 100%"
+            />
+          </n-form-item>
+          <n-form-item :label="t('panels.infoPanel.backgroundFont.fontSize')">
+            <div style="width: 100%;">
+              <n-input-number
+                v-model:value="bgFontSize"
+                :min="10"
+                :max="100"
+                :step="1"
+              />
+              <n-slider
+                v-model:value="bgFontSize"
+                style="margin-top: 6px;"
+                :min="10"
+                :max="100"
+                :step="1"
+              />
+            </div>
+          </n-form-item>
+        </n-form>
+      </template>
+      <n-empty v-else :description="t('panels.infoPanel.preview.noCharacter')" />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NSlider, NInputNumber, NCheckbox, NSpin, NEmpty, NForm, NFormItem, NTooltip, useMessage } from 'naive-ui'
+import { NSlider, NInputNumber, NCheckbox, NSpin, NEmpty, NForm, NFormItem, NTooltip, NSpace, NSwitch, NSelect, useMessage } from 'naive-ui'
 import { useCharacterStore } from '@/stores/character'
 import { useProjectStore } from '@/stores/project'
 import { buildCharacterPreviewFontBuffer } from '@/features/editor/services/ExportFontService'
 import { ensureDictionary, lookupByUnicode, type DictionaryIndex } from '@/features/dictionary/DictionaryService'
 import { copyTextToClipboard } from '@/features/dictionary/copyText'
+import { isTauri } from '@/utils/env'
+import { useBackgroundFontStore, DEFAULT_FONT_SIZE_RATIO } from '@/features/backgroundFont/backgroundFontStore'
+import { getSystemFonts } from '@/features/backgroundFont/systemFonts'
 import type { ICharacterFileMetadata } from '@/core/types'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const characterStore = useCharacterStore()
 const projectStore = useProjectStore()
 const message = useMessage()
@@ -128,6 +182,46 @@ const handleCopyCharacter = async () => {
     ok ? t('panels.infoPanel.reading.copySuccess') : t('panels.infoPanel.reading.copyFailed'),
   )
 }
+
+// ---- 背景字体（仅 Tauri 端） ----
+const showBackgroundFontSection = isTauri()
+const backgroundFontStore = useBackgroundFontStore()
+const bgEnabled = computed({
+  get: () => backgroundFontStore.effective.enabled,
+  set: (v: boolean) => backgroundFontStore.setEnabled(v),
+})
+const bgScopeAll = computed({
+  get: () => backgroundFontStore.applyToAll,
+  set: (v: boolean) => backgroundFontStore.setApplyToAll(v),
+})
+const bgFontFamily = computed({
+  get: () => backgroundFontStore.effective.fontFamily,
+  set: (v: string) => backgroundFontStore.setFontFamily(v),
+})
+const bgFontSize = computed({
+  get: () => backgroundFontStore.effective.fontSizeRatio,
+  set: (v: number | null) => backgroundFontStore.setFontSizeRatio(v ?? DEFAULT_FONT_SIZE_RATIO),
+})
+const fontOptions = ref<Array<{ label: string; value: string }>>([])
+const fontLoading = ref(false)
+// label 等长对齐：中文 6 字宽约 88px，英文标签较长放宽
+const bgLabelWidth = computed(() => (locale.value.startsWith('zh') ? '88px' : '150px'))
+
+onMounted(() => {
+  if (!showBackgroundFontSection) return
+  fontLoading.value = true
+  void getSystemFonts()
+    .then((fonts) => {
+      // 优先显示中文名，附带英文族名便于搜索
+      fontOptions.value = fonts.map((f) => ({
+        label: f.display && f.display !== f.family ? `${f.display}（${f.family}）` : f.family,
+        value: f.family,
+      }))
+    })
+    .finally(() => {
+      fontLoading.value = false
+    })
+})
 
 // 内存管理：始终只保留当前字符的 FontFace；重建前删除旧 face，组件卸载时再删一次
 let activeFace: FontFace | null = null
@@ -264,6 +358,14 @@ onUnmounted(() => {
 .reading-label {
   color: #999;
   margin-right: 4px;
+}
+.bg-scope-hint {
+  font-size: 12px;
+  color: var(--light-4);
+}
+/* placeholder 加深（main.css 全局规则为 primary-5 浅色，此处用更高优先级覆盖） */
+.bg-font-select :deep(.n-base-selection-placeholder) {
+  color: var(--light-5) !important;
 }
 .section {
   margin-bottom: 20px;

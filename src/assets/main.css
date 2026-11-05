@@ -190,6 +190,11 @@ div, span {
   .n-base-selection-input, .n-base-suffix__arrow {
     color: var(--primary-0) !important;
   }
+
+  /* filterable select 失焦时已选值渲染在此元素（非 filterable 用 input__content），补齐深色 */
+  .n-base-selection-label__render-label {
+    color: var(--primary-0) !important;
+  }
 }
 
 .n-base-select-menu .n-base-select-option.n-base-select-option--selected::before {

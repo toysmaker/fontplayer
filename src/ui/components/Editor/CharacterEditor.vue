@@ -109,6 +109,7 @@ import { rebuildCharacterListPreviewAfterExitEdit } from '@/features/editor/list
 import { skeletonFreeEdit, exitSkeletonFreeEdit } from '@/stores/skeletonDragger'
 import { renderContourEditOverlay, initContourEditOverlay, forceCleanupOverlay } from '@/features/tools/skeletonBind/contourEditOverlay'
 import { useEffectStore } from '@/features/effects/effectStore'
+import { useBackgroundFontStore } from '@/features/backgroundFont/backgroundFontStore'
 import { getStrokeWidth } from '@/utils/canvas-utils'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import { discardGlobalConstantsDraftOnLeave } from '@/stores/editorConstantsSession'
@@ -148,6 +149,7 @@ const selectControl = ref<string>('null')
 
 // 效果滤镜 Store
 const effectStore = useEffectStore()
+const backgroundFontStore = useBackgroundFontStore()
 
 // 防止 watch 回调重入：渲染路径中可能写入被监听数据（如 previewRef），导致循环更新
 const isRenderingFromWatch = ref(false)
@@ -847,6 +849,11 @@ watch(() => {
 
 // 监听关键点和辅助线显示状态变化，重新渲染
 watch([() => editorStore.checkJoints, () => editorStore.checkRefLines], async () => {
+  renderCanvas()
+})
+
+// 监听背景字体提示设置变化，重新渲染
+watch(() => backgroundFontStore.renderSignature, () => {
   renderCanvas()
 })
 
