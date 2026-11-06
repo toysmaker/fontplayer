@@ -47,9 +47,13 @@ import {
   selectedBone,
   weightValue,
   brushSize,
+  selectedRefLineIdx,
+  bindEditMode,
+  hoveredBindInfo,
 } from '@/stores/skeletonDragger'
 import { getEditCanvasContext } from '@/features/editor/editCanvas'
-import { initWeightSelector, renderBoneAndWeight } from '@/features/tools/skeletonBind'
+import { initWeightSelector, renderBoneAndWeight, initZoneBrushSelector, renderZoneBrush, restoreAllZoneBindings, restoreAllLbsWeights } from '@/features/tools/skeletonBind'
+import { buildRibbonOutline } from '@/features/skeletonFitting'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import { isDefaultScriptTemplate } from '@/features/programming/glyphProgrammingUtils'
@@ -606,12 +610,87 @@ const handleChangeSkeletonOY = (value: number | null) => {
 }
 
 let closeWeightSelector: null | (() => void) = null
+let closeZoneBrushSelector: null | (() => void) = null
+
+/** 手动绑定模式: 细节迁移绑定 (_outlineOffsetData) → 区域指派刷; 否则 LBS 权重刷 */
+const isZoneBrushMode = computed(() => {
+  const g = editGlyph.value
+  const stored = g?.skeleton?.glyphSkeletonBindData || g?.skeleton?.skeletonBindData
+  return !!stored?._outlineOffsetData
+})
+
+/** 骨架段下拉选项 (非 ref 辅助线, 标签取起始关节名去后缀) */
+const refLineOptions = computed(() => {
+  const inst = editGlyphInstance.value
+  const reflines = (inst?.getRefLines?.() ?? []) as Array<{ start: string; end: string; type?: string }>
+  return reflines
+    .filter((r) => r.type !== 'ref')
+    .map((r, idx) => {
+      const name = (r.start || '').replace(/_start$|_end$/, '')
+      return { label: `${name} (${r.start} → ${r.end})`, value: idx }
+    })
+})
+
+/** 当前手动指派处数 (override run 数) */
+const overrideCount = computed(() => {
+  const stored = editGlyph.value?.skeleton?.glyphSkeletonBindData || editGlyph.value?.skeleton?.skeletonBindData
+  return stored?._outlineOffsetData?.overrides?.length ?? 0
+})
+
+/** 悬停查看明细的展示文本 */
+const hoveredBindInfoText = computed(() => {
+  const info = hoveredBindInfo.value
+  if (!info || info.refLineIdx == null) return ''
+  const opts = refLineOptions.value
+  const segName = opts[info.refLineIdx]?.label?.split(' ')[0] ?? String(info.refLineIdx)
+  const parts = [
+    `#${info.index} ${segName}`,
+    `seg${info.segIdx} s=${info.s}`,
+    `u=${info.u?.toFixed(1)} v=${info.v?.toFixed(1)}`,
+    info.overridden ? 'override' : 'auto',
+  ]
+  return parts.join('  ')
+})
+
 const initWeightSetting = () => {
   onWeightSetting.value = true
   onSelectBone.value = true
 
   const ctx = getEditCanvasContext()
   if (!ctx) return
+
+  if (isZoneBrushMode.value) {
+    // 细节迁移路径: 区域指派刷 — 由当前骨架构建会话带子 (凹角模式与绑定时刻一致)
+    const inst = editGlyphInstance.value
+    const reflines = (inst?.getRefLines?.() ?? []) as any[]
+    const joints = (inst?.getJoints?.() ?? []) as any[]
+    const weight = (editGlyph.value?.parameters as any[])?.find((p: any) => p.name === '字重')?.value || 50
+    const stored = editGlyph.value?.skeleton?.glyphSkeletonBindData || editGlyph.value?.skeleton?.skeletonBindData
+    const od = stored?._outlineOffsetData
+    // 优先用绑定时刻的带子几何 (与自动绑定同一姿态, 清除即精确还原自动匹配);
+    // 旧工程无 bindRibbon → 按当前骨架重建
+    const ribbonSegments = od?.bindRibbon?.length
+      ? od.bindRibbon
+      : buildRibbonOutline(reflines, joints, weight, undefined, (od?.cornerMode ?? 'round') as 'miter' | 'round').segments
+    const ribbon = ribbonSegments
+    if (ribbon.length === 0) {
+      onWeightSetting.value = false
+      onSelectBone.value = false
+      return
+    }
+    selectedRefLineIdx.value = null
+    bindEditMode.value = 'assign'
+    hoveredBindInfo.value = null
+    closeZoneBrushSelector = initZoneBrushSelector(ctx.canvas, {
+      getCoord: ctx.getCoord,
+      onRender: ctx.onRender,
+      ribbon,
+      onHint: (msg) => message.warning(msg),
+    })
+    ctx.onRender()
+    renderZoneBrush(ctx.canvas)
+    return
+  }
 
   closeWeightSelector = initWeightSelector(ctx.canvas, {
     getCoord: ctx.getCoord,
@@ -627,12 +706,28 @@ const closeWeightSetting = () => {
   onSelectBone.value = false
   closeWeightSelector && closeWeightSelector()
   closeWeightSelector = null
+  closeZoneBrushSelector && closeZoneBrushSelector()
+  closeZoneBrushSelector = null
+  selectedRefLineIdx.value = null
+  hoveredBindInfo.value = null
 
   const ctx = getEditCanvasContext()
   ctx?.onRender()
 }
 const handleInitWeightSetting = createDebouncedHandler(initWeightSetting, 'GlyphParamsPanel.initWeightSetting')
 const handleCloseWeightSetting = createDebouncedHandler(closeWeightSetting, 'GlyphParamsPanel.closeWeightSetting')
+
+/** 编辑模式中恢复全部自动绑定 (不退出编辑) */
+const restoreAutoBind = () => {
+  if (isZoneBrushMode.value) {
+    restoreAllZoneBindings()
+  } else {
+    restoreAllLbsWeights()
+  }
+  const ctx = getEditCanvasContext()
+  ctx?.onRender()
+}
+const handleRestoreAutoBind = createDebouncedHandler(restoreAutoBind, 'GlyphParamsPanel.restoreAutoBind')
 
 const selectedBoneIndex = computed<number | null>({
   get: () => (selectedBone.value ? selectedBone.value.index : null),
@@ -932,13 +1027,44 @@ onUnmounted(() => {
         </n-form>
 
         <div v-if="editGlyph?.skeleton && !onSkeletonBind" class="weight-setting-wrap">
-          <n-button size="small" @click="handleInitWeightSetting" @pointerup="handleInitWeightSetting">{{ t('panels.paramsPanel.glyphParamsPanel.manualWeight') }}</n-button>
+          <n-button v-if="!onWeightSetting" size="small" @click="handleInitWeightSetting" @pointerup="handleInitWeightSetting">{{ isZoneBrushMode ? t('panels.paramsPanel.glyphParamsPanel.manualBind') : t('panels.paramsPanel.glyphParamsPanel.manualWeight') }}</n-button>
+          <n-button v-if="onWeightSetting" size="small" @click="handleRestoreAutoBind" @pointerup="handleRestoreAutoBind">{{ t('panels.paramsPanel.glyphParamsPanel.restoreAutoBind') }}</n-button>
           <n-button v-if="!onWeightSetting" size="small" @click="handleModifySkeleton" @pointerup="handleModifySkeleton">{{ t('panels.paramsPanel.glyphParamsPanel.modifySkeleton') }}</n-button>
           <n-button v-if="!onWeightSetting" size="small" type="error" @click="handleRemoveSkeleton" @pointerup="handleRemoveSkeleton">{{ t('panels.paramsPanel.glyphParamsPanel.removeSkeleton') }}</n-button>
         </div>
 
         <div v-if="onWeightSetting" class="weight-setting">
-          <n-form label-placement="left" label-width="80">
+          <!-- 细节迁移路径: 区域指派刷 -->
+          <n-form v-if="isZoneBrushMode" label-placement="left" label-width="80">
+            <n-form-item :label="t('panels.paramsPanel.glyphParamsPanel.selectRefLine')">
+              <n-select
+                v-model:value="selectedRefLineIdx"
+                :options="refLineOptions"
+                :placeholder="t('panels.paramsPanel.glyphParamsPanel.selectRefLinePlaceholder')"
+              />
+            </n-form-item>
+            <n-form-item :label="t('panels.paramsPanel.glyphParamsPanel.bindMode')">
+              <n-radio-group v-model:value="bindEditMode">
+                <n-radio value="assign">{{ t('panels.paramsPanel.glyphParamsPanel.bindModeAssign') }}</n-radio>
+                <n-radio value="clear">{{ t('panels.paramsPanel.glyphParamsPanel.bindModeClear') }}</n-radio>
+              </n-radio-group>
+            </n-form-item>
+            <n-form-item :label="t('panels.paramsPanel.glyphParamsPanel.brushSize')">
+              <n-input-number v-model:value="brushSize" :precision="2" :min="10" :max="200" />
+            </n-form-item>
+            <n-form-item :label="t('panels.paramsPanel.glyphParamsPanel.bindHover')" :show-feedback="false">
+              <span class="bind-hover-info">{{ hoveredBindInfoText || '—' }}</span>
+            </n-form-item>
+            <n-form-item :show-label="false" :show-feedback="false">
+              <span class="bind-hover-info">{{ t('panels.paramsPanel.glyphParamsPanel.bindOverrideCount') }}: {{ overrideCount }}</span>
+            </n-form-item>
+            <n-form-item :show-label="false" :show-feedback="false">
+              <span class="bind-hint">{{ t('panels.paramsPanel.glyphParamsPanel.bindHint') }}</span>
+            </n-form-item>
+            <n-button size="small" @click="handleCloseWeightSetting" @pointerup="handleCloseWeightSetting">{{ t('panels.paramsPanel.glyphParamsPanel.finishWeightSetting') }}</n-button>
+          </n-form>
+          <!-- LBS 回退路径: 权重刷 (旧交互) -->
+          <n-form v-else label-placement="left" label-width="80">
             <n-form-item :label="t('panels.paramsPanel.glyphParamsPanel.selectBone')">
               <n-select
                 v-model:value="selectedBoneIndex"
@@ -1169,6 +1295,11 @@ onUnmounted(() => {
 }
 .weight-setting {
   margin-top: 12px;
+}
+.bind-hover-info {
+  font-size: 12px;
+  color: var(--light-0);
+  word-break: break-all;
 }
 .skeleton-wrap .n-button {
   width: 100% !important;

@@ -36,6 +36,16 @@ const onWeightSetting = ref(false)
 const weightValue = ref(0.5)
 const brushSize = ref(100)
 
+// 区域指派刷 (细节迁移路径) 状态
+/** 当前选中的骨架段 (辅助线 main 下标), 仅由面板下拉设置 */
+const selectedRefLineIdx = ref<number | null>(null)
+/** 悬停高亮的骨架段 (仅视觉提示, 不改变选中) */
+const hoveredRefLineIdx = ref<number | null>(null)
+/** 左键刷模式: 指派(段上最近点) / 清除 (右键刷始终为清除) */
+const bindEditMode = ref<'assign' | 'clear'>('assign')
+/** 悬停查看: 最近采样点的绑定明细 */
+const hoveredBindInfo = ref<any>(null)
+
 // --- Skeleton Free Edit State ---
 // 骨架绑定字形组件的钢笔轮廓自由编辑模式
 const skeletonFreeEdit = ref(false)
@@ -69,6 +79,10 @@ export {
   onWeightSetting,
   weightValue,
   brushSize,
+  selectedRefLineIdx,
+  hoveredRefLineIdx,
+  bindEditMode,
+  hoveredBindInfo,
   skeletonFreeEdit,
   skeletonFreeEditPenUUID,
   skeletonFreeEditGlyphUUID,

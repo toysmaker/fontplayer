@@ -199,6 +199,47 @@ describe('竖折折钩 手绘轮廓骨架拖拽', () => {
     expect(m.count).toBeLessThanOrEqual(6)
   })
 
+  it('收缩折1 时折1点不进入竖内部 (凹角边线截断到相邻笔画边缘)', () => {
+    // 回归: 折1 带子原从竖中心线开始, 收缩折1 时绑在折1 上的点会滑到竖右边缘
+    // 左侧 (竖内部) 造成交叉。修复: 凹角边线截断到斜接点 (竖右边缘),
+    // 折1 带子从竖右边缘开始, 收缩时锚点最多压到该边缘即停。
+    const { g, inst } = buildInstance()
+    const sbd = (g.skeleton as any).skeletonBindData
+    const samplePoints = sbd._sampleBindData.samplePoints as number[]
+    const reflines = (inst as any).getRefLines?.() ?? []
+    const joints = (inst as any).getJoints?.() ?? []
+    const ribbon = buildRibbonOutline(reflines, joints, 50, undefined)
+
+    // 折1 顶边带子段 (refLineIdx 1, y<450): 角端应为竖右边缘 (~266), 而非竖中心线 (240)
+    const topSeg = ribbon.segments.find(
+      (s: any) => s.refLineIdx === 1 && s.pts[0].y < 450 && s.pts[0].x > 200,
+    )
+    expect(topSeg).toBeTruthy()
+    const cornerEndX = topSeg!.pts[topSeg!.pts.length - 1].x
+    expect(cornerEndX).toBeGreaterThan(255) // 竖右边缘 ≈ 266 > 255 (旧行为为 240)
+    expect(cornerEndX).toBeLessThan(280)
+
+    // 极端收缩折1: 折1 顶边采样点变形后仍不越过竖右边缘
+    drag(inst, 'zhe1_end', -350, 0)
+    const ribbon2 = buildRibbonOutline(reflines2(), joints2(), 50, sbd._outlineOffsetData.arcSigns)
+    function reflines2() { return (inst as any).getRefLines?.() ?? [] }
+    function joints2() { return (inst as any).getJoints?.() ?? [] }
+    const out = new Float64Array(samplePoints.length)
+    applyOutlineOffsetDeformation(sbd._outlineOffsetData, ribbon2.segments, out)
+
+    // 折1 顶边采样点 (绑定时刻 y<450 且 x>400): 变形后 x 不得低于竖右边缘 - 2
+    const n = samplePoints.length / 2
+    const rightEdge = cornerEndX
+    let checked = 0
+    for (let i = 0; i < n; i++) {
+      if (samplePoints[i * 2 + 1] < 450 && samplePoints[i * 2] > 400) {
+        expect(out[i * 2]).toBeGreaterThan(rightEdge - 2)
+        checked++
+      }
+    }
+    expect(checked).toBeGreaterThan(10)
+  })
+
   it('收缩折1 无角部交叉 (角部边界剪切阶跃由变形场平滑消除)', () => {
     // 回归: test_strokes_09/10 收缩折1时折1末尾小凹陷前后点顺序翻转成交叉。
     // 根因: 角部边界两侧锚点位移存在阶跃 (折1线段侧随压缩收缩, 折2侧随尾部刚性平移),

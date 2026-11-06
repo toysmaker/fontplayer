@@ -308,12 +308,38 @@ export interface OutlineOffsetEntry {
    */
   px?: number
   py?: number
+  /**
+   * 手动指派的目标骨架段 (角弧段被两条骨架段共享, 自动绑定时无法区分归属 —
+   * 手动指派时记录目标, 供色带着色/悬停查看正确显示; 清除时删除恢复自动)。
+   */
+  forcedRefLineIdx?: number
 }
 
 export interface OutlineOffsetBindData {
   entries: OutlineOffsetEntry[]
   /** 每个角部/端点弧线的绑定时刻方向符号 (+1 短弧逆时针 / -1 反射弧): 拖拽时沿用, 防止角凸凹翻转时弧线翻面 */
   arcSigns: number[]
+  /** 手动绑定覆盖区间 (采样点下标范围 → 强制骨架段); 用于可视化与清除, 丢失不影响变形 */
+  overrides?: BindOverrideRun[]
+  /**
+   * 凹角构造模式: 'miter' (新) 凹角边线截断到相邻笔画边缘, 折段带子不深入相邻笔画;
+   * 'round' (旧) 凹角为圆心在关节处的圆角弧。旧工程持久化数据无此字段 → 拖拽回退
+   * 'round' 保持几何一致 (否则旧 u/v 在新锚点上重建出巨大错位, 笔画断裂)。
+   */
+  cornerMode?: 'miter' | 'round'
+  /**
+   * 绑定时刻的带子几何 (轻量: pts + 骨架段归属, 无 normals)。
+   * 手动绑定 (指派/清除/恢复) 全部基于它: 保证与自动绑定同一姿态同一几何,
+   * 清除即精确还原自动匹配 (若用当前骨架重建带子, 拖拽后再进手动模式会错位)。
+   * 旧工程数据无此字段 → 回退为进入手动模式时按当前骨架重建。
+   */
+  bindRibbon?: FlatSegment[]
+}
+
+export interface BindOverrideRun {
+  start: number
+  end: number
+  refLineIdx: number
 }
 
 /**
@@ -350,15 +376,19 @@ const OUTLINE_SUBDIV = 6
 /** 圆帽端点的细分段数 */
 const CAP_SEGMENTS = 6
 
-interface FlatSegment {
+export interface FlatSegment {
   compIdx: number
   segIdx: number
   /** 'side' 直线边 / 'arc' 角部与端点弧 */
   kind: 'side' | 'arc'
   /** 等分采样点 (subdiv+1 个) */
   pts: Array<{ x: number; y: number }>
-  /** 每点法向 (平均相邻段方向) */
-  normals: Array<{ x: number; y: number }>
+  /** 每点法向 (平均相邻段方向); 持久化的轻量 bindRibbon 不携带 */
+  normals?: Array<{ x: number; y: number }>
+  /** 所属骨架段 (辅助线 main 数组下标); 角弧段为 -1 */
+  refLineIdx: number
+  /** 角弧段邻接的两条骨架段下标 (手动绑定重投影的候选子集用) */
+  arcAdjRefLines?: [number, number]
 }
 
 export interface RibbonOutline {
@@ -451,7 +481,7 @@ function buildCurvedRibbon(
       dy /= len
       normalsSeg[s] = { x: -dy, y: dx }
     }
-    segments.push({ compIdx: 0, segIdx: i, kind: 'side', pts: sampled, normals: normalsSeg })
+    segments.push({ compIdx: 0, segIdx: i, kind: 'side', pts: sampled, normals: normalsSeg, refLineIdx: 0 })
   }
   return { segments, arcSigns: usedSigns }
 }
@@ -466,6 +496,7 @@ export function buildRibbonOutline(
   joints: Array<{ name: string; x: number; y: number }>,
   weight: number,
   arcSigns?: number[],
+  cornerMode: 'miter' | 'round' = 'miter',
 ): RibbonOutline {
   const jointMap = new Map<string, { x: number; y: number }>()
   for (const j of joints) {
@@ -530,8 +561,9 @@ export function buildRibbonOutline(
     if (Math.hypot(p.x - last.x, p.y - last.y) > 0.01) ribbonChain.push(p)
   }
 
-  // 每边法向 (链上相邻点的边)
+  // 每边法向与方向 (链上相邻点的边)
   const edgeNormals: Array<{ x: number; y: number }> = []
+  const edgeDirs: Array<{ x: number; y: number }> = []
   for (let i = 0; i < ribbonChain.length - 1; i++) {
     let dx = ribbonChain[i + 1].x - ribbonChain[i].x
     let dy = ribbonChain[i + 1].y - ribbonChain[i].y
@@ -539,21 +571,68 @@ export function buildRibbonOutline(
     dx /= len
     dy /= len
     edgeNormals.push({ x: -dy, y: dx })
+    edgeDirs.push({ x: dx, y: dy })
+  }
+
+  // 凹角修复: 折线段在凹角 (内角) 处延伸进了相邻笔画内部 —
+  // 收缩该段时锚点会滑入相邻笔画 (如折1 收缩时点滑入竖内部造成交叉)。
+  // 修复: 凹角两侧的边线截断到斜接点 (相邻笔画边缘交点), 折段带子从相邻笔画
+  // 边缘开始, 锚点压缩到边缘即停; 凸角 (外角) 保持圆角弧。凹角处放退化弧
+  // (6 点全在斜接点) 保持段拓扑与弧符号计数稳定。
+  const cross = (a: { x: number; y: number }, b: { x: number; y: number }) => a.x * b.y - a.y * b.x
+  /** 凹角判断: A 侧 (法向 n) 在角 i 处为凹 iff cross(d_i, d_{i+1}) > 0 (y 向下坐标系) */
+  const concaveAAt = (i: number) => cross(edgeDirs[i], edgeDirs[i + 1]) > 1e-6
+  /** B 侧 (-n) 凹角: 与 A 侧相反 */
+  const concaveBAt = (i: number) => cross(edgeDirs[i], edgeDirs[i + 1]) < -1e-6
+  /** 两偏移线交点 (斜接点); 平行返回 null */
+  const miterPoint = (
+    p: { x: number; y: number }, d1: { x: number; y: number },
+    q: { x: number; y: number }, d2: { x: number; y: number },
+  ): { x: number; y: number } | null => {
+    const c = cross(d1, d2)
+    if (Math.abs(c) < 1e-9) return null
+    const t = cross({ x: q.x - p.x, y: q.y - p.y }, d2) / c
+    return { x: p.x + d1.x * t, y: p.y + d1.y * t }
+  }
+  /** A 侧角 i 的斜接点: edge i-1 与 edge i 的 A 侧偏移线交点 */
+  const aMiterAt = (i: number) => {
+    if (i <= 0 || i >= ribbonChain.length - 1) return null
+    return miterPoint(
+      { x: ribbonChain[i].x + edgeNormals[i - 1].x * half, y: ribbonChain[i].y + edgeNormals[i - 1].y * half },
+      edgeDirs[i - 1],
+      { x: ribbonChain[i].x + edgeNormals[i].x * half, y: ribbonChain[i].y + edgeNormals[i].y * half },
+      edgeDirs[i],
+    )
+  }
+  /** B 侧角 i 的斜接点: edge i-1 与 edge i 的 B 侧 (-n) 偏移线交点 */
+  const bMiterAt = (i: number) => {
+    if (i <= 0 || i >= ribbonChain.length - 1) return null
+    return miterPoint(
+      { x: ribbonChain[i].x - edgeNormals[i - 1].x * half, y: ribbonChain[i].y - edgeNormals[i - 1].y * half },
+      edgeDirs[i - 1],
+      { x: ribbonChain[i].x - edgeNormals[i].x * half, y: ribbonChain[i].y - edgeNormals[i].y * half },
+      edgeDirs[i],
+    )
   }
 
   // 轮廓: A 侧 (边线 + 顶点圆角弧, 每顶点恒定存在保证段数稳定) → 末端圆帽 → B 侧倒走 → 起始圆帽。
   // 曲线采样点处的弧近乎平角, 段间拐角处则为平滑圆角 — 无折线尖角交错。
   const outline: Array<{ x: number; y: number }> = []
+  // 每个轮廓顶点所属骨架段 (main 辅助线下标); 角弧顶点为 -1, 邻接骨架段另存 arcAdjMap
+  const outlineTags: number[] = []
+  const arcAdjMap = new Map<number, [number, number]>()
   const usedSigns: number[] = []
   let arcIdx = 0
   const arcPointSet = new Set<number>()
-  const pushLine = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+  const pushLine = (a: { x: number; y: number }, b: { x: number; y: number }, tag: number) => {
     if (outline.length === 0 || Math.hypot(a.x - outline[outline.length - 1].x, a.y - outline[outline.length - 1].y) > 0.01) {
       outline.push(a)
+      outlineTags.push(tag)
     }
     outline.push(b)
+    outlineTags.push(tag)
   }
-  const pushJoinArc = (center: { x: number; y: number }, fromAngle: number, toAngle: number) => {
+  const pushJoinArc = (center: { x: number; y: number }, fromAngle: number, toAngle: number, adj?: [number, number]) => {
     let sweep = ((toAngle - fromAngle + Math.PI * 3) % (Math.PI * 2)) - Math.PI
     const override = arcSigns?.[arcIdx]
     if (override !== undefined && sweep !== 0) {
@@ -566,38 +645,81 @@ export function buildRibbonOutline(
       const a = fromAngle + (sweep * s) / CAP_SEGMENTS
       arcPointSet.add(outline.length)
       outline.push({ x: center.x + Math.cos(a) * half, y: center.y + Math.sin(a) * half })
+      outlineTags.push(-1)
+      if (adj) arcAdjMap.set(outline.length - 1, adj)
+    }
+  }
+  /** 凹角退化弧: 6 点全在斜接点, 保持段拓扑与弧符号计数稳定 */
+  const pushDegenerateArc = (pt: { x: number; y: number }, adj: [number, number]) => {
+    usedSigns.push(1)
+    arcIdx++
+    for (let s = 1; s <= CAP_SEGMENTS; s++) {
+      arcPointSet.add(outline.length)
+      outline.push({ x: pt.x, y: pt.y })
+      outlineTags.push(-1)
+      arcAdjMap.set(outline.length - 1, adj)
     }
   }
 
+  const useMiter = cornerMode !== 'round'
   for (let i = 0; i < ribbonChain.length - 1; i++) {
     const n = edgeNormals[i]
-    pushLine(
-      { x: ribbonChain[i].x + n.x * half, y: ribbonChain[i].y + n.y * half },
-      { x: ribbonChain[i + 1].x + n.x * half, y: ribbonChain[i + 1].y + n.y * half },
-    )
+    // 起点: 前一角 (i-1→i) 在 A 侧为凹时截断到斜接点 (相邻笔画边缘)
+    let startPt = { x: ribbonChain[i].x + n.x * half, y: ribbonChain[i].y + n.y * half }
+    if (useMiter && i > 0 && concaveAAt(i - 1)) {
+      const m = aMiterAt(i)
+      if (m) startPt = m
+    }
+    // 终点: 后一角 (i→i+1) 在 A 侧为凹时截断到斜接点
+    let endPt = { x: ribbonChain[i + 1].x + n.x * half, y: ribbonChain[i + 1].y + n.y * half }
+    if (useMiter && i < ribbonChain.length - 2 && concaveAAt(i)) {
+      const m = aMiterAt(i + 1)
+      if (m) endPt = m
+    }
+    pushLine(startPt, endPt, i)
     if (i < ribbonChain.length - 2) {
-      pushJoinArc(ribbonChain[i + 1], Math.atan2(n.y, n.x), Math.atan2(edgeNormals[i + 1].y, edgeNormals[i + 1].x))
+      if (useMiter && concaveAAt(i)) {
+        pushDegenerateArc(endPt, [i, i + 1])
+      } else {
+        pushJoinArc(ribbonChain[i + 1], Math.atan2(n.y, n.x), Math.atan2(edgeNormals[i + 1].y, edgeNormals[i + 1].x), [i, i + 1])
+      }
     }
   }
   {
     const last = ribbonChain[ribbonChain.length - 1]
     const n = edgeNormals[edgeNormals.length - 1]
-    pushJoinArc(last, Math.atan2(n.y, n.x), Math.atan2(-n.y, -n.x))
+    // 收笔圆帽归属末段 (如钩) — 可视化/悬停查看有归属, 手动指派仍不可选 (refLineIdx=-1)
+    const lastIdx = edgeNormals.length - 1
+    pushJoinArc(last, Math.atan2(n.y, n.x), Math.atan2(-n.y, -n.x), [lastIdx, lastIdx])
   }
   for (let i = ribbonChain.length - 2; i >= 0; i--) {
     const n = edgeNormals[i]
-    pushLine(
-      { x: ribbonChain[i + 1].x - n.x * half, y: ribbonChain[i + 1].y - n.y * half },
-      { x: ribbonChain[i].x - n.x * half, y: ribbonChain[i].y - n.y * half },
-    )
+    // 起点 (B 侧遍历方向): 后一角 (i→i+1) 在 B 侧为凹时截断到斜接点
+    let startPt = { x: ribbonChain[i + 1].x - n.x * half, y: ribbonChain[i + 1].y - n.y * half }
+    if (useMiter && i + 1 < ribbonChain.length - 1 && concaveBAt(i)) {
+      const m = bMiterAt(i + 1)
+      if (m) startPt = m
+    }
+    // 终点: 前一角 (i-1→i) 在 B 侧为凹时截断到斜接点
+    let endPt = { x: ribbonChain[i].x - n.x * half, y: ribbonChain[i].y - n.y * half }
+    if (useMiter && i > 0 && concaveBAt(i - 1)) {
+      const m = bMiterAt(i)
+      if (m) endPt = m
+    }
+    pushLine(startPt, endPt, i)
     if (i > 0) {
-      pushJoinArc(ribbonChain[i], Math.atan2(-edgeNormals[i].y, -edgeNormals[i].x), Math.atan2(-edgeNormals[i - 1].y, -edgeNormals[i - 1].x))
+      if (useMiter && concaveBAt(i - 1)) {
+        pushDegenerateArc(endPt, [i, i - 1])
+      } else {
+        pushJoinArc(ribbonChain[i], Math.atan2(-edgeNormals[i].y, -edgeNormals[i].x), Math.atan2(-edgeNormals[i - 1].y, -edgeNormals[i - 1].x), [i, i - 1])
+      }
     }
   }
   {
     const first = ribbonChain[0]
     const n = edgeNormals[0]
-    pushJoinArc(first, Math.atan2(-n.y, -n.x), Math.atan2(n.y, n.x))
+    // 起笔圆帽归属首段 (如竖) — 可视化/悬停查看有归属, 手动指派仍不可选 (refLineIdx=-1)
+    pushJoinArc(first, Math.atan2(-n.y, -n.x), Math.atan2(n.y, n.x), [0, 0])
   }
 
   // 组成 line 段列表
@@ -622,12 +744,18 @@ export function buildRibbonOutline(
       dy /= len
       normalsSeg[s] = { x: -dy, y: dx }
     }
+    // 段归属取终点顶点: 长边线段 (弧末点→线终点) 归当前骨架段,
+    // 弧段由 arcAdjRefLines 记录邻接的两条骨架段 (手动绑定重投影候选子集)
+    const tagIdx = (i + 1) % total
+    const arcAdj = arcAdjMap.get(tagIdx)
     segments.push({
       compIdx: 0,
       segIdx: i,
       kind: arcPointSet.has(i) ? 'arc' : 'side',
       pts: sampled,
       normals: normalsSeg,
+      refLineIdx: outlineTags[tagIdx] ?? -1,
+      ...(arcAdj ? { arcAdjRefLines: arcAdj } : {}),
     })
   }
   return { segments, arcSigns: usedSigns }
@@ -736,20 +864,39 @@ export function buildOutlineOffsetBindData(
 
   // 法向位移频率拆分: 低频 (笔画宽度变化) 不随段缩放; 高频 (边缘小凸起/凹口)
   // 随段压缩缩放 — 否则压缩时凸起的底座变窄而高度不变, 小角向内反折。
-  {
-    const vs = new Float64Array(count)
-    for (let i = 0; i < count; i++) vs[i] = entries[i].v
-    for (let pass = 0; pass < 2; pass++) {
-      const src = Float64Array.from(vs)
-      for (let i = 0; i < count; i++) {
-        const prev = i > 0 ? i - 1 : count - 1
-        const next = i < count - 1 ? i + 1 : 0
-        vs[i] = 0.5 * src[i] + 0.25 * src[prev] + 0.25 * src[next]
-      }
-    }
-    for (let i = 0; i < count; i++) entries[i].vSmooth = vs[i]
+  recomputeVSmooth(entries)
+  return {
+    entries,
+    arcSigns: ribbon.arcSigns,
+    cornerMode: 'miter',
+    bindRibbon: ribbon.segments.map((s) => ({
+      compIdx: s.compIdx,
+      segIdx: s.segIdx,
+      kind: s.kind,
+      refLineIdx: s.refLineIdx,
+      arcAdjRefLines: s.arcAdjRefLines,
+      pts: s.pts,
+    })),
   }
-  return { entries, arcSigns: ribbon.arcSigns }
+}
+
+/**
+ * 重算法向位移低频分量 vSmooth (绑定与手动重投影后共用):
+ * 对 v 沿轮廓 2 次低通 (0.5 自身 + 0.25 左右邻, 闭合环)。
+ */
+export function recomputeVSmooth(entries: OutlineOffsetEntry[]): void {
+  const count = entries.length
+  const vs = new Float64Array(count)
+  for (let i = 0; i < count; i++) vs[i] = entries[i].v
+  for (let pass = 0; pass < 2; pass++) {
+    const src = Float64Array.from(vs)
+    for (let i = 0; i < count; i++) {
+      const prev = i > 0 ? i - 1 : count - 1
+      const next = i < count - 1 ? i + 1 : 0
+      vs[i] = 0.5 * src[i] + 0.25 * src[prev] + 0.25 * src[next]
+    }
+  }
+  for (let i = 0; i < count; i++) entries[i].vSmooth = vs[i]
 }
 
 /**
@@ -878,6 +1025,182 @@ export function applyOutlineOffsetDeformation(
     }
   }
   return anyChanged
+}
+
+// ==================== 手动绑定: 区域重投影 ====================
+
+/** 在给定带子段集合内找最近子分划点 */
+function nearestOnSegments(
+  px: number,
+  py: number,
+  segs: FlatSegment[],
+): { sgm: FlatSegment; s: number } | null {
+  let best: { sgm: FlatSegment; s: number } | null = null
+  let bestDist = Infinity
+  for (const sgm of segs) {
+    for (let s = 0; s < sgm.pts.length; s++) {
+      const q = sgm.pts[s]
+      const d = Math.hypot(px - q.x, py - q.y)
+      if (d < bestDist) {
+        bestDist = d
+        best = { sgm, s }
+      }
+    }
+  }
+  return best
+}
+
+/** 按新锚点重算条目的 s/u/v/bindSegLen (px/py 不变 — 绑定时刻原始轮廓坐标) */
+function updateEntryProjection(
+  e: OutlineOffsetEntry,
+  sgm: FlatSegment,
+  s: number,
+): void {
+  const q = sgm.pts[s]
+  const px = e.px!
+  const py = e.py!
+  const prev = sgm.pts[Math.max(0, s - 1)]
+  const next = sgm.pts[Math.min(sgm.pts.length - 1, s + 1)]
+  let tx = next.x - prev.x
+  let ty = next.y - prev.y
+  const tl = Math.hypot(tx, ty) || 1
+  tx /= tl
+  ty /= tl
+  const nx = -ty
+  const ny = tx
+  const ddx = px - q.x
+  const ddy = py - q.y
+  const segLen = Math.hypot(
+    sgm.pts[sgm.pts.length - 1].x - sgm.pts[0].x,
+    sgm.pts[sgm.pts.length - 1].y - sgm.pts[0].y,
+  )
+  e.bezierIdx = sgm.segIdx
+  e.s = s
+  e.u = ddx * tx + ddy * ty
+  e.v = ddx * nx + ddy * ny
+  e.bindSegLen = Math.max(segLen, 0.5)
+}
+
+/**
+ * 手动绑定: 把采样点区间 [start, end] 强制重投影到指定骨架段。
+ * 候选集仅含目标段**自身的边线段** (排除共享角弧): 共享角弧的变形天然是
+ * 两段混合, 若允许锚到弧上, 指派给哪一侧都落在同一弧点, 变形不变 —
+ * 指派失去意义。锚到目标段边线后, 点严格跟随该段的压缩/平移。
+ * 重算 s/u/v/bindSegLen; 随后沿轮廓重算 vSmooth。
+ */
+export function reprojectEntriesToRefLine(
+  bindData: OutlineOffsetBindData,
+  ribbon: FlatSegment[],
+  start: number,
+  end: number,
+  refLineIdx: number,
+): void {
+  const entries = bindData.entries
+  const segs: FlatSegment[] = []
+  for (const sgm of ribbon) {
+    if (sgm.refLineIdx === refLineIdx) segs.push(sgm)
+  }
+  if (segs.length === 0) return
+  const lo = Math.max(0, start)
+  const hi = Math.min(entries.length - 1, end)
+  for (let i = lo; i <= hi; i++) {
+    const e = entries[i]
+    if (e.compIdx < 0 || e.px === undefined) continue
+    const hit = nearestOnSegments(e.px, e.py, segs)
+    if (hit) {
+      updateEntryProjection(e, hit.sgm, hit.s)
+      e.forcedRefLineIdx = refLineIdx
+    }
+  }
+  recomputeVSmooth(entries)
+}
+
+/**
+ * 手动绑定: 恢复采样点区间 [start, end] 的自动最近点匹配 (清除 override)。
+ */
+export function restoreAutomaticEntries(
+  bindData: OutlineOffsetBindData,
+  ribbon: FlatSegment[],
+  start: number,
+  end: number,
+): void {
+  const entries = bindData.entries
+  const lo = Math.max(0, start)
+  const hi = Math.min(entries.length - 1, end)
+  for (let i = lo; i <= hi; i++) {
+    const e = entries[i]
+    if (e.compIdx < 0 || e.px === undefined) continue
+    const hit = nearestOnSegments(e.px, e.py, ribbon)
+    if (hit) {
+      updateEntryProjection(e, hit.sgm, hit.s)
+      delete e.forcedRefLineIdx
+    }
+  }
+  recomputeVSmooth(entries)
+}
+
+/**
+ * 维护 override 区间列表: 指派 (refLineIdx != null) 或清除 (null) 后合并/切分 runs。
+ * runs 仅用于可视化与清除, 丢失不影响变形正确性 (entries 已自洽)。
+ */
+export function applyOverrideRuns(
+  bindData: OutlineOffsetBindData,
+  start: number,
+  end: number,
+  refLineIdx: number | null,
+): void {
+  const lo = Math.max(0, start)
+  const hi = Math.min(bindData.entries.length - 1, end)
+  if (hi < lo) return
+  if (!Array.isArray(bindData.overrides)) bindData.overrides = []
+  const runs = bindData.overrides
+
+  // 先移除与 [lo, hi] 相交的所有 run
+  const kept: BindOverrideRun[] = []
+  for (const r of runs) {
+    if (r.end < lo || r.start > hi) {
+      kept.push(r)
+    } else if (r.start < lo && r.end > hi) {
+      // 从中间切分: 保留两侧
+      kept.push({ start: r.start, end: lo - 1, refLineIdx: r.refLineIdx })
+      kept.push({ start: hi + 1, end: r.end, refLineIdx: r.refLineIdx })
+    } else if (r.start < lo) {
+      kept.push({ start: r.start, end: lo - 1, refLineIdx: r.refLineIdx })
+    } else if (r.end > hi) {
+      kept.push({ start: hi + 1, end: r.end, refLineIdx: r.refLineIdx })
+    }
+  }
+  // 指派时插入新区间并合并相邻同段 run
+  if (refLineIdx != null) {
+    kept.push({ start: lo, end: hi, refLineIdx })
+    kept.sort((a, b) => a.start - b.start)
+    const merged: BindOverrideRun[] = []
+    for (const r of kept) {
+      const last = merged[merged.length - 1]
+      if (last && last.refLineIdx === r.refLineIdx && r.start <= last.end + 1) {
+        last.end = Math.max(last.end, r.end)
+      } else {
+        merged.push({ ...r })
+      }
+    }
+    bindData.overrides = merged
+  } else {
+    bindData.overrides = kept
+  }
+}
+
+/** 条目当前所属骨架段 (供可视化着色): 手动指派优先; 角弧段返回邻接首段; 未知返回 -2 */
+export function entryRefLineIdx(
+  e: OutlineOffsetEntry,
+  ribbon: FlatSegment[],
+): number {
+  if (e.compIdx < 0) return -2
+  if (e.forcedRefLineIdx !== undefined) return e.forcedRefLineIdx
+  const sgm = ribbon.find((x) => x.segIdx === e.bezierIdx)
+  if (!sgm) return -2
+  if (sgm.refLineIdx >= 0) return sgm.refLineIdx
+  if (sgm.arcAdjRefLines && sgm.arcAdjRefLines.length > 0) return sgm.arcAdjRefLines[0]
+  return -2
 }
 
 /**

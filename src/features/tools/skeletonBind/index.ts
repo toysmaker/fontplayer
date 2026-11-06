@@ -1,2 +1,2 @@
 export { initSkeletonDragger, renderSkeletonSelector } from "./skeletonDragger"
-export { initWeightSelector, renderBoneAndWeight } from "./weightSetting"
+export { initWeightSelector, renderBoneAndWeight, initZoneBrushSelector, renderZoneBrush, restoreAllZoneBindings, restoreAllLbsWeights } from "./weightSetting"

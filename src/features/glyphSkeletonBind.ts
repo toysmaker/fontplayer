@@ -1346,9 +1346,10 @@ export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any
   const dragReflines = (glyph as any).getRefLines?.() ?? []
   const dragJoints = (glyph as any).getJoints?.() ?? []
   const dragWeight = (glyph as any).getParam?.('字重') || 50
-  // 拖拽时沿用绑定时刻的弧线方向符号 (防止角部凸凹翻转时弧线翻面)
+  // 拖拽时沿用绑定时刻的弧线方向符号 (防止角部凸凹翻转时弧线翻面);
+  // 凹角构造模式与绑定时刻一致: 旧工程数据无 cornerMode → 'round' (几何一致, 否则旧 u/v 错位断裂)
   const ribbon = outlineOffsetData
-    ? buildRibbonOutline(dragReflines, dragJoints, dragWeight, outlineOffsetData.arcSigns)
+    ? buildRibbonOutline(dragReflines, dragJoints, dragWeight, outlineOffsetData.arcSigns, outlineOffsetData.cornerMode ?? 'round')
     : { segments: [] as any[], arcSigns: [] }
   if (outlineOffsetData && ribbon.segments.length > 0) {
     applyOutlineOffsetDeformation(outlineOffsetData, ribbon.segments, outBuffer)
