@@ -291,6 +291,9 @@ function collectContiguousHitRange(
 /** 操作提示回调 (面板传入, 用于指派时未选骨架段的警告) */
 let zoneHint: ((msg: string) => void) | null = null
 
+/** 刚刷过的区间闪烁标记 (无论指派/清除/无变化都闪烁, 给用户明确的操作反馈) */
+let flashRange: { start: number; end: number; until: number } | null = null
+
 /**
  * 恢复全部自动绑定 (清空所有手动指派), 不退出编辑模式。
  * 细节迁移路径: 全区间恢复自动最近点匹配 + 清空 override 列表。
@@ -329,6 +332,8 @@ function paintZone(mx: number, my: number, clear: boolean) {
   if (distToNearest > Math.max(radius, 30)) return
   const range = collectContiguousHitRange(samplePoints, nearest, radius)
   if (range.end < range.start) return
+  // 刷到的区间闪烁: 无论是否有 override 变化都反馈 (指派/清除/已自动区域均可见)
+  flashRange = { start: range.start, end: range.end, until: performance.now() + 700 }
   if (clear) {
     restoreAutomaticEntries(od, zoneRibbon, range.start, range.end)
     applyOverrideRuns(od, range.start, range.end, null)
@@ -443,6 +448,7 @@ export const initZoneBrushSelector = (
     zoneRibbon = null
     zoneHint = null
     lastMouse = null
+    flashRange = null
     hoveredBindInfo.value = null
     hoveredRefLineIdx.value = null
   }
@@ -586,6 +592,22 @@ export const renderZoneBrush = (
     ctx.beginPath()
     ctx.arc(mapCanvasX(info.anchor.x), mapCanvasY(info.anchor.y), 4, 0, Math.PI * 2)
     ctx.fill()
+  }
+
+  // 4.5 刚刷区间的闪烁反馈 (亮黄色描边, 700ms 后消失)
+  if (flashRange) {
+    if (performance.now() < flashRange.until) {
+      ctx.strokeStyle = "rgba(255, 200, 0, 0.85)"
+      ctx.lineWidth = strokeW * 1.8
+      ctx.beginPath()
+      ctx.moveTo(mapCanvasX(samplePoints[flashRange.start * 2]), mapCanvasY(samplePoints[flashRange.start * 2 + 1]))
+      for (let i = flashRange.start + 1; i <= flashRange.end; i++) {
+        ctx.lineTo(mapCanvasX(samplePoints[i * 2]), mapCanvasY(samplePoints[i * 2 + 1]))
+      }
+      ctx.stroke()
+    } else {
+      flashRange = null
+    }
   }
 
   // 5. 刷圈 (跟随鼠标, 无文字 — 模式看面板单选)

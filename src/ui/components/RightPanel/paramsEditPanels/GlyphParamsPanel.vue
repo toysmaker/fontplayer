@@ -653,6 +653,15 @@ const hoveredBindInfoText = computed(() => {
 })
 
 const initWeightSetting = () => {
+  // 重进前先关闭旧选择器: 防止未通过「完成设置」退出时残留的监听器叠加
+  if (closeZoneBrushSelector) {
+    closeZoneBrushSelector()
+    closeZoneBrushSelector = null
+  }
+  if (closeWeightSelector) {
+    closeWeightSelector()
+    closeWeightSelector = null
+  }
   onWeightSetting.value = true
   onSelectBone.value = true
 
@@ -662,6 +671,12 @@ const initWeightSetting = () => {
   if (isZoneBrushMode.value) {
     // 细节迁移路径: 区域指派刷 — 由当前骨架构建会话带子 (凹角模式与绑定时刻一致)
     const inst = editGlyphInstance.value
+    // 退出编辑时实例被释放 (GlyphEditor onUnmounted releaseInstance), 重新进入拿到的
+    // 新实例没有脚本状态 (reflines/joints 为空) — 重跑模板脚本恢复, 否则骨架段下拉无数据
+    if (inst && !(inst?.getRefLines?.()?.length)) {
+      const strokeFn = (strokeFnMap as any)[editGlyph.value?.skeleton?.type]
+      strokeFn?.instanceBasicGlyph?.(editGlyph.value, inst)
+    }
     const reflines = (inst?.getRefLines?.() ?? []) as any[]
     const joints = (inst?.getJoints?.() ?? []) as any[]
     const weight = (editGlyph.value?.parameters as any[])?.find((p: any) => p.name === '字重')?.value || 50
@@ -944,6 +959,9 @@ watch([onSkeletonDragging, () => editGlyph.value?.skeleton?.type], ([dragging, s
 })
 
 onUnmounted(() => {
+  // 手动绑定模式未通过「完成设置」退出时 (切换工具/字形/字符), 关闭选择器与状态,
+  // 避免残留监听器导致下次进入时面板在但笔刷失效
+  closeWeightSetting()
   // 如果退出时还未绑定骨架（onSkeletonBind=true），重置骨架数据
   const g = editGlyph.value
   if (g?.skeleton?.type === 'glyphSkeleton' && g.skeleton.onSkeletonBind) {
