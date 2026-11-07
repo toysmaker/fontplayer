@@ -1,0 +1,9 @@
+Arphic Public License (文鼎公众授权)
+
+本产品中不包含 makemeahanzi 的字形图形（SVG）数据，仅使用其整理的文字释义
+（源自 Unicode Unihan，适用 LICENSE.UNICODE.txt）。此处保留 Arphic Public
+License 说明以备溯源。
+
+Arphic Public License 全文见：
+https://github.com/skishore/makemeahanzi/blob/master/LICENSE
+（要点：允许使用、复制、修改与再分发，包括商业用途，须保留本声明。）
