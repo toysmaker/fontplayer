@@ -400,6 +400,106 @@ export interface ICharacterFileLite {
   matches?: unknown
   /** 从位图提取的字符骨架数据 */
   skeleton?: ICharacterSkeleton
+  /** 动效与视频列表（参数关键帧动画，仅存储参数快照，不持有字形数据） */
+  animations?: IAnimationClip[]
+  /** 动效微交互列表（状态机数据） */
+  microInteractions?: IMicroInteraction[]
+}
+
+// ==================== 动效与视频（参数关键帧动画） ====================
+
+/**
+ * 动效关键帧：只存储参数数值快照，不持有字形/轮廓数据，避免内存膨胀。
+ * params 缺失的组件使用字符当前数值（即"未修改"语义）。
+ */
+export interface IAnimationKeyframe {
+  id: string
+  /** 时间（秒） */
+  time: number
+  /** 隐藏所有组件（整字符隐藏，用于淡入淡出等需要整体隐藏的关键帧） */
+  hidden: boolean
+  /** 隐藏单个组件：componentUUID 列表（与整字符隐藏区分） */
+  hiddenComponents?: string[]
+  /** 组件位置（ox/oy）：componentUUID -> { x, y } */
+  positions?: Record<string, { x: number; y: number }>
+  /** componentUUID -> paramUUID -> 数值 */
+  params: Record<string, Record<string, number>>
+  /** 字符自身参数快照：paramUUID -> 数值（字符与字形一样可以包含参数） */
+  charParams?: Record<string, number>
+  /** 常量覆盖：constantUUID -> 数值（引用类型为 Number 的常量参数可参与动画） */
+  constants?: Record<string, number>
+}
+
+/**
+ * 动效视频（参数关键帧动画片段）
+ * 视频生成逻辑按关键帧插帧，插帧使用 SDF（有符号距离场）在 GPU 上实时完成。
+ */
+export interface IAnimationClip {
+  id: string
+  name: string
+  /** 关键帧（按 time 升序） */
+  keyframes: IAnimationKeyframe[]
+  fps: number
+  createdAt: number
+  updatedAt: number
+}
+
+// ==================== 动效微交互（状态机） ====================
+
+export interface IMicroInteractionState {
+  id: string
+  name: string
+  /** 关联的动画片段（动效视频）id */
+  segmentId: string
+  /** 是否循环播放 */
+  loop: boolean
+  /** 画布坐标 */
+  position: { x: number; y: number }
+}
+
+export type IMicroInputType = 'boolean' | 'trigger' | 'number'
+
+/**
+ * 输入变量绑定来源（声明真实事件 → 变量的映射，播放器按此契约绑定）：
+ * - hover：绑定 pointerenter/pointerleave（进入 true，离开 false），类型须为 boolean
+ * - click：绑定 click（瞬时触发 true 后复位），类型 trigger（或 boolean 表示点击切换）
+ * - custom：由宿主代码/播放器直接写入值，任意类型
+ */
+export type IMicroInputSource = 'hover' | 'click' | 'custom'
+
+export interface IMicroInteractionInput {
+  id: string
+  name: string
+  type: IMicroInputType
+  /** 真实事件绑定来源（播放器契约） */
+  source: IMicroInputSource
+  defaultValue: boolean | number
+}
+
+export type IMicroConditionOperator = 'eq' | 'neq' | 'gt' | 'lt'
+
+export interface IMicroInteractionCondition {
+  inputId: string
+  operator: IMicroConditionOperator
+  value: boolean | number
+}
+
+export interface IMicroInteractionTransition {
+  id: string
+  /** 源状态 id */
+  from: string
+  /** 目标状态 id */
+  to: string
+  /** 条件之间为"与"关系 */
+  conditions: IMicroInteractionCondition[]
+}
+
+export interface IMicroInteraction {
+  id: string
+  name: string
+  states: IMicroInteractionState[]
+  inputs: IMicroInteractionInput[]
+  transitions: IMicroInteractionTransition[]
 }
 
 /**

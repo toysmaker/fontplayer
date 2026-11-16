@@ -75,6 +75,12 @@
         <RightPanel />
       </aside>
     </main>
+
+    <!-- 高级编辑「动效与视频」对话框：挂载在编辑界面根部，
+         避免右侧面板 z-index 层叠上下文影响 naive-ui 弹层（select 下拉等） -->
+    <AnimationEditorDialog v-model:visible="animationStore.editorVisible" />
+    <AnimationExportDialog v-model:visible="animationStore.exportVisible" :clip="animationStore.exportClip" />
+    <MicroInteractionDialog v-model:visible="animationStore.microEditorVisible" />
   </div>
 </template>
 
@@ -126,6 +132,10 @@ import GridControllerFree from '@/ui/components/Widgets/GridControllerFree.vue'
 import { useCharacterGridEditStore } from '@/stores/characterGridEdit'
 import type { IGridItem } from '@/core/types'
 import type { ToolType } from '@/features/tools'
+import { useAnimationStore } from '@/stores/animation'
+import AnimationEditorDialog from '@/ui/dialogs/AnimationEditorDialog.vue'
+import AnimationExportDialog from '@/ui/dialogs/AnimationExportDialog.vue'
+import MicroInteractionDialog from '@/ui/dialogs/MicroInteractionDialog.vue'
 
 const characterStore = useCharacterStore()
 const dialogsStore = useDialogsStore()
@@ -136,6 +146,7 @@ const bottomBarToolStore = useBottomBarToolStore()
 const toolStore = useToolStore()
 const characterMetricsDraftStore = useCharacterMetricsDraftStore()
 const characterGridEditStore = useCharacterGridEditStore()
+const animationStore = useAnimationStore()
 const canvasRef = ref<HTMLCanvasElement>()
 let dragger: BaseGlyphDragger | null = null
 let selectControlCheckInterval: number | null = null

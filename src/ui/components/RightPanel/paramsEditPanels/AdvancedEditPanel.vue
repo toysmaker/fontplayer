@@ -75,7 +75,92 @@
       </div>
     </div>
 
-    <!-- ============ Section 2 / Section 3: 后续功能 ============ -->
+    <!-- ============ Section 2: 动效与视频 ============ -->
+    <div class="section">
+      <div class="section-title">{{ t('panels.advancedEditPanel.animation.title') }}</div>
+      <div class="section-body">
+        <n-button
+          block
+          size="small"
+          type="primary"
+          @click="handleAddClip"
+          @pointerup="handleAddClip"
+        >
+          <template #icon>
+            <font-awesome-icon :icon="['fas', 'film']" />
+          </template>
+          {{ t('panels.advancedEditPanel.animation.addClip') }}
+        </n-button>
+
+        <!-- 动效视频列表 -->
+        <div class="anim-list">
+          <div class="anim-list-title">
+            {{ t('panels.advancedEditPanel.animation.clipListTitle') }}
+            ({{ animationStore.clips.length }})
+          </div>
+          <n-empty
+            v-if="animationStore.clips.length === 0"
+            size="small"
+            :description="t('panels.advancedEditPanel.animation.noClips')"
+          />
+          <div v-for="clip in animationStore.clips" :key="clip.id" class="anim-list-row">
+            <span class="anim-list-name">{{ clip.name }}</span>
+            <span class="anim-list-actions">
+              <n-button size="tiny" @click="handleEditClip(clip.id)" @pointerup="handleEditClip(clip.id)">
+                {{ t('panels.advancedEditPanel.animation.edit') }}
+              </n-button>
+              <n-button size="tiny" type="primary" @click="handleExportClip(clip.id)" @pointerup="handleExportClip(clip.id)">
+                {{ t('panels.advancedEditPanel.animation.export') }}
+              </n-button>
+            </span>
+          </div>
+        </div>
+
+        <!-- 微交互依赖动画片段：视频列表为空时不显示按钮与列表 -->
+        <template v-if="animationStore.clips.length > 0">
+          <n-button
+            block
+            size="small"
+            class="anim-add-micro"
+            @click="handleAddMicro"
+            @pointerup="handleAddMicro"
+          >
+            <template #icon>
+              <font-awesome-icon :icon="['fas', 'diagram-project']" />
+            </template>
+            {{ t('panels.advancedEditPanel.animation.addMicro') }}
+          </n-button>
+
+          <!-- 交互列表 -->
+          <div class="anim-list">
+            <div class="anim-list-title">
+              {{ t('panels.advancedEditPanel.animation.microListTitle') }}
+              ({{ animationStore.microInteractions.length }})
+            </div>
+            <n-empty
+              v-if="animationStore.microInteractions.length === 0"
+              size="small"
+              :description="t('panels.advancedEditPanel.animation.noMicros')"
+            />
+            <div v-for="micro in animationStore.microInteractions" :key="micro.id" class="anim-list-row">
+              <span class="anim-list-name">{{ micro.name }}</span>
+              <span class="anim-list-actions">
+                <n-button size="tiny" @click="handleEditMicro(micro.id)" @pointerup="handleEditMicro(micro.id)">
+                  {{ t('panels.advancedEditPanel.animation.edit') }}
+                </n-button>
+                <n-button size="tiny" type="primary" @click="handleExportMicro(micro.id)" @pointerup="handleExportMicro(micro.id)">
+                  {{ t('panels.advancedEditPanel.animation.export') }}
+                </n-button>
+              </span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ============ Section 3: 后续功能 ============ -->
+    <!-- 注：动效/微交互对话框挂载在编辑界面根部（CharacterEditor），
+         避免右侧面板 z-index 层叠上下文影响 naive-ui 弹层（select 下拉等）显示 -->
   </div>
 </template>
 
@@ -89,6 +174,8 @@ import {
   useStrokeStyleReplaceStore,
   type StrokeListItem,
 } from '@/stores/strokeStyleReplace'
+import { useAnimationStore } from '@/stores/animation'
+import { exportMicroInteractionFile } from '@/features/animation/stateMachineExporter'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t } = useI18n()
@@ -97,6 +184,7 @@ const message = useMessage()
 const characterStore = useCharacterStore()
 const dialogsStore = useDialogsStore()
 const strokeStyleReplace = useStrokeStyleReplaceStore()
+const animationStore = useAnimationStore()
 
 // ---------------- 整体笔画风格替换 ----------------
 
@@ -227,6 +315,44 @@ watch(
   },
 )
 
+// ---------------- Section 2: 动效与视频 ----------------
+
+const _addClip = () => {
+  animationStore.openNewClipEditor()
+}
+const handleAddClip = createDebouncedHandler(_addClip, 'AdvancedEditPanel.addClip')
+
+const _editClip = (id: string) => {
+  animationStore.openClipEditor(id)
+}
+const handleEditClip = createDebouncedHandler(_editClip, 'AdvancedEditPanel.editClip', (args) => args[0])
+
+/** 列表点击导出：只显示导出小对话框（挂载在 CharacterEditor 根部），不打开编辑对话框 */
+const _exportClip = (id: string) => {
+  animationStore.openClipExport(id)
+}
+const handleExportClip = createDebouncedHandler(_exportClip, 'AdvancedEditPanel.exportClip', (args) => args[0])
+
+const _addMicro = () => {
+  animationStore.openNewMicroEditor()
+}
+const handleAddMicro = createDebouncedHandler(_addMicro, 'AdvancedEditPanel.addMicro')
+
+const _editMicro = (id: string) => {
+  animationStore.openMicroEditor(id)
+}
+const handleEditMicro = createDebouncedHandler(_editMicro, 'AdvancedEditPanel.editMicro', (args) => args[0])
+
+/** 交互列表直接导出当前交互文件（状态机 JSON，内嵌片段动画） */
+const _exportMicro = (id: string) => {
+  const micro = animationStore.getMicro(id)
+  const ch = characterStore.editingCharacter
+  if (!micro || !ch) return
+  exportMicroInteractionFile(micro, animationStore.clips, ch)
+  message.success(t('panels.advancedEditPanel.animation.exported'))
+}
+const handleExportMicro = createDebouncedHandler(_exportMicro, 'AdvancedEditPanel.exportMicro', (args) => args[0])
+
 onUnmounted(() => {
   strokeStyleReplace.reset()
 })
@@ -298,5 +424,39 @@ onUnmounted(() => {
 }
 .collapse-btn {
   margin-top: 6px;
+}
+/* Section 2: 动效与视频 */
+.anim-add-micro {
+  margin-top: 8px;
+}
+.anim-list {
+  margin-top: 10px;
+}
+.anim-list-title {
+  font-size: 12px;
+  color: var(--light-5);
+  margin-bottom: 6px;
+}
+.anim-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  background-color: var(--dark-1);
+  border-radius: 3px;
+}
+.anim-list-name {
+  font-size: 12px;
+  color: var(--light-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.anim-list-actions {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
 }
 </style>
