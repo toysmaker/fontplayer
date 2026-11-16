@@ -4,112 +4,147 @@
       <!-- 工具图标区域 -->
       <div class="tool-icons">
         <!-- 选择工具 -->
-        <n-icon
-          class="tool-icon" 
-          :class="{
-            'selected': tool === 'select',
-          }"
-          @click="switchTool('select')"
-          @pointerup="switchTool('select')"
-          size="40"
-          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
-          <font-awesome-icon
-            icon="fa-solid fa-arrow-pointer"
-          />
-        </n-icon>
-        
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-icon
+              v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph"
+              class="tool-icon"
+              :class="{
+                'selected': tool === 'select',
+              }"
+              @click="switchTool('select')"
+              @pointerup="switchTool('select')"
+              size="40">
+              <font-awesome-icon
+                icon="fa-solid fa-arrow-pointer"
+              />
+            </n-icon>
+          </template>
+          {{ t('panels.toolBar.select') }}
+        </n-tooltip>
+
         <!-- 钢笔工具 -->
-        <n-icon
-          class="tool-icon"
-          :class="{
-            'selected': tool === 'pen',
-          }"
-          @click="switchTool('pen')"
-          @pointerup="switchTool('pen')"
-          size="40"
-          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
-          <font-awesome-icon
-            icon="fa-solid fa-pen-nib"
-          />
-        </n-icon>
-        
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-icon
+              v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph"
+              class="tool-icon"
+              :class="{
+                'selected': tool === 'pen',
+              }"
+              @click="switchTool('pen')"
+              @pointerup="switchTool('pen')"
+              size="40">
+              <font-awesome-icon
+                icon="fa-solid fa-pen-nib"
+              />
+            </n-icon>
+          </template>
+          {{ t('panels.toolBar.pen') }}
+        </n-tooltip>
+
         <!-- 椭圆工具 -->
-        <n-icon
-          class="tool-icon"
-          :class="{
-            'selected': tool === 'ellipse',
-          }"
-          @click="switchTool('ellipse')"
-          @pointerup="switchTool('ellipse')"
-          size="40"
-          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
-          <font-awesome-icon
-            icon="fa-regular fa-circle"
-          />
-        </n-icon>
-        
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-icon
+              v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph"
+              class="tool-icon"
+              :class="{
+                'selected': tool === 'ellipse',
+              }"
+              @click="switchTool('ellipse')"
+              @pointerup="switchTool('ellipse')"
+              size="40">
+              <font-awesome-icon
+                icon="fa-regular fa-circle"
+              />
+            </n-icon>
+          </template>
+          {{ t('panels.toolBar.ellipse') }}
+        </n-tooltip>
+
         <!-- 矩形工具 -->
-        <n-icon
-          class="tool-icon"
-          :class="{
-            'selected': tool === 'rectangle',
-          }"
-          @click="switchTool('rectangle')"
-          @pointerup="switchTool('rectangle')"
-          size="40"
-          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
-          <font-awesome-icon
-            icon="fa-regular fa-square"
-          />
-        </n-icon>
-        
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-icon
+              v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph"
+              class="tool-icon"
+              :class="{
+                'selected': tool === 'rectangle',
+              }"
+              @click="switchTool('rectangle')"
+              @pointerup="switchTool('rectangle')"
+              size="40">
+              <font-awesome-icon
+                icon="fa-regular fa-square"
+              />
+            </n-icon>
+          </template>
+          {{ t('panels.toolBar.rectangle') }}
+        </n-tooltip>
+
         <!-- 多边形工具 -->
-        <n-icon
-          class="tool-icon"
-          :class="{
-            'selected': tool === 'polygon',
-          }"
-          @click="switchTool('polygon')"
-          @pointerup="switchTool('polygon')"
-          size="40"
-          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
-          <font-awesome-icon
-            icon="fa-solid fa-draw-polygon"
-          />
-        </n-icon>
-        
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-icon
+              v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph"
+              class="tool-icon"
+              :class="{
+                'selected': tool === 'polygon',
+              }"
+              @click="switchTool('polygon')"
+              @pointerup="switchTool('polygon')"
+              size="40">
+              <font-awesome-icon
+                icon="fa-solid fa-draw-polygon"
+              />
+            </n-icon>
+          </template>
+          {{ t('panels.toolBar.polygon') }}
+        </n-tooltip>
+
         <!-- 图片工具 - 仅在字符编辑模式显示 -->
-        <n-icon
-          class="tool-icon"
-          :class="{
-            'selected': tool === 'picture',
-          }"
-          @click="switchTool('picture')"
-          @pointerup="switchTool('picture')"
-          size="40"
-          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
-          <font-awesome-icon
-            icon="fa-solid fa-image"
-          />
-        </n-icon>
-        
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-icon
+              v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph"
+              class="tool-icon"
+              :class="{
+                'selected': tool === 'picture',
+              }"
+              @click="switchTool('picture')"
+              @pointerup="switchTool('picture')"
+              size="40">
+              <font-awesome-icon
+                icon="fa-solid fa-image"
+              />
+            </n-icon>
+          </template>
+          {{ t('panels.toolBar.picture') }}
+        </n-tooltip>
+
         <!-- 字形组件工具 - 在字符和字形编辑模式显示 -->
-        <n-icon
-          class="tool-icon"
-          :class="{
-            'selected': tool === 'glyph' || dialogsStore.glyphComponentsDialogVisible,
-          }"
-          @click="openGlyphComponentsDialog"
-          @pointerup="openGlyphComponentsDialog"
-          size="40"
-          v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
-          <font-awesome-icon
-            :icon="['fas', 'font']"
-          />
-        </n-icon>
-        
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-icon
+              v-show="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph"
+              class="tool-icon"
+              :class="{
+                'selected': tool === 'glyph' || dialogsStore.glyphComponentsDialogVisible,
+              }"
+              @click="openGlyphComponentsDialog"
+              @pointerup="openGlyphComponentsDialog"
+              size="40">
+              <font-awesome-icon
+                :icon="['fas', 'font']"
+              />
+            </n-icon>
+          </template>
+          {{ t('panels.toolBar.glyph') }}
+        </n-tooltip>
+
         <!-- 代码编辑器 - 在字符和字形编辑模式显示；可变字形禁用 -->
-        <n-tooltip v-if="editingGlyphHasVariables && editStatus === EditStatus.Glyph" trigger="hover">
+        <n-tooltip v-if="editingGlyphHasVariables && editStatus === EditStatus.Glyph" trigger="hover" placement="bottom">
           <template #trigger>
             <n-icon class="tool-icon code-icon disabled" size="40">
               <font-awesome-icon :icon="['fas', 'terminal']" />
@@ -117,64 +152,84 @@
           </template>
           {{ t('panels.paramsPanel.variablesPanel.variableGlyphNoScript') }}
         </n-tooltip>
-        <n-icon v-else-if="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph" class="tool-icon code-icon" size="40"
-          @click="switchTool('code')"
-          @pointerup="switchTool('code')">
-          <font-awesome-icon
-          :icon="['fas', 'terminal']"
-          />
-        </n-icon>
-        
+        <n-tooltip v-else-if="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph" trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-icon class="tool-icon code-icon" size="40"
+              @click="switchTool('code')"
+              @pointerup="switchTool('code')">
+              <font-awesome-icon
+              :icon="['fas', 'terminal']"
+              />
+            </n-icon>
+          </template>
+          {{ t('panels.toolBar.code') }}
+        </n-tooltip>
+
         <!-- 参数工具 - 仅在字形编辑模式显示 -->
-        <n-icon
-          class="tool-icon"
-          :class="{
-            'selected': tool === 'params',
-          }"
-          @click="switchTool('params')"
-          @pointerup="switchTool('params')"
-          size="40"
-          v-show="editStatus === EditStatus.Glyph || (editStatus === EditStatus.Edit && characterStore.editingCharacter?.script)">
-          <font-awesome-icon
-            :icon="['fas', 'sliders']"
-          />
-        </n-icon>
-        
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-icon
+              v-show="editStatus === EditStatus.Glyph || (editStatus === EditStatus.Edit && characterStore.editingCharacter?.script)"
+              class="tool-icon"
+              :class="{
+                'selected': tool === 'params',
+              }"
+              @click="switchTool('params')"
+              @pointerup="switchTool('params')"
+              size="40">
+              <font-awesome-icon
+                :icon="['fas', 'sliders']"
+              />
+            </n-icon>
+          </template>
+          {{ t('panels.toolBar.params') }}
+        </n-tooltip>
+
         <!-- 网格工具 - 仅在字符编辑模式显示 -->
-        <n-icon
-          class="tool-icon"
-          :class="{
-            'selected': tool === 'grid',
-          }"
-          size="40"
-          @click="switchTool('grid')"
-          @pointerup="switchTool('grid')"
-          v-show="editStatus === EditStatus.Edit">
-          <font-awesome-icon
-            :class="{
-              'selected': tool === 'grid',
-            }"
-            :icon="['fas', 'table-cells']"
-          />
-        </n-icon>
-        
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-icon
+              v-show="editStatus === EditStatus.Edit"
+              class="tool-icon"
+              :class="{
+                'selected': tool === 'grid',
+              }"
+              size="40"
+              @click="switchTool('grid')"
+              @pointerup="switchTool('grid')">
+              <font-awesome-icon
+                :class="{
+                  'selected': tool === 'grid',
+                }"
+                :icon="['fas', 'table-cells']"
+              />
+            </n-icon>
+          </template>
+          {{ t('panels.toolBar.grid') }}
+        </n-tooltip>
+
         <!-- 度量工具 - 仅在字符编辑模式显示 -->
-        <n-icon
-          class="tool-icon"
-          :class="{
-            'selected': tool === 'metrics',
-          }"
-          size="40"
-          @click="switchTool('metrics')"
-          @pointerup="switchTool('metrics')"
-          v-show="editStatus === EditStatus.Edit">
-          <font-awesome-icon
-            :class="{
-              'selected': tool === 'metrics',
-            }"
-            :icon="['fas', 'text-width']"
-          />
-        </n-icon>
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-icon
+              v-show="editStatus === EditStatus.Edit"
+              class="tool-icon"
+              :class="{
+                'selected': tool === 'metrics',
+              }"
+              size="40"
+              @click="switchTool('metrics')"
+              @pointerup="switchTool('metrics')">
+              <font-awesome-icon
+                :class="{
+                  'selected': tool === 'metrics',
+                }"
+                :icon="['fas', 'text-width']"
+              />
+            </n-icon>
+          </template>
+          {{ t('panels.toolBar.metrics') }}
+        </n-tooltip>
 
         <!-- 布尔运算分隔线和按钮 -->
         <template v-if="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
@@ -182,31 +237,49 @@
           <n-tooltip trigger="hover" placement="bottom"><template #trigger>
             <n-icon class="tool-icon boolean-icon" size="24" @click="handleBooleanOp('union')" @pointerup="handleBooleanOp('union')">
               <ShapeUnion16Filled />
-            </n-icon></template>并集
+            </n-icon></template>{{ t('panels.toolBar.boolean.union') }}
           </n-tooltip>
           <n-tooltip trigger="hover" placement="bottom"><template #trigger>
             <n-icon class="tool-icon boolean-icon" size="24" @click="handleBooleanOp('intersect')" @pointerup="handleBooleanOp('intersect')">
               <ShapeIntersect16Filled />
-            </n-icon></template>交集
+            </n-icon></template>{{ t('panels.toolBar.boolean.intersect') }}
           </n-tooltip>
           <n-tooltip trigger="hover" placement="bottom"><template #trigger>
             <n-icon class="tool-icon boolean-icon" size="24" @click="handleBooleanOp('subtract')" @pointerup="handleBooleanOp('subtract')">
               <ShapeSubtract16Filled />
-            </n-icon></template>差集
+            </n-icon></template>{{ t('panels.toolBar.boolean.subtract') }}
           </n-tooltip>
         </template>
 
-        <!-- 信息按钮 - 仅在字符编辑模式显示（toggle 展示信息面板，不抢占当前工具） -->
+        <!-- 高级编辑 + 信息按钮 - 仅在字符编辑模式显示，共用一个分隔（信息为 toggle，不抢占当前工具） -->
         <template v-if="editStatus === EditStatus.Edit">
           <div class="boolean-separator"></div>
-          <n-icon
-            class="tool-icon"
-            :class="{ 'selected': editorStore.infoPanelVisible }"
-            size="40"
-            @click="handleInfoToggle"
-            @pointerup="handleInfoToggle">
-            <font-awesome-icon :icon="['fas', 'circle-info']" />
-          </n-icon>
+          <n-tooltip trigger="hover" placement="bottom">
+            <template #trigger>
+              <n-icon
+                class="tool-icon"
+                :class="{ 'selected': editorStore.advancedEditPanelVisible }"
+                size="40"
+                @click="handleAdvancedEditToggle"
+                @pointerup="handleAdvancedEditToggle">
+                <font-awesome-icon :icon="['fas', 'gears']" />
+              </n-icon>
+            </template>
+            {{ t('panels.toolBar.advancedEdit') }}
+          </n-tooltip>
+          <n-tooltip trigger="hover" placement="bottom">
+            <template #trigger>
+              <n-icon
+                class="tool-icon"
+                :class="{ 'selected': editorStore.infoPanelVisible }"
+                size="40"
+                @click="handleInfoToggle"
+                @pointerup="handleInfoToggle">
+                <font-awesome-icon :icon="['fas', 'circle-info']" />
+              </n-icon>
+            </template>
+            {{ t('panels.toolBar.info') }}
+          </n-tooltip>
         </template>
 
         <!-- 骨架提取按钮 - 仅在字符编辑模式显示 -->
@@ -385,6 +458,12 @@ const _handleInfoToggle = () => {
   editorStore.toggleInfoPanel()
 }
 const handleInfoToggle = createDebouncedHandler(_handleInfoToggle, 'ToolBar.infoToggle')
+
+// ---- 高级编辑面板：与信息面板同机制，toggle 展示，不改变当前工具 ----
+const _handleAdvancedEditToggle = () => {
+  editorStore.toggleAdvancedEditPanel()
+}
+const handleAdvancedEditToggle = createDebouncedHandler(_handleAdvancedEditToggle, 'ToolBar.advancedEditToggle')
 
 // ---- 布尔运算：通过 window 事件触发，由 EditorSidebar 统一处理 ----
 const _handleBooleanOp = (op: BooleanOp) => {

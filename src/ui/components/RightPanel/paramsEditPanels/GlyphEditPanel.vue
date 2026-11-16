@@ -1891,7 +1891,7 @@ const handleFormatGlyphComponent = () => {
                   @pointerup="handleRemoveTarget(ruleIndex, targetIndex)"
                 >
                   <template #icon>
-                    <n-icon size="12"><font-awesome-icon :icon="['fas', 'times']" /></n-icon>
+                    <n-icon size="12"><font-awesome-icon :icon="['fas', 'xmark']" /></n-icon>
                   </template>
                 </n-button>
               </div>

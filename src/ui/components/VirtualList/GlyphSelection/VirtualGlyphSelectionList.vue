@@ -11,6 +11,7 @@
         :key="item.uuid"
         :ref="(el) => setItemRef(el, item.uuid)"
         class="glyph-item"
+        :class="{ 'glyph-item--highlighted': highlightUuids.has(item.uuid) }"
         @click="handleSelect(item)"
         @pointerup="handleSelect(item)"
       >
@@ -66,6 +67,8 @@ const props = defineProps<{
   /** 须与 .virtual-list-content 的 padding-bottom 一致 */
   padBottom?: number
   visible?: boolean
+  /** 笔画风格替换：非空时高亮所有同风格的字形 */
+  highlightStyle?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -109,6 +112,17 @@ const glyphList = computed<ICustomGlyph[]>(() => {
   const f: any = projectStore.selectedFile
   if (!f) return []
   return (f[props.glyphType] || []) as ICustomGlyph[]
+})
+
+/** 笔画风格替换：与所选风格一致的字形 uuid 集合（用于高亮） */
+const highlightUuids = computed<Set<string>>(() => {
+  const style = (props.highlightStyle || '').trim()
+  const set = new Set<string>()
+  if (!style) return set
+  for (const g of glyphList.value) {
+    if ((g.style || '').trim() === style) set.add(g.uuid)
+  }
+  return set
 })
 
 const rowHeight = computed(() => itemHeight + gridGap)
@@ -444,6 +458,15 @@ watch(
 }
 .glyph-item {
   cursor: pointer;
+}
+
+/* 笔画风格替换：同风格笔画高亮 */
+.glyph-item--highlighted :deep(.glyph) {
+  border-color: #e6a23c;
+  box-shadow: 0 0 0 2px rgba(230, 162, 60, 0.35);
+}
+.glyph-item--highlighted :deep(.glyph) .info {
+  background-color: #e6a23c;
 }
 
 /* WKWebView：父级 translateY 虚拟滚动时，子 canvas 偶发不合成；轻触发展开合成层减轻空白缩略图 */

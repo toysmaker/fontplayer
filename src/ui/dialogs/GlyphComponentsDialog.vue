@@ -2,14 +2,14 @@
   <n-modal
     :show="visible"
     preset="dialog"
-    :title="t('dialogs.glyphComponentDialog.title')"
+    :title="isStylePickMode || isSingleReplaceMode ? t('panels.advancedEditPanel.strokeStyleReplace.title') : t('dialogs.glyphComponentDialog.title')"
     class="glyph-components-dialog"
     :style="{ width: '805px', height: '560px' }"
     :mask-closable="true"
     @update:show="(v: boolean) => emit('update:show', v)"
   >
-    <!-- Tab 按钮：右上角，与列表页右下角按钮样式一致 -->
-    <div class="dialog-tabs">
+    <!-- Tab 按钮：右上角，与列表页右下角按钮样式一致（笔画风格替换模式仅显示笔画 tab） -->
+    <div v-if="!isStylePickMode && !isSingleReplaceMode" class="dialog-tabs">
       <span
         class="tab-btn"
         :class="{ selected: activeTab === 'stroke_glyphs' }"
@@ -38,10 +38,32 @@
 
     <!-- 列表区域 -->
     <div class="tab-body">
-      <VirtualGlyphSelectionList v-show="activeTab === 'stroke_glyphs'" :visible="visible" glyph-type="stroke_glyphs" @select="handleSelect" />
+      <VirtualGlyphSelectionList
+        v-show="activeTab === 'stroke_glyphs'"
+        :visible="visible"
+        glyph-type="stroke_glyphs"
+        :highlight-style="isStylePickMode ? dialogs.glyphStylePickSelectedStyle : null"
+        @select="handleSelect"
+      />
       <VirtualGlyphSelectionList v-show="activeTab === 'radical_glyphs'" :visible="visible" glyph-type="radical_glyphs" @select="handleSelect" />
       <VirtualGlyphSelectionList v-show="activeTab === 'glyphs'" :visible="visible" glyph-type="glyphs" @select="handleSelect" />
       <VirtualGlyphSelectionList v-show="activeTab === 'comp_glyphs'" :visible="visible" glyph-type="comp_glyphs" @select="handleSelect" />
+    </div>
+
+    <!-- 笔画风格替换：对话框内部下方显示当前选择的风格 / 提示 -->
+    <div v-if="isStylePickMode || isSingleReplaceMode" class="dialog-bottom-info">
+      <span v-if="dialogs.glyphStylePickHint" class="bottom-hint">
+        <font-awesome-icon :icon="['fas', 'circle-info']" />
+        {{ dialogs.glyphStylePickHint }}
+      </span>
+      <span v-else-if="isStylePickMode" class="bottom-style">
+        <template v-if="dialogs.glyphStylePickSelectedStyle">
+          {{ t('dialogs.glyphComponentDialog.stylePick.currentStyle', { style: dialogs.glyphStylePickSelectedStyle }) }}
+        </template>
+        <template v-else>
+          {{ t('dialogs.glyphComponentDialog.stylePick.noStyleSelected') }}
+        </template>
+      </span>
     </div>
 
     <!-- 底部：左下角单选/多选切换，右侧取消/确定 -->
@@ -49,7 +71,7 @@
       <div class="dialog-footer">
         <div class="footer-left">
           <n-switch
-            v-if="!dialogs.glyphComponentsStrokeReplaceHandler"
+            v-if="!dialogs.glyphComponentsStrokeReplaceHandler && !isStylePickMode"
             :value="dialogs.glyphComponentsMultiSelect"
             @update:value="dialogs.toggleGlyphComponentsMultiSelect"
           >
@@ -75,11 +97,11 @@
           <n-button @click="handleCancel" @pointerup="handleCancel">{{ t('dialogs.glyphComponentDialog.cancel') }}</n-button>
           <n-button
             type="primary"
-            :disabled="dialogs.glyphComponentsMultiSelect && dialogs.glyphComponentsSelectedCount === 0"
+            :disabled="confirmDisabled"
             @click="handleConfirm"
             @pointerup="handleConfirm"
           >
-            {{ dialogs.glyphComponentsMultiSelect ? t('dialogs.glyphComponentDialog.confirm') : t('dialogs.glyphComponentDialog.close') }}
+            {{ confirmLabel }}
           </n-button>
         </div>
       </div>
@@ -120,6 +142,23 @@ const visible = computed({
 })
 
 const activeTab = computed(() => dialogs.glyphComponentsActiveTab)
+
+/** 笔画风格替换：整体风格选择模式 */
+const isStylePickMode = computed(() => dialogs.glyphStylePickMode)
+/** 笔画风格替换：单个笔画替换模式（复用 strokeReplaceHandler，返回 false 保持对话框打开） */
+const isSingleReplaceMode = computed(() => dialogs.glyphSingleStyleReplaceMode)
+
+const confirmDisabled = computed(() => {
+  if (isStylePickMode.value) return !dialogs.glyphStylePickSelectedStyle
+  return dialogs.glyphComponentsMultiSelect && dialogs.glyphComponentsSelectedCount === 0
+})
+
+const confirmLabel = computed(() => {
+  if (isStylePickMode.value) return t('dialogs.glyphComponentDialog.confirm')
+  return dialogs.glyphComponentsMultiSelect
+    ? t('dialogs.glyphComponentDialog.confirm')
+    : t('dialogs.glyphComponentDialog.close')
+})
 
 /** 多选队列顺序解析为模板字形（同一 uuid 可出现多行） */
 const selectedPickRows = computed(() => {
@@ -178,17 +217,34 @@ function addGlyphToCurrentContainer(glyph: ICustomGlyph, nameNonce = 0) {
 }
 
 function handleSelect(glyph: ICustomGlyph) {
+  // 整体笔画风格替换：点击字形选择其风格（高亮同风格笔画，底部显示当前风格）
+  if (dialogs.glyphStylePickMode) {
+    const style = (glyph.style || '').trim()
+    if (!style) {
+      // 未命名不可选择，对话框内部下方给出提示
+      dialogs.setGlyphStylePickHint(t('dialogs.glyphComponentDialog.stylePick.unnamedHint'))
+      return
+    }
+    dialogs.glyphStylePickSelectedStyle = style
+    dialogs.setGlyphStylePickHint('')
+    return
+  }
+
+  // 笔画风格替换（单个）/ 笔画替换：回调模板 uuid；返回 false 表示保持对话框打开
   const strokeCb = dialogs.glyphComponentsStrokeReplaceHandler
   if (strokeCb) {
+    let keepOpen = false
     try {
-      strokeCb(glyph.uuid)
+      keepOpen = strokeCb(glyph.uuid) === false
     } catch (e) {
       console.error('[GlyphComponentsDialog] strokeReplaceHandler error:', e)
       message.warning('操作失败: ' + (e instanceof Error ? e.message : String(e)))
     }
-    dialogs.clearGlyphComponentsStrokeReplaceHandler()
-    dialogs.closeGlyphComponentsDialog()
-    visible.value = false
+    if (!keepOpen) {
+      dialogs.clearGlyphComponentsStrokeReplaceHandler()
+      dialogs.closeGlyphComponentsDialog()
+      visible.value = false
+    }
     return
   }
   if (!dialogs.glyphComponentsMultiSelect) {
@@ -212,6 +268,22 @@ function handleCancel() {
 }
 
 function handleConfirm() {
+  // 整体笔画风格替换：确认已选中的风格
+  if (dialogs.glyphStylePickMode) {
+    const style = dialogs.glyphStylePickSelectedStyle
+    const handler = dialogs.glyphStylePickConfirmHandler
+    dialogs.closeGlyphComponentsDialog()
+    visible.value = false
+    if (style && handler) {
+      try {
+        handler(style)
+      } catch (e) {
+        console.error('[GlyphComponentsDialog] stylePickConfirmHandler error:', e)
+        message.warning('操作失败: ' + (e instanceof Error ? e.message : String(e)))
+      }
+    }
+    return
+  }
   if (!dialogs.glyphComponentsMultiSelect) {
     handleCancel()
     return
@@ -267,6 +339,28 @@ function handleConfirm() {
 .tab-body {
   height: 360px;
   margin-top: 8px;
+}
+.dialog-bottom-info {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  margin-top: 8px;
+  padding: 4px 8px;
+  background-color: #f4f4f5;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--primary-0);
+}
+.dialog-bottom-info .bottom-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #e6a23c;
+  word-break: break-all;
+}
+.dialog-bottom-info .bottom-style {
+  color: var(--primary-0);
+  word-break: break-all;
 }
 .dialog-footer {
   display: flex;

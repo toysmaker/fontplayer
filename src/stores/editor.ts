@@ -43,6 +43,9 @@ export const useEditorStore = defineStore('editor', () => {
   // 信息面板可见性（独立于工具状态：打开时不抢占当前工具，拖拽编辑不受影响）
   const infoPanelVisible = ref<boolean>(false)
 
+  // 高级编辑面板可见性（与信息面板同机制：独立 flag，不抢占当前工具，select 工具保持可用）
+  const advancedEditPanelVisible = ref<boolean>(false)
+
   // 用于跨组件触发 canvas 重绘的计数器（GlyphEditPanel 修改后递增，Editor watch 它）
   const componentRenderTick = ref(0)
 
@@ -145,6 +148,10 @@ export const useEditorStore = defineStore('editor', () => {
    */
   function toggleInfoPanel() {
     infoPanelVisible.value = !infoPanelVisible.value
+    // 与高级编辑面板互斥：打开信息面板时收起高级编辑面板
+    if (infoPanelVisible.value) {
+      advancedEditPanelVisible.value = false
+    }
   }
 
   /**
@@ -152,6 +159,24 @@ export const useEditorStore = defineStore('editor', () => {
    */
   function hideInfoPanel() {
     infoPanelVisible.value = false
+  }
+
+  /**
+   * 切换高级编辑面板（不改变当前工具）
+   */
+  function toggleAdvancedEditPanel() {
+    advancedEditPanelVisible.value = !advancedEditPanelVisible.value
+    // 与信息面板互斥：打开高级编辑面板时收起信息面板
+    if (advancedEditPanelVisible.value) {
+      infoPanelVisible.value = false
+    }
+  }
+
+  /**
+   * 隐藏高级编辑面板
+   */
+  function hideAdvancedEditPanel() {
+    advancedEditPanelVisible.value = false
   }
 
   /**
@@ -213,6 +238,7 @@ export const useEditorStore = defineStore('editor', () => {
     variablePreviewEnabled,
     componentRenderTick,
     infoPanelVisible,
+    advancedEditPanelVisible,
 
     // Actions
     setEditStatus,
@@ -222,6 +248,8 @@ export const useEditorStore = defineStore('editor', () => {
     toggleBottomBar,
     toggleInfoPanel,
     hideInfoPanel,
+    toggleAdvancedEditPanel,
+    hideAdvancedEditPanel,
     setCharacterSearchKeyword,
     setIsCharacterSearching,
     setEditPanelCompFilter,

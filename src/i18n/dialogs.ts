@@ -199,6 +199,11 @@ const dialogs = {
 			close: '关闭',
 			notInEditMode: '请在“字符编辑/字形编辑”模式下使用',
 			added: '已添加 {count} 个组件',
+			stylePick: {
+				noStyleSelected: '请点击选择一个笔画以确定风格',
+				currentStyle: '当前选择的风格：{style}',
+				unnamedHint: '该字形未命名风格，不可选择',
+			},
 		},
 		addFileDialog: {
 			title: '创建字体',
@@ -546,6 +551,11 @@ const dialogs = {
 			close: 'Close',
 			notInEditMode: 'Please use in Character/Glyph edit mode',
 			added: 'Added {count} components',
+			stylePick: {
+				noStyleSelected: 'Click a stroke to pick its style',
+				currentStyle: 'Selected style: {style}',
+				unnamedHint: 'This glyph has no style name and cannot be selected',
+			},
 		},
 		addFileDialog: {
 			title: 'New Font',

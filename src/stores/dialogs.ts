@@ -19,10 +19,10 @@ export const useDialogsStore = defineStore('dialogs', () => {
 
   const glyphComponentsSelectedCount = computed(() => glyphComponentsSelectedPicks.value.length)
 
-  /** 高级编辑「笔画替换」：选模板后回调 uuid，不插入到当前编辑字符 */
-  const glyphComponentsStrokeReplaceHandler = ref<((templateUuid: string) => void) | null>(null)
+  /** 高级编辑「笔画替换」：选模板后回调 uuid，不插入到当前编辑字符。返回 false 表示保持对话框打开 */
+  const glyphComponentsStrokeReplaceHandler = ref<((templateUuid: string) => boolean | void) | null>(null)
 
-  function openGlyphComponentsDialogForStrokeReplace(onPicked: (templateUuid: string) => void) {
+  function openGlyphComponentsDialogForStrokeReplace(onPicked: (templateUuid: string) => boolean | void) {
     glyphComponentsStrokeReplaceHandler.value = onPicked
     glyphComponentsMultiSelect.value = false
     glyphComponentsSelectedPicks.value = []
@@ -31,6 +31,56 @@ export const useDialogsStore = defineStore('dialogs', () => {
 
   function clearGlyphComponentsStrokeReplaceHandler() {
     glyphComponentsStrokeReplaceHandler.value = null
+  }
+
+  // ============ 笔画风格替换：字形选择对话框专用模式 ============
+
+  /** 整体笔画风格替换模式：点击字形选择其风格（高亮同风格笔画），确认后回调风格名 */
+  const glyphStylePickMode = ref(false)
+  /** 整体模式当前选中的风格（未命名风格不可选） */
+  const glyphStylePickSelectedStyle = ref('')
+  /** 底部提示（未命名不可选 / 单个替换不匹配等） */
+  const glyphStylePickHint = ref('')
+  const glyphStylePickConfirmHandler = ref<((style: string) => void) | null>(null)
+
+  function openGlyphComponentsDialogForStylePick(onConfirm: (style: string) => void) {
+    glyphStylePickMode.value = true
+    glyphStylePickSelectedStyle.value = ''
+    glyphStylePickHint.value = ''
+    glyphStylePickConfirmHandler.value = onConfirm
+    glyphComponentsActiveTab.value = 'stroke_glyphs'
+    glyphComponentsMultiSelect.value = false
+    glyphComponentsSelectedPicks.value = []
+    glyphComponentsDialogVisible.value = true
+  }
+
+  function clearGlyphStylePickMode() {
+    glyphStylePickMode.value = false
+    glyphStylePickSelectedStyle.value = ''
+    glyphStylePickHint.value = ''
+    glyphStylePickConfirmHandler.value = null
+  }
+
+  /** 单个笔画风格替换模式：复用 strokeReplaceHandler（返回 false 保持对话框打开） */
+  const glyphSingleStyleReplaceMode = ref(false)
+
+  function openGlyphComponentsDialogForSingleStyleReplace(onPicked: (templateUuid: string) => boolean | void) {
+    glyphStylePickMode.value = false
+    glyphSingleStyleReplaceMode.value = true
+    glyphStylePickHint.value = ''
+    glyphComponentsStrokeReplaceHandler.value = onPicked
+    glyphComponentsActiveTab.value = 'stroke_glyphs'
+    glyphComponentsMultiSelect.value = false
+    glyphComponentsSelectedPicks.value = []
+    glyphComponentsDialogVisible.value = true
+  }
+
+  function clearGlyphSingleStyleReplaceMode() {
+    glyphSingleStyleReplaceMode.value = false
+  }
+
+  function setGlyphStylePickHint(hint: string) {
+    glyphStylePickHint.value = hint
   }
 
   /** 字形骨架：选择参考字形后回调完整字形数据 */
@@ -56,6 +106,8 @@ export const useDialogsStore = defineStore('dialogs', () => {
     glyphComponentsStrokeReplaceHandler.value = null
     glyphSkeletonPickHandler.value = null
     glyphComponentsSelectedPicks.value = []
+    clearGlyphStylePickMode()
+    clearGlyphSingleStyleReplaceMode()
   }
 
   function setGlyphComponentsActiveTab(tab: GlyphComponentsTab) {
@@ -162,6 +214,16 @@ export const useDialogsStore = defineStore('dialogs', () => {
     glyphComponentsStrokeReplaceHandler,
     openGlyphComponentsDialogForStrokeReplace,
     clearGlyphComponentsStrokeReplaceHandler,
+    glyphStylePickMode,
+    glyphStylePickSelectedStyle,
+    glyphStylePickHint,
+    glyphStylePickConfirmHandler,
+    openGlyphComponentsDialogForStylePick,
+    clearGlyphStylePickMode,
+    glyphSingleStyleReplaceMode,
+    openGlyphComponentsDialogForSingleStyleReplace,
+    clearGlyphSingleStyleReplaceMode,
+    setGlyphStylePickHint,
     glyphSkeletonPickHandler,
     openGlyphComponentsDialogForSkeletonPick,
     clearGlyphSkeletonPickHandler,

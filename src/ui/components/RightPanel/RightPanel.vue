@@ -28,6 +28,7 @@ import PictureImportParamsPanel from './paramsEditPanels/PictureImportParamsPane
 import EffectParamsPanel from './paramsEditPanels/EffectParamsPanel.vue'
 import SkeletonPanel from './paramsEditPanels/SkeletonPanel.vue'
 import InfoPanel from './paramsEditPanels/InfoPanel.vue'
+import AdvancedEditPanel from './paramsEditPanels/AdvancedEditPanel.vue'
 import { useEffectStore } from '@/features/effects/effectStore'
 
 const { t } = useI18n()
@@ -36,21 +37,26 @@ const { selectedComponent, selectedComponentUUID, editStatus } = useComponentEdi
 const toolStore = useToolStore()
 const { tool } = storeToRefs(toolStore)
 const editorStore = useEditorStore()
-const { infoPanelVisible } = storeToRefs(editorStore)
+const { infoPanelVisible, advancedEditPanelVisible } = storeToRefs(editorStore)
 const effectStore = useEffectStore()
 
-// 信息面板自动让位：切换工具 / 激活效果滤镜 / 离开编辑态时收起（选中组件让位由 characterStore.setSelection 处理）
+// 信息/高级编辑面板自动让位：切换工具 / 激活效果滤镜 / 离开编辑态时收起（选中组件让位由 characterStore.setSelection 处理）
 watch(tool, () => {
   editorStore.hideInfoPanel()
+  editorStore.hideAdvancedEditPanel()
 })
 watch(
   () => effectStore.isActive,
   (active) => {
-    if (active) editorStore.hideInfoPanel()
+    if (active) {
+      editorStore.hideInfoPanel()
+      editorStore.hideAdvancedEditPanel()
+    }
   },
 )
 watch(editStatus, () => {
   editorStore.hideInfoPanel()
+  editorStore.hideAdvancedEditPanel()
 })
 
 // 调试信息
@@ -93,6 +99,10 @@ if (import.meta.env.DEV) {
     <!-- 信息面板：独立 flag（不抢占工具）；选中组件/切换工具/离开编辑态时自动让位 -->
     <info-panel
       v-else-if="editStatus === EditStatus.Edit && infoPanelVisible"
+    />
+    <!-- 高级编辑面板：与信息面板同机制（独立 flag，不抢占工具） -->
+    <advanced-edit-panel
+      v-else-if="editStatus === EditStatus.Edit && advancedEditPanelVisible"
     />
     <!-- 基础组件面板（不区分字符/字形） -->
     <pen-edit-panel

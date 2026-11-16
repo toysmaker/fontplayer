@@ -224,6 +224,7 @@ const web_menu_icons: Record<string, any> = {
   'templates': ['fas', 'list'],
   'tools': ['fas', 'wrench'],
   'effects': ['fas', 'bolt'],
+  'test': ['fas', 'flask'],
 }
 
 // 菜单处理器与禁用规则（由统一的 handlers 模块提供）
