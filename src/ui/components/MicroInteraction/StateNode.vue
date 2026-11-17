@@ -121,6 +121,7 @@ function onPortDown(port: 'in' | 'out', e: PointerEvent) {
 .state-node-name {
   font-size: 12px;
   font-weight: 600;
+  color: var(--primary-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -130,7 +131,7 @@ function onPortDown(port: 'in' | 'out', e: PointerEvent) {
   align-items: center;
   gap: 4px;
   font-size: 10px;
-  color: #666;
+  color: var(--primary-0);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

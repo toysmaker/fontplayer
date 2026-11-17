@@ -82,6 +82,7 @@ function onDragStart(segmentId: string, ev: DragEvent) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--primary-0);
 }
 .segment-duration {
   font-size: 10px;

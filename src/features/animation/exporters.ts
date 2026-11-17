@@ -14,6 +14,7 @@ import { getCharacterMetrics, type SdfMetrics } from './render'
 import { renderClipFrameAt } from './vectorRender'
 import { createGifWriter } from './gifEncoder'
 import { buildLottieJson } from './lottieExporter'
+import { fontRenderStyle } from '@/core/script/globals'
 
 export type ExportFormat = 'mp4' | 'gif' | 'webm' | 'lottie'
 
@@ -48,9 +49,18 @@ export async function exportAnimationClip(opts: ExportClipOptions): Promise<Blob
   const totalFrames = Math.max(1, Math.ceil(duration * fps))
 
   if (format === 'lottie') {
-    return new Blob([buildLottieJson({ clip, char, metrics, onProgress: opts.onProgress })], {
-      type: 'application/json',
-    })
+    return new Blob(
+      [
+        buildLottieJson({
+          clip,
+          char,
+          metrics,
+          style: fontRenderStyle.value as 'contour' | 'black' | 'color',
+          onProgress: opts.onProgress,
+        }),
+      ],
+      { type: 'application/json' },
+    )
   }
 
   // 画布分辨率 = unitsPerEm（上限 1024，防止极端 em 值导致内存压力）

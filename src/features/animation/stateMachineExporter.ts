@@ -17,6 +17,7 @@ import type { IAnimationClip, ICharacterFileLite, IMicroInteraction } from '@/co
 import { saveAs } from 'file-saver'
 import { buildLottieJson } from './lottieExporter'
 import { getCharacterMetrics, type SdfMetrics } from './render'
+import { fontRenderStyle } from '@/core/script/globals'
 import { buildReferencePlayerHtml } from './referencePlayerHtml'
 
 export interface StateMachineSegment {
@@ -56,7 +57,12 @@ export function buildStateMachineData(
       type: 'font-clip' as const,
       /** 内嵌 Lottie 动画（关键帧轮廓 + 交叉淡化），播放器可直接渲染 */
       animation: JSON.parse(
-        buildLottieJson({ clip: c, char, metrics: m }),
+        buildLottieJson({
+          clip: c,
+          char,
+          metrics: m,
+          style: fontRenderStyle.value as 'contour' | 'black' | 'color',
+        }),
       ) as unknown,
     }))
 

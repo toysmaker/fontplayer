@@ -29,8 +29,8 @@
         size="small"
         type="error"
         block
-        @click="store.removeState(selectedState.id)"
-        @pointerup="store.removeState(selectedState.id)"
+        @click="handleRemoveState(selectedState.id)"
+        @pointerup="handleRemoveState(selectedState.id)"
       >{{ t('dialogs.microInteraction.deleteState') }}</n-button>
     </template>
 
@@ -61,17 +61,13 @@
           :options="inputOptions"
           @update:value="(v: string) => store.updateCondition(selectedTransition.id, index, { inputId: v })"
         />
-        <n-radio-group
+        <n-select
           size="tiny"
           class="props-cond-op"
           :value="cond.operator"
+          :options="operatorOptions"
           @update:value="(v: string) => store.updateCondition(selectedTransition.id, index, { operator: v as any })"
-        >
-          <n-radio-button value="eq" :title="t('dialogs.microInteraction.opEq')">=</n-radio-button>
-          <n-radio-button value="neq" :title="t('dialogs.microInteraction.opNeq')">≠</n-radio-button>
-          <n-radio-button value="gt" :title="t('dialogs.microInteraction.opGt')">></n-radio-button>
-          <n-radio-button value="lt" :title="t('dialogs.microInteraction.opLt')"><</n-radio-button>
-        </n-radio-group>
+        />
         <n-select
           v-if="condInputType(cond.inputId) !== 'number'"
           size="tiny"
@@ -87,17 +83,24 @@
           :value="Number(cond.value)"
           @update:value="(v: number | null) => v !== null && store.updateCondition(selectedTransition.id, index, { value: v })"
         />
-        <n-button size="tiny" quaternary type="error" @click.stop="store.removeCondition(selectedTransition.id, index)" @pointerup.stop="store.removeCondition(selectedTransition.id, index)">
+        <n-button size="tiny" quaternary type="error" @click.stop="handleRemoveCondition(selectedTransition.id, index)" @pointerup.stop="handleRemoveCondition(selectedTransition.id, index)">
           <font-awesome-icon :icon="['fas', 'xmark']" />
         </n-button>
       </div>
       <n-button
         size="small"
+        block
+        class="props-reverse-transition"
+        @click="handleAddReverse(selectedTransition.id)"
+        @pointerup="handleAddReverse(selectedTransition.id)"
+      >{{ t('dialogs.microInteraction.addReverseTransition') }}</n-button>
+      <n-button
+        size="small"
         type="error"
         block
         class="props-delete-transition"
-        @click="store.removeTransition(selectedTransition.id)"
-        @pointerup="store.removeTransition(selectedTransition.id)"
+        @click="handleRemoveTransition(selectedTransition.id)"
+        @pointerup="handleRemoveTransition(selectedTransition.id)"
       >{{ t('dialogs.microInteraction.deleteTransition') }}</n-button>
     </template>
 
@@ -112,7 +115,7 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton, NForm, NFormItem, NInput, NInputNumber, NRadioButton, NRadioGroup, NSelect, NSwitch } from 'naive-ui'
+import { NButton, NForm, NFormItem, NInput, NInputNumber, NSelect, NSwitch } from 'naive-ui'
 import { useMicroInteractionStore } from '@/stores/microInteraction'
 import { useAnimationStore } from '@/stores/animation'
 import { createDebouncedHandler } from '@/utils/debounce-click'
@@ -130,6 +133,12 @@ const segmentOptions = computed(() =>
 const inputOptions = computed(() =>
   (store.draft?.inputs ?? []).map((i) => ({ label: i.name, value: i.id })),
 )
+const operatorOptions = [
+  { label: '= ' + t('dialogs.microInteraction.opEq'), value: 'eq' },
+  { label: '≠ ' + t('dialogs.microInteraction.opNeq'), value: 'neq' },
+  { label: '> ' + t('dialogs.microInteraction.opGt'), value: 'gt' },
+  { label: '< ' + t('dialogs.microInteraction.opLt'), value: 'lt' },
+]
 const boolOptions = [
   { label: 'true', value: true },
   { label: 'false', value: false },
@@ -142,6 +151,30 @@ function stateName(id: string): string {
 function condInputType(inputId: string): string {
   return store.draft?.inputs.find((i) => i.id === inputId)?.type ?? 'boolean'
 }
+
+const _removeState = (id: string) => {
+  store.removeState(id)
+}
+const handleRemoveState = createDebouncedHandler(_removeState, 'PropertiesPanel.removeState', (args) => args[0])
+
+const _addReverse = (id: string) => {
+  store.addReverseTransition(id)
+}
+const handleAddReverse = createDebouncedHandler(_addReverse, 'PropertiesPanel.addReverse', (args) => args[0])
+
+const _removeTransition = (id: string) => {
+  store.removeTransition(id)
+}
+const handleRemoveTransition = createDebouncedHandler(_removeTransition, 'PropertiesPanel.removeTransition', (args) => args[0])
+
+const _removeCondition = (transitionId: string, index: number) => {
+  store.removeCondition(transitionId, index)
+}
+const handleRemoveCondition = createDebouncedHandler(
+  _removeCondition,
+  'PropertiesPanel.removeCondition',
+  (args) => `${args[0]}:${args[1]}`,
+)
 
 const _addCondition = () => {
   if (store.selectedTransition) {
@@ -186,16 +219,20 @@ const handleAddCondition = createDebouncedHandler(_addCondition, 'PropertiesPane
   align-items: center;
   gap: 4px;
   margin-bottom: 4px;
+  min-width: 0;
 }
 .props-cond-input {
   flex: 1;
-  min-width: 60px;
+  min-width: 40px;
 }
 .props-cond-op {
-  flex: 0 0 auto;
+  flex: 0 0 60px;
 }
 .props-cond-value {
   flex: 0 0 64px;
+}
+.props-reverse-transition {
+  margin-top: 10px;
 }
 .props-delete-transition {
   margin-top: 10px;

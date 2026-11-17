@@ -130,6 +130,8 @@ export function createGifWriter(
     le16(frame, width)
     le16(frame, height)
     frame.push(0x00)
+    // LZW 最小码长（GIF 规范：图像数据第一字节，必须存在）
+    frame.push(8)
     // LZW 数据（子块，每块最大 255 字节）
     const compressed = lzwCompress(gray, 8)
     let pos = 0

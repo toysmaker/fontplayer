@@ -14,8 +14,8 @@
           v-else-if="input.type === 'trigger'"
           size="tiny"
           type="primary"
-          @click="store.triggerPreviewInput(input.id)"
-          @pointerup="store.triggerPreviewInput(input.id)"
+          @click="handleTrigger(input.id)"
+          @pointerup="handleTrigger(input.id)"
         >{{ t('dialogs.microInteraction.trigger') }}</n-button>
         <n-slider
           v-else
@@ -57,6 +57,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NEmpty, NSlider, NSwitch } from 'naive-ui'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 import { useMicroInteractionStore } from '@/stores/microInteraction'
 import { useAnimationStore } from '@/stores/animation'
 import { useCharacterStore } from '@/stores/character'
@@ -64,6 +65,13 @@ import ClipPlayer from './ClipPlayer.vue'
 
 const { t } = useI18n()
 const store = useMicroInteractionStore()
+
+// click + pointerup 双触发会把触发器脉冲执行两次，防抖（按输入 id 区分）
+const handleTrigger = createDebouncedHandler(
+  (id: string) => store.triggerPreviewInput(id),
+  'PreviewPanel.trigger',
+  (args) => args[0],
+)
 const animationStore = useAnimationStore()
 const characterStore = useCharacterStore()
 

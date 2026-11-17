@@ -31,7 +31,7 @@
         <n-radio-group
           size="tiny"
           class="input-source"
-          :value="input.source ?? 'custom'"
+          :value="input.source ?? 'hover'"
           @update:value="(v: string) => onSourceChange(input.id, v)"
         >
           <n-radio-button
@@ -42,47 +42,7 @@
             value="click"
             :title="t('dialogs.microInteraction.sourceClickHint')"
           >{{ t('dialogs.microInteraction.sourceClick') }}</n-radio-button>
-          <n-radio-button
-            value="custom"
-            :title="t('dialogs.microInteraction.sourceCustomHint')"
-          >{{ t('dialogs.microInteraction.sourceCustom') }}</n-radio-button>
         </n-radio-group>
-      </div>
-      <div class="input-item-row">
-        <span class="input-row-label">{{ t('dialogs.microInteraction.typeLabel') }}</span>
-        <n-radio-group
-          size="tiny"
-          class="input-type"
-          :value="input.type"
-          @update:value="(v: string) => onTypeChange(input.id, v)"
-        >
-          <n-radio-button
-            value="boolean"
-            :title="t('dialogs.microInteraction.booleanHint')"
-          >{{ t('dialogs.microInteraction.typeBoolean') }}</n-radio-button>
-          <n-radio-button
-            value="trigger"
-            :title="t('dialogs.microInteraction.triggerHint')"
-          >{{ t('dialogs.microInteraction.typeTrigger') }}</n-radio-button>
-          <n-radio-button
-            value="number"
-            :title="t('dialogs.microInteraction.numberHint')"
-          >{{ t('dialogs.microInteraction.typeNumber') }}</n-radio-button>
-        </n-radio-group>
-        <n-input-number
-          v-if="input.type === 'number'"
-          size="tiny"
-          class="input-default"
-          :value="input.defaultValue as number"
-          @update:value="(v: number | null) => v !== null && update(input.id, { defaultValue: v })"
-        />
-        <n-switch
-          v-else
-          size="small"
-          class="input-default"
-          :value="Boolean(input.defaultValue)"
-          @update:value="(v: boolean) => update(input.id, { defaultValue: v })"
-        />
       </div>
     </div>
   </div>
@@ -94,7 +54,7 @@
  * 数据直接读写 store 草稿（由 MicroInteractionEditor 统一持有）。
  */
 import { useI18n } from 'vue-i18n'
-import { NButton, NInput, NInputNumber, NRadioButton, NRadioGroup, NSwitch, useMessage } from 'naive-ui'
+import { NButton, NInput, NRadioButton, NRadioGroup, useMessage } from 'naive-ui'
 import type { IMicroInteractionInput } from '@/core/types'
 import { useMicroInteractionStore } from '@/stores/microInteraction'
 import { createDebouncedHandler } from '@/utils/debounce-click'
@@ -127,32 +87,19 @@ function update(id: string, patch: Partial<IMicroInteractionInput>) {
   store.updateInput(id, patch)
 }
 
-function onTypeChange(id: string, type: string) {
-  const input = store.draft?.inputs.find((i) => i.id === id)
-  if (!input) return
-  // hover 来源只允许布尔类型（进入/离开两态）
-  const nextType = (input.source === 'hover' ? 'boolean' : type) as IMicroInteractionInput['type']
-  update(id, {
-    type: nextType,
-    defaultValue: nextType === 'number' ? 0 : false,
-  })
-}
-
-/** 切换来源时联动类型：悬停 → 布尔，点击 → 触发器，自定义 → 保持 */
+/**
+ * 来源决定类型：悬停 → 布尔（进入 true / 离开 false）；
+ * 点击 → 触发器（瞬时脉冲）。类型对用户隐藏，自动设置。
+ */
 function onSourceChange(id: string, source: string) {
-  const input = store.draft?.inputs.find((i) => i.id === id)
-  if (!input) return
-  let type = input.type
-  if (source === 'hover') type = 'boolean'
-  else if (source === 'click' && input.type === 'number') type = 'trigger'
   update(id, {
     source: source as IMicroInteractionInput['source'],
-    type,
-    defaultValue: type === 'number' ? 0 : false,
+    type: source === 'hover' ? 'boolean' : 'trigger',
+    defaultValue: false,
   })
 }
 
-function remove(id: string) {
+const _remove = (id: string) => {
   // 检查是否有转换条件引用
   const used = store.draft?.transitions.some((tr) => tr.conditions.some((c) => c.inputId === id))
   if (used) {
@@ -161,6 +108,7 @@ function remove(id: string) {
   }
   store.removeInput(id)
 }
+const remove = createDebouncedHandler(_remove, 'InputList.remove', (args) => args[0])
 </script>
 
 <style scoped>
@@ -183,6 +131,8 @@ function remove(id: string) {
   margin-bottom: 4px;
   border: 1px solid transparent;
   border-radius: 3px;
+  /* 无论是否选中都使用 active 的底色（primary-5），选中仅加边框高亮 */
+  background-color: var(--primary-5);
 }
 .input-item.selected {
   border-color: var(--primary-3);
@@ -204,12 +154,14 @@ function remove(id: string) {
 }
 .input-source {
   flex: 1;
+  display: flex;
 }
-.input-type {
+.input-source :deep(.n-radio-button) {
   flex: 1;
+  text-align: center;
 }
-.input-default {
-  flex: 0 0 56px;
+.input-source :deep(.n-radio-button:not(.n-radio-button--checked)) {
+  color: var(--primary-3);
 }
 .input-delete {
   flex: 0 0 auto;

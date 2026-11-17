@@ -171,6 +171,27 @@ export const useMicroInteractionStore = defineStore('microInteraction', () => {
     Object.assign(tr, patch)
   }
 
+  /** 反向转换：from/to 互换，条件操作符取反（eq↔neq、gt↔lt、lt↔gt），布尔条件直接可用 */
+  function addReverseTransition(id: string): string {
+    if (!draft.value) return ''
+    const tr = draft.value.transitions.find((t) => t.id === id)
+    if (!tr) return ''
+    const newId = addTransition(tr.to, tr.from)
+    const nt = draft.value.transitions.find((t) => t.id === newId)
+    if (nt) {
+      nt.conditions = tr.conditions.map((c) => {
+        const flip: Record<string, IMicroInteractionCondition['operator']> = {
+          eq: 'neq',
+          neq: 'eq',
+          gt: 'lt',
+          lt: 'gt',
+        }
+        return { ...c, operator: flip[c.operator] ?? c.operator }
+      })
+    }
+    return newId
+  }
+
   function removeTransition(id: string) {
     if (!draft.value) return
     draft.value.transitions = draft.value.transitions.filter((t) => t.id !== id)
@@ -297,6 +318,7 @@ export const useMicroInteractionStore = defineStore('microInteraction', () => {
     updateInput,
     removeInput,
     addTransition,
+    addReverseTransition,
     updateTransition,
     removeTransition,
     addCondition,

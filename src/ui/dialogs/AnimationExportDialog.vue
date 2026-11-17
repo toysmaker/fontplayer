@@ -19,6 +19,11 @@
         </n-radio-group>
       </div>
 
+      <!-- lottie 测试提示 -->
+      <div v-if="format === 'lottie'" class="anim-export-hint">
+        {{ t('dialogs.animationExport.lottieHint') }}
+      </div>
+
       <div v-if="exporting" class="anim-export-progress">
         <n-progress
           type="line"
@@ -30,28 +35,26 @@
         </div>
       </div>
       <n-alert v-if="errorMsg" type="error" :title="errorMsg" style="margin-top: 8px" />
-      <n-alert v-if="successMsg" type="success" :title="successMsg" style="margin-top: 8px" />
     </div>
 
     <template #action>
       <div class="anim-export-footer">
         <n-button
-          v-if="!exporting && !successMsg"
+          v-if="!exporting"
+          @click="handleExportPage"
+          @pointerup="handleExportPage"
+        >{{ t('dialogs.animationExport.exportPage') }}</n-button>
+        <n-button
+          v-if="!exporting"
           @click="handleCancel"
           @pointerup="handleCancel"
         >{{ t('dialogs.animationExport.cancel') }}</n-button>
         <n-button
-          v-if="!exporting && !successMsg"
+          v-if="!exporting"
           type="primary"
           @click="handleExport"
           @pointerup="handleExport"
         >{{ t('dialogs.animationExport.export') }}</n-button>
-        <n-button
-          v-if="successMsg"
-          type="primary"
-          @click="handleClose"
-          @pointerup="handleClose"
-        >{{ t('dialogs.animationExport.close') }}</n-button>
       </div>
     </template>
   </n-modal>
@@ -59,15 +62,17 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NAlert, NButton, NModal, NProgress, NRadioButton, NRadioGroup } from 'naive-ui'
+import { NAlert, NButton, NModal, NProgress, NRadioButton, NRadioGroup, useNotification } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { saveAs } from 'file-saver'
 import type { IAnimationClip } from '@/core/types'
 import { exportAnimationClip, type ExportFormat } from '@/features/animation/exporters'
+import { buildClipPlayerHtml } from '@/features/animation/referencePlayerHtml'
 import { useCharacterStore } from '@/stores/character'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t } = useI18n()
+const notification = useNotification()
 const characterStore = useCharacterStore()
 
 const props = defineProps<{ visible: boolean; clip: IAnimationClip | null }>()
@@ -76,7 +81,6 @@ const emit = defineEmits<{ 'update:visible': [value: boolean] }>()
 const format = ref<ExportFormat>('mp4')
 const exporting = ref(false)
 const errorMsg = ref('')
-const successMsg = ref('')
 const progressDone = ref(0)
 const progressTotal = ref(1)
 
@@ -89,7 +93,6 @@ watch(
   (v) => {
     if (v) {
       errorMsg.value = ''
-      successMsg.value = ''
       exporting.value = false
       progressDone.value = 0
     }
@@ -106,7 +109,6 @@ const _handleExport = async () => {
   if (!clip || !ch) return
   exporting.value = true
   errorMsg.value = ''
-  successMsg.value = ''
   progressDone.value = 0
   progressTotal.value = 1
   try {
@@ -121,7 +123,13 @@ const _handleExport = async () => {
     })
     const ext = format.value === 'lottie' ? 'json' : format.value
     saveAs(blob, `${sanitizeName(clip.name)}.${ext}`)
-    successMsg.value = t('dialogs.animationExport.done')
+    // 完成提示用窗口上方浮动通知，不在对话框内展示
+    notification.success({
+      title: t('dialogs.animationExport.done'),
+      content: `${sanitizeName(clip.name)}.${ext}`,
+      duration: 3000,
+    })
+    emit('update:visible', false)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     if (msg.startsWith('unsupported:')) {
@@ -138,13 +146,52 @@ const _handleExport = async () => {
 }
 const handleExport = createDebouncedHandler(_handleExport, 'AnimationExportDialog.export')
 
-function handleCancel() {
-  emit('update:visible', false)
+/** 导出预览页面：数据（Lottie）+ 播放器打包为单个 HTML，双击即可播放 */
+const _handleExportPage = async () => {
+  const clip = props.clip
+  const ch = characterStore.editingCharacter
+  if (!clip || !ch) return
+  exporting.value = true
+  errorMsg.value = ''
+  progressDone.value = 0
+  progressTotal.value = 1
+  try {
+    const blob = await exportAnimationClip({
+      clip,
+      char: ch,
+      format: 'lottie',
+      onProgress: (done, total) => {
+        progressDone.value = done
+        progressTotal.value = total
+      },
+    })
+    const json = await blob.text()
+    const html = buildClipPlayerHtml(sanitizeName(clip.name), json)
+    saveAs(
+      new Blob([html], { type: 'text/html;charset=utf-8' }),
+      `${sanitizeName(clip.name)}-player.html`,
+    )
+    notification.success({
+      title: t('dialogs.animationExport.done'),
+      content: `${sanitizeName(clip.name)}-player.html`,
+      duration: 3000,
+    })
+    emit('update:visible', false)
+  } catch (e) {
+    errorMsg.value = t('dialogs.animationExport.failed')
+    if (import.meta.env.DEV) {
+      console.warn('[AnimationExportDialog] export page failed:', e)
+    }
+  } finally {
+    exporting.value = false
+  }
 }
+const handleExportPage = createDebouncedHandler(_handleExportPage, 'AnimationExportDialog.exportPage')
 
-function handleClose() {
+const _cancel = () => {
   emit('update:visible', false)
 }
+const handleCancel = createDebouncedHandler(_cancel, 'AnimationExportDialog.cancel')
 </script>
 
 <style scoped>
@@ -162,6 +209,12 @@ function handleClose() {
 .anim-export-label {
   flex: 0 0 auto;
   font-size: 13px;
+  color: var(--primary-0);
+}
+.anim-export-hint {
+  font-size: 12px;
+  color: var(--light-2);
+  line-height: 1.5;
 }
 .anim-export-progress-text {
   font-size: 12px;

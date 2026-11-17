@@ -115,6 +115,7 @@ import { NModal, NSwitch, NButton, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import * as R from 'ramda'
 import { genUUID } from '@/utils/uuid'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 import { useDialogsStore } from '@/stores/dialogs'
 import { useProjectStore } from '@/stores/project'
 import { useEditorStore } from '@/stores/editor'
@@ -262,12 +263,13 @@ function handleSelect(glyph: ICustomGlyph) {
   dialogs.selectGlyphComponentUUID(glyph.uuid)
 }
 
-function handleCancel() {
+const _cancel = () => {
   dialogs.closeGlyphComponentsDialog()
   visible.value = false
 }
+const handleCancel = createDebouncedHandler(_cancel, 'GlyphComponentsDialog.cancel')
 
-function handleConfirm() {
+const _confirm = () => {
   // 整体笔画风格替换：确认已选中的风格
   if (dialogs.glyphStylePickMode) {
     const style = dialogs.glyphStylePickSelectedStyle
@@ -302,6 +304,7 @@ function handleConfirm() {
   dialogs.closeGlyphComponentsDialog()
   visible.value = false
 }
+const handleConfirm = createDebouncedHandler(_confirm, 'GlyphComponentsDialog.confirm')
 </script>
 
 <style scoped>

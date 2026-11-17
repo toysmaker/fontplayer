@@ -73,6 +73,8 @@ import {
 	faSquarePlus,
 	faDiagramProject,
 	faFileCode,
+	faCircleQuestion,
+	faQuestion,
 } from '@fortawesome/free-solid-svg-icons'
 
 // 按需导入图标 - 从 @fortawesome/free-regular-svg-icons
@@ -219,6 +221,8 @@ library.add(
 	faSquarePlus,
 	faDiagramProject,
 	faFileCode,
+	faCircleQuestion,
+	faQuestion,
 	faSquare_regular,
 	faCircle_regular,
   faPenToSquare,

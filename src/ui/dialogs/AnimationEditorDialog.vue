@@ -30,12 +30,14 @@
           <n-button
             size="small"
             :type="activeTab === 'keyframes' ? 'primary' : 'default'"
+            :text-color="activeTab === 'keyframes' ? undefined : 'var(--primary-3)'"
             @click="activeTab = 'keyframes'"
             @pointerup="activeTab = 'keyframes'"
           >{{ t('dialogs.animationEditor.tabs.keyframes') }}</n-button>
           <n-button
             size="small"
             :type="activeTab === 'components' ? 'primary' : 'default'"
+            :text-color="activeTab === 'components' ? undefined : 'var(--primary-3)'"
             @click="activeTab = 'components'"
             @pointerup="activeTab = 'components'"
           >{{ t('dialogs.animationEditor.tabs.components') }}</n-button>
@@ -503,6 +505,7 @@ watch(
     } else {
       // 关闭时停止播放（矢量渲染无 GPU 资源，重开时按需重建画布）
       playback.dispose()
+      animationStore.closeClipEditor()
     }
   },
 )
@@ -647,7 +650,7 @@ function selectComponent(uuid: string) {
 
 // ---------------- 保存 / 取消 ----------------
 
-function handleSaveClip() {
+const _saveClip = () => {
   const name = draftName.value.trim()
   if (!name) {
     nameError.value = true
@@ -668,11 +671,14 @@ function handleSaveClip() {
   emit('update:visible', false)
   message.success(t('dialogs.animationEditor.saveSuccess', { name }))
 }
+// click + pointerup 会触发两次（Tauri Webview 修复规范），必须防抖，否则列表出现两个 item
+const handleSaveClip = createDebouncedHandler(_saveClip, 'AnimationEditorDialog.saveClip')
 
-function handleCancel() {
+const _cancel = () => {
   if (playback.playing.value) playback.pause()
   emit('update:visible', false)
 }
+const handleCancel = createDebouncedHandler(_cancel, 'AnimationEditorDialog.cancel')
 
 // 编辑页面渲染样式变化（轮廓/黑白/彩色）时刷新静态预览
 watch(fontRenderStyle, () => {

@@ -49,6 +49,7 @@ import type { IMicroInteraction } from '@/core/types'
 import { useAnimationStore } from '@/stores/animation'
 import { useMicroInteractionStore } from '@/stores/microInteraction'
 import MicroInteractionEditor from '@/ui/components/MicroInteraction/MicroInteractionEditor.vue'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -88,7 +89,7 @@ watch(
   },
 )
 
-function handleSave() {
+const _save = () => {
   const name = draftName.value.trim()
   if (!name) {
     nameError.value = true
@@ -109,9 +110,11 @@ function handleSave() {
   message.success(t('dialogs.microInteraction.saved'))
 }
 
-function handleCancel() {
+const _cancel = () => {
   emit('update:visible', false)
 }
+const handleSave = createDebouncedHandler(_save, 'MicroInteractionDialog.save')
+const handleCancel = createDebouncedHandler(_cancel, 'MicroInteractionDialog.cancel')
 </script>
 
 <style scoped>
