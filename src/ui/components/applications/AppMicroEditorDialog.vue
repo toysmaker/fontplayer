@@ -9,7 +9,7 @@
   >
     <div class="micro-dialog-body">
       <div class="micro-name-row">
-        <span class="micro-name-label">{{ t('applications.microEditor.name') }}</span>
+        <label class="micro-name-label">{{ t('applications.microEditor.name') }}</label>
         <n-input v-model:value="microName" size="small" class="micro-name-input" />
       </div>
 
@@ -204,20 +204,19 @@ const handleSave = createDebouncedHandler(_handleSave, 'AppMicroEditorDialog.sav
 }
 
 .micro-name-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   margin-bottom: 8px;
 }
 
 .micro-name-label {
+  display: block;
   font-size: 13px;
   font-weight: 600;
-  flex-shrink: 0;
+  margin-bottom: 4px;
 }
 
 .micro-name-input {
-  max-width: 320px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .micro-toolbar {

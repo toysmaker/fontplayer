@@ -74,12 +74,8 @@
           </div>
 
           <div class="panel-section">
-            <div class="param-grid">
-              <span class="param-label">{{ t('applications.logoEditor.iconFontSize') }}</span>
-              <n-input-number v-model:value="logoData.iconFontSize" size="small" :min="1" />
-              <span class="param-label">{{ t('applications.logoEditor.textFontSize') }}</span>
-              <n-input-number v-model:value="logoData.textFontSize" size="small" :min="1" />
-            </div>
+            <ParamNumberField v-model:model-value="logoData.iconFontSize" :label="t('applications.logoEditor.iconFontSize')" :min="1" :max="1024" />
+            <ParamNumberField v-model:model-value="logoData.textFontSize" :label="t('applications.logoEditor.textFontSize')" :min="1" :max="1024" />
           </div>
 
           <div class="panel-section">
@@ -111,10 +107,10 @@
 
           <div v-if="logoData.layoutBlocks" class="panel-section">
             <div class="section-label">{{ t('applications.logoEditor.exportImage') }}</div>
-            <n-radio-group v-model:value="imageFormat" size="small" class="format-group">
-              <n-radio-button value="png">PNG</n-radio-button>
-              <n-radio-button value="jpeg">JPEG</n-radio-button>
-              <n-radio-button v-if="webpSupported" value="webp">WebP</n-radio-button>
+            <n-radio-group v-model:value="imageFormat" size="small" class="format-group app-radio-gray app-radio-vertical">
+              <n-radio value="png">PNG</n-radio>
+              <n-radio value="jpeg">JPEG</n-radio>
+              <n-radio v-if="webpSupported" value="webp">WebP</n-radio>
             </n-radio-group>
           </div>
 
@@ -185,7 +181,7 @@ import {
   NInput,
   NInputNumber,
   NProgress,
-  NRadioButton,
+  NRadio,
   NRadioGroup,
   NSelect,
   NSpin,
@@ -221,6 +217,7 @@ import { createAppVideoDoc } from '@/features/applications/video/videoData'
 import type { FontLibrary } from '@/features/applications/fontLibraryService'
 import type { ICardAppData, IAppLayoutChar, ILogoAppData } from '@/features/applications/types'
 import AppVideoEditor from '@/ui/components/applications/AppVideoEditor.vue'
+import ParamNumberField from '@/ui/components/applications/ParamNumberField.vue'
 import AppEntryModal from '@/ui/components/applications/AppEntryModal.vue'
 import AppVideoListPanel from '@/ui/components/applications/AppVideoListPanel.vue'
 import AppMicroListPanel from '@/ui/components/applications/AppMicroListPanel.vue'

@@ -68,18 +68,9 @@
         </div>
 
         <div class="panel-section">
-          <div class="section-label">{{ t('applications.avatarEditor.size') }}</div>
-          <n-input-number v-model:value="avatarData.size" size="small" :min="64" :max="4096" />
-        </div>
-
-        <div class="panel-section">
-          <div class="section-label">{{ t('applications.avatarEditor.iconFontSize') }}</div>
-          <n-input-number v-model:value="iconFontSize" size="small" :min="1" :max="4096" />
-        </div>
-
-        <div class="panel-section">
-          <div class="section-label">{{ t('applications.avatarEditor.textFontSize') }}</div>
-          <n-input-number v-model:value="textFontSize" size="small" :min="1" :max="4096" />
+          <ParamNumberField v-model:model-value="avatarData.size" :label="t('applications.avatarEditor.size')" :min="64" :max="4096" />
+          <ParamNumberField v-model:model-value="iconFontSize" :label="t('applications.avatarEditor.iconFontSize')" :min="1" :max="4096" />
+          <ParamNumberField v-model:model-value="textFontSize" :label="t('applications.avatarEditor.textFontSize')" :min="1" :max="4096" />
         </div>
 
         <div class="panel-section">
@@ -101,10 +92,10 @@
       <aside class="right-panel">
         <div class="panel-section">
           <div class="section-label">{{ t('applications.avatarEditor.export') }}</div>
-          <n-radio-group v-model:value="imageFormat" size="small" class="format-group">
-            <n-radio-button value="png">PNG</n-radio-button>
-            <n-radio-button value="jpeg">JPEG</n-radio-button>
-            <n-radio-button v-if="webpSupported" value="webp">WebP</n-radio-button>
+          <n-radio-group v-model:value="imageFormat" size="small" class="format-group app-radio-gray app-radio-vertical">
+            <n-radio value="png">PNG</n-radio>
+            <n-radio value="jpeg">JPEG</n-radio>
+            <n-radio v-if="webpSupported" value="webp">WebP</n-radio>
           </n-radio-group>
         </div>
         <div class="right-export-bar">
@@ -145,7 +136,7 @@ import {
   NInput,
   NInputNumber,
   NProgress,
-  NRadioButton,
+  NRadio,
   NRadioGroup,
   NSpin,
   NSwitch,
@@ -174,6 +165,7 @@ import {
 } from '@/features/applications/export/imageExport'
 import type { IAvatarAppData } from '@/features/applications/types'
 import AppEntryModal from '@/ui/components/applications/AppEntryModal.vue'
+import ParamNumberField from '@/ui/components/applications/ParamNumberField.vue'
 
 const { t } = useI18n()
 const message = useMessage()

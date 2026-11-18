@@ -9,9 +9,9 @@
     <div class="format-group">
       <div class="format-label">{{ t('applications.exportDialog.format') }}</div>
       <n-radio-group v-model:value="format" size="small">
-        <n-radio-button value="mp4">{{ t('applications.exportDialog.mp4') }}</n-radio-button>
-        <n-radio-button value="webm">{{ t('applications.exportDialog.webm') }}</n-radio-button>
-        <n-radio-button value="html">{{ t('applications.exportDialog.html') }}</n-radio-button>
+        <n-radio value="mp4">{{ t('applications.exportDialog.mp4') }}</n-radio>
+        <n-radio value="webm">{{ t('applications.exportDialog.webm') }}</n-radio>
+        <n-radio value="html">{{ t('applications.exportDialog.html') }}</n-radio>
         <n-radio-button v-if="scenePkgVisible" value="scenePkg">
           {{ t('applications.exportDialog.scenePkg') }}
         </n-radio-button>
@@ -41,7 +41,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton, NModal, NProgress, NRadioButton, NRadioGroup, useMessage } from 'naive-ui'
+import { NButton, NModal, NProgress, NRadio, NRadioGroup, useMessage } from 'naive-ui'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import { formatSupported, type AppVideoExportFormat } from '@/features/applications/export/videoExport'
 

@@ -119,6 +119,36 @@ export async function closeApplicationWindow(): Promise<void> {
   window.close()
 }
 
+/**
+ * 主窗口侧：从 IndexedDB 快照合并应用数据。
+ * BroadcastChannel 在 Tauri 多 WKWebView 间可能不可靠，快照（IDB）是
+ * 已验证的跨窗口通道——打开应用窗口前先合并，保证保存的应用不丢。
+ */
+async function mergeApplicationsFromSnapshot(fileUUID: string): Promise<void> {
+  const projectStore = useProjectStore()
+  const file = projectStore.selectedFile
+  if (!file || file.uuid !== fileUUID) return
+  try {
+    const raw = await indexedDBManager.get<string>(generateApplicationKeys(fileUUID).file)
+    if (!raw) return
+    const snapshot = JSON.parse(raw) as { applications?: unknown }
+    if (!snapshot.applications) return
+    const current = JSON.stringify(file.applications ?? {})
+    const incoming = JSON.stringify(snapshot.applications)
+    if (current !== incoming) {
+      file.applications = snapshot.applications as never
+      projectStore.markFileUnsaved(file.uuid)
+      if (import.meta.env.DEV) {
+        console.log('[applications] merged applications from snapshot')
+      }
+    }
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[applications] merge snapshot failed:', err)
+    }
+  }
+}
+
 /** 打开（或聚焦）应用子选项窗口 */
 export async function openApplicationWindow(type: ApplicationType): Promise<void> {
   const projectStore = useProjectStore()
@@ -129,6 +159,9 @@ export async function openApplicationWindow(type: ApplicationType): Promise<void
   const hashBase = `${location.origin}${location.pathname}`
   // 点开子选项先进入应用列表（添加新应用按钮进入创建/编辑界面）
   const url = `${hashBase}#/applications/${type}?file=${file.uuid}`
+
+  // 先合并快照中的应用数据（保存/删除后关窗重开不丢），再写最新快照
+  await mergeApplicationsFromSnapshot(file.uuid)
 
   if (getEnv() === 'web') {
     await writeFileSnapshot(file.uuid)

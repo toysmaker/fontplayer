@@ -35,20 +35,10 @@
       <!-- 左栏：关键帧 / 组件列表（tab 切换，可拖拽排序） -->
       <div class="anim-editor-left">
         <div class="anim-editor-tabs">
-          <n-button
-            size="small"
-            :type="activeTab === 'keyframes' ? 'primary' : 'default'"
-            :text-color="activeTab === 'keyframes' ? undefined : 'var(--primary-3)'"
-            @click="activeTab = 'keyframes'"
-            @pointerup="activeTab = 'keyframes'"
-          >{{ t('dialogs.animationEditor.tabs.keyframes') }}</n-button>
-          <n-button
-            size="small"
-            :type="activeTab === 'components' ? 'primary' : 'default'"
-            :text-color="activeTab === 'components' ? undefined : 'var(--primary-3)'"
-            @click="activeTab = 'components'"
-            @pointerup="activeTab = 'components'"
-          >{{ t('dialogs.animationEditor.tabs.components') }}</n-button>
+          <n-radio-group v-model:value="activeTab" size="small" class="app-radio-gray">
+            <n-radio value="keyframes">{{ t('dialogs.animationEditor.tabs.keyframes') }}</n-radio>
+            <n-radio value="components">{{ t('dialogs.animationEditor.tabs.components') }}</n-radio>
+          </n-radio-group>
         </div>
 
         <!-- 关键帧列表 -->

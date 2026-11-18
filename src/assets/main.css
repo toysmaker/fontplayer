@@ -257,3 +257,27 @@ div, span {
 .n-color-picker-trigger {
   border: none !important;
 }
+/* 应用页 radio 统一淡灰样式（与动效编辑页预览模式一致） */
+.app-radio-gray .n-radio__label {
+  color: #9aa3b2 !important;
+}
+.app-radio-gray .n-radio__dot {
+  box-shadow: inset 0 0 0 1px #7a8089 !important;
+}
+.app-radio-gray .n-radio:hover .n-radio__dot,
+.app-radio-gray .n-radio--checked .n-radio__dot,
+.app-radio-gray .n-radio--checked:hover .n-radio__dot {
+  box-shadow: inset 0 0 0 1px #7a8089 !important;
+}
+.app-radio-gray .n-radio__dot::before,
+.app-radio-gray .n-radio__dot:before {
+  background: #9aa3b2 !important;
+}
+
+/* 应用页 radio group 纵向排列 */
+.n-radio-group.app-radio-vertical {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}

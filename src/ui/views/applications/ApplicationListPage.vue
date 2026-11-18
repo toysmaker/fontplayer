@@ -6,6 +6,15 @@
       </n-button>
       <span class="app-title">{{ title }}</span>
       <span class="header-spacer"></span>
+      <n-button
+        v-if="!noProject"
+        type="primary"
+        size="small"
+        @click="handleAdd"
+        @pointerup="handleAdd"
+      >
+        + {{ t('applications.listPage.add') }}
+      </n-button>
     </header>
 
     <main class="app-list-main">
@@ -17,12 +26,6 @@
       </div>
 
       <template v-else>
-        <div class="list-toolbar">
-          <n-button type="primary" size="small" @click="handleAdd" @pointerup="handleAdd">
-            + {{ t('applications.listPage.add') }}
-          </n-button>
-        </div>
-
         <n-spin :show="loading">
           <div v-if="!loading && docs.length === 0" class="empty-state">
             <p>{{ t('applications.listPage.empty') }}</p>

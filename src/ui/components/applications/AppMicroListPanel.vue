@@ -40,8 +40,8 @@
       :show-icon="false"
     >
       <n-radio-group v-model:value="exportFormat" size="small">
-        <n-radio-button value="json">JSON</n-radio-button>
-        <n-radio-button value="html">{{ t('applications.exportDialog.html') }}</n-radio-button>
+        <n-radio value="json">JSON</n-radio>
+        <n-radio value="html">{{ t('applications.exportDialog.html') }}</n-radio>
       </n-radio-group>
       <template #action>
         <n-button size="small" @click="handleExportCancel" @pointerup="handleExportCancel">
@@ -58,7 +58,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton, NModal, NRadioButton, NRadioGroup, useDialog, useMessage } from 'naive-ui'
+import { NButton, NModal, NRadio, NRadioGroup, useDialog, useMessage } from 'naive-ui'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import type { FontLibrary } from '@/features/applications/fontLibraryService'
 import type {

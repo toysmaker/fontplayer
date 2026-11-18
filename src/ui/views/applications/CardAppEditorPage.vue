@@ -46,22 +46,21 @@
           <div class="panel-section">
             <div class="section-label">{{ t('applications.cardEditor.resolution') }}</div>
             <div class="resolution-row">
-              <n-input-number v-model:value="cardData.canvas.width" size="small" :min="1" />
-              <span>×</span>
-              <n-input-number v-model:value="cardData.canvas.height" size="small" :min="1" />
+              <n-input-number v-model:value="cardData.canvas.width" size="small" :min="1" class="resolution-input" />
+              <span class="resolution-sep">×</span>
+              <n-input-number v-model:value="cardData.canvas.height" size="small" :min="1" class="resolution-input" />
             </div>
           </div>
 
           <div class="panel-section">
             <div class="section-label">{{ t('applications.cardEditor.imageExport') }}</div>
-            <n-radio-group v-model:value="imageFormat" size="small" class="format-group">
-              <n-radio-button value="png">PNG</n-radio-button>
-              <n-radio-button value="jpeg">JPEG</n-radio-button>
-              <n-radio-button v-if="webpSupported" value="webp">WebP</n-radio-button>
+            <n-radio-group v-model:value="imageFormat" size="small" class="format-group app-radio-gray app-radio-vertical">
+              <n-radio value="png">PNG</n-radio>
+              <n-radio value="jpeg">JPEG</n-radio>
+              <n-radio v-if="webpSupported" value="webp">WebP</n-radio>
             </n-radio-group>
-            <div v-if="imageFormat === 'jpeg'" class="resolution-row">
-              <span class="param-label">{{ t('applications.cardEditor.quality') }}</span>
-              <n-input-number v-model:value="jpegQuality" size="small" :min="0.1" :max="1" :step="0.02" />
+            <div v-if="imageFormat === 'jpeg'">
+              <ParamNumberField v-model:model-value="jpegQuality" :label="t('applications.cardEditor.quality')" :min="0.1" :max="1" :step="0.02" />
             </div>
           </div>
 
@@ -132,7 +131,7 @@ import {
   NInput,
   NInputNumber,
   NProgress,
-  NRadioButton,
+  NRadio,
   NRadioGroup,
   NSpin,
   useMessage,
@@ -152,6 +151,7 @@ import ComponentPropertiesPanel from '@/ui/components/applications/ComponentProp
 import AppEntryModal from '@/ui/components/applications/AppEntryModal.vue'
 import AppVideoEditor from '@/ui/components/applications/AppVideoEditor.vue'
 import AppVideoListPanel from '@/ui/components/applications/AppVideoListPanel.vue'
+import ParamNumberField from '@/ui/components/applications/ParamNumberField.vue'
 import AppMicroListPanel from '@/ui/components/applications/AppMicroListPanel.vue'
 import { exportScenePkg } from '@/features/applications/export/wallpaperPkgExport'
 import { exportMacWallpaperHeic, heicExportSupported } from '@/features/applications/export/heicBridge'
@@ -395,6 +395,16 @@ const handleCustomVideoExport = createDebouncedHandler(_handleCustomVideoExport,
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.resolution-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.resolution-sep {
+  flex-shrink: 0;
+  opacity: 0.7;
 }
 
 .param-label {

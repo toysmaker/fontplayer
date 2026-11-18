@@ -4,7 +4,7 @@
     <aside class="ve-left">
       <div class="ve-section">
         <div class="ve-label">{{ t('applications.videoEditor.name') }} *</div>
-        <n-input v-model:value="video.name" size="small" :placeholder="t('applications.videoEditor.name')" />
+        <n-input v-model:value="video.name" size="small" :placeholder="t('applications.videoEditor.name')" class="ve-full" />
       </div>
       <div class="ve-label">{{ t('applications.videoEditor.characters') }}</div>
       <div class="char-list">
@@ -418,6 +418,10 @@ onMounted(() => {
 
 .ve-section {
   margin-bottom: 14px;
+}
+
+.ve-full {
+  width: 100%;
 }
 
 .ve-label {
