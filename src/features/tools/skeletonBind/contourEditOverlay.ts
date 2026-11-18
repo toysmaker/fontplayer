@@ -105,6 +105,14 @@ export function isContourEditActive(): boolean {
  * 强制清理覆盖层（不检查拖拽状态）
  */
 export function forceCleanupOverlay(): void {
+  if (activeOverlayCanvas) {
+    try {
+      const tool = PenSelectTool.getInstance(activeOverlayCanvas, {} as IToolConfig)
+      tool.deactivate()
+    } catch (_e) {
+      // 忽略清理错误
+    }
+  }
   activeOverlayCanvas = null
   isActive = false
 }

@@ -1,6 +1,28 @@
 <template>
   <div class="bottom-bar">
     <div class="bottom-bar-row" v-if="editStatus === EditStatus.Edit || editStatus === EditStatus.Glyph">
+      <!-- 钢笔路径编辑提示（钢笔创建/编辑模式下显示） -->
+      <div v-if="penPathEditingActive" class="pen-edit-hint">
+        <n-popover trigger="hover" placement="top" :show-arrow="true">
+          <template #trigger>
+            <span class="pen-edit-hint-trigger">
+              <font-awesome-icon :icon="['fas', 'circle-question']" class="pen-edit-hint-icon" />
+              <span class="pen-edit-hint-label">{{ t('panels.bottomBar.penEditHint.label') }}</span>
+            </span>
+          </template>
+          <div class="pen-edit-hint-pop">
+            <div class="pen-edit-hint-title">{{ t('panels.bottomBar.penEditHint.title') }}</div>
+            <ul class="pen-edit-hint-list">
+              <li>{{ t('panels.bottomBar.penEditHint.addAnchor') }}</li>
+              <li>{{ t('panels.bottomBar.penEditHint.deleteAnchor') }}</li>
+              <li>{{ t('panels.bottomBar.penEditHint.switchAnchor') }}</li>
+              <li>{{ t('panels.bottomBar.penEditHint.cycleControl') }}</li>
+              <li>{{ t('panels.bottomBar.penEditHint.movePoint') }}</li>
+              <li>{{ t('panels.bottomBar.penEditHint.dragPoint') }}</li>
+            </ul>
+          </div>
+        </n-popover>
+      </div>
       <span class="tools-wrapper">
         <!-- <span class="translate-wrapper">
           <div v-if="tool === 'translateMover'" class="translate-input-wrapper">
@@ -77,10 +99,11 @@
 </template>
 
 <script setup lang="ts">
-import { NInput, NButton, NInputNumber } from 'naive-ui'
+import { NInput, NButton, NInputNumber, NPopover } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { useBottomBar } from './composables/useBottomBar'
 import { EditStatus } from '@/core/types'
+import { penPathEditingActive } from '@/features/tools/penEditStatus'
 
 const { t } = useI18n()
 
@@ -108,6 +131,65 @@ const {
   position: relative;
   z-index: 99;
   background-color: white;
+}
+
+.bottom-bar-row {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+}
+
+.pen-edit-hint {
+  position: absolute;
+  left: 5px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  z-index: 100;
+}
+
+.pen-edit-hint-trigger {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 30px;
+  cursor: help;
+  color: var(--primary-0);
+  font-size: 12px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.pen-edit-hint-icon {
+  font-size: 14px;
+}
+
+.pen-edit-hint-label {
+  user-select: none;
+}
+
+.pen-edit-hint-pop {
+  max-width: 360px;
+  padding: 4px 2px;
+}
+
+.pen-edit-hint-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-color-1);
+}
+
+.pen-edit-hint-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.pen-edit-hint-list li {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-color-2);
 }
 
 .tools-wrapper {

@@ -334,6 +334,16 @@ const panels = {
 		bottomBar: {
 			reset: '归零',
 			coords: '坐标',
+			penEditHint: {
+				label: '钢笔路径编辑提示',
+				title: '钢笔路径编辑功能',
+				addAnchor: '悬停在路径上并点击：在路径上新建锚点（自动插值控制点，形状基本不变）',
+				deleteAnchor: 'Delete 键：删除选中的锚点',
+				switchAnchor: '←/→ 方向键：切换选中锚点（上一个/下一个）',
+				cycleControl: '↑/↓ 方向键：切换控制点选择（左控制点 → 无 → 右控制点）',
+				movePoint: 'Shift + 方向键：移动当前点（未选控制点时移动锚点，选中控制点时移动控制点）',
+				dragPoint: '鼠标拖拽：移动锚点/控制点',
+			},
 		},
 		filesBar: {
 			advancedEdit: '高级编辑',
@@ -806,6 +816,16 @@ const panels = {
 		bottomBar: {
 			reset: 'Reset',
 			coords: 'Coords',
+			penEditHint: {
+				label: 'Pen Path Editing Tips',
+				title: 'Pen Path Editing Features',
+				addAnchor: 'Hover on the path and click: add a new anchor point (control points are auto-interpolated, shape stays nearly unchanged)',
+				deleteAnchor: 'Delete key: remove the selected anchor point',
+				switchAnchor: '←/→ Arrow keys: switch selected anchor point (previous / next)',
+				cycleControl: '↑/↓ Arrow keys: switch control point selection (left control → none → right control)',
+				movePoint: 'Shift + Arrow keys: move current point (anchor when no control selected, control point when selected)',
+				dragPoint: 'Mouse drag: move anchor / control points',
+			},
 		},
 		filesBar: {
 			advancedEdit: 'Advanced Edit',

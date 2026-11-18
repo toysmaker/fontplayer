@@ -189,6 +189,11 @@ export class SelectTool extends BaseTool {
     this.lastMY = -1
     this.initialBBox = null
     this.resetOverlapPickState()
+    // 切换工具时同步停用钢笔编辑工具（解除事件监听与激活标记），
+    // 切回选择工具时由 updatePenSelectToolState 重新激活
+    if (this.penSelectTool && this.penSelectTool.isToolActive()) {
+      this.penSelectTool.deactivate()
+    }
   }
 
   cleanup(): void {

@@ -40,6 +40,7 @@
             </div>
             <canvas
               ref="canvasRef"
+              tabindex="0"
               class="editor-canvas"
               :class="{
                 'edit-canvas-panel': true,
@@ -1138,6 +1139,10 @@ watch(
 .editor-canvas {
   position: absolute; /* 原工程中使用 absolute，通过 wrapper 的 flex 居中 */
   /* cursor: crosshair; */
+}
+
+.editor-canvas:focus {
+  outline: none;
 }
 
 /* 工具鼠标样式 */

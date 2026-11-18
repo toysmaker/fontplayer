@@ -11,6 +11,7 @@ import { useComponentEditor } from '../composables/useComponentEditor'
 import { EditStatus, IPenComponent } from '@/core/types'
 import { editModeFixedBounds } from '@/features/tools/select/PenSelectTool'
 import { computePenLayoutUpdatesFromFixedBounds } from '@/features/tools/select/penLayoutSync'
+import { toolManager } from '@/features/tools'
 
 const { t } = useI18n()
 
@@ -81,6 +82,11 @@ const handleChangeEditMode = (editMode: boolean) => {
   }
 
   modifyComponent(updates)
+
+  // 开启编辑模式时自动切换到选择工具，使钢笔路径编辑（锚点增删、键盘编辑）立即生效
+  if (editMode) {
+    void toolManager.switchTool('select')
+  }
 }
 
 const penFillColorDisplay = computed(() => {

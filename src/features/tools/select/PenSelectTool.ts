@@ -18,6 +18,21 @@ import { listToMap } from '@/core/utils/data'
 import { formatPoints, genPenContour } from '@/core/utils/contour'
 import { getStrokeWidth } from '@/utils/canvas-utils'
 import { roundToPrecision } from '@/utils/number'
+import {
+  collectAnchorIndices,
+  getPenSegments,
+  findClosestOnPath,
+  splitCubicAt,
+  lineSplitPoints,
+  insertBezierSplit,
+  insertClosingLineSplit,
+  removeAnchorAt,
+  movePointSynced,
+  anchorControlIndices,
+  nextAnchorIndex,
+} from './penPathEdit'
+import type { PointXY, PathHit, SplitPoints } from './penPathEdit'
+import { setPenPathEditingActive } from '../penEditStatus'
 
 /**
  * 编辑模式下的固定边界框（按组件UUID索引）
@@ -33,6 +48,8 @@ export class PenSelectTool extends BaseTool {
   private selectAnchor: string = ''
   private selectPenPoint: string = ''
   private hoverPenPoint: string = ''
+  /** 键盘控制点选择标志：无 / 左控制点 / 右控制点 */
+  private controlFlag: 'none' | 'left' | 'right' = 'none'
   private lastX: number = -1
   private lastY: number = -1
   private mousedown: boolean = false
@@ -88,6 +105,7 @@ export class PenSelectTool extends BaseTool {
     this.selectAnchor = ''
     this.selectPenPoint = ''
     this.hoverPenPoint = ''
+    this.controlFlag = 'none'
     this.lastX = -1
     this.lastY = -1
     this.mousedown = false
@@ -142,6 +160,19 @@ export class PenSelectTool extends BaseTool {
 
   activate(): void {
     this.isActive = true
+
+    // 重置键盘编辑状态并标记钢笔编辑激活（BottomBar 提示）
+    this.controlFlag = 'none'
+    setPenPathEditingActive(true)
+
+    // 聚焦画布，使键盘快捷键（方向键/Delete）在进入编辑模式后立即可用
+    try {
+      if (document.activeElement !== this.canvas) {
+        this.canvas.focus({ preventScroll: true })
+      }
+    } catch {
+      // 忽略聚焦失败
+    }
 
     // 骨架自由编辑模式：使用上下文中的 bounds，不与 store 中的 selectedComponent 交互
     const skCtx = this.resolveSkeletonContext()
@@ -205,7 +236,15 @@ export class PenSelectTool extends BaseTool {
     this.selectAnchor = ''
     this.selectPenPoint = ''
     this.hoverPenPoint = ''
+    this.controlFlag = 'none'
     this.mousedown = false
+    // 恢复默认光标并取消钢笔编辑标记
+    try {
+      this.canvas.style.cursor = ''
+    } catch {
+      // 忽略
+    }
+    setPenPathEditingActive(false)
   }
 
   cleanup(): void {
@@ -287,6 +326,8 @@ export class PenSelectTool extends BaseTool {
 
       const d = getStrokeWidth() * 2
       const _points = this.transformPenPointsForContext(skCtx, false)
+      const rawPoints = skCtx.penComponent.points
+      const rawClosePath = !!(skCtx.penComponent as any).closePath
 
       // 检查是否点击在锚点或控制点上
       for (let i = 0; i < _points.length; i++) {
@@ -295,6 +336,7 @@ export class PenSelectTool extends BaseTool {
           if (point.type === 'anchor') {
             this.selectAnchor = point.uuid
             this.selectPenPoint = point.uuid
+            this.controlFlag = 'none'
             this.lastX = localX
             this.lastY = localY
             this.mousedown = true
@@ -307,8 +349,10 @@ export class PenSelectTool extends BaseTool {
               }
               return -1
             })()
+            const { left, right } = anchorControlIndices(rawPoints, _index, rawClosePath)
             if (i <= _index + 4 && i >= _index - 4) {
               this.selectPenPoint = point.uuid
+              this.controlFlag = i === left ? 'left' : i === right ? 'right' : 'none'
               this.lastX = localX
               this.lastY = localY
               this.mousedown = true
@@ -316,6 +360,7 @@ export class PenSelectTool extends BaseTool {
               return
             } else if (i === 1 && _index === _points.length - 1) {
               this.selectPenPoint = point.uuid
+              this.controlFlag = i === left ? 'left' : i === right ? 'right' : 'none'
               this.lastX = localX
               this.lastY = localY
               this.mousedown = true
@@ -326,9 +371,18 @@ export class PenSelectTool extends BaseTool {
         }
       }
 
+      // 未点击到锚点/控制点：检查是否点击在路径上（新建锚点）
+      // 使用反旋转后的坐标 _x/_y，与 transformPenPointsForContext 的点空间一致
+      const pathHit = this.hitTestPathForSkeleton(skCtx, _x, _y, d)
+      if (pathHit) {
+        this.insertAnchorAtHitForSkeleton(skCtx, pathHit)
+        return
+      }
+
       this.selectPenPoint = ''
       this.selectAnchor = ''
       this.hoverPenPoint = ''
+      this.controlFlag = 'none'
       this.mousedown = false
       this.triggerRender()
       return
@@ -367,12 +421,15 @@ export class PenSelectTool extends BaseTool {
     const _points = this.transformPenPoints(selectedComponent, false)
 
     // 检查是否点击在锚点或控制点上（含最后一个点，修复开放路径末端锚点无法选中的问题）
+    const rawPoints = penComponent.points || []
+    const rawClosePath = !!penComponent.closePath
     for (let i = 0; i < _points.length; i++) {
       const point = _points[i]
       if (distance(_x, _y, point.x, point.y) <= d) {
         if (point.type === 'anchor') {
           this.selectAnchor = point.uuid
           this.selectPenPoint = point.uuid
+          this.controlFlag = 'none'
           this.lastX = _x
           this.lastY = _y
           this.mousedown = true
@@ -388,8 +445,10 @@ export class PenSelectTool extends BaseTool {
             }
             return -1
           })()
+          const { left, right } = anchorControlIndices(rawPoints, _index, rawClosePath)
           if (i <= _index + 4 && i >= _index - 4) {
             this.selectPenPoint = point.uuid
+            this.controlFlag = i === left ? 'left' : i === right ? 'right' : 'none'
             this.lastX = _x
             this.lastY = _y
             this.mousedown = true
@@ -398,6 +457,7 @@ export class PenSelectTool extends BaseTool {
           } else if (i === 1 && _index === _points.length - 1) {
             // 最后一个锚点（和第一个锚点重合），第二个控制点为第一个锚点的第一个控制点
             this.selectPenPoint = point.uuid
+            this.controlFlag = i === left ? 'left' : i === right ? 'right' : 'none'
             this.lastX = _x
             this.lastY = _y
             this.mousedown = true
@@ -408,10 +468,18 @@ export class PenSelectTool extends BaseTool {
       }
     }
 
+    // 未点击到锚点/控制点：检查是否点击在路径上（新建锚点）
+    const pathHit = this.hitTestPathForComponent(selectedComponent, _x, _y, d)
+    if (pathHit) {
+      this.insertAnchorAtHit(selectedComponent, penComponent, pathHit, isGlyph)
+      return
+    }
+
     // 点击在组件边界框内但没有点击到锚点或控制点，清除之前的状态
     this.selectPenPoint = ''
     this.selectAnchor = ''
     this.hoverPenPoint = ''
+    this.controlFlag = 'none'
     this.mousedown = false
     this.triggerRender() // 清除选择后触发重新渲染
   }
@@ -557,6 +625,14 @@ export class PenSelectTool extends BaseTool {
         }
       }
       
+      // 未悬停到锚点/控制点时检测路径：悬停在路径上显示「添加锚点」光标
+      if (!foundHover) {
+        const pathHit = this.hitTestPathForComponent(selectedComponent, _x, _y, d)
+        this.canvas.style.cursor = pathHit ? 'copy' : ''
+      } else if (this.canvas.style.cursor === 'copy') {
+        this.canvas.style.cursor = ''
+      }
+
       // 如果hover状态发生变化，触发重新渲染
       if (oldHoverPenPoint !== this.hoverPenPoint) {
         this.triggerRender()
@@ -590,18 +666,23 @@ export class PenSelectTool extends BaseTool {
 
   /**
    * 键盘按下事件
+   * 左右方向键：切换选中锚点（上一个/下一个）
+   * 上下方向键：循环控制点标志（无 → 左控制点 → 右控制点 → 无）
+   * Shift+方向键：移动当前点（未选控制点时移动锚点，已选控制点时移动控制点）
+   * Delete/Backspace：删除选中锚点
    */
   onKeyDown(e: KeyboardEvent): void {
     // 骨架自由编辑模式：Enter 不做清除选择
-    if (this.resolveSkeletonContext()) {
-      return
-    }
+    const isSkeleton = !!this.resolveSkeletonContext()
 
     if (e.code === 'Enter') {
+      if (isSkeleton) {
+        return
+      }
       const characterStore = useCharacterStore()
       const glyphStore = useGlyphStore()
       const isGlyph = this.config.mode === 'glyph'
-      
+
       const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
       if (!selectedComponent || !selectedComponent.visible) return
 
@@ -611,7 +692,362 @@ export class PenSelectTool extends BaseTool {
       } else {
         (characterStore as any).clearSelection()
       }
+      return
     }
+
+    if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+      e.preventDefault()
+      const dx = e.code === 'ArrowRight' ? 1 : -1
+      if (e.shiftKey) {
+        this.moveSelectionByKeys(dx, 0)
+      } else {
+        this.switchAnchorByKeys(e.code === 'ArrowRight' ? 1 : -1)
+      }
+      return
+    }
+
+    if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+      e.preventDefault()
+      const dy = e.code === 'ArrowDown' ? 1 : -1
+      if (e.shiftKey) {
+        this.moveSelectionByKeys(0, dy)
+      } else {
+        this.cycleControlFlag(e.code === 'ArrowUp' ? 1 : -1)
+      }
+      return
+    }
+
+    if (e.code === 'Delete' || e.code === 'Backspace') {
+      // 仅当有选中锚点时删除锚点，并阻止事件冒泡到全局删除逻辑（EditorLayout 的 editor-delete），
+      // 避免删除锚点的同时把整个组件也删掉；无选中锚点时交给全局逻辑删除组件
+      if (this.selectAnchor) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!e.repeat) {
+          this.deleteSelectedAnchor()
+        }
+      }
+    }
+  }
+
+  /**
+   * 获取当前编辑中的原始点数组（骨架模式读取上下文，普通模式读取 store 选中组件）
+   */
+  private getEditablePoints(): { points: IPoint[]; closePath: boolean } | null {
+    const skCtx = this.resolveSkeletonContext()
+    if (skCtx) {
+      const points = skCtx.penComponent.points
+      if (!points) return null
+      return { points, closePath: !!(skCtx.penComponent as any).closePath }
+    }
+
+    const characterStore = useCharacterStore()
+    const glyphStore = useGlyphStore()
+    const isGlyph = this.config.mode === 'glyph'
+    const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
+    if (!selectedComponent || selectedComponent.type !== 'pen') return null
+    const penComponent = selectedComponent.value as unknown as IPenComponent
+    if (!penComponent.points) return null
+    return { points: penComponent.points, closePath: !!penComponent.closePath }
+  }
+
+  /**
+   * 提交点数组修改（骨架模式直接写回上下文，普通模式写入 store）
+   */
+  private commitPoints(next: IPoint[], triggerRender: boolean): void {
+    const skCtx = this.resolveSkeletonContext()
+    if (skCtx) {
+      skCtx.penComponent.points = next
+    } else {
+      const characterStore = useCharacterStore()
+      const glyphStore = useGlyphStore()
+      const isGlyph = this.config.mode === 'glyph'
+      const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
+      if (!selectedComponent) return
+      const modifyComponent = isGlyph ? (glyphStore as any).modifyComponent : (characterStore as any).modifyComponent
+      modifyComponent(selectedComponent.uuid, { value: { points: next } })
+    }
+    if (triggerRender) {
+      this.triggerRender()
+    }
+  }
+
+  /**
+   * 组件空间坐标 → 原始点空间坐标（与鼠标拖拽的逆映射一致）
+   */
+  private componentPointToOriginPoint(component: IComponent, p: PointXY): PointXY {
+    const { x, y, w, h, flipX, flipY } = component
+    const originBounds = this.initialOriginBounds ?? editModeFixedBounds.get(component.uuid)
+    if (!originBounds) return { x: p.x, y: p.y }
+    const { x: origin_x, y: origin_y, w: origin_w, h: origin_h } = originBounds
+    if (!w || !origin_w || !h || !origin_h) return { x: p.x, y: p.y }
+    let px = origin_x + ((p.x - x) * origin_w) / w
+    let py = origin_y + ((p.y - y) * origin_h) / h
+    if (flipX) {
+      px = 2 * (origin_x + origin_w / 2) - px
+    }
+    if (flipY) {
+      py = 2 * (origin_y + origin_h / 2) - py
+    }
+    return { x: px, y: py }
+  }
+
+  /** 将组件空间的分割点转换为原始点空间 */
+  private convertSplitToOrigin(component: IComponent, split: SplitPoints): SplitPoints {
+    const conv = (p: PointXY): PointXY => this.componentPointToOriginPoint(component, p)
+    return {
+      c1a: conv(split.c1a),
+      c2a: conv(split.c2a),
+      mid: conv(split.mid),
+      c1b: conv(split.c1b),
+      c2b: conv(split.c2b),
+    }
+  }
+
+  /** 普通模式：检测鼠标（组件空间）是否在路径上 */
+  private hitTestPathForComponent(component: IComponent, x: number, y: number, maxDist: number): PathHit | null {
+    const penValue = component.value as unknown as IPenComponent
+    if (!penValue.points || penValue.points.length === 0) return null
+    const _points = this.transformPenPoints(component, false)
+    const segments = getPenSegments(_points, !!penValue.closePath)
+    return findClosestOnPath(segments, x, y, maxDist)
+  }
+
+  /** 骨架模式：检测鼠标（画布逻辑坐标）是否在路径上 */
+  private hitTestPathForSkeleton(
+    skCtx: NonNullable<ReturnType<typeof this.resolveSkeletonContext>>,
+    x: number,
+    y: number,
+    maxDist: number,
+  ): PathHit | null {
+    const points = skCtx.penComponent.points
+    if (!points || points.length === 0) return null
+    const _points = this.transformPenPointsForContext(skCtx, false)
+    const segments = getPenSegments(_points, !!(skCtx.penComponent as any).closePath)
+    return findClosestOnPath(segments, x, y, maxDist)
+  }
+
+  /** 普通模式：在路径命中位置插入新锚点（贝塞尔分割，形状保持不变） */
+  private insertAnchorAtHit(
+    component: IComponent,
+    penComponent: IPenComponent,
+    hit: PathHit,
+    isGlyph: boolean,
+  ): void {
+    const points = penComponent.points
+    if (!points || points.length === 0) return
+    const _points = this.transformPenPoints(component, false)
+    const segments = getPenSegments(_points, !!penComponent.closePath)
+    const seg = segments[hit.segIndex]
+    if (!seg) return
+
+    let next: IPoint[]
+    let newAnchorUUID = ''
+    if (seg.type === 'bezier') {
+      const split = splitCubicAt(seg.p0, seg.c1, seg.c2, seg.p3, hit.t)
+      const ins = this.convertSplitToOrigin(component, split)
+      const result = insertBezierSplit(points, seg.startIndex, ins)
+      next = result.points
+      newAnchorUUID = result.newAnchorUUID
+    } else {
+      const split = lineSplitPoints(seg.p0, seg.p3, hit.t)
+      const ins = this.convertSplitToOrigin(component, split)
+      const result = insertClosingLineSplit(points, seg.startIndex, ins)
+      next = result.points
+      newAnchorUUID = result.newAnchorUUID
+    }
+
+    if (!newAnchorUUID) return
+
+    const characterStore = useCharacterStore()
+    const glyphStore = useGlyphStore()
+    const modifyComponent = isGlyph ? (glyphStore as any).modifyComponent : (characterStore as any).modifyComponent
+    modifyComponent(component.uuid, { value: { points: next } })
+
+    // 选中新插入的锚点
+    this.selectAnchor = newAnchorUUID
+    this.selectPenPoint = newAnchorUUID
+    this.hoverPenPoint = ''
+    this.controlFlag = 'none'
+    this.mousedown = false
+    this.triggerRender()
+  }
+
+  /** 骨架模式：在路径命中位置插入新锚点（画布坐标 → 字形局部坐标） */
+  private insertAnchorAtHitForSkeleton(
+    skCtx: NonNullable<ReturnType<typeof this.resolveSkeletonContext>>,
+    hit: PathHit,
+  ): void {
+    const points = skCtx.penComponent.points
+    if (!points || points.length === 0) return
+    const _points = this.transformPenPointsForContext(skCtx, false)
+    const segments = getPenSegments(_points, !!(skCtx.penComponent as any).closePath)
+    const seg = segments[hit.segIndex]
+    if (!seg) return
+
+    const ox = skCtx.bounds.x
+    const oy = skCtx.bounds.y
+    const toLocal = (p: PointXY): PointXY => ({ x: p.x - ox, y: p.y - oy })
+
+    let ins: SplitPoints
+    if (seg.type === 'bezier') {
+      ins = splitCubicAt(seg.p0, seg.c1, seg.c2, seg.p3, hit.t)
+    } else {
+      ins = lineSplitPoints(seg.p0, seg.p3, hit.t)
+    }
+    const localIns: SplitPoints = {
+      c1a: toLocal(ins.c1a),
+      c2a: toLocal(ins.c2a),
+      mid: toLocal(ins.mid),
+      c1b: toLocal(ins.c1b),
+      c2b: toLocal(ins.c2b),
+    }
+
+    let next: IPoint[]
+    let newAnchorUUID = ''
+    if (seg.type === 'bezier') {
+      const result = insertBezierSplit(points, seg.startIndex, localIns)
+      next = result.points
+      newAnchorUUID = result.newAnchorUUID
+    } else {
+      const result = insertClosingLineSplit(points, seg.startIndex, localIns)
+      next = result.points
+      newAnchorUUID = result.newAnchorUUID
+    }
+
+    if (!newAnchorUUID) return
+
+    skCtx.penComponent.points = next
+    this.selectAnchor = newAnchorUUID
+    this.selectPenPoint = newAnchorUUID
+    this.hoverPenPoint = ''
+    this.controlFlag = 'none'
+    this.mousedown = false
+    this.triggerRender()
+  }
+
+  /** 左右方向键：切换选中锚点（上一个/下一个，循环） */
+  private switchAnchorByKeys(direction: 1 | -1): void {
+    const editable = this.getEditablePoints()
+    if (!editable || editable.points.length === 0) return
+    const anchorIndices = collectAnchorIndices(editable.points)
+    if (anchorIndices.length === 0) return
+    const currentIdx = editable.points.findIndex((p) => p.uuid === this.selectAnchor)
+    const targetIdx = nextAnchorIndex(anchorIndices, currentIdx, direction)
+    if (targetIdx < 0) return
+    const target = editable.points[targetIdx]
+    this.selectAnchor = target.uuid
+    this.selectPenPoint = target.uuid
+    this.hoverPenPoint = ''
+    this.controlFlag = 'none'
+    this.triggerRender()
+  }
+
+  /** 上下方向键：循环控制点标志（无 → 左控制点 → 右控制点 → 无） */
+  private cycleControlFlag(direction: 1 | -1): void {
+    if (!this.selectAnchor) return
+    const editable = this.getEditablePoints()
+    if (!editable) return
+    const anchorIdx = editable.points.findIndex((p) => p.uuid === this.selectAnchor)
+    if (anchorIdx < 0) return
+    const { left, right } = anchorControlIndices(editable.points, anchorIdx, editable.closePath)
+
+    const order: Array<'none' | 'left' | 'right'> = ['none', 'left', 'right']
+    const pos = order.indexOf(this.controlFlag)
+    let nextPos = (pos + direction + order.length) % order.length
+    // 目标控制点不存在时继续尝试下一个状态（最多一圈）
+    for (let step = 0; step < order.length; step++) {
+      const candidate = order[nextPos]
+      if (
+        candidate === 'none' ||
+        (candidate === 'left' && left >= 0) ||
+        (candidate === 'right' && right >= 0)
+      ) {
+        this.controlFlag = candidate
+        break
+      }
+      nextPos = (nextPos + direction + order.length) % order.length
+    }
+    this.triggerRender()
+  }
+
+  /** Shift+方向键：移动当前点（未选控制点移动锚点，已选控制点移动控制点） */
+  private moveSelectionByKeys(dx: number, dy: number): void {
+    if (!this.selectAnchor) return
+    const editable = this.getEditablePoints()
+    if (!editable) return
+    const anchorIdx = editable.points.findIndex((p) => p.uuid === this.selectAnchor)
+    if (anchorIdx < 0) return
+
+    let next: IPoint[]
+    if (this.controlFlag === 'none') {
+      next = movePointSynced(editable.points, anchorIdx, dx, dy, editable.closePath)
+    } else {
+      const { left, right } = anchorControlIndices(editable.points, anchorIdx, editable.closePath)
+      const ctrlIdx = this.controlFlag === 'left' ? left : right
+      if (ctrlIdx < 0) return
+      next = editable.points.map((p, i) =>
+        i === ctrlIdx
+          ? { ...p, x: roundToPrecision(p.x + dx, 2), y: roundToPrecision(p.y + dy, 2) }
+          : p,
+      )
+    }
+    this.commitPoints(next, true)
+  }
+
+  /** Delete/Backspace：删除选中锚点（连同其相邻控制点） */
+  private deleteSelectedAnchor(): void {
+    if (!this.selectAnchor) return
+    const editable = this.getEditablePoints()
+    if (!editable) return
+    const anchorIdx = editable.points.findIndex((p) => p.uuid === this.selectAnchor)
+    if (anchorIdx < 0) return
+
+    // 删除后优先选中后继锚点，否则选中前一个锚点
+    const anchorIndices = collectAnchorIndices(editable.points)
+    const removedPos = anchorIndices.indexOf(anchorIdx)
+    const nextAnchorUUID =
+      removedPos >= 0 && removedPos + 1 < anchorIndices.length
+        ? editable.points[anchorIndices[removedPos + 1]].uuid
+        : removedPos > 0
+          ? editable.points[anchorIndices[removedPos - 1]].uuid
+          : ''
+
+    const next = removeAnchorAt(editable.points, anchorIdx, editable.closePath)
+    if (!next) return
+
+    this.commitPoints(next, false)
+
+    if (nextAnchorUUID && next.some((p) => p.uuid === nextAnchorUUID)) {
+      this.selectAnchor = nextAnchorUUID
+      this.selectPenPoint = nextAnchorUUID
+    } else {
+      const anchors = collectAnchorIndices(next)
+      if (anchors.length > 0) {
+        this.selectAnchor = next[anchors[anchors.length - 1]].uuid
+        this.selectPenPoint = this.selectAnchor
+      } else {
+        this.selectAnchor = ''
+        this.selectPenPoint = ''
+      }
+    }
+    this.hoverPenPoint = ''
+    this.controlFlag = 'none'
+    this.triggerRender()
+  }
+
+  /**
+   * 获取键盘标记的控制点在（变换后）点数组中的索引
+   * 原始点与变换点索引一一对应
+   */
+  private getFlaggedControlIndex(_points: IPoint[]): number {
+    if (this.controlFlag === 'none' || !this.selectAnchor) return -1
+    const anchorIdx = _points.findIndex((p) => p.uuid === this.selectAnchor)
+    if (anchorIdx < 0) return -1
+    const editable = this.getEditablePoints()
+    if (!editable) return -1
+    const { left, right } = anchorControlIndices(editable.points, anchorIdx, editable.closePath)
+    return this.controlFlag === 'left' ? left : right
   }
 
   /**
@@ -850,6 +1286,15 @@ export class PenSelectTool extends BaseTool {
         }
       }
 
+      // 未悬停到点时检测路径：悬停在路径上显示「添加锚点」光标
+      // 使用反旋转后的坐标 _x/_y，与 transformPenPointsForContext 的点空间一致
+      if (!this.hoverPenPoint) {
+        const pathHit = this.hitTestPathForSkeleton(skCtx, _x, _y, d)
+        this.canvas.style.cursor = pathHit ? 'copy' : ''
+      } else if (this.canvas.style.cursor === 'copy') {
+        this.canvas.style.cursor = ''
+      }
+
       if (oldHoverPenPoint !== this.hoverPenPoint) {
         this.triggerRender()
       }
@@ -985,6 +1430,39 @@ export class PenSelectTool extends BaseTool {
         }
         ctx.fillStyle = '#fff'
       }
+    }
+
+    // 高亮键盘标记的控制点（样式与 hover 一致）
+    if (this.controlFlag !== 'none' && this.selectAnchor) {
+      const flagIdx = this.getFlaggedControlIndex(_points)
+      if (flagIdx >= 0 && flagIdx < _points.length && _points[flagIdx].type === 'control') {
+        const control = _points[flagIdx]
+        const originUUID = control.origin as string
+        const originAnchor: IPoint | undefined = originUUID ? _map[originUUID] : undefined
+        const anchorPoint = originAnchor || (index >= 0 ? _points[index] : undefined)
+        ctx.strokeStyle = '#153063'
+        ctx.strokeRect(control.x - d, control.y - d, 2 * d, 2 * d)
+        if (anchorPoint) {
+          ctx.beginPath()
+          ctx.moveTo(control.x, control.y)
+          ctx.lineTo(anchorPoint.x, anchorPoint.y)
+          ctx.stroke()
+          ctx.closePath()
+        }
+        ctx.fillStyle = '#79bbff'
+        ctx.fillRect(control.x - d, control.y - d, 2 * d, 2 * d)
+        ctx.fillStyle = '#fff'
+      }
+    }
+
+    // 高亮选中的锚点（不依赖鼠标 hover）
+    if (this.selectAnchor && index >= 0 && _points[index].type === 'anchor') {
+      ctx.fillStyle = '#79bbff'
+      ctx.beginPath()
+      ctx.ellipse(_points[index].x, _points[index].y, d, d, 0, 0, 2 * Math.PI)
+      ctx.fill()
+      ctx.closePath()
+      ctx.fillStyle = '#fff'
     }
 
     ctx.restore()
@@ -1140,6 +1618,39 @@ export class PenSelectTool extends BaseTool {
         }
         ctx.fillStyle = '#fff'
       }
+    }
+
+    // 高亮键盘标记的控制点（样式与 hover 一致）
+    if (this.controlFlag !== 'none' && this.selectAnchor) {
+      const flagIdx = this.getFlaggedControlIndex(_points)
+      if (flagIdx >= 0 && flagIdx < _points.length && _points[flagIdx].type === 'control') {
+        const control = _points[flagIdx]
+        const originUUID = control.origin as string
+        const originAnchor: IPoint | undefined = originUUID ? _map[originUUID] : undefined
+        const anchorPoint = originAnchor || (index >= 0 ? _points[index] : undefined)
+        ctx.strokeStyle = '#153063'
+        ctx.strokeRect(control.x - d, control.y - d, 2 * d, 2 * d)
+        if (anchorPoint) {
+          ctx.beginPath()
+          ctx.moveTo(control.x, control.y)
+          ctx.lineTo(anchorPoint.x, anchorPoint.y)
+          ctx.stroke()
+          ctx.closePath()
+        }
+        ctx.fillStyle = '#79bbff'
+        ctx.fillRect(control.x - d, control.y - d, 2 * d, 2 * d)
+        ctx.fillStyle = '#fff'
+      }
+    }
+
+    // 高亮选中的锚点（不依赖鼠标 hover）
+    if (this.selectAnchor && index >= 0 && _points[index].type === 'anchor') {
+      ctx.fillStyle = '#79bbff'
+      ctx.beginPath()
+      ctx.ellipse(_points[index].x, _points[index].y, d, d, 0, 0, 2 * Math.PI)
+      ctx.fill()
+      ctx.closePath()
+      ctx.fillStyle = '#fff'
     }
 
     ctx.restore()

@@ -24,6 +24,7 @@
           <div class="edit-canvas-wrapper">
             <canvas
               ref="canvasRef"
+              tabindex="0"
               class="editor-canvas"
               :class="{
                 'edit-canvas-panel': true,
@@ -1086,6 +1087,10 @@ watch(() => toolStore.tool, (newTool) => {
 .editor-canvas {
   position: absolute;
   /* cursor: crosshair; */
+}
+
+.editor-canvas:focus {
+  outline: none;
 }
 
 /* 工具鼠标样式 */
