@@ -127,9 +127,13 @@ const animationStore = useAnimationStore()
 const selectedState = computed(() => store.selectedState)
 const selectedTransition = computed(() => store.selectedTransition)
 
-const segmentOptions = computed(() =>
-  animationStore.clips.map((c) => ({ label: c.name, value: c.id })),
-)
+const segmentOptions = computed(() => {
+  // 应用级微交互（store.segments 非空）优先；否则回退字符动效列表
+  if (store.segments.length > 0) {
+    return store.segments.map((s) => ({ label: s.name, value: s.id }))
+  }
+  return animationStore.clips.map((c) => ({ label: c.name, value: c.id }))
+})
 const inputOptions = computed(() =>
   (store.draft?.inputs ?? []).map((i) => ({ label: i.name, value: i.id })),
 )

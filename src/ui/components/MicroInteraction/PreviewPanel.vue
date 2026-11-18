@@ -45,6 +45,9 @@
         :loop="currentState?.loop ?? false"
         :restart-token="store.playNonce"
         :size="160"
+        :video="currentVideo"
+        :card-data="currentCardData"
+        :library="currentLibrary"
       />
     </div>
   </div>
@@ -94,6 +97,17 @@ const currentClip = computed(() => {
   if (!segId) return null
   return animationStore.clips.find((c) => c.id === segId) ?? null
 })
+
+/** 应用级：当前状态对应的组合视频片段 */
+const currentSegment = computed(() => {
+  const segId = currentState.value?.segmentId
+  if (!segId) return null
+  return store.segments.find((s) => s.id === segId) ?? null
+})
+
+const currentVideo = computed(() => (currentSegment.value?.video as never) ?? null)
+const currentCardData = computed(() => (currentSegment.value?.cardData as never) ?? null)
+const currentLibrary = computed(() => (currentSegment.value?.library as never) ?? null)
 </script>
 
 <style scoped>

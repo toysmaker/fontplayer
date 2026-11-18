@@ -357,6 +357,8 @@ export function renderCharacterLikeEditor(
   clone: ICharacterFileLite,
   visible: IComponent[],
   style: 'color' | 'black' | 'contour',
+  /** 透明背景（应用视频合成用；默认 false 保持编辑/导出同款白底） */
+  transparentBackground = false,
 ): HTMLCanvasElement {
   const file = useProjectStore().selectedFile
   const width = mapCanvasWidth(file?.width || 1000)
@@ -372,7 +374,9 @@ export function renderCharacterLikeEditor(
       mode: 'character',
       character: { ...clone, character: { ...clone.character, text: '' } },
       components: visible,
-      background: { type: BackgroundType.Color, color: '#FFFFFF' } as IBackground,
+      background: transparentBackground
+        ? ({ type: BackgroundType.Transparent } as IBackground)
+        : ({ type: BackgroundType.Color, color: '#FFFFFF' } as IBackground),
       grid: { type: GridType.None, precision: 20 } as IGrid,
       layoutTransformGrid: characterLayoutGrid(clone),
     })

@@ -442,6 +442,12 @@ export interface IAnimationClip {
   fps: number
   createdAt: number
   updatedAt: number
+  /**
+   * 渲染模式（轮廓/黑白/彩色）。
+   * 创建动效时默认取当前预览模式，可在动效编辑窗口修改；
+   * 预览/导出/应用视频合成统一按此渲染，与全局预览模式解耦。
+   */
+  renderStyle?: 'contour' | 'black' | 'color'
 }
 
 // ==================== 动效微交互（状态机） ====================
@@ -656,6 +662,17 @@ export interface IRingParameter {
 /**
  * 文件数据结构
  */
+/** 工程内嵌的应用文档（JSON 安全，不含字体二进制；字体副本在 IndexedDB 按 工程+应用 缓存） */
+export interface IFileApplication {
+  [key: string]: unknown
+}
+
+export interface IFileApplications {
+  card: IFileApplication[]
+  logo: IFileApplication[]
+  avatar: IFileApplication[]
+}
+
 export interface IFile {
   uuid: string
   name: string
@@ -674,6 +691,11 @@ export interface IFile {
   comp_glyphs?: Array<ICustomGlyph>
   constants?: Array<IConstant>
   variants?: any
+  /**
+   * 应用列表（卡片、屏保与壁纸 / Logo / 头像）。
+   * 随工程保存/导出持久化；不保存工程则仅存在于内存与跨窗口快照中。
+   */
+  applications?: IFileApplications
 }
 
 // ==================== 编辑器状态 ====================

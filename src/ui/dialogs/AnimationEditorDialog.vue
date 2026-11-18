@@ -21,6 +21,14 @@
         @update:value="nameError = false"
       />
       <span v-if="nameError" class="anim-editor-name-error">{{ t('dialogs.animationEditor.nameRequired') }}</span>
+      <span class="anim-editor-render">
+        <span class="anim-editor-label">{{ t('panels.settingsPanel.render.title') }}</span>
+        <n-radio-group v-model:value="draftRenderStyle" size="small">
+          <n-radio value="contour">{{ t('panels.settingsPanel.render.contour') }}</n-radio>
+          <n-radio value="black">{{ t('panels.settingsPanel.render.black') }}</n-radio>
+          <n-radio value="color">{{ t('panels.settingsPanel.render.color') }}</n-radio>
+        </n-radio-group>
+      </span>
     </div>
 
     <div class="anim-editor-body">
@@ -215,7 +223,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { NButton, NEmpty, NInput, NInputNumber, NModal, NSelect, NSlider, NSwitch, useMessage } from 'naive-ui'
+import { NButton, NEmpty, NInput, NInputNumber, NModal, NSelect, NSlider, NSwitch, useMessage , NRadioGroup, NRadio } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import * as R from 'ramda'
 import { genUUID } from '@/utils/uuid'
@@ -245,6 +253,8 @@ const emit = defineEmits<{ 'update:visible': [value: boolean] }>()
 const activeTab = ref<'keyframes' | 'components'>('keyframes')
 const draftName = ref('')
 const nameError = ref(false)
+/** 渲染模式草稿（创建时默认取当前预览模式，可修改） */
+const draftRenderStyle = ref<'contour' | 'black' | 'color'>(fontRenderStyle.value as 'contour' | 'black' | 'color')
 /** 关键帧草稿（深拷贝，保存时写回 store） */
 const keyframes = ref<IAnimationKeyframe[]>([])
 const selectedKeyframeId = ref<string | null>(null)
@@ -451,6 +461,7 @@ const draftClip = computed<IAnimationClip | null>(() => {
     name: draftName.value || 'draft',
     keyframes: R.clone(sortedKeyframes.value),
     fps: 30,
+    renderStyle: draftRenderStyle.value,
     createdAt: 0,
     updatedAt: 0,
   }
@@ -470,6 +481,7 @@ function loadDraft() {
   const id = animationStore.editingClipId
   const existing = id ? animationStore.getClip(id) : null
   draftName.value = existing?.name ?? ''
+  draftRenderStyle.value = (existing?.renderStyle ?? fontRenderStyle.value) as 'contour' | 'black' | 'color'
   keyframes.value = existing ? R.clone(existing.keyframes) : [{ id: genUUID(), time: 0, hidden: false, params: {} }]
   if (keyframes.value.length > 0) selectedKeyframeId.value = keyframes.value[0].id
   nameError.value = false
@@ -664,6 +676,7 @@ const _saveClip = () => {
     name,
     fps: 30,
     keyframes: R.clone(sortedKeyframes.value),
+    renderStyle: draftRenderStyle.value,
     createdAt: existing?.createdAt ?? Date.now(),
     updatedAt: Date.now(),
   }
@@ -685,6 +698,11 @@ watch(fontRenderStyle, () => {
   if (!playback.playing.value) renderCurrentKeyframe()
 })
 
+// 动效自身渲染模式变化时刷新静态预览
+watch(draftRenderStyle, () => {
+  if (!playback.playing.value) renderCurrentKeyframe()
+})
+
 // 卸载时清理待执行的重烘焙定时器
 onUnmounted(() => {
   if (reRenderTimer != null) {
@@ -703,6 +721,29 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
+}
+/* 渲染模式固定在最右侧 */
+.anim-editor-render {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* radio 灰色化：naive-ui 用 box-shadow 画描边、::before 画实心，逐状态覆盖 */
+.anim-editor-render :deep(.n-radio__label) {
+  color: #9aa3b2 !important;
+}
+.anim-editor-render :deep(.n-radio__dot) {
+  box-shadow: inset 0 0 0 1px #7a8089 !important;
+}
+.anim-editor-render :deep(.n-radio:hover .n-radio__dot),
+.anim-editor-render :deep(.n-radio--checked .n-radio__dot),
+.anim-editor-render :deep(.n-radio--checked:hover .n-radio__dot) {
+  box-shadow: inset 0 0 0 1px #7a8089 !important;
+}
+.anim-editor-render :deep(.n-radio__dot::before),
+.anim-editor-render :deep(.n-radio__dot:before) {
+  background: #9aa3b2 !important;
 }
 .anim-editor-label {
   flex: 0 0 auto;

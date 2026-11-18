@@ -165,6 +165,18 @@ export async function initTauriMenu() {
       window.dispatchEvent(new CustomEvent('editor-typesetting-preview'))
     })
 
+    listen('application-card', () => {
+      window.dispatchEvent(new CustomEvent('editor-application-card'))
+    })
+
+    listen('application-logo', () => {
+      window.dispatchEvent(new CustomEvent('editor-application-logo'))
+    })
+
+    listen('application-avatar', () => {
+      window.dispatchEvent(new CustomEvent('editor-application-avatar'))
+    })
+
     listen('random-stroke-gen', () => {
       window.dispatchEvent(new CustomEvent('editor-random-stroke-gen'))
     })

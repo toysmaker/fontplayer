@@ -55,7 +55,7 @@ export async function exportAnimationClip(opts: ExportClipOptions): Promise<Blob
           clip,
           char,
           metrics,
-          style: fontRenderStyle.value as 'contour' | 'black' | 'color',
+          style: (clip.renderStyle ?? fontRenderStyle.value) as 'contour' | 'black' | 'color',
           onProgress: opts.onProgress,
         }),
       ],
@@ -75,7 +75,7 @@ export async function exportAnimationClip(opts: ExportClipOptions): Promise<Blob
     if (!ctx2) throw new Error('canvas 2d unavailable')
     const writer = createGifWriter(renderSize, renderSize, 100 / fps)
     for (let frame = 0; frame < totalFrames; frame++) {
-      renderClipFrameAt(char, clip, frameTime(frame), canvas)
+      renderClipFrameAt(char, clip, frameTime(frame), canvas, undefined, false, clip.renderStyle)
       const img = ctx2.getImageData(0, 0, renderSize, renderSize)
       const gray = new Uint8Array(renderSize * renderSize)
       for (let p = 0; p < gray.length; p++) {

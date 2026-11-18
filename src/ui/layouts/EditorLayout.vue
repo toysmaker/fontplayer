@@ -33,6 +33,7 @@ import EditorMain from './EditorMain.vue'
 import LoadingProgress from '@/ui/components/LoadingProgress.vue'
 import { isTauri, getEnv } from '@/utils/env'
 import { initTauriMenu } from '@/utils/tauri-menu'
+import { initApplicationChannel } from '@/features/applications/applicationChannel'
 import { startSessionSnapshot, stopSessionSnapshot, flushSnapshotNow } from '@/features/sessionSnapshot/SessionSnapshotService'
 import { useGlyphStore } from '@/stores/glyph'
 import { useCharacterStore } from '@/stores/character'
@@ -137,6 +138,7 @@ onMounted(() => {
 
   if (isTauri()) {
     initTauriMenu()
+  initApplicationChannel()
     window.addEventListener('show-new-project-dialog', handleShowNewProjectDialog)
     window.addEventListener('show-save-char-pngs-dialog', (e: Event) => {
       window.dispatchEvent(new CustomEvent('editor-show-save-char-pngs-dialog', { detail: (e as CustomEvent).detail }))

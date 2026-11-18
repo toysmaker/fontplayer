@@ -105,6 +105,9 @@ function portY(stateId: string): number {
 }
 
 function segmentNameOf(segmentId: string): string {
+  if (store.segments.length > 0) {
+    return store.segments.find((s) => s.id === segmentId)?.name ?? ''
+  }
   return animationStore.clips.find((c) => c.id === segmentId)?.name ?? ''
 }
 
@@ -139,7 +142,10 @@ function onDropFromSegmentList(e: DragEvent) {
   if (!rect) return
   const x = e.clientX - rect.left - NODE_W / 2
   const y = e.clientY - rect.top - NODE_H / 2
-  const seg = animationStore.clips.find((c) => c.id === segmentId)
+  const seg =
+    store.segments.length > 0
+      ? store.segments.find((s) => s.id === segmentId)
+      : animationStore.clips.find((c) => c.id === segmentId)
   if (!seg) return
   store.addState(seg.name, seg.id, { x: Math.max(0, x), y: Math.max(0, y) })
 }

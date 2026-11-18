@@ -7,6 +7,8 @@
  * 因此这里直接使用未压缩 JSON，避免依赖环境特定的解压行为。
  */
 
+import { unicodeToCode } from '@/utils/unicode'
+
 export interface DictionaryEntry {
   pinyin?: string[]
   definitionZh: string
@@ -50,6 +52,6 @@ export function lookupByUnicode(
   unicode: string,
 ): DictionaryEntry | null {
   if (!index) return null
-  const code = unicode.replace(/^U\+/i, '').toUpperCase()
+  const code = unicodeToCode(unicode).toString(16).toUpperCase()
   return index[code] ?? null
 }

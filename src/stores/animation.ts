@@ -16,6 +16,7 @@ import * as R from 'ramda'
 import { genUUID } from '@/utils/uuid'
 import type { IAnimationClip, IMicroInteraction } from '@/core/types'
 import { useCharacterStore } from '@/stores/character'
+import { fontRenderStyle } from '@/core/script/globals'
 import { useProjectStore } from '@/stores/project'
 
 export const useAnimationStore = defineStore('animation', () => {
@@ -74,6 +75,8 @@ export const useAnimationStore = defineStore('animation', () => {
       name,
       fps,
       keyframes: [{ id: genUUID(), time: 0, hidden: false, params: {} }],
+      // 渲染模式默认取当前预览模式，创建后可在动效编辑窗口修改
+      renderStyle: fontRenderStyle.value as 'contour' | 'black' | 'color',
       createdAt: now,
       updatedAt: now,
     }

@@ -13,6 +13,7 @@ use tauri::menu::{Menu, MenuItemBuilder, MenuItemKind, Submenu};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 mod skeleton;
+mod heic;
 
 // 语言状态管理
 struct LanguageState {
@@ -31,6 +32,7 @@ struct MenuTexts {
     settings: SettingsMenuTexts,
     templates: TemplatesMenuTexts,
     tools: ToolsMenuTexts,
+    applications: ApplicationsMenuTexts,
     test: TestMenuTexts,
 }
 
@@ -107,6 +109,13 @@ struct ToolsMenuTexts {
     typesetting_preview: &'static str,
     random_stroke_gen: &'static str,
     random_char_gen: &'static str,
+}
+
+struct ApplicationsMenuTexts {
+    applications: &'static str,
+    card: &'static str,
+    logo: &'static str,
+    avatar: &'static str,
 }
 
 struct TestMenuTexts {
@@ -190,6 +199,12 @@ fn get_menu_texts(lang: &str) -> MenuTexts {
                 random_stroke_gen: "Random Stroke Generation",
                 random_char_gen: "Random Character Generation",
             },
+            applications: ApplicationsMenuTexts {
+                applications: "Applications",
+                card: "Cards, Screensavers & Wallpapers",
+                logo: "Logo",
+                avatar: "Avatar",
+            },
             test: TestMenuTexts {
                 test: "Test",
                 export_json: "Export JSON",
@@ -268,6 +283,12 @@ fn get_menu_texts(lang: &str) -> MenuTexts {
                 typesetting_preview: "排版预览",
                 random_stroke_gen: "随机生成笔画",
                 random_char_gen: "随机生成字符",
+            },
+            applications: ApplicationsMenuTexts {
+                applications: "应用",
+                card: "卡片、屏保与壁纸",
+                logo: "Logo",
+                avatar: "头像",
             },
             test: TestMenuTexts {
                 test: "测试",
@@ -607,6 +628,10 @@ fn build_menu_enabled_map() -> HashMap<String, Box<dyn Fn(&str) -> bool>> {
     map.insert("typesetting-preview".to_string(), Box::new(enable_at_list));
     map.insert("random-stroke-gen".to_string(), Box::new(enable_at_list));
     map.insert("random-char-gen".to_string(), Box::new(enable_at_list));
+    // 应用菜单：仅由工程打开状态决定（update_menu_project_status 中覆盖）
+    map.insert("application-card".to_string(), Box::new(enable));
+    map.insert("application-logo".to_string(), Box::new(enable));
+    map.insert("application-avatar".to_string(), Box::new(enable));
     map.insert("test-export-json".to_string(), Box::new(enable));
     map.insert("export-stroke-pngs".to_string(), Box::new(enable));
     map.insert("save-char-pngs".to_string(), Box::new(enable));
@@ -716,6 +741,13 @@ fn update_menu_project_status(app: AppHandle, has_project: bool) {
                                 item.set_enabled(false).unwrap_or_default();
                             }
                         }
+                        // 应用菜单：有工程才可用
+                        if id == "application-card"
+                            || id == "application-logo"
+                            || id == "application-avatar"
+                        {
+                            item.set_enabled(has_project).unwrap_or_default();
+                        }
                     }
                 }
             }
@@ -770,6 +802,9 @@ fn get_menu_item_text<'a>(id: &str, texts: &'a MenuTexts) -> Option<&'a str> {
         "typesetting-preview" => Some(texts.tools.typesetting_preview),
         "random-stroke-gen" => Some(texts.tools.random_stroke_gen),
         "random-char-gen" => Some(texts.tools.random_char_gen),
+        "application-card" => Some(texts.applications.card),
+        "application-logo" => Some(texts.applications.logo),
+        "application-avatar" => Some(texts.applications.avatar),
         "test-export-json" => Some(texts.test.export_json),
         "export-stroke-pngs" => Some(texts.test.export_stroke_pngs),
         "generate-training-data-v1" => Some(texts.test.generate_training_data_v1),
@@ -791,7 +826,8 @@ fn get_submenu_text<'a>(index: usize, texts: &'a MenuTexts) -> Option<&'a str> {
         6 => Some(texts.settings.settings),
         7 => Some(texts.templates.templates),
         8 => Some(texts.tools.tools),
-        9 => Some(texts.test.test),
+        9 => Some(texts.applications.applications),
+        10 => Some(texts.test.test),
         _ => None,
     }
 }
@@ -1089,6 +1125,26 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>, texts: &MenuTexts) -> Resul
                         .build(app)
                         ?,
                     &MenuItemBuilder::with_id("component-subtract", "差集 (Subtract)")
+                        .enabled(false)
+                        .build(app)
+                        ?,
+                ],
+            )
+            ?,
+            &Submenu::with_items(
+                app,
+                texts.applications.applications,
+                true,
+                &[
+                    &MenuItemBuilder::with_id("application-card", texts.applications.card)
+                        .enabled(false)
+                        .build(app)
+                        ?,
+                    &MenuItemBuilder::with_id("application-logo", texts.applications.logo)
+                        .enabled(false)
+                        .build(app)
+                        ?,
+                    &MenuItemBuilder::with_id("application-avatar", texts.applications.avatar)
                         .enabled(false)
                         .build(app)
                         ?,
@@ -1450,6 +1506,9 @@ pub fn run() {
                     "format-all-characters" => format_all_characters(app.app_handle().clone()),
                     "format-current-character" => format_current_character(app.app_handle().clone()),
                     "typesetting-preview" => typesetting_preview(app.app_handle().clone()),
+                    "application-card" => { let _ = app.app_handle().emit("application-card", ()); }
+                    "application-logo" => { let _ = app.app_handle().emit("application-logo", ()); }
+                    "application-avatar" => { let _ = app.app_handle().emit("application-avatar", ()); }
                     "random-stroke-gen" => random_stroke_gen(app.app_handle().clone()),
                     "random-char-gen" => random_char_gen(app.app_handle().clone()),
                     "component-union" => component_union(app.app_handle().clone()),
@@ -1476,6 +1535,7 @@ pub fn run() {
             toggle_menu_disabled,
             update_menu_project_status,
             update_menu_language,
+            heic::export_dynamic_wallpaper_heic,
             save_project,
             write_file_chunk,
             read_keydata,

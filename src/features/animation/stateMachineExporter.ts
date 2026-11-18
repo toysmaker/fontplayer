@@ -61,7 +61,7 @@ export function buildStateMachineData(
           clip: c,
           char,
           metrics: m,
-          style: fontRenderStyle.value as 'contour' | 'black' | 'color',
+          style: (c.renderStyle ?? fontRenderStyle.value) as 'contour' | 'black' | 'color',
         }),
       ) as unknown,
     }))

@@ -132,6 +132,15 @@ const getWebMenu = (): Array<IMenu> => {
 				{ label: tm('menus.effects.pixelate'), key: 'effect-pixelate', click: (handlers: IHandlerMap) => { handlers['effect-pixelate']() } },
 			]
 		},
+		{
+			label: tm('menus.applications.applications'),
+			key: 'applications',
+			submenu: [
+				{ label: tm('menus.applications.card'), key: 'application-card', click: (handlers: IHandlerMap) => { handlers['application-card']() } },
+				{ label: tm('menus.applications.logo'), key: 'application-logo', click: (handlers: IHandlerMap) => { handlers['application-logo']() } },
+				{ label: tm('menus.applications.avatar'), key: 'application-avatar', click: (handlers: IHandlerMap) => { handlers['application-avatar']() } },
+			]
+		},
 		...((import.meta as any).env.DEV ? [{
 			label: tm('menus.test.test'),
 			key: 'test',

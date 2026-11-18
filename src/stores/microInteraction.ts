@@ -24,9 +24,24 @@ export type MicroSelection =
   | { kind: 'input'; id: string }
   | null
 
+/** 应用级微交互的片段描述（segmentId → 应用视频） */
+export interface AppMicroSegment {
+  id: string
+  name: string
+  /** 时长（秒） */
+  duration: number
+  /** 应用视频（用于组合视频预览） */
+  video?: unknown
+  cardData?: unknown
+  library?: unknown
+}
+
 export const useMicroInteractionStore = defineStore('microInteraction', () => {
   /** 工作草稿（深拷贝，编辑器持有） */
   const draft = ref<IMicroInteraction | null>(null)
+
+  /** 应用级片段描述（空数组 = 字符编辑路径，回退 animationStore.clips） */
+  const segments = ref<AppMicroSegment[]>([])
 
   const selected = ref<MicroSelection>(null)
   const previewMode = ref(false)
@@ -62,6 +77,13 @@ export const useMicroInteractionStore = defineStore('microInteraction', () => {
     previewMode.value = false
     previewValues.value = {}
     currentStateId.value = null
+    segments.value = []
+  }
+
+  /** 应用级加载：携带视频片段描述（缺省空数组保持字符编辑路径不变） */
+  function loadWithSegments(micro: IMicroInteraction, segs?: AppMicroSegment[]) {
+    load(micro)
+    segments.value = segs ?? []
   }
 
   /** 重置（对话框关闭时释放草稿） */
@@ -71,6 +93,7 @@ export const useMicroInteractionStore = defineStore('microInteraction', () => {
     previewMode.value = false
     previewValues.value = {}
     currentStateId.value = null
+    segments.value = []
   }
 
   function select(sel: MicroSelection) {
@@ -307,7 +330,9 @@ export const useMicroInteractionStore = defineStore('microInteraction', () => {
     previewValues,
     currentStateId,
     playNonce,
+    segments,
     load,
+    loadWithSegments,
     reset,
     select,
     clearSelection,

@@ -1,4 +1,5 @@
 import * as R from 'ramda'
+import { unicodeToCode } from '@/utils/unicode'
 import type { IFile, ICharacterFileLite, ICharacterFileMetadata, IFontSettings, IPenComponent } from '@/core/types'
 import type { IContours, IContour } from '@/core/font/types'
 import { ContourConverter } from '@/core/font/converter'
@@ -24,7 +25,7 @@ function defaultFontSettings(): IFontSettings {
   }
 }
 
-function resolveFontSettings(file: IFile): IFontSettings {
+export function resolveFontSettings(file: IFile): IFontSettings {
   return file.fontSettings
     ? {
         unitsPerEm: file.fontSettings.unitsPerEm ?? 1000,
@@ -224,7 +225,7 @@ export async function buildExportFontBuffer(
 
     const contours = contoursForCharacterFile(ch, file, fs, options.removeOverlap)
     const { text, unicode } = meta.character
-    const uc = parseInt(unicode.replace(/^U\+/i, ''), 16)
+    const uc = unicodeToCode(unicode)
 
     fontChars.push({
       name: text,

@@ -9,6 +9,7 @@ import { createTemplateMenuHandlers } from './templateMenuHandlers'
 import { createToolsHandlers } from './toolsHandlers'
 import { createEffectHandlers } from './effectHandlers'
 import { createTestHandlers } from './testHandlers'
+import { createApplicationHandlers } from './applicationHandlers'
 import { EditStatus } from '@/core/types'
 
 /**
@@ -27,6 +28,7 @@ export function createMenuHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
     ...createToolsHandlers(ctx),
     ...createEffectHandlers(ctx),
     ...createTestHandlers(ctx),
+    ...createApplicationHandlers(ctx),
   }
 }
 
@@ -168,6 +170,11 @@ export function createDisabledRules(ctx: {
     'effect-melt': enableAtCharacterEdit,
     'effect-geometric-simplify': enableAtCharacterEdit,
     'effect-pixelate': enableAtCharacterEdit,
+
+    // applications（只需工程打开，与编辑状态无关）
+    'application-card': () => projectStore.hasFiles,
+    'application-logo': () => projectStore.hasFiles,
+    'application-avatar': () => projectStore.hasFiles,
   }
 }
 

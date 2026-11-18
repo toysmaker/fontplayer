@@ -224,6 +224,7 @@ const web_menu_icons: Record<string, any> = {
   'templates': ['fas', 'list'],
   'tools': ['fas', 'wrench'],
   'effects': ['fas', 'bolt'],
+  'applications': ['fas', 'shapes'],
   'test': ['fas', 'flask'],
 }
 
@@ -507,6 +508,9 @@ const onFontSettings = () => { showFontSettingsDialog.value = true }
 const onPreferenceSettings = () => { showPreferenceSettingsDialog.value = true }
 const onLanguageSettings = () => { showLanguageSettingsDialog.value = true }
 const onTypesettingPreview = () => web_handlers['typesetting-preview']?.()
+const onApplicationCard = () => web_handlers['application-card']?.()
+const onApplicationLogo = () => web_handlers['application-logo']?.()
+const onApplicationAvatar = () => web_handlers['application-avatar']?.()
 const onSaveFile = async () => { try { await fileHandler.saveProjectTauriRememberPath() } catch (error) { console.error('Failed to save project from Tauri menu:', error) } }
 const onSaveAs = async () => { try { await fileHandler.saveProjectTauriAs() } catch (error) { console.error('Failed to save-as project from Tauri menu:', error) } }
 
@@ -538,6 +542,9 @@ onMounted(() => {
   window.addEventListener('editor-font-settings', onFontSettings)
   window.addEventListener('editor-preference-settings', onPreferenceSettings)
   window.addEventListener('editor-typesetting-preview', onTypesettingPreview)
+  window.addEventListener('editor-application-card', onApplicationCard)
+  window.addEventListener('editor-application-logo', onApplicationLogo)
+  window.addEventListener('editor-application-avatar', onApplicationAvatar)
   if (import.meta.env.DEV) {
     window.addEventListener('editor-show-save-char-pngs-dialog', (e: Event) => {
       const detail = (e as CustomEvent).detail as { total: number }
@@ -593,6 +600,9 @@ onUnmounted(() => {
   window.removeEventListener('editor-font-settings', onFontSettings)
   window.removeEventListener('editor-preference-settings', onPreferenceSettings)
   window.removeEventListener('editor-typesetting-preview', onTypesettingPreview)
+  window.removeEventListener('editor-application-card', onApplicationCard)
+  window.removeEventListener('editor-application-logo', onApplicationLogo)
+  window.removeEventListener('editor-application-avatar', onApplicationAvatar)
   window.removeEventListener('editor-language-settings', onLanguageSettings)
   window.removeEventListener('editor-template', handleEditorTemplate)
   window.removeEventListener('save-file', onSaveFile)

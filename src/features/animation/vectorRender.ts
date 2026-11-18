@@ -183,6 +183,10 @@ export function renderClipFrameAt(
   time: number,
   targetCanvas: HTMLCanvasElement,
   override?: KeyframeOverride & { keyframeId?: string },
+  /** 透明背景（应用视频合成用；默认 false 保持白底） */
+  transparentBackground = false,
+  /** 渲染模式覆盖（应用视频按视频自身设置渲染；默认跟随全局预览模式） */
+  style?: 'contour' | 'black' | 'color',
 ): void {
   const kfs = sortedKeyframes(clip)
   if (kfs.length === 0) return
@@ -192,7 +196,7 @@ export function renderClipFrameAt(
   const kf1 = kfs[Math.min(i + 1, kfs.length - 1)]
 
   if (kf0.id === kf1.id) {
-    renderKeyframeVector(char, kf0, targetCanvas, override && override.keyframeId === kf0.id ? override : undefined)
+    renderKeyframeVector(char, kf0, targetCanvas, override && override.keyframeId === kf0.id ? override : undefined, transparentBackground, style)
     return
   }
 
@@ -212,7 +216,7 @@ export function renderClipFrameAt(
     override && (override.keyframeId === kf0.id || override.keyframeId === kf1.id)
       ? override
       : undefined
-  drawSnapshotToCanvas(char, snapshot, targetCanvas, kfOverride, opacity)
+  drawSnapshotToCanvas(char, snapshot, targetCanvas, kfOverride, opacity, transparentBackground, style)
 }
 
 /** 渲染单个关键帧（静态预览） */
@@ -221,8 +225,10 @@ export function renderKeyframeVector(
   kf: IAnimationKeyframe,
   targetCanvas: HTMLCanvasElement,
   override?: KeyframeOverride,
+  transparentBackground = false,
+  style?: 'contour' | 'black' | 'color',
 ): void {
-  drawSnapshotToCanvas(char, kf, targetCanvas, override, kf.hidden ? 0 : 1)
+  drawSnapshotToCanvas(char, kf, targetCanvas, override, kf.hidden ? 0 : 1, transparentBackground, style)
 }
 
 function drawSnapshotToCanvas(
@@ -231,6 +237,8 @@ function drawSnapshotToCanvas(
   targetCanvas: HTMLCanvasElement,
   override: KeyframeOverride | undefined,
   opacity: number,
+  transparentBackground = false,
+  style?: 'contour' | 'black' | 'color',
 ): void {
   const session = createBakeClone(char)
   try {
@@ -246,7 +254,8 @@ function drawSnapshotToCanvas(
       const renderCanvas = renderCharacterLikeEditor(
         session.clone,
         visible,
-        fontRenderStyle.value as 'color' | 'black' | 'contour',
+        (style ?? fontRenderStyle.value) as 'color' | 'black' | 'contour',
+        transparentBackground,
       )
       const ctx = targetCanvas.getContext('2d')
       if (!ctx) return

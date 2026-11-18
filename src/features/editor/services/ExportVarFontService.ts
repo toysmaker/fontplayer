@@ -3,6 +3,7 @@
  */
 
 import * as R from 'ramda'
+import { unicodeToCode } from '@/utils/unicode'
 import type { IFile, ICharacterFileLite, IFontSettings, IConstant } from '@/core/types'
 import type { IContours } from '@/core/font/types'
 import { create, toArrayBuffer, type ICharacter } from '@/fontManager'
@@ -124,7 +125,7 @@ async function getVarFontContourRows(
       contours = contoursForCharacterFile(ch, file, fs, removeOverlap)
     }
     out.push({
-      unicode: parseInt(meta.character.unicode.replace(/^U\+/i, ''), 16),
+      unicode: unicodeToCode(meta.character.unicode),
       contours,
     })
     onAfterChar?.()
@@ -234,7 +235,7 @@ export async function buildExportVarFontBuffer(
         contours = contoursForCharacterFile(ch, file, fs, removeOverlap)
       }
       const { text, unicode } = meta.character
-      const uc = parseInt(unicode.replace(/^U\+/i, ''), 16)
+      const uc = unicodeToCode(unicode)
       fontCharacters.push({
         name: text,
         unicode: uc,

@@ -6,7 +6,10 @@
     "main",
     "character-script",
     "glyph-script",
-    "typesetting-preview"
+    "typesetting-preview",
+    "application-card",
+    "application-logo",
+    "application-avatar"
   ],
   "remote": {
     "urls": [

@@ -87,6 +87,12 @@ const menus = {
 			geometric_simplify: '几何简化',
 			pixelate: '像素化',
 		},
+		applications: {
+			applications: '应用',
+			card: '卡片、屏保与壁纸',
+			logo: 'Logo',
+			avatar: '头像',
+		},
 		test: {
 			test: "测试",
 			export_json: "导出为json工程",
@@ -182,6 +188,12 @@ const menus = {
 			melt: 'Melt',
 			geometric_simplify: 'Geometric Simplify',
 			pixelate: 'Pixelate',
+		},
+		applications: {
+			applications: 'Applications',
+			card: 'Cards, Screensavers & Wallpapers',
+			logo: 'Logo',
+			avatar: 'Avatar',
 		},
 		test: {
 			test: "Test",

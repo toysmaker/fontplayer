@@ -282,6 +282,7 @@ export class ProjectLoader {
         comp_glyphs: data.comp_glyphs || [],
         constants: constants,
         variants: data.file.variants,
+        applications: data.file.applications ?? { card: [], logo: [], avatar: [] },
       }
 
       // 再次让出主线程，确保文件对象创建后UI能够更新
@@ -379,6 +380,7 @@ export class ProjectLoader {
         comp_glyphs: data.comp_glyphs || [],
         constants: constants,
         variants: data.file.variants,
+        applications: data.file.applications ?? { card: [], logo: [], avatar: [] },
       }
 
       await this.yieldToMainThread()
@@ -576,6 +578,7 @@ export class ProjectLoader {
         comp_glyphs: data.comp_glyphs || [],
         constants: constants,
         variants: data.file.variants,
+        applications: data.file.applications ?? { card: [], logo: [], avatar: [] },
       }
 
       await this.yieldToMainThread()

@@ -47,7 +47,7 @@ export function useAnimationPlayback(opts: AnimationPlaybackOptions) {
     if (!canvas || !clip || !char || clip.keyframes.length === 0) return
     // 注意：播放/插值不使用 overrideRef（草稿只影响静态预览的选中关键帧；
     // 否则每帧都被选中帧草稿覆盖，插值失效、画面恒定）
-    renderClipFrameAt(char, clip, time, canvas)
+    renderClipFrameAt(char, clip, time, canvas, undefined, false, clip.renderStyle)
     currentTime.value = time
   }
 
@@ -56,7 +56,7 @@ export function useAnimationPlayback(opts: AnimationPlaybackOptions) {
     const canvas = canvasRef.value
     const char = charRef.value
     if (!canvas || !char) return
-    renderKeyframeVector(char, kf, canvas, overrideRef?.value ?? undefined)
+    renderKeyframeVector(char, kf, canvas, overrideRef?.value ?? undefined, false, clipRef.value?.renderStyle)
   }
 
   function clipDuration(): number {

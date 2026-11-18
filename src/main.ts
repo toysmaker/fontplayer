@@ -75,6 +75,7 @@ import {
 	faFileCode,
 	faCircleQuestion,
 	faQuestion,
+	faShapes,
 } from '@fortawesome/free-solid-svg-icons'
 
 // 按需导入图标 - 从 @fortawesome/free-regular-svg-icons
@@ -236,6 +237,7 @@ library.add(
 	faChevronDown,
 	faEllipsisVertical,
 	faTrash,
+  faShapes,
 )
 
 app.use(pinia)

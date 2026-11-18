@@ -12,6 +12,7 @@ import {
   type ExportFontMessageApi,
 } from '@/features/editor/services/ExportFontService'
 import { isTauri } from '@/utils/env'
+import { unicodeToCode } from '@/utils/unicode'
 
 type ProjectStore = ReturnType<typeof import('@/stores/project').useProjectStore>
 
@@ -75,7 +76,7 @@ function collectColorComponents(components: IComponent[]): IComponent[] {
   return result
 }
 
-function generateColorFontLayers(
+export function generateColorFontLayers(
   char: ICharacterFileLite,
   fs: IFontSettings
 ): NonNullable<ICharacter['layers']> {
@@ -202,7 +203,7 @@ export async function buildExportColorFontBuffer(
     const layers = usesColor ? generateColorFontLayers(ch, fs) : []
 
     const { text, unicode } = meta.character
-    const uc = parseInt(unicode, 16)
+    const uc = unicodeToCode(unicode)
 
     fontChars.push({
       name: text,

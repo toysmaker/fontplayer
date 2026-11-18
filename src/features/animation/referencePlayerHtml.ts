@@ -124,6 +124,8 @@ const LOTTIE_PLAYER_JS = `
   }
 `
 
+export { LOTTIE_PLAYER_JS }
+
 export function buildReferencePlayerHtml(data: Record<string, unknown>): string {
   const json = JSON.stringify(data)
   return `<!doctype html>

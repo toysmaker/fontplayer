@@ -16,19 +16,21 @@ const lastCallParams = new Map<string, any>()
  * @param fn 要包装的函数
  * @param key 唯一标识符，用于区分不同的函数调用
  * @param compareParams 可选，用于比较参数是否相同（如列表项的UUID）
+ * @param debounceTime 可选防抖时长（默认 300ms；连续快速操作如图层上下移动可传更短，避免吞掉连点）
  * @returns 包装后的函数
  */
 export function createDebouncedHandler<T extends (...args: any[]) => any>(
   fn: T,
   key: string,
-  compareParams?: (args: Parameters<T>) => any
+  compareParams?: (args: Parameters<T>) => any,
+  debounceTime: number = CLICK_DEBOUNCE_TIME
 ): T {
   return ((...args: Parameters<T>) => {
     const now = Date.now()
     const lastTime = lastCallTimes.get(key) || 0
-    
+
     // 如果距离上次调用时间太短，检查是否需要跳过
-    if (now - lastTime < CLICK_DEBOUNCE_TIME) {
+    if (now - lastTime < debounceTime) {
       // 如果提供了参数比较函数，检查参数是否相同
       if (compareParams) {
         const lastParams = lastCallParams.get(key)
@@ -42,13 +44,13 @@ export function createDebouncedHandler<T extends (...args: any[]) => any>(
         return
       }
     }
-    
+
     // 更新调用时间和参数
     lastCallTimes.set(key, now)
     if (compareParams) {
       lastCallParams.set(key, compareParams(args))
     }
-    
+
     // 执行原函数
     return fn(...args)
   }) as T

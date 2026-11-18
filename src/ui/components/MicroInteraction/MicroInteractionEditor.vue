@@ -53,7 +53,6 @@
 
       <div class="micro-center">
         <StateCanvas />
-        <PreviewPanel v-if="store.previewMode" />
       </div>
 
       <div class="micro-right">
@@ -61,6 +60,9 @@
       </div>
     </div>
   </div>
+
+  <!-- 预览独立模态框：固定大小、内容居中适配、hover/click 自动绑定 -->
+  <MicroPreviewModal />
 </template>
 
 <script setup lang="ts">
@@ -83,7 +85,7 @@ import SegmentList, { type SegmentItem } from './SegmentList.vue'
 import InputList from './InputList.vue'
 import StateCanvas from './StateCanvas.vue'
 import PropertiesPanel from './PropertiesPanel.vue'
-import PreviewPanel from './PreviewPanel.vue'
+import MicroPreviewModal from './MicroPreviewModal.vue'
 
 const { t } = useI18n()
 const message = useMessage()

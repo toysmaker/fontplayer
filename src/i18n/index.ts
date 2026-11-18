@@ -7,6 +7,7 @@ import { welcome } from './welcome'
 import { programming } from './programming'
 import { effects } from './effects'
 import { typesetting } from './typesetting'
+import { applications } from './applications'
 
 const messages = {
 	zh: {
@@ -17,6 +18,7 @@ const messages = {
 		programming: programming.zh,
 		effects: effects.zh,
 		typesetting: typesetting.zh,
+		applications: applications.zh,
 	},
 	en: {
 		menus: menus.en,
@@ -26,6 +28,7 @@ const messages = {
 		programming: programming.en,
 		effects: effects.en,
 		typesetting: typesetting.en,
+		applications: applications.en,
 	},
 }
 
