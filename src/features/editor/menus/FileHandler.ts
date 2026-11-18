@@ -1280,6 +1280,13 @@ export class FileHandler {
     if (character.selectedComponentsTree) {
       data.selectedComponentsTree = character.selectedComponentsTree
     }
+    // 动效与微交互：随工程保存/导出（JSON 安全），丢失会导致动效数据无法随工程携带
+    if (character.animations && character.animations.length > 0) {
+      data.animations = character.animations
+    }
+    if (character.microInteractions && character.microInteractions.length > 0) {
+      data.microInteractions = character.microInteractions
+    }
 
     // 注意：不保存 contourRef/previewRef，这些是 IndexedDB 的引用
     // 保存时，工程文件应该只包含可序列化的数据，不包含 IndexedDB 引用
