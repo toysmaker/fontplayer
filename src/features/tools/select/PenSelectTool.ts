@@ -629,7 +629,7 @@ export class PenSelectTool extends BaseTool {
       if (!foundHover) {
         const pathHit = this.hitTestPathForComponent(selectedComponent, _x, _y, d)
         this.canvas.style.cursor = pathHit ? 'copy' : ''
-      } else if (this.canvas.style.cursor === 'copy') {
+      } else if (this.canvas.style.cursor !== '') {
         this.canvas.style.cursor = ''
       }
 
@@ -1291,7 +1291,7 @@ export class PenSelectTool extends BaseTool {
       if (!this.hoverPenPoint) {
         const pathHit = this.hitTestPathForSkeleton(skCtx, _x, _y, d)
         this.canvas.style.cursor = pathHit ? 'copy' : ''
-      } else if (this.canvas.style.cursor === 'copy') {
+      } else if (this.canvas.style.cursor !== '') {
         this.canvas.style.cursor = ''
       }
 
