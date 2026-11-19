@@ -29,6 +29,23 @@ export function generateTypesettingKeys(fileUUID: string) {
     file: `typesetting_file_${fileUUID}`,
     // v2：字库构建修复（脚本字形注册）后旧缓存作废，强制重建一次
     font: `typesetting_font_v2_${fileUUID}`,
+    // 会话级内容缓存：仅当前工程会话内续编辑用；重新打开工程时清除
+    content: `typesetting_content_${fileUUID}`,
+  }
+}
+
+/**
+ * 清除排版预览的会话级缓存（重新打开工程时调用）：
+ * 字号/颜色/字符等设置与内容永不写入工程，重开工程后不恢复，
+ * 但当前工程会话内再次进入排版预览可继续上次的样式。
+ */
+export async function clearTypesettingContentCache(fileUUID: string): Promise<void> {
+  try {
+    await indexedDBManager.remove(generateTypesettingKeys(fileUUID).content)
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[typesetting] clear content cache failed:', err)
+    }
   }
 }
 

@@ -174,6 +174,9 @@ const editor = useEditor({
       return false
     },
   },
+  onUpdate: () => {
+    scheduleContentSave()
+  },
   onSelectionUpdate: ({ editor }) => {
     const { from, to } = editor.state.selection
     if (from !== to) {
@@ -426,10 +429,58 @@ const getDefaultHtml = async (): Promise<string> => {
 const initContent = async () => {
   const ed = editor.value
   if (!ed || ed.isDestroyed) return
-  const html = await getDefaultHtml()
+  let html = await getDefaultHtml()
+  // 会话级续编辑：当前工程会话内再次进入时恢复上次的内容与样式
+  // （重开工程时该缓存已被清除，恢复为默认）
+  try {
+    const cached = await indexedDBManager.get<{
+      html: string
+      baseFontSize: number
+      defaultColor: string
+      globalMode: boolean
+    }>(keys().content)
+    if (cached) {
+      html = cached.html
+      baseFontSize.value = cached.baseFontSize ?? 64
+      defaultColor.value = cached.defaultColor ?? '#000000'
+      globalMode.value = cached.globalMode ?? false
+    }
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[TypesettingPreview] restore content cache failed:', err)
+    }
+  }
   snapshotFile.value = null
   ed.commands.setContent(html)
 }
+
+// ---- 会话级内容缓存（不写工程、不跨工程会话恢复） ----
+let contentSaveTimer: number | null = null
+
+function saveContentCacheNow() {
+  const ed = editor.value
+  if (!ed || ed.isDestroyed) return
+  const payload = {
+    html: ed.getHTML(),
+    baseFontSize: baseFontSize.value,
+    defaultColor: defaultColor.value,
+    globalMode: globalMode.value,
+  }
+  indexedDBManager.set(keys().content, payload).catch((err) => {
+    if (import.meta.env.DEV) {
+      console.warn('[TypesettingPreview] save content cache failed:', err)
+    }
+  })
+}
+
+function scheduleContentSave() {
+  if (contentSaveTimer !== null) clearTimeout(contentSaveTimer)
+  contentSaveTimer = window.setTimeout(saveContentCacheNow, 600)
+}
+
+watch([baseFontSize, defaultColor, globalMode], () => {
+  scheduleContentSave()
+})
 
 // 点击内容区空白处时聚焦编辑器（内容为空时编辑区塌缩，
 // 若不自动聚焦，用户点击空白处键入的文字进不了编辑器）
@@ -462,6 +513,15 @@ const handleWindowError = (e: ErrorEvent) => {
 const handleRejection = (e: PromiseRejectionEvent) => {
   if (isDev) devErrors.value.push(`[promise] ${String(e.reason).slice(0, 300)}`)
 }
+
+// 卸载时立即保存内容缓存
+onUnmounted(() => {
+  if (contentSaveTimer !== null) {
+    clearTimeout(contentSaveTimer)
+    contentSaveTimer = null
+  }
+  saveContentCacheNow()
+})
 
 // ---- 字体重建 ----
 const rebuildFont = async () => {

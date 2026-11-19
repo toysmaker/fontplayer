@@ -14,6 +14,14 @@ export interface IRenderOptions {
   fillColor?: string
   /** 填充颜色数组（每个轮廓一个颜色） */
   fillColors?: string[]
+  /**
+   * 填充单元数组（与 contours 索引对齐）。
+   * 同一单元内颜色相同的轮廓合并到一个 path 中统一 fill('nonzero')，
+   * 才能利用非零环绕规则产生镂空（与编辑界面「同一组件内子轮廓合并后一次填充」一致）；
+   * 不同单元的轮廓即使同色也独立填充，避免把无关组件误合并出洞。
+   * 未提供时退化为按颜色分组（整个预览视为单一组件上下文，如字形列表）。
+   */
+  fillUnits?: string[]
   /** 背景颜色 */
   backgroundColor?: string
   /** 预览样式：'black' | 'color' */
@@ -28,6 +36,12 @@ export interface IRenderOptions {
    * 不参与 pen/polygon 的非零环绕规则计算。
    */
   solidContours?: IContours
+  /**
+   * 实心轮廓各自的填充颜色（与 solidContours 索引对齐）。
+   * 彩色模式下使用，与编辑界面一致（矩形/椭圆按自身 fillColor 着色）；
+   * 缺省时回退到 fillColor。
+   */
+  solidFillColors?: string[]
 }
 
 /**
@@ -56,6 +70,8 @@ export class RenderEngine {
       scale = 1,
       offset = { x: 0, y: 0 },
       solidContours = [],
+      solidFillColors = [],
+      fillUnits = [],
     } = options
 
     // 清空并填充背景
@@ -90,14 +106,34 @@ export class RenderEngine {
     }
 
     if (previewStyle === 'color') {
-      // 彩色模式：每个轮廓单独填充（nonzero）
+      // 彩色模式：按「填充单元 + 颜色」分组，同一单元内同色的轮廓合并到一个 path 中
+      // 统一 fill('nonzero')。与编辑界面（CustomGlyph.render 彩色分支）一致：
+      // 多个子路径在同一 beginPath 内才能利用非零环绕规则产生镂空效果；
+      // 逐个轮廓单独填充会把镂空轮廓填实。不同单元的轮廓即使同色也独立填充，
+      // 避免把无法确认复用关系的组件误合并出洞。
+      // 未提供 fillUnits 时退化为按颜色分组（整个预览视为单一组件上下文，如字形列表）。
+      const groups: Array<{ color: string; contours: IContours }> = []
+      const groupIndexByKey = new Map<string, number>()
       for (let i = 0; i < contours.length; i++) {
         const contour = contours[i]
         if (!contour || !contour.length) continue
+        const color = fillColors[i] || fillColor
+        const groupKey = `${fillUnits[i] || ''}|${color}`
+        let groupIndex = groupIndexByKey.get(groupKey)
+        if (groupIndex === undefined) {
+          groupIndex = groups.length
+          groupIndexByKey.set(groupKey, groupIndex)
+          groups.push({ color, contours: [] })
+        }
+        groups[groupIndex].contours.push(contour)
+      }
+      for (const { color, contours: groupContours } of groups) {
         ctx.beginPath()
-        drawContourPath(contour)
-        ctx.closePath()
-        ctx.fillStyle = fillColors[i] || fillColor
+        for (const contour of groupContours) {
+          drawContourPath(contour)
+          ctx.closePath()
+        }
+        ctx.fillStyle = color
         ctx.fill('nonzero')
       }
     } else {
@@ -114,12 +150,14 @@ export class RenderEngine {
     }
 
     // Pass 2 - 实心轮廓（矩形/椭圆）单独绘制，始终实心填充，最后绘制以覆盖在上方
-    for (const contour of solidContours) {
+    for (let i = 0; i < solidContours.length; i++) {
+      const contour = solidContours[i]
       if (!contour || !contour.length) continue
       ctx.beginPath()
       drawContourPath(contour)
       ctx.closePath()
-      ctx.fillStyle = fillColor
+      // 彩色模式下按各实心轮廓自身的 fillColor 着色（与编辑界面一致）
+      ctx.fillStyle = (previewStyle === 'color' && solidFillColors[i]) || fillColor
       ctx.fill('nonzero')
     }
   }

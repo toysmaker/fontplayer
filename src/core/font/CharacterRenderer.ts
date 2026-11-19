@@ -12,12 +12,18 @@ import { useProjectStore } from '@/stores/project'
 import type { IContours } from './types'
 
 /**
+ * 渲染算法版本号：渲染逻辑（如彩色模式填充分组）变化时 +1，
+ * 使旧的像素缓存（CanvasManager）与 IndexedDB 预览缓存失效并重新渲染
+ */
+const RENDERER_VERSION = 2
+
+/**
  * 计算字符内容的版本号（用于判断是否需要重新渲染）
  */
 function getContentVersion(characterFile: ICharacterFileLite): number {
   // 使用字符的UUID和文本内容作为版本号
   // 如果字符数据变化，版本号会变化
-  let hash = characterFile.uuid.charCodeAt(0)
+  let hash = RENDERER_VERSION + characterFile.uuid.charCodeAt(0)
   if (characterFile.character?.text) {
     hash += characterFile.character.text.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
   }
@@ -68,14 +74,18 @@ export class CharacterRenderer {
       let solidContours: IContours = []
       let fillColorsOut: string[] = []
       let solidFlagsOut: boolean[] = []
+      let solidFillColorsOut: string[] = []
+      let fillUnitsOut: string[] = []
+      // 旧缓存缺少 fillUnits（修复镂空前持久化）时需重新计算并覆盖缓存
+      let shouldRepersist = false
 
       if (characterFile.previewRef) {
         try {
-          const stored = await indexedDBManager.get<IContours | { nonzero: IContours; solid: IContours; fillColors?: string[] }>(characterFile.previewRef)
+          const stored = await indexedDBManager.get<IContours | { nonzero: IContours; solid: IContours; fillColors?: string[]; solidFillColors?: string[]; fillUnits?: string[] }>(characterFile.previewRef)
           if (stored) {
             if ('nonzero' in (stored as any)) {
               // 新格式
-              const grouped = stored as { nonzero: IContours; solid: IContours; fillColors?: string[] }
+              const grouped = stored as { nonzero: IContours; solid: IContours; fillColors?: string[]; solidFillColors?: string[]; fillUnits?: string[] }
               nonzeroContours = grouped.nonzero
               solidContours = grouped.solid || []
               // 从缓存恢复 fillColors（仅彩色模式需要）
@@ -84,10 +94,27 @@ export class CharacterRenderer {
                 // 重建 solidFlagsOut：fillColors 长度即 nonzero 数量
                 solidFlagsOut = Array.from({ length: fillColorsOut.length }, () => false)
               }
+              // 从缓存恢复实心轮廓颜色（彩色模式下与编辑界面一致着色）
+              solidFillColorsOut = grouped.solidFillColors || []
+              // 从缓存恢复填充单元；旧缓存缺少该字段时强制重新计算（否则无法还原组件级合并填充）
+              if (Array.isArray(grouped.fillUnits) && grouped.fillUnits.length === (nonzeroContours?.length ?? 0)) {
+                fillUnitsOut = grouped.fillUnits
+              } else {
+                if (import.meta.env.DEV) {
+                  console.log(`[CharacterRenderer] Stale preview cache (no fillUnits) for ${characterFile.uuid}, recomputing`)
+                }
+                nonzeroContours = null
+                solidContours = []
+                fillColorsOut = []
+                solidFlagsOut = []
+                solidFillColorsOut = []
+                shouldRepersist = true
+              }
             } else {
-              // 旧格式，全部视为 nonzero
-              nonzeroContours = stored as IContours
+              // 旧格式：全部视为 nonzero 且无填充单元信息，强制重新计算并覆盖缓存
+              nonzeroContours = null
               solidContours = []
+              shouldRepersist = true
             }
             if (import.meta.env.DEV) {
               console.log(`[CharacterRenderer] Loaded preview from IndexedDB for ${characterFile.uuid}`)
@@ -133,6 +160,7 @@ export class CharacterRenderer {
 
         solidFlagsOut = []
         fillColorsOut = []
+        fillUnitsOut = []
         const allContours = ContourConverter.componentsToContours(
           components,
           {
@@ -145,22 +173,28 @@ export class CharacterRenderer {
           { x: 0, y: 0 },
           solidFlagsOut,
           fillColorsOut,
+          fillUnitsOut,
         )
 
         nonzeroContours = allContours.filter((_, i) => !solidFlagsOut[i])
         solidContours = allContours.filter((_, i) => solidFlagsOut[i])
+        // 实心轮廓（矩形/椭圆）的颜色与 solidContours 索引对齐，供彩色模式着色
+        solidFillColorsOut = fillColorsOut.filter((_, i) => solidFlagsOut[i])
+        // 填充单元只对非实心轮廓有意义，过滤后与 nonzeroContours 索引对齐
+        fillUnitsOut = fillUnitsOut.filter((_, i) => !solidFlagsOut[i])
 
         // 持久化预览：必须 await，成功后才写入 previewRef，避免「未落库却持 ref」的竞态
         // 与 GlyphRenderer 一致：先 JSON 深拷贝为纯数据。组件在 Vue 响应式树中时，
         // contour 数组可能是 Proxy，IndexedDB structured clone 会报 DataCloneError。
-        // 同时保存 fillColors 以便彩色模式从缓存加载时也能正确着色
-        if (allContours.length > 0 && !characterFile.previewRef) {
-          const previewKey = IndexedDBManager.generatePreviewKey(characterFile.uuid)
+        // 同时保存 fillColors / solidFillColors / fillUnits 以便彩色模式从缓存加载时也能正确着色与合并填充
+        if (allContours.length > 0 && (!characterFile.previewRef || shouldRepersist)) {
+          const previewKey = characterFile.previewRef || IndexedDBManager.generatePreviewKey(characterFile.uuid)
           try {
             const previewFillColors = fillColorsOut.filter((_, i) => !solidFlagsOut[i])
+            const previewSolidFillColors = fillColorsOut.filter((_, i) => solidFlagsOut[i])
             const payload = JSON.parse(
-              JSON.stringify({ nonzero: nonzeroContours, solid: solidContours, fillColors: previewFillColors }),
-            ) as { nonzero: IContours; solid: IContours; fillColors?: string[] }
+              JSON.stringify({ nonzero: nonzeroContours, solid: solidContours, fillColors: previewFillColors, solidFillColors: previewSolidFillColors, fillUnits: fillUnitsOut }),
+            ) as { nonzero: IContours; solid: IContours; fillColors?: string[]; solidFillColors?: string[]; fillUnits?: string[] }
             await indexedDBManager.set(previewKey, payload)
             characterFile.previewRef = previewKey
             if (import.meta.env.DEV) {
@@ -218,10 +252,12 @@ export class CharacterRenderer {
       const previewScale = canvas.width / 100
       RenderEngine.renderPreview(canvas, nonzeroContours || [], {
         fillColors,
+        fillUnits: fillUnitsOut,
         previewStyle,
         scale: previewScale,
         offset: { x: 0, y: 0 },
         solidContours,
+        solidFillColors: solidFillColorsOut,
       })
       
       // 标记 Canvas 已渲染（用于检测 Canvas 复用）

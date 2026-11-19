@@ -16,6 +16,8 @@ vi.mock('@/core/instance/InstanceManager', () => ({
     acquireTemporaryInstance: vi.fn((key, factory) => factory()),
     releaseTemporaryInstance: vi.fn(),
     getOrCreateGlyphInstance: vi.fn((glyph, factory) => factory()),
+    pinTemporaryFromLRUEviction: vi.fn(),
+    unpinTemporaryFromLRUEviction: vi.fn(),
   },
 }))
 

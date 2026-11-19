@@ -2637,14 +2637,18 @@ const getSegmentOnCurveByPercentage = (curves, startPercent, endPercent) => {
 
 // 噪声与 FBM（详见 FPUtils/Noise.ts）
 
+// 注意：以下条目与 FPUtils 存在循环依赖（PenComponent ↔ FPUtils、
+// Character → CustomGlyph → … → FPUtils 等），必须用 getter 延迟取值。
+// 若在对象字面量中直接引用，当模块从循环的另一侧首次加载时，
+// 绑定尚在 TDZ（Cannot access 'X' before initialization），应用启动即崩溃。
 const FP = {
 	EllipseComponent,
-	PenComponent,
+	get PenComponent() { return PenComponent },
 	PolygonComponent,
 	RectangleComponent,
-	Skeleton,
-	Joint,
-	Character,
+	get Skeleton() { return Skeleton },
+	get Joint() { return Joint },
+	get Character() { return Character },
 	fitCurve,
 	getLineContours,
 	getCurveContours,
@@ -2681,14 +2685,15 @@ const FP = {
 	getMiddlePoint,
 	degreeToRadian,
 	radianToDegree,
-	interpolateFromKeyframes: PenComponentOps.interpolateFromKeyframes,
-	rotatePenComponent: PenComponentOps.rotatePenComponent,
-	flipPenComponent: PenComponentOps.flipPenComponent,
-	rotateSkeleton: PenComponentOps.rotateSkeleton,
-	subtractOp: PenComponentOps.subtractOp,
-	subtractOpAll: PenComponentOps.subtractOpAll,
-	intersectOp: PenComponentOps.intersectOp,
-	unionOp: PenComponentOps.unionOp,
+	// PenComponentOps 依赖 PenComponent，同属循环依赖，同样需要 getter 延迟取值
+	get interpolateFromKeyframes() { return PenComponentOps.interpolateFromKeyframes },
+	get rotatePenComponent() { return PenComponentOps.rotatePenComponent },
+	get flipPenComponent() { return PenComponentOps.flipPenComponent },
+	get rotateSkeleton() { return PenComponentOps.rotateSkeleton },
+	get subtractOp() { return PenComponentOps.subtractOp },
+	get subtractOpAll() { return PenComponentOps.subtractOpAll },
+	get intersectOp() { return PenComponentOps.intersectOp },
+	get unionOp() { return PenComponentOps.unionOp },
 	SeededRandom,
 	seededRandom,
 	valueNoise,

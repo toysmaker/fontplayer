@@ -174,6 +174,39 @@ describe('ContourConverter', () => {
       })
     })
 
+    describe('fillUnits', () => {
+      it('should assign a distinct fill unit per top-level component', async () => {
+        const comp1 = createMockPenComponent({ uuid: 'comp-1', usedInCharacter: true })
+        const comp2 = createMockPenComponent({ uuid: 'comp-2', usedInCharacter: true })
+
+        const solidFlags: boolean[] = []
+        const fillColors: string[] = []
+        const fillUnits: string[] = []
+        const contours = ContourConverter.componentsToContours(
+          [comp1, comp2],
+          defaultOptions,
+          { x: 0, y: 0 },
+          solidFlags,
+          fillColors,
+          fillUnits,
+        )
+
+        expect(contours.length).toBe(2)
+        expect(fillUnits).toEqual(['comp-comp-1', 'comp-comp-2'])
+      })
+
+      it('should not push fillUnits when output array is not provided', async () => {
+        const comp = createMockPenComponent({ uuid: 'comp-1', usedInCharacter: true })
+
+        const contours = ContourConverter.componentsToContours(
+          [comp],
+          defaultOptions,
+        )
+
+        expect(contours.length).toBeGreaterThan(0)
+      })
+    })
+
     describe('polygon component', () => {
       it('should convert polygon component to contour', async () => {
         const component = createMockPolygonComponent({

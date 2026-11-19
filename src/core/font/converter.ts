@@ -229,6 +229,7 @@ export class ContourConverter {
     offset: { x: number; y: number } = { x: 0, y: 0 },
     solidFlagsOut?: boolean[],
     fillColorsOut?: string[],
+    fillUnitsOut?: string[],
   ): IContours {
     const contours: IContours = []
     const { preview = true, forceUpdate = false, grid, useSkeletonGrid = false } = options
@@ -345,6 +346,7 @@ export class ContourConverter {
           }
           solidFlagsOut?.push(false)
           fillColorsOut?.push(getCompFillColor(component));
+          fillUnitsOut?.push(`comp-${component.uuid}`)
           break
         }
 
@@ -387,6 +389,7 @@ export class ContourConverter {
           }
           solidFlagsOut?.push(false)
           fillColorsOut?.push(getCompFillColor(component));
+          fillUnitsOut?.push(`comp-${component.uuid}`)
           break
         }
 
@@ -430,6 +433,7 @@ export class ContourConverter {
           }
           solidFlagsOut?.push(true)
           fillColorsOut?.push(getCompFillColor(component));
+          fillUnitsOut?.push(`comp-${component.uuid}`)
           break
         }
 
@@ -479,6 +483,7 @@ export class ContourConverter {
           }
           solidFlagsOut?.push(true)
           fillColorsOut?.push(getCompFillColor(component));
+          fillUnitsOut?.push(`comp-${component.uuid}`)
           break
         }
 
@@ -504,12 +509,14 @@ export class ContourConverter {
               contours.push(scriptComp.contour as IContour)
               solidFlagsOut?.push(false)
               fillColorsOut?.push(getCompFillColor(component));
+              fillUnitsOut?.push(`comp-${component.uuid}`)
             }
           } else {
             if (scriptComp.preview && scriptComp.preview.length > 0) {
               contours.push(scriptComp.preview as IContour)
               solidFlagsOut?.push(false)
               fillColorsOut?.push(getCompFillColor(component));
+              fillUnitsOut?.push(`comp-${component.uuid}`)
             }
           }
           break
@@ -533,12 +540,14 @@ export class ContourConverter {
               contours.push(scriptComp.contour as IContour)
               solidFlagsOut?.push(false)
               fillColorsOut?.push(getCompFillColor(component));
+              fillUnitsOut?.push(`comp-${component.uuid}`)
             }
           } else {
             if (scriptComp.preview && scriptComp.preview.length > 0) {
               contours.push(scriptComp.preview as IContour)
               solidFlagsOut?.push(false)
               fillColorsOut?.push(getCompFillColor(component));
+              fillUnitsOut?.push(`comp-${component.uuid}`)
             }
           }
           break
@@ -562,12 +571,14 @@ export class ContourConverter {
               contours.push(scriptComp.contour as IContour)
               solidFlagsOut?.push(true)
               fillColorsOut?.push(getCompFillColor(component));
+              fillUnitsOut?.push(`comp-${component.uuid}`)
             }
           } else {
             if (scriptComp.preview && scriptComp.preview.length > 0) {
               contours.push(scriptComp.preview as IContour)
               solidFlagsOut?.push(true)
               fillColorsOut?.push(getCompFillColor(component));
+              fillUnitsOut?.push(`comp-${component.uuid}`)
             }
           }
           break
@@ -591,12 +602,14 @@ export class ContourConverter {
               contours.push(scriptComp.contour as IContour)
               solidFlagsOut?.push(true)
               fillColorsOut?.push(getCompFillColor(component));
+              fillUnitsOut?.push(`comp-${component.uuid}`)
             }
           } else {
             if (scriptComp.preview && scriptComp.preview.length > 0) {
               contours.push(scriptComp.preview as IContour)
               solidFlagsOut?.push(true)
               fillColorsOut?.push(getCompFillColor(component));
+              fillUnitsOut?.push(`comp-${component.uuid}`)
             }
           }
           break
@@ -670,6 +683,7 @@ export class ContourConverter {
 
             const subSolidFlags: boolean[] | undefined = solidFlagsOut ? [] : undefined
             const subFillColors: string[] | undefined = fillColorsOut ? [] : undefined
+            const subFillUnits: string[] | undefined = fillUnitsOut ? [] : undefined
             const childOptions = { ...options, forceUpdate: true }
 
             const useSkeleton =
@@ -696,6 +710,7 @@ export class ContourConverter {
                 { x: 0, y: 0 },
                 subSolidFlags,
                 subFillColors,
+                subFillUnits,
               )
               contours.push(...subContours)
               if (subSolidFlags && solidFlagsOut) solidFlagsOut.push(...subSolidFlags)
@@ -709,6 +724,17 @@ export class ContourConverter {
               }
               fillColorsOut.push(...subFillColors)
             }
+              // 继承父色的子轮廓归入父 glyph 的填充单元：与编辑界面一致，
+              // 同一组件内同色子轮廓合并为一次 fill('nonzero')，反方向轮廓形成镂空
+              if (subFillUnits && fillUnitsOut) {
+                const _parentFill = getCompFillColor(component)
+                for (let _ui = 0; _ui < subFillUnits.length; _ui++) {
+                  if (subFillColors && subFillColors[_ui] === _parentFill) {
+                    subFillUnits[_ui] = `glyph-${component.uuid}`
+                  }
+                  fillUnitsOut.push(subFillUnits[_ui])
+                }
+              }
             } else {
               const childList = (glyphInstance?.components ?? []) as IComponent[]
               if (childList.length > 0) {
@@ -718,6 +744,7 @@ export class ContourConverter {
                   childOffset,
                   subSolidFlags,
                   subFillColors,
+                  subFillUnits,
                 )
                 contours.push(...subContours)
                 if (subSolidFlags && solidFlagsOut) solidFlagsOut.push(...subSolidFlags)
@@ -731,6 +758,17 @@ export class ContourConverter {
               }
               fillColorsOut.push(...subFillColors)
             }
+                // 继承父色的子轮廓归入父 glyph 的填充单元：与编辑界面一致，
+                // 同一组件内同色子轮廓合并为一次 fill('nonzero')，反方向轮廓形成镂空
+                if (subFillUnits && fillUnitsOut) {
+                  const _parentFill = getCompFillColor(component)
+                  for (let _ui = 0; _ui < subFillUnits.length; _ui++) {
+                    if (subFillColors && subFillColors[_ui] === _parentFill) {
+                      subFillUnits[_ui] = `glyph-${component.uuid}`
+                    }
+                    fillUnitsOut.push(subFillUnits[_ui])
+                  }
+                }
               }
             }
 
@@ -741,12 +779,14 @@ export class ContourConverter {
             if (glyphValue.components && glyphValue.components.length > 0) {
               const fb: boolean[] | undefined = solidFlagsOut ? [] : undefined
               const fc: string[] | undefined = fillColorsOut ? [] : undefined
+              const fu: string[] | undefined = fillUnitsOut ? [] : undefined
               const subContours = this.componentsToContours(
                 glyphValue.components,
                 { ...options, forceUpdate: true },
                 childOffset,
                 fb,
                 fc,
+                fu,
               )
               contours.push(...subContours)
               if (fb && solidFlagsOut) solidFlagsOut.push(...fb)
@@ -759,6 +799,16 @@ export class ContourConverter {
               }
               fillColorsOut.push(...fc)
             }
+              // 继承父色的子轮廓归入父 glyph 的填充单元（同色子轮廓一次填充以保留镂空）
+              if (fu && fillUnitsOut) {
+                const _parentFill2 = getCompFillColor(component)
+                for (let _ui2 = 0; _ui2 < fu.length; _ui2++) {
+                  if (fc && fc[_ui2] === _parentFill2) {
+                    fu[_ui2] = `glyph-${component.uuid}`
+                  }
+                  fillUnitsOut.push(fu[_ui2])
+                }
+              }
             }
           }
           break
@@ -771,6 +821,7 @@ export class ContourConverter {
           contours.push(emptyContour)
           solidFlagsOut?.push(false)
           fillColorsOut?.push(getCompFillColor(component));
+          fillUnitsOut?.push(`comp-${component.uuid}`)
           break
         }
       }

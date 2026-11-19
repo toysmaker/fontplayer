@@ -35,15 +35,9 @@
         <font-awesome-icon :icon="['fas', 'trash']" />
       </span>
     </span>
-    <TextInputDialog
+    <CopyCharacterDialog
       v-model:show="showCopyDialog"
-      :title="'复制字符'"
-      :label="'字符文本'"
-      :initial-value="character.character.text + ' (副本)'"
-      placeholder="请输入单个汉字"
-      :maxlength="1"
-      :validator="validateCharacterCopy"
-      @confirm="onCopyConfirm"
+      :character="character"
     />
     <TextInputDialog
       v-model:show="showRenameDialog"
@@ -60,16 +54,15 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import type { ICharacterFileLite, ICharacterFileMetadata } from '@/core/types'
+import type { ICharacterFileLite } from '@/core/types'
 import { CharacterRenderer } from '@/core/font/CharacterRenderer'
 import { useProjectStore } from '@/stores/project'
 import { useCharacterStore } from '@/stores/character'
 import { CanvasManager } from '@/core/canvas/CanvasManager'
 import { useDialog, useMessage } from 'naive-ui'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
-import { genUUID } from '@/utils/uuid'
-import * as R from 'ramda'
 import TextInputDialog from '@/ui/dialogs/TextInputDialog.vue'
+import CopyCharacterDialog from '@/ui/dialogs/CopyCharacterDialog.vue'
 
 // 标记是否已初始化（避免重复渲染）
 const isInitialized = ref(false)
@@ -194,18 +187,6 @@ const validateSingleChar = (val: string): string | null => {
   return null
 }
 
-const validateCharacterCopy = (val: string): string | null => {
-  const err = validateSingleChar(val)
-  if (err) return err
-
-  const unicodeLabel = toUnicodeString(val)
-  const file = projectStore.selectedFile
-  if (file?.characterList?.some(m => m.character?.unicode === unicodeLabel)) {
-    return '该字符已存在'
-  }
-  return null
-}
-
 const validateCharacterRename = (val: string): string | null => {
   const err = validateSingleChar(val)
   if (err) return err
@@ -218,38 +199,6 @@ const validateCharacterRename = (val: string): string | null => {
     return '该字符已存在'
   }
   return null
-}
-
-const onCopyConfirm = async (text: string) => {
-  const fileUUID = projectStore.selectedFile?.uuid
-  if (!fileUUID) return
-
-  const fullChar = await characterDataManager.loadCharacter(fileUUID, props.character.uuid)
-  if (!fullChar) {
-    message.warning('无法加载字符数据')
-    return
-  }
-
-  const newChar = R.clone(fullChar) as ICharacterFileLite
-  newChar.uuid = genUUID()
-  newChar.character = {
-    ...newChar.character,
-    text,
-    unicode: toUnicodeString(text),
-  }
-  newChar.previewRef = undefined
-  newChar.contourRef = undefined
-
-  await characterDataManager.updateCharacter(fileUUID, newChar)
-
-  const metadata: ICharacterFileMetadata = {
-    uuid: newChar.uuid,
-    type: newChar.type,
-    character: newChar.character,
-  }
-  projectStore.selectedFile!.characterList.push(metadata)
-
-  message.success('字符已复制')
 }
 
 const onRenameConfirm = async (text: string) => {

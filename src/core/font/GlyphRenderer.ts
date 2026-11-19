@@ -71,10 +71,16 @@ function summarizeGlyphInstanceForSel(
 }
 
 /**
+ * 渲染算法版本号：渲染逻辑（如彩色模式填充分组）变化时 +1，
+ * 使旧的像素缓存（CanvasManager）与 IndexedDB 预览缓存失效并重新渲染
+ */
+const RENDERER_VERSION = 2
+
+/**
  * 计算字形内容的版本号（用于判断是否需要重新渲染）
  */
 function getContentVersion(glyph: ICustomGlyph): number {
-  let hash = glyph.uuid.charCodeAt(0)
+  let hash = RENDERER_VERSION + glyph.uuid.charCodeAt(0)
   if (glyph.name) {
     hash += glyph.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
   }

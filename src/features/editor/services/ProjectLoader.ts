@@ -14,6 +14,7 @@ import type {
 import { indexedDBManager, IndexedDBManager } from '@/core/storage/IndexedDBManager'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import { useProjectStore } from '@/stores/project'
+import { clearTypesettingContentCache } from '@/features/typesettingPreview/typesettingPreviewBridge'
 import { projectMigrator, ProjectMigrator } from './ProjectMigrator'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
@@ -298,6 +299,8 @@ export class ProjectLoader {
       await this.yieldToMainThread()
       store.loading = false
 
+      // 重开工程：清除排版预览的会话级内容缓存（字号/颜色/字符设置不跨会话恢复）
+      void clearTypesettingContentCache(file.uuid)
       return file
     } catch (error) {
       const store = this.projectStore
@@ -392,6 +395,8 @@ export class ProjectLoader {
       await this.yieldToMainThread()
       store.loading = false
 
+      // 重开工程：清除排版预览的会话级内容缓存（字号/颜色/字符设置不跨会话恢复）
+      void clearTypesettingContentCache(file.uuid)
       return file
     } catch (error) {
       const store = this.projectStore
@@ -590,6 +595,8 @@ export class ProjectLoader {
       await this.yieldToMainThread()
       store.loading = false
 
+      // 重开工程：清除排版预览的会话级内容缓存（字号/颜色/字符设置不跨会话恢复）
+      void clearTypesettingContentCache(file.uuid)
       return file
     } catch (error) {
       const store = this.projectStore
