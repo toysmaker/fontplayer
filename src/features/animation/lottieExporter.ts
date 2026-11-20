@@ -11,19 +11,52 @@
  *   提取全部组件轮廓后立即释放全部临时实例，不缓存任何轮廓/SDF
  */
 
-import type { IAnimationClip, ICharacterFileLite, ICustomGlyph, IGlyphComponent } from '@/core/types'
+import type { IAnimationClip, ICharacterFileLite, IComponent, ICustomGlyph, IGlyphComponent } from '@/core/types'
 import type { IContour } from '@/core/font/types'
 import { PathType } from '@/core/font/types'
 import { ContourConverter } from '@/core/font/converter'
 import { hexToRgb } from './sdf'
+
+/** 解析组件填充色 → [r, g, b, a]（支持 #rgb/#rrggbb/#rrggbbaa 与 rgba()/rgb()；透明色不再回退黑色） */
+function parseColorToRgba(color: string): [number, number, number, number] {
+  const s = (color || '#000').trim()
+  if (s.startsWith('#')) {
+    const h = s.slice(1)
+    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
+    if (full.length === 6) {
+      const num = parseInt(full, 16)
+      if (!Number.isNaN(num)) return [(num >> 16) & 0xff, (num >> 8) & 0xff, num & 0xff, 255]
+    }
+    if (full.length === 8) {
+      const num = parseInt(full, 16)
+      if (!Number.isNaN(num)) return [(num >> 24) & 0xff, (num >> 16) & 0xff, (num >> 8) & 0xff, num & 0xff]
+    }
+    return [0, 0, 0, 255]
+  }
+  const m = s.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/)
+  if (m) {
+    return [
+      parseInt(m[1]),
+      parseInt(m[2]),
+      parseInt(m[3]),
+      Math.round((m[4] !== undefined ? parseFloat(m[4]) : 1) * 255),
+    ]
+  }
+  return [0, 0, 0, 255]
+}
 import { useProjectStore } from '@/stores/project'
+import { executeGlyphScript } from '@/core/script/ScriptExecutor'
+import { instanceManager } from '@/core/instance'
+import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { fontRenderStyle } from '@/core/script/globals'
 import {
   applyKeyframeParamsToCharacter,
   characterGlyphComponents,
+  characterOrderedComponents,
   characterLayoutGrid,
   componentFillColor,
   createBakeClone,
+  executeAllGlyphScriptsOnClone,
   withKeyframeConstantsMap,
   type SdfMetrics,
 } from './render'
@@ -85,6 +118,8 @@ function opacityKeyframes(
   const f = (t: number) => Math.round((t - firstTime) * fps)
   const fk = f(kf.time)
   if (kf.hidden) return [{ t: fk, s: [0] }]
+  // 单关键帧片段：无前后关键帧可交叉淡化，恒显即可
+  if (keyframes.length === 1) return [{ t: fk, s: [100] }]
   if (index === keyframes.length - 1) {
     const prev = keyframes[index - 1]
     const fPrev = f(prev.time)
@@ -117,15 +152,6 @@ function opacityKeyframes(
   ]
 }
 
-/**
- * 组件轮廓：使用编辑时原始坐标（componentsToContoursEditing 仅做几何变换，
- * 不做 formatPoints / unitsPerEm 等字库坐标转换）。
- * 原始坐标与 lottie 同为 y-down，导出后无需翻转。
- */
-function componentContours(comp: IGlyphComponent): IContour[] {
-  return ContourConverter.componentsToContoursEditing([comp], { x: 0, y: 0 })
-}
-
 export interface LottieExportOptions {
   clip: IAnimationClip
   char: ICharacterFileLite
@@ -152,15 +178,24 @@ export function buildLottieJson(opts: LottieExportOptions): string {
   const lastTime = kfs.length > 0 ? kfs[kfs.length - 1].time : 0
   const totalFrames = Math.max(1, Math.round((lastTime - firstTime) * fps))
 
-  const comps = characterGlyphComponents(char).filter((gc) => {
-    const g = gc.value as ICustomGlyph | undefined
-    return !!g && typeof g === 'object'
-  })
   // comp|k -> 形状数组（每轮廓一个 {c,v,i,o}）；null = 隐藏或无轮廓
   const shapeMap = new Map<string, Array<{ c: boolean; v: number[][]; i: number[][]; o: number[][] }> | null>()
 
   const totalWork = Math.max(1, kfs.length)
   let done = 0
+
+  // 叶子信息：key（稳定身份）→ 组件 + 填充色；各关键帧按同一 key 对齐
+  interface FlatLeaf {
+    key: string
+    comp: IComponent
+    fill: string
+    /** 累积的父字形 ox/oy 偏移（编辑坐标定位） */
+    ox: number
+    oy: number
+  }
+  const leafFills = new Map<string, string>()
+  // 每关键帧的叶子出现顺序（用于确定最终图层 z 序）
+  const kfKeyOrders: string[][] = []
 
   for (let k = 0; k < kfs.length; k++) {
     const kf = kfs[k]
@@ -170,29 +205,93 @@ export function buildLottieJson(opts: LottieExportOptions): string {
       applyKeyframeParamsToCharacter(session.clone, kf, undefined, session.uuidMap)
       const hasCharAnim = kf.charParams && Object.keys(kf.charParams).length > 0
       session.runCharacterScript(hasCharAnim)
-      for (const comp of comps) {
-        // 整字符隐藏或该组件在此关键帧被隐藏 → 无形状（透明度由组关键帧控制）
-        const compHidden = kf.hidden || (kf.hiddenComponents ?? []).includes(comp.uuid)
-        if (compHidden) {
-          shapeMap.set(`${comp.uuid}|${k}`, null)
-          continue
+      // 执行字形脚本：生成子组件与颜色（脚本型字形的轮廓/颜色在运行时才有）
+      executeAllGlyphScriptsOnClone(session.clone)
+
+      // 从克隆展平叶子组件（脚本生成的子组件按名字对齐各关键帧）
+      const leaves = new Map<string, FlatLeaf>()
+      const nameCount = new Map<string, number>()
+      const kfKeyOrder: string[] = []
+      const seenInKf = new Set<string>()
+      const flattenClone = (components: IComponent[], parentFill?: string, ox = 0, oy = 0, scope = '') => {
+        for (const top of components) {
+          if (top.type === 'glyph') {
+            // 与转换器编辑路径一致：执行字形脚本后取实例的 components
+            // （= 字形自身组件 + 脚本生成组件，脚本型字形只有后者）
+            const glyphValue = top.value as ICustomGlyph | undefined
+            if (glyphValue) {
+              try {
+                executeGlyphScript(glyphValue, top.uuid)
+              } catch (err) {
+                if (import.meta.env.DEV) {
+                  console.warn('[lottieExporter] glyph script failed:', top.uuid, err)
+                }
+              }
+            }
+            const instance = instanceManager.acquireTemporaryInstance(
+              top.uuid,
+              () => new CustomGlyph(glyphValue as ICustomGlyph),
+              'glyph',
+            ) as unknown as { components?: IComponent[] } | null
+            const subs = ((instance?.components ?? glyphValue?.components ?? []) as IComponent[]).filter(
+              (c) => c != null,
+            )
+            const fill =
+              (top as { fillColor?: string }).fillColor ||
+              ((top as { value?: { fillColor?: string } }).value?.fillColor) ||
+              parentFill
+            // 字形组件定位只用 ox/oy（不含 x/y）
+            const gx = (top as IGlyphComponent).ox ?? 0
+            const gy = (top as IGlyphComponent).oy ?? 0
+            // 身份作用域 = 祖先字形名链（名字跨关键帧/脚本重生成稳定）
+            const gName =
+              (top as { name?: string }).name ||
+              ((glyphValue as { name?: string } | undefined)?.name) ||
+              top.uuid
+            const childScope = scope ? `${scope}/${gName}` : gName
+            flattenClone(subs, fill, ox + gx, oy + gy, childScope)
+            continue
+          }
+          // 叶子身份：字形作用域内的类型+域内序号（全局序号在叶子数变化时会跨字形串位，
+          // 导致关键帧间错配、组件"漂移"）
+          const leafScope = scope || 'root'
+          const name = `${leafScope}::${top.type}`
+          const n = (nameCount.get(name) ?? 0) + 1
+          nameCount.set(name, n)
+          const key = n > 1 ? `${name}#${n}` : name
+          const fill =
+            (top as { fillColor?: string }).fillColor ||
+            ((top as { value?: { fillColor?: string } }).value?.fillColor) ||
+            parentFill ||
+            '#000'
+          leaves.set(key, { key, comp: top, fill, ox, oy })
+          if (!leafFills.has(key)) leafFills.set(key, fill)
+          if (!seenInKf.has(key)) {
+            seenInKf.add(key)
+            kfKeyOrder.push(key)
+          }
         }
-        const clonedComp = (session.clone.components || []).find(
-          (c) => c.uuid === session.uuidMap.get(comp.uuid),
-        ) as IGlyphComponent | undefined
-        if (!clonedComp) {
-          shapeMap.set(`${comp.uuid}|${k}`, null)
+      }
+      // 字符级 z 序与应用渲染一致：按 orderedList（characterOrderedComponents），
+      // 而非 components 原始数组顺序
+      flattenClone(characterOrderedComponents(session.clone))
+      kfKeyOrders.push(kfKeyOrder)
+
+      for (const [key, leaf] of leaves) {
+        // 整字符隐藏 → 无形状
+        if (kf.hidden) {
+          shapeMap.set(`${key}|${k}`, null)
           continue
         }
         const contours = withKeyframeConstantsMap(kf.constants, () =>
-          componentContours(clonedComp),
+          ContourConverter.componentsToContoursEditing([leaf.comp], { x: leaf.ox, y: leaf.oy }),
         )
         const shapes: Array<{ c: boolean; v: number[][]; i: number[][]; o: number[][] }> = []
         for (const contour of contours) {
           const shape = contourToShapePoints(contour, metrics)
           if (shape) shapes.push(shape)
         }
-        shapeMap.set(`${comp.uuid}|${k}`, shapes.length > 0 ? shapes : null)
+        shapeMap.set(`${key}|${k}`, shapes.length > 0 ? shapes : null)
       }
     } finally {
       session.release()
@@ -201,16 +300,33 @@ export function buildLottieJson(opts: LottieExportOptions): string {
     onProgress?.(done, totalWork)
   }
 
+  // 图层 z 序：取叶子数最多的关键帧的展平顺序为规范（= 应用在该帧的绘制顺序：
+  // 字形内先画者在下）。「绽放」类动画首帧只有内层花瓣，若按首见顺序排，
+  // 内层会沉到底层被后出现的外层花瓣盖住。
+  let canonOrder = kfKeyOrders[0] ?? []
+  for (const seq of kfKeyOrders) {
+    if (seq.length > canonOrder.length) canonOrder = seq
+  }
+  const inCanon = new Set(canonOrder)
+  const leafOrder = [...canonOrder]
+  for (const seq of kfKeyOrders) {
+    for (const key of seq) {
+      if (!inCanon.has(key)) {
+        inCanon.add(key)
+        leafOrder.push(key)
+      }
+    }
+  }
+
   // 组装图层：连续关键帧轮廓顶点数一一匹配 → 单个形变组（路径关键帧插值）；
   // 顶点数变化（拓扑变化）→ 交叉淡化回退；样式按轮廓/黑白/彩色填充或描边
   type Shape = { c: boolean; v: number[][]; i: number[][]; o: number[][] }
   const layers: unknown[] = []
-  for (const comp of comps) {
-    const glyph = comp.value as ICustomGlyph
-    const layerName = (comp as { name?: string }).name || glyph.name || 'stroke'
-    // 分色与编辑页面一致（comp.fillColor → value.fillColor → '#000'）
-    const [fr, fg, fb] = hexToRgb(componentFillColor(comp))
-    const shapeAt = (k: number): Shape[] | null => shapeMap.get(`${comp.uuid}|${k}`) ?? null
+  for (const key of leafOrder) {
+    const layerName = key
+    // 叶子填充色（首帧展平时记录；支持透明色 rgba/8 位 hex）
+    const [fr, fg, fb, fa] = parseColorToRgba(leafFills.get(key) ?? '#000')
+    const shapeAt = (k: number): Shape[] | null => shapeMap.get(`${key}|${k}`) ?? null
 
     // 连续形变段
     const runs: Array<{ start: number; end: number }> = []
@@ -252,7 +368,7 @@ export function buildLottieJson(opts: LottieExportOptions): string {
       style === 'contour'
         ? // 轮廓：纯描边（宽度与编辑界面一致：getStrokeWidth 20px@2000 → 10 逻辑单位）
           { ty: 'st', c: { a: 0, k: [0, 0, 0, 1] }, o: { a: 0, k: 100 }, w: { a: 0, k: 10 }, lc: 2, lj: 2 }
-        : { ty: 'fl', c: { a: 0, k: [fr / 255, fg / 255, fb / 255, 1] }, o: { a: 0, k: 100 }, r: 1 }
+        : { ty: 'fl', c: { a: 0, k: [fr / 255, fg / 255, fb / 255, fa / 255] }, o: { a: 0, k: 100 }, r: 1 }
 
     for (const run of runs) {
       if (run.start === run.end) {
@@ -339,7 +455,9 @@ export function buildLottieJson(opts: LottieExportOptions): string {
     nm: clip.name,
     ddd: 0,
     assets: [],
-    layers: layers.reverse(), // lottie 层级自下而上
+    // 组件数组顺序即 z 序（下标小者在底层）；参考播放器按数组顺序绘制（后绘者在上），
+    // 因此保持原始顺序即可——背景组件在数组前部 = 最底层（此前 reverse 导致背景盖住前景）
+    layers,
   }
   return JSON.stringify(json)
 }

@@ -59,6 +59,7 @@ import { useI18n } from 'vue-i18n'
 import { useProjectStore } from '@/stores/project'
 import type { ICharacterFileLite, ICharacterFileMetadata } from '@/core/types'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
+import { rewriteScriptUUIDReference } from '@/core/script/ScriptExecutor'
 import { genUUID } from '@/utils/uuid'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import * as R from 'ramda'
@@ -170,6 +171,9 @@ const _handleConfirm = async () => {
 
   const newChar = R.clone(fullChar) as ICharacterFileLite
   newChar.uuid = genUUID()
+  // 脚本随数据一并复制，函数名引用旧 uuid；改写为新 uuid，否则执行时报
+  // ReferenceError: script_<uuid> is not defined
+  newChar.script = rewriteScriptUUIDReference(newChar.script, newChar.uuid)
   newChar.type = newType
   newChar.character = {
     uuid: genUUID(),

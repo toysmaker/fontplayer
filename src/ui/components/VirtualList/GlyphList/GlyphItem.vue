@@ -57,6 +57,7 @@ import { useDialog, useMessage } from 'naive-ui'
 import { genUUID } from '@/utils/uuid'
 import * as R from 'ramda'
 import TextInputDialog from '@/ui/dialogs/TextInputDialog.vue'
+import { rewriteScriptUUIDReference } from '@/core/script/ScriptExecutor'
 
 // 标记是否已初始化（避免重复渲染）
 const isInitialized = ref(false)
@@ -302,6 +303,9 @@ const onCopyConfirm = (name: string) => {
   newGlyph.name = name
   newGlyph.previewRef = undefined
   newGlyph.contourRef = undefined
+  // 脚本随数据一并复制，函数名引用旧 uuid；改写为新 uuid，否则执行时报
+  // ReferenceError: script_<uuid> is not defined
+  newGlyph.script = rewriteScriptUUIDReference(newGlyph.script, newGlyph.uuid)
 
   result.list.push(newGlyph)
   message.success('字形已复制')

@@ -51,6 +51,32 @@ function getScript(glyph: ICustomGlyph, projectStore?: ReturnType<typeof useProj
   return null
 }
 
+/**
+ * 复制字符/字形后重写脚本函数名引用。
+ *
+ * 脚本约定格式：function script_<sanitizedUUID>(character|glyph, constants, FP) { body }
+ * 执行器以实例当前的 uuid 拼出 script_<uuid> 进行调用；
+ * 复制时脚本随数据一起克隆，但 uuid 已更换，脚本内声明的仍是旧 uuid 的函数名，
+ * 导致 ReferenceError: script_<uuid> is not defined。
+ * 因此复制后必须把脚本内的声明与内部引用全部改写为新 uuid 对应的函数名。
+ *
+ * @param script  被复制的脚本字符串（无脚本时原样返回）
+ * @param newUUID 新实例的 uuid
+ */
+export function rewriteScriptUUIDReference(
+  script: string | undefined,
+  newUUID: string,
+): string | undefined {
+  if (!script) return script
+  // 匹配主函数声明（约定第一个 script_* 函数即为入口）
+  const match = script.match(/\bfunction\s+(script_[0-9a-z_]+)\b/)
+  if (!match) return script
+  const newFnName = `script_${newUUID.replaceAll('-', '_')}`
+  if (match[1] === newFnName) return script
+  // 全局替换：覆盖声明处以及脚本内部的递归/自引用
+  return script.split(match[1]).join(newFnName)
+}
+
 export type ExecuteGlyphScriptOptions = {
   /** 同一调用树内防止组件环导致无限递归；由内部递归传入，外部勿手动复用同一 Set */
   recursionGuard?: Set<string>

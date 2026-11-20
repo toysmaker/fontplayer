@@ -11,11 +11,15 @@
     <div class="anim-export-body">
       <div class="anim-export-row">
         <span class="anim-export-label">{{ t('dialogs.animationExport.format') }}</span>
-        <n-radio-group v-model:value="format" :disabled="exporting">
-          <n-radio-button value="mp4">mp4</n-radio-button>
-          <n-radio-button value="gif">gif</n-radio-button>
-          <n-radio-button value="webm">webm</n-radio-button>
-          <n-radio-button value="lottie">lottieJson</n-radio-button>
+        <n-radio-group
+          v-model:value="format"
+          :disabled="exporting"
+          class="app-radio-gray app-radio-vertical"
+        >
+          <n-radio value="mp4">mp4</n-radio>
+          <n-radio value="gif">gif</n-radio>
+          <n-radio value="webm">webm</n-radio>
+          <n-radio value="lottie">lottieJson</n-radio>
         </n-radio-group>
       </div>
 
@@ -62,7 +66,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NAlert, NButton, NModal, NProgress, NRadioButton, NRadioGroup, useNotification } from 'naive-ui'
+import { NAlert, NButton, NModal, NProgress, NRadio, NRadioGroup, useNotification } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { saveAs } from 'file-saver'
 import type { IAnimationClip } from '@/core/types'
@@ -203,13 +207,16 @@ const handleCancel = createDebouncedHandler(_cancel, 'AnimationExportDialog.canc
 }
 .anim-export-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
 }
 .anim-export-label {
   flex: 0 0 auto;
   font-size: 13px;
-  color: var(--primary-0);
+  /* 灰色文本，与纵向灰色 radio 风格一致 */
+  color: #9aa3b2;
+  /* 与纵向 radio 首行文字对齐 */
+  padding-top: 5px;
 }
 .anim-export-hint {
   font-size: 12px;

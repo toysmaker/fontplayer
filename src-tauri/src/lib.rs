@@ -635,6 +635,7 @@ fn build_menu_enabled_map() -> HashMap<String, Box<dyn Fn(&str) -> bool>> {
     map.insert("test-export-json".to_string(), Box::new(enable));
     map.insert("export-stroke-pngs".to_string(), Box::new(enable));
     map.insert("save-char-pngs".to_string(), Box::new(enable));
+    map.insert("export-icon-dataset".to_string(), Box::new(enable));
     map.insert("generate-training-data-v1".to_string(), Box::new(enable));
     map.insert("generate-training-data-v2".to_string(), Box::new(enable));
     map.insert("save-stroke-training-data".to_string(), Box::new(enable));
@@ -1166,6 +1167,9 @@ fn build_menu<R: tauri::Runtime>(app: &AppHandle<R>, texts: &MenuTexts) -> Resul
                     &MenuItemBuilder::with_id("save-char-pngs", "保存字符图片")
                         .build(app)
                         ?,
+                    &MenuItemBuilder::with_id("export-icon-dataset", "导出图标数据集")
+                        .build(app)
+                        ?,
                     &MenuItemBuilder::with_id("generate-training-data-v1", texts.test.generate_training_data_v1)
                         .build(app)
                         ?,
@@ -1517,6 +1521,7 @@ pub fn run() {
                     "test-export-json" => { let _ = app.app_handle().emit("test-export-json", ()); }
                     "export-stroke-pngs" => { let _ = app.app_handle().emit("export-stroke-pngs", ()); }
                     "save-char-pngs" => save_char_pngs(app.app_handle().clone()),
+                    "export-icon-dataset" => { let _ = app.app_handle().emit("export-icon-dataset", ()); }
                     "generate-training-data-v1" => { let _ = app.app_handle().emit("generate-training-data-v1", ()); }
                     "generate-training-data-v2" => { let _ = app.app_handle().emit("generate-training-data-v2", ()); }
                     "save-stroke-training-data" => { let _ = app.app_handle().emit("save-stroke-training-data", ()); }

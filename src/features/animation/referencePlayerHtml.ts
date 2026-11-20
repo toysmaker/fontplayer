@@ -88,9 +88,10 @@ const LOTTIE_PLAYER_JS = `
         ctx.lineCap = 'round';
         ctx.stroke();
       } else {
-        // 填充（fl 项颜色，黑白/彩色模式）
+        // 填充（fl 项颜色，黑白/彩色模式；透明色 alpha 与组透明度相乘）
         var fc = fillItem && fillItem.c && fillItem.c.a === 0 ? fillItem.c.k : [0, 0, 0, 1];
-        ctx.fillStyle = 'rgba(' + Math.round(fc[0] * 255) + ',' + Math.round(fc[1] * 255) + ',' + Math.round(fc[2] * 255) + ',' + alpha + ')';
+        var fillAlpha = fc.length > 3 ? fc[3] : 1;
+        ctx.fillStyle = 'rgba(' + Math.round(fc[0] * 255) + ',' + Math.round(fc[1] * 255) + ',' + Math.round(fc[2] * 255) + ',' + (alpha * fillAlpha) + ')';
         ctx.fill('nonzero');
       }
     }

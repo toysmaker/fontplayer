@@ -19,6 +19,8 @@ export interface LogoGlyphRenderable {
   contours: IContours
   /** 与 contours 一一对应；null = 黑白单色 */
   fillColors: string[] | null
+  /** 与 contours 一一对应的填充单元；同单元同色轮廓合并为一次 fill('nonzero')（镂空） */
+  fillUnits: string[] | null
   advanceWidth: number
 }
 
@@ -34,16 +36,19 @@ export async function buildLogoGlyphRenderable(
     const layers = generateColorFontLayers(char, fs)
     const contours: IContours = []
     const fillColors: string[] = []
-    for (const layer of layers) {
+    const fillUnits: string[] = []
+    layers.forEach((layer, li) => {
+      const unit = layer.fillUnit || `layer-${li}`
       for (const c of layer.contours) {
         contours.push(c)
         fillColors.push(layer.fillColor)
+        fillUnits.push(unit)
       }
-    }
-    return { contours, fillColors, advanceWidth }
+    })
+    return { contours, fillColors, fillUnits, advanceWidth }
   }
   const contours = contoursForCharacterFile(char, file, fs, true)
-  return { contours, fillColors: null, advanceWidth }
+  return { contours, fillColors: null, fillUnits: null, advanceWidth }
 }
 
 export interface LogoLayout {
@@ -213,15 +218,31 @@ export function renderGlyphBlock(
   if (!ctx) return canvas
 
   if (renderable.fillColors) {
-    // 彩色：逐轮廓单独填充
+    // 彩色：按「填充单元 + 颜色」分组，同组轮廓合并为一个 path 统一 fill('nonzero')，
+    // 反方向轮廓通过非零环绕规则形成镂空（与编辑界面一致）；逐轮廓单独填充会把镂空填实
+    const groups: Array<{ color: string; contours: IContours }> = []
+    const groupIndexByKey = new Map<string, number>()
     renderable.contours.forEach((contour, i) => {
       if (!contour.length) return
-      ctx.beginPath()
-      drawContourToCtx(ctx, contour, scale, ascender)
-      ctx.closePath()
-      ctx.fillStyle = renderable.fillColors![i] ?? '#000'
-      ctx.fill('nonzero')
+      const color = renderable.fillColors![i] ?? '#000'
+      const key = `${renderable.fillUnits?.[i] ?? ''}|${color}`
+      let groupIndex = groupIndexByKey.get(key)
+      if (groupIndex === undefined) {
+        groupIndex = groups.length
+        groupIndexByKey.set(key, groupIndex)
+        groups.push({ color, contours: [] })
+      }
+      groups[groupIndex].contours.push(contour)
     })
+    for (const g of groups) {
+      ctx.beginPath()
+      for (const contour of g.contours) {
+        drawContourToCtx(ctx, contour, scale, ascender)
+        ctx.closePath()
+      }
+      ctx.fillStyle = g.color
+      ctx.fill('nonzero')
+    }
   } else {
     // 黑白：所有轮廓同一路径 nonzero（镂空正确）
     ctx.beginPath()

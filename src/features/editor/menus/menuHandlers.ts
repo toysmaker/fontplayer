@@ -160,6 +160,7 @@ export function createDisabledRules(ctx: {
     'test-import-from-params': enable,
     'test-import-from-skeleton': enable,
     'test-print-character-info': enableAtCharacterEdit,
+    'test-export-icon-dataset': enable,
 
     // effects
     'effect-adjust-weight': enableAtCharacterEdit,

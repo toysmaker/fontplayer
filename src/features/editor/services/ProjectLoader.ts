@@ -985,6 +985,9 @@ export class ProjectLoader {
       glyph_script: character.glyph_script,
       decomposition: character.decomposition,
       matches: character.matches,
+      // 动效与微交互：随工程保存/导出后，重新打开时必须保留（此前在此被丢弃）
+      animations: character.animations,
+      microInteractions: character.microInteractions,
     }
 
     // 工程文件中不包含 contour/preview（导出时已删除），需要重新计算

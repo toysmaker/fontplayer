@@ -53,35 +53,11 @@ export function characterUsesColorLayers(char: ICharacterFileLite): boolean {
   return components.some(componentHasFillColor)
 }
 
-/** 递归收集所有带 fillColor 的叶子组件（展平 glyph 子组件树） */
-function collectColorComponents(components: IComponent[]): IComponent[] {
-  const result: IComponent[] = []
-  for (const comp of components) {
-    if (comp.type === 'glyph') {
-      const subComps = (comp.value as any)?.components as IComponent[] | undefined
-      if (subComps && subComps.length > 0) {
-        // 字形包含子组件：递归收集，父 fillColor 传给无色的子组件
-        const parentFill = (comp as any).fillColor || (comp.value as any)?.fillColor
-        for (const sub of collectColorComponents(subComps)) {
-          if (!(sub as any).fillColor && !(sub.value as any)?.fillColor && parentFill) {
-            (sub as any).fillColor = parentFill
-          }
-          result.push(sub)
-        }
-        continue
-      }
-    }
-    result.push(comp)
-  }
-  return result
-}
-
 export function generateColorFontLayers(
   char: ICharacterFileLite,
   fs: IFontSettings
 ): NonNullable<ICharacter['layers']> {
   const components = ContourConverter.getComponentsForCharacter(char)
-  const flatComponents = collectColorComponents(components)
   const layers: NonNullable<ICharacter['layers']> = []
   const opts = {
     unitsPerEm: fs.unitsPerEm,
@@ -90,32 +66,46 @@ export function generateColorFontLayers(
     preview: false,
     forceUpdate: false,
   }
-  for (const component of flatComponents) {
-    // 传入 fillColorsOut 获取每个轮廓对应的颜色（脚本内置组件 setFillColor 的颜色在此体现）
-    const fillColors: string[] = []
-    const contours = ContourConverter.componentsToContours(
-      [component] as IComponent[],
-      opts,
-      { x: 0, y: 0 },
-      undefined,
-      fillColors,
-    )
-    const componentFillColor =
-      (component as { fillColor?: string }).fillColor ||
-      (component.value as { fillColor?: string } | undefined)?.fillColor
-    const defaultColor = componentFillColor || 'rgba(0, 0, 0, 1)'
+  // 传入 fillColorsOut 获取每个轮廓对应的颜色（脚本内置组件 setFillColor 的颜色在此体现），
+  // fillUnitsOut 标识填充单元（glyph 组件的同色子轮廓共享同一单元）
+  const solidFlags: boolean[] = []
+  const fillColors: string[] = []
+  const fillUnits: string[] = []
+  const contours = ContourConverter.componentsToContours(
+    components,
+    opts,
+    { x: 0, y: 0 },
+    solidFlags,
+    fillColors,
+    fillUnits,
+  )
 
-    if (contours.length === 0) continue
-
-    // 逐轮廓分层：内置组件各有颜色时按各自颜色分到不同图层
-    for (let i = 0; i < contours.length; i++) {
-      const contourColor = fillColors[i] && fillColors[i] !== '#000' ? fillColors[i] : defaultColor
+  // 按「填充单元 + 颜色」合并为图层字形：同一单元内同色轮廓合并到一个图层，
+  // 图层字形内以非零环绕规则填充，反方向轮廓形成镂空（与编辑界面一致）；
+  // 逐轮廓单独分层会把镂空轮廓填实。
+  // ⚠️ 过滤空轮廓（脚本组件在个别场景可能产出空轮廓）：
+  // 空图层字形会导致 CFF 字形数错乱、渲染乱码
+  const groupIndexByKey = new Map<string, number>()
+  for (let i = 0; i < contours.length; i++) {
+    const contour = contours[i]
+    if (!contour || contour.length === 0 || !contour[0]?.start) continue
+    const contourColor =
+      fillColors[i] && fillColors[i] !== '#000' ? fillColors[i] : 'rgba(0, 0, 0, 1)'
+    const key = `${fillUnits[i] || ''}|${contourColor}`
+    let groupIndex = groupIndexByKey.get(key)
+    if (groupIndex === undefined) {
+      groupIndex = layers.length
+      groupIndexByKey.set(key, groupIndex)
       layers.push({
         fillColor: contourColor,
-        contours: [contours[i]] as ICharacter['contours'],
-        contourNum: 1,
+        contours: [],
+        contourNum: 0,
+        fillUnit: fillUnits[i] || '',
       })
     }
+    const layer = layers[groupIndex]
+    layer.contours.push(contour)
+    layer.contourNum++
   }
   return layers
 }

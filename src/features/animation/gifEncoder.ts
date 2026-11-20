@@ -71,10 +71,31 @@ function lzwCompress(indices: Uint8Array, minCodeSize: number): Uint8Array {
 }
 
 export interface GifFrameWriter {
-  /** 写入一帧灰度图（0-255，w×h） */
-  writeFrame(gray: Uint8Array): void
+  /** 写入一帧：灰度（0-255，w×h）或 RGBA（w×h×4，color 模式） */
+  writeFrame(data: Uint8Array): void
   /** 结束并返回完整 GIF 字节 */
   finish(): Uint8Array
+}
+
+// 6×6×6 RGB 立方调色板（216 色），每通道 6 级：0/51/102/153/204/255
+const CUBE_LEVELS = [0, 51, 102, 153, 204, 255]
+const CUBE_PALETTE: number[] = []
+for (let r = 0; r < 6; r++) {
+  for (let g = 0; g < 6; g++) {
+    for (let b = 0; b < 6; b++) {
+      CUBE_PALETTE.push(CUBE_LEVELS[r], CUBE_LEVELS[g], CUBE_LEVELS[b])
+    }
+  }
+}
+// 216 色之后的 40 个槽位补 0（像素量化钳制在 0-215，不引用尾部）
+while (CUBE_PALETTE.length < 256 * 3) CUBE_PALETTE.push(0)
+
+/** RGBA → 最近立方色索引 */
+function rgbaToCubeIndex(r: number, g: number, b: number): number {
+  const rl = Math.min(5, Math.max(0, Math.round(r / 51)))
+  const gl = Math.min(5, Math.max(0, Math.round(g / 51)))
+  const bl = Math.min(5, Math.max(0, Math.round(b / 51)))
+  return rl * 36 + gl * 6 + bl
 }
 
 /**
@@ -83,16 +104,19 @@ export interface GifFrameWriter {
  * @param height 帧高
  * @param delayCs 帧间隔（百分之一秒）
  * @param loop 是否循环播放
+ * @param color true = 彩色模式（writeFrame 接收 RGBA 数据，216 色立方调色板量化）；
+ *              false = 灰度模式（writeFrame 接收 0-255 灰度）
  */
 export function createGifWriter(
   width: number,
   height: number,
   delayCs: number,
   loop = true,
+  color = false,
 ): GifFrameWriter {
   const chunks: Uint8Array[] = []
 
-  // Header + LSD + 全局灰阶调色板
+  // Header + LSD + 全局调色板（彩色立方 / 灰度渐变）
   const header: number[] = []
   const ascii = (s: string) => {
     for (let i = 0; i < s.length; i++) header.push(s.charCodeAt(i))
@@ -101,9 +125,13 @@ export function createGifWriter(
   le16(header, width)
   le16(header, height)
   header.push(0xf7) // GCT 标志 + 8bit 色深 + 256 色
-  header.push(0) // 背景色索引 0（白）
+  header.push(0) // 背景色索引 0
   header.push(0) // 像素纵横比
-  for (let i = 0; i < 256; i++) header.push(i, i, i) // 灰度渐变
+  if (color) {
+    for (const v of CUBE_PALETTE) header.push(v)
+  } else {
+    for (let i = 0; i < 256; i++) header.push(i, i, i) // 灰度渐变
+  }
   if (loop) {
     // NETSCAPE2.0 循环扩展
     header.push(0x21, 0xff, 0x0b)
@@ -116,14 +144,24 @@ export function createGifWriter(
 
   let finished = false
 
-  const writeFrame = (gray: Uint8Array) => {
+  const writeFrame = (data: Uint8Array) => {
     if (finished) return
+    // 彩色模式：RGBA → 调色板索引
+    const indices = color
+      ? (() => {
+          const out = new Uint8Array(width * height)
+          for (let p = 0; p < out.length; p++) {
+            out[p] = rgbaToCubeIndex(data[p * 4], data[p * 4 + 1], data[p * 4 + 2])
+          }
+          return out
+        })()
+      : data
     const frame: number[] = []
     // 图形控制扩展（无透明，延迟）
     frame.push(0x21, 0xf9, 0x04, 0x00)
     le16(frame, Math.max(1, Math.round(delayCs)))
     frame.push(0x00, 0x00)
-    // 图像描述符（局部色表关闭，使用全局灰阶）
+    // 图像描述符（局部色表关闭，使用全局调色板）
     frame.push(0x2c)
     le16(frame, 0)
     le16(frame, 0)
@@ -133,7 +171,7 @@ export function createGifWriter(
     // LZW 最小码长（GIF 规范：图像数据第一字节，必须存在）
     frame.push(8)
     // LZW 数据（子块，每块最大 255 字节）
-    const compressed = lzwCompress(gray, 8)
+    const compressed = lzwCompress(indices, 8)
     let pos = 0
     while (pos < compressed.length) {
       const len = Math.min(255, compressed.length - pos)

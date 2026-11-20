@@ -76,6 +76,15 @@ if (import.meta.env.DEV) {
     <!-- 效果滤镜参数面板（最高优先级，在其他任何面板之前显示） -->
     <effect-params-panel v-if="effectStore.isActive" />
     <picture-import-params-panel v-else-if="editStatus === EditStatus.Pic" />
+    <!-- 信息/高级编辑面板：独立 flag（不抢占工具）。
+         必须排在工具面板（params/metrics/grid/skeleton）与组件面板之前，
+         否则这些分支会遮蔽 flag 面板，表现为「选中参数工具时点击图标无反应」。 -->
+    <info-panel
+      v-else-if="editStatus === EditStatus.Edit && infoPanelVisible"
+    />
+    <advanced-edit-panel
+      v-else-if="editStatus === EditStatus.Edit && advancedEditPanelVisible"
+    />
     <!-- 骨架提取面板 -->
     <skeleton-panel
       v-else-if="editStatus === EditStatus.Edit && tool === 'skeleton'"
@@ -95,14 +104,6 @@ if (import.meta.env.DEV) {
     <!-- 字形编辑 params 工具：显示字形参数面板（骨架绑定等） -->
     <glyph-params-panel
       v-else-if="editStatus === EditStatus.Glyph && tool === 'params' && !skeletonFreeEdit"
-    />
-    <!-- 信息面板：独立 flag（不抢占工具）；选中组件/切换工具/离开编辑态时自动让位 -->
-    <info-panel
-      v-else-if="editStatus === EditStatus.Edit && infoPanelVisible"
-    />
-    <!-- 高级编辑面板：与信息面板同机制（独立 flag，不抢占工具） -->
-    <advanced-edit-panel
-      v-else-if="editStatus === EditStatus.Edit && advancedEditPanelVisible"
     />
     <!-- 基础组件面板（不区分字符/字形） -->
     <pen-edit-panel

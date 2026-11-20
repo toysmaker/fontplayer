@@ -29,6 +29,8 @@ interface ILayer {
 	fillColor?: string;
 	contours: Array<Array<ILine | IQuadraticBezierCurve | ICubicBezierCurve>>;
 	contourNum: number;
+	/** 填充单元：同一单元内同色轮廓合并为一个图层（非零环绕镂空） */
+	fillUnit?: string;
 	advanceWidth?: number;
 	leftSideBearing?: number | undefined;
 	rightSideBearing?: number;

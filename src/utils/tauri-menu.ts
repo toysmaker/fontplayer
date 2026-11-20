@@ -191,6 +191,17 @@ export async function initTauriMenu() {
     listen('component-intersect', () => {
       window.dispatchEvent(new CustomEvent('editor-component-boolean', { detail: { operation: 'intersect' } }))
     })
+    listen('export-icon-dataset', async () => {
+      if (import.meta.env.DEV) console.log('[tauri-menu] export-icon-dataset triggered')
+      try {
+        const { exportIconDataset } = await import('@/features/editor/services/ExportIconDatasetService')
+        await exportIconDataset((msg) => alert(msg))
+      } catch (err) {
+        console.error('export-icon-dataset failed:', err)
+        alert('导出图标数据集失败: ' + (err as Error).message)
+      }
+    })
+
     listen('save-char-pngs', async () => {
       if (import.meta.env.DEV) console.warn('[tauri-menu] save-char-pngs event received!')
       try {

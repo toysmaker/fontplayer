@@ -390,4 +390,39 @@ describe('ScriptExecutor', () => {
       consoleWarnSpy.mockRestore()
     })
   })
+
+  describe('rewriteScriptUUIDReference', () => {
+    const oldUUID = '1795101025573-bxyiv3yk8'
+    const newUUID = '1795101999999-copy9ab12'
+    const oldFnName = `script_${oldUUID.replaceAll('-', '_')}`
+    const newFnName = `script_${newUUID.replaceAll('-', '_')}`
+
+    it('should rename the script function name to the new uuid', async () => {
+      const { rewriteScriptUUIDReference } = await import('@/core/script/ScriptExecutor')
+      const script = `function ${oldFnName}(character, constants, FP) {\n\t// body\n}`
+      const rewritten = rewriteScriptUUIDReference(script, newUUID)
+      expect(rewritten).toContain(`function ${newFnName}`)
+      expect(rewritten).not.toContain(oldFnName)
+    })
+
+    it('should rename internal self-references too', async () => {
+      const { rewriteScriptUUIDReference } = await import('@/core/script/ScriptExecutor')
+      const script = `function ${oldFnName}(character, constants, FP) {\n\treturn ${oldFnName}(character, constants, FP)\n}`
+      const rewritten = rewriteScriptUUIDReference(script, newUUID)
+      expect(rewritten).toContain(`${newFnName}(character, constants, FP)`)
+      expect(rewritten).not.toContain(oldFnName)
+    })
+
+    it('should return undefined for empty script', async () => {
+      const { rewriteScriptUUIDReference } = await import('@/core/script/ScriptExecutor')
+      expect(rewriteScriptUUIDReference(undefined, newUUID)).toBeUndefined()
+      expect(rewriteScriptUUIDReference('', newUUID)).toBe('')
+    })
+
+    it('should leave script unchanged when no script_* declaration exists', async () => {
+      const { rewriteScriptUUIDReference } = await import('@/core/script/ScriptExecutor')
+      const script = `// just a comment`
+      expect(rewriteScriptUUIDReference(script, newUUID)).toBe(script)
+    })
+  })
 })

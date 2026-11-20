@@ -2,6 +2,7 @@ import { getEnv } from '@/utils/env'
 import { saveAs } from 'file-saver'
 import { PathType, type IContour } from '@/core/font/types'
 import { computeLogoLayout, type LogoGlyphRenderable } from '../canvas/renderLogo'
+import { contourGroupsToSvgPaths } from '@/features/editor/services/ExportIconDatasetService'
 import type { ILogoAppData } from '../types'
 import { sanitizeFilename } from './imageExport'
 
@@ -36,12 +37,14 @@ function glyphGroup(
   const transform = `translate(${block.x}, ${block.y}) scale(${block.scale}) translate(0, ${ascender}) scale(1, -1)`
   let paths: string
   if (renderable.fillColors) {
-    paths = renderable.contours
-      .map(
-        (c, i) =>
-          `<path d="${contourToPathData(c)}" fill="${renderable.fillColors![i] ?? '#000'}" fill-rule="nonzero"/>`
-      )
-      .join('\n')
+    // 彩色：同「填充单元 + 颜色」轮廓合并为一个 path（nonzero 镂空），与画布渲染一致
+    paths = contourGroupsToSvgPaths(
+      renderable.contours,
+      renderable.contours.map(() => false),
+      renderable.fillColors,
+      renderable.fillUnits ?? [],
+      true,
+    ).join('\n')
   } else {
     // 黑白：所有轮廓一个 path（nonzero 镂空）
     const d = renderable.contours.map((c) => contourToPathData(c)).join(' ')

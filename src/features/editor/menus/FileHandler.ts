@@ -6,6 +6,8 @@
 import { projectLoader } from '../services/ProjectLoader'
 import { projectCreator } from '../services/ProjectCreator'
 import { useProjectStore } from '@/stores/project'
+import { useCharacterStore } from '@/stores/character'
+import type { ICharacterFileLite } from '@/core/types'
 import { isTauri } from '@/utils/env'
 import type { ProjectConfig } from '../services/ProjectCreator'
 import localForage from 'localforage'
@@ -73,6 +75,18 @@ async function scanProblemGlyphs(file: IFile) {
       console.log(`  字符: "${r.charText}" (${r.charUuid}) -> 笔画: ${r.glyphNames.join(', ')}`)
     }
   }
+}
+
+/**
+ * 保存/导出时加载字符：优先使用正在编辑的字符（内存中，含最新动效/微交互），
+ * 否则读 IndexedDB。修复「编辑中直接导出/保存，动效丢失」问题。
+ */
+function loadCharacterForSave(file: IFile, metaUuid: string): Promise<ICharacterFileLite | null> {
+  const characterStore = useCharacterStore()
+  if (characterStore.editingCharacterUUID === metaUuid && characterStore.editingCharacter) {
+    return Promise.resolve(characterStore.editingCharacter)
+  }
+  return characterDataManager.loadCharacter(file.uuid, metaUuid)
 }
 
 export class FileHandler {
@@ -717,7 +731,7 @@ export class FileHandler {
     const tocMeta: EncodeFpTocMeta[] = []
     for (let i = 0; i < list.length; i++) {
       const metadata = list[i]!
-      const char = await characterDataManager.loadCharacter(file.uuid, metadata.uuid)
+      const char = await loadCharacterForSave(file, metadata.uuid)
       const plain = char ? this.plainCharacter(char) : metadata
       const stripped = stripCharacterForTemplate(plain as Record<string, unknown>, {
         stripGlyphParameterEnumOptions: false,
@@ -791,7 +805,7 @@ export class FileHandler {
 
       for (let i = 0; i < list.length; i++) {
         const metadata = list[i]!
-        const char = await characterDataManager.loadCharacter(file.uuid, metadata.uuid)
+        const char = await loadCharacterForSave(file, metadata.uuid)
         const plain = char ? this.plainCharacter(char) : metadata
         const stripped = stripCharacterForTemplate(plain as Record<string, unknown>, {
           stripGlyphParameterEnumOptions: false,
@@ -951,7 +965,7 @@ export class FileHandler {
       let firstChar = true
       for (let i = 0; i < characterList.length; i++) {
         const metadata = characterList[i]
-        const char = await characterDataManager.loadCharacter(file.uuid, metadata.uuid)
+        const char = await loadCharacterForSave(file, metadata.uuid)
         if (!firstChar) await write(',')
         firstChar = false
         if (char) {
@@ -1011,7 +1025,7 @@ export class FileHandler {
     const list: any[] = file.characterList || []
     for (let i = 0; i < list.length; i++) {
       const metadata = list[i]
-      const character = await characterDataManager.loadCharacter(file.uuid, metadata.uuid)
+      const character = await loadCharacterForSave(file, metadata.uuid)
       if (character) {
         characterList.push(this.plainCharacter(character))
       } else {

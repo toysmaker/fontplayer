@@ -24,25 +24,54 @@ export interface IColorRecord {
 }
 
 /**
- * 解析 rgba 字符串为 ColorRecord
- * @param rgba 格式为 'rgba(r, g, b, a)' 或 'rgb(r, g, b)'
+ * 解析颜色字符串为 ColorRecord
+ * @param color 支持 'rgba(r, g, b, a)' / 'rgb(r, g, b)' / '#RGB' / '#RRGGBB' / '#RRGGBBAA'
  * @returns ColorRecord
  */
-export function parseRgba(rgba: string | undefined): IColorRecord {
-  if (!rgba) {
+export function parseRgba(color: string | undefined): IColorRecord {
+  if (!color) {
     // 默认黑色
     return { red: 0, green: 0, blue: 0, alpha: 255 }
   }
 
+  const trimmed = color.trim()
+
+  // hex：#RGB / #RRGGBB / #RRGGBBAA（编辑器颜色选择器输出 #RRGGBB）
+  if (trimmed.startsWith('#')) {
+    const hex = trimmed.slice(1)
+    let r = 0
+    let g = 0
+    let b = 0
+    let a = 255
+    if (hex.length === 3) {
+      r = parseInt(hex[0] + hex[0], 16)
+      g = parseInt(hex[1] + hex[1], 16)
+      b = parseInt(hex[2] + hex[2], 16)
+    } else if (hex.length === 6 || hex.length === 8) {
+      r = parseInt(hex.slice(0, 2), 16)
+      g = parseInt(hex.slice(2, 4), 16)
+      b = parseInt(hex.slice(4, 6), 16)
+      if (hex.length === 8) {
+        a = parseInt(hex.slice(6, 8), 16)
+      }
+    } else {
+      return { red: 0, green: 0, blue: 0, alpha: 255 }
+    }
+    if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b) || Number.isNaN(a)) {
+      return { red: 0, green: 0, blue: 0, alpha: 255 }
+    }
+    return { red: r, green: g, blue: b, alpha: a }
+  }
+
   // 匹配 rgba(r, g, b, a) 或 rgb(r, g, b)
-  const rgbaMatch = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/)
-  
+  const rgbaMatch = trimmed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/)
+
   if (rgbaMatch) {
     const r = parseInt(rgbaMatch[1])
     const g = parseInt(rgbaMatch[2])
     const b = parseInt(rgbaMatch[3])
     const a = rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1.0
-    
+
     return {
       red: r,
       green: g,

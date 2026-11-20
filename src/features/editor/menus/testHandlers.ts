@@ -3,6 +3,7 @@
  */
 
 import type { MenuHandlerContext, MenuHandlersMap } from './menuHandlerTypes'
+import { exportIconDataset } from '@/features/editor/services/ExportIconDatasetService'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
@@ -563,5 +564,8 @@ export function createTestHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
     'test-import-from-params': handleImportFromParams,
     'test-import-from-skeleton': handleImportFromSkeleton,
     'test-print-character-info': handlePrintCharacterInfo,
+    'test-export-icon-dataset': async () => {
+      await exportIconDataset((msg) => ctx.message.info(msg))
+    },
   }
 }

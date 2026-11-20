@@ -73,16 +73,24 @@ export async function exportAnimationClip(opts: ExportClipOptions): Promise<Blob
     canvas.height = renderSize
     const ctx2 = canvas.getContext('2d', { willReadFrequently: true })
     if (!ctx2) throw new Error('canvas 2d unavailable')
-    const writer = createGifWriter(renderSize, renderSize, 100 / fps)
+    // 渲染模式：剪辑自身设置，缺省跟随全局预览模式
+    const style = clip.renderStyle ?? (fontRenderStyle.value as 'contour' | 'black' | 'color')
+    // 彩色模式 → 彩色 GIF（216 色立方调色板量化）；轮廓/黑白 → 灰度 GIF
+    const colorGif = style === 'color'
+    const writer = createGifWriter(renderSize, renderSize, 100 / fps, true, colorGif)
     for (let frame = 0; frame < totalFrames; frame++) {
-      renderClipFrameAt(char, clip, frameTime(frame), canvas, undefined, false, clip.renderStyle)
+      renderClipFrameAt(char, clip, frameTime(frame), canvas, undefined, false, style)
       const img = ctx2.getImageData(0, 0, renderSize, renderSize)
-      const gray = new Uint8Array(renderSize * renderSize)
-      for (let p = 0; p < gray.length; p++) {
-        // 黑字形 + 白背景：alpha 覆盖度 → 灰度
-        gray[p] = 255 - img.data[p * 4 + 3]
+      if (colorGif) {
+        writer.writeFrame(new Uint8Array(img.data.buffer.slice(0)))
+      } else {
+        const gray = new Uint8Array(renderSize * renderSize)
+        for (let p = 0; p < gray.length; p++) {
+          // 黑字形 + 白背景：alpha 覆盖度 → 灰度
+          gray[p] = 255 - img.data[p * 4 + 3]
+        }
+        writer.writeFrame(gray)
       }
-      writer.writeFrame(gray)
       opts.onProgress?.(frame + 1, totalFrames)
       // 让出事件循环，避免长时间阻塞 UI
       if (frame % 8 === 7) await new Promise<void>((r) => setTimeout(r, 0))
