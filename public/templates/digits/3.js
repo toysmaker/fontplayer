@@ -8,6 +8,34 @@ const global_params = {
   weight: glyph.getParam('字重') || 40,
   serifType: glyph.getParam('衬线类型') || 0,
   serifSize: glyph.getParam('衬线大小') || 2.0,
+  curvature: glyph.getParam('弯曲度') ?? 1,
+}
+// 每段曲线的弯曲度系数（段名:序号 → 系数），当前全部为 1（统一跟随全局「弯曲度」参数）；
+// 之后要微调某一段转角时，只需改这里的系数，例如 'stroke1:0': 0.8 更平、1.2 更圆
+const segmentCurvature = {
+  'stroke1:0': 1,
+  'stroke1:1': 1,
+  'stroke1:2': 1,
+  'stroke2:0': 1,
+  'stroke2:1': 1,
+  'stroke2:2': 1,
+}
+// 弯曲度 → 三次贝塞尔曲线描述：最终弯曲度 = 全局弯曲度 × 段系数；
+// 弯曲度为 1 时与原二次贝塞尔（bend）完全一致；越大控制点离对应锚点越远、转角越饱满；为 0 时退化为直线（直角）
+const bendToCubic = (start, bend, end, segmentKey) => {
+  const k = (2 / 3) * global_params.curvature * (segmentCurvature[segmentKey] ?? 1)
+  return {
+    start,
+    control1: {
+      x: start.x + k * (bend.x - start.x),
+      y: start.y + k * (bend.y - start.y),
+    },
+    control2: {
+      x: end.x + k * (bend.x - end.x),
+      y: end.y + k * (bend.y - end.y),
+    },
+    end,
+  }
 }
 const ascender = 800
 const descender = -200
@@ -572,42 +600,18 @@ const getComponents = (skeleton, global_params) => {
   const { out_stroke1_curves, out_stroke1_points, in_stroke1_curves, in_stroke1_points } = FP.getCurveContours2(
     'stroke1',
     [
-      {
-        start: skeleton_0,
-        bend: skeleton_1,
-        end: skeleton_2,
-      },
-      {
-        start: skeleton_2,
-        bend: skeleton_3,
-        end: skeleton_4,
-      },
-      {
-        start: skeleton_4,
-        bend: skeleton_5,
-        end: skeleton_6,
-      },
+      bendToCubic(skeleton_0, skeleton_1, skeleton_2, 'stroke1:0'),
+      bendToCubic(skeleton_2, skeleton_3, skeleton_4, 'stroke1:1'),
+      bendToCubic(skeleton_4, skeleton_5, skeleton_6, 'stroke1:2'),
     ],
     weight
   )
   const { out_stroke2_curves, out_stroke2_points, in_stroke2_curves, in_stroke2_points } = FP.getCurveContours2(
     'stroke2',
     [
-      {
-        start: skeleton_6,
-        bend: skeleton_5,
-        end: skeleton_7,
-      },
-      {
-        start: skeleton_7,
-        bend: skeleton_8,
-        end: skeleton_9,
-      },
-      {
-        start: skeleton_9,
-        bend: skeleton_10,
-        end: skeleton_11,
-      },
+      bendToCubic(skeleton_6, skeleton_5, skeleton_7, 'stroke2:0'),
+      bendToCubic(skeleton_7, skeleton_8, skeleton_9, 'stroke2:1'),
+      bendToCubic(skeleton_9, skeleton_10, skeleton_11, 'stroke2:2'),
     ],
     weight
   )

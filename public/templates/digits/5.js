@@ -9,6 +9,32 @@ const global_params = {
   weight: glyph.getParam('字重') || 40,
   serifType: glyph.getParam('衬线类型') || 0,
   serifSize: glyph.getParam('衬线大小') || 2.0,
+  curvature: glyph.getParam('弯曲度') ?? 1,
+}
+// 每段曲线的弯曲度系数（段名:序号 → 系数），当前全部为 1（统一跟随全局「弯曲度」参数）；
+// 之后要微调某一段转角时，只需改这里的系数，例如 'stroke3:0': 0.8 更平、1.2 更圆
+const segmentCurvature = {
+  'stroke3:0': 1,
+  'stroke3:1': 1,
+  'stroke3:2': 1,
+  'stroke3:3': 1,
+}
+// 弯曲度 → 三次贝塞尔曲线描述：最终弯曲度 = 全局弯曲度 × 段系数；
+// 弯曲度为 1 时与原二次贝塞尔（bend）完全一致；越大控制点离对应锚点越远、转角越饱满；为 0 时退化为直线（直角）
+const bendToCubic = (start, bend, end, segmentKey) => {
+  const k = (2 / 3) * global_params.curvature * (segmentCurvature[segmentKey] ?? 1)
+  return {
+    start,
+    control1: {
+      x: start.x + k * (bend.x - start.x),
+      y: start.y + k * (bend.y - start.y),
+    },
+    control2: {
+      x: end.x + k * (bend.x - end.x),
+      y: end.y + k * (bend.y - end.y),
+    },
+    end,
+  }
 }
 const ascender = 800
 const descender = -200
@@ -444,10 +470,10 @@ const getComponents = (skeleton, global_params) => {
   const { out_stroke3_curves, out_stroke3_points, in_stroke3_curves, in_stroke3_points } = FP.getCurveContours2(
     'stroke3',
     [
-      { start: skeleton_1, bend: skeleton_2, end: skeleton_3 },
-      { start: skeleton_3, bend: skeleton_4, end: skeleton_5 },
-      { start: skeleton_5, bend: skeleton_6, end: skeleton_7 },
-      { start: skeleton_7, bend: skeleton_8, end: skeleton_9 },
+      bendToCubic(skeleton_1, skeleton_2, skeleton_3, 'stroke3:0'),
+      bendToCubic(skeleton_3, skeleton_4, skeleton_5, 'stroke3:1'),
+      bendToCubic(skeleton_5, skeleton_6, skeleton_7, 'stroke3:2'),
+      bendToCubic(skeleton_7, skeleton_8, skeleton_9, 'stroke3:3'),
     ],
     weight
   )

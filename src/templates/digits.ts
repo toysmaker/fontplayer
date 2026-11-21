@@ -491,6 +491,16 @@ digits = digits.map((digit) => {
     step: 0.1,
     default: 2.0,
   })
+  digit.globalParams.push({
+    name: '弯曲度',
+    // @ts-ignore
+    type: ParameterType.Number,
+    value: 1.0,
+    min: 0,
+    max: 2.0,
+    step: 0.01,
+    default: 1.0,
+  })
   return digit
 })
 
