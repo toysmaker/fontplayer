@@ -328,9 +328,18 @@ const heitiPressureWaistFn = (x: number) : number => {
 	return (1 + Math.cos((x - 0.5) * Math.PI * 2)) / 2
 }
 
-// 0 字形专用：上下（水平走向段）略细，左右（竖直段）满字重——模仿成熟字体的 0
+// 0 字形专用：上下（水平走向段）略细，左右（竖直段）满字重——模仿成熟字体的 0。
+// 接缝（x=0/1，位于侧面满字重处）为 0，避免接缝处掐出尖头
 const heitiPressureRingFn = (x: number) : number => {
-	return (1 + Math.cos(x * Math.PI * 4)) / 2
+	return (1 - Math.cos(x * Math.PI * 4)) / 2
+}
+
+// 圆圈/半圆专用平滑缓动（贝塞尔）：接缝与弧两端满字重（无尖头），
+// 过渡带更长更平（覆盖四分之一环长），可承受更重的笔压幅度
+const heitiPressureCircleSmoothFn = (x: number) : number => {
+	const q = x % 0.5
+	if (q <= 0.25) return cubicBezierEase(q / 0.25, ...EASE_CIRCLE)
+	return cubicBezierEase((0.5 - q) / 0.25, ...EASE_CIRCLE)
 }
 
 // 圆弧（衔接型）笔压：衔接处（x=0）收缩（75%），
@@ -361,11 +370,20 @@ const cubicBezierEase = (x: number, x1: number, y1: number, x2: number, y2: numb
 	return 3 * v * v * u * y1 + 3 * v * u * u * y2 + u * u * u
 }
 
-// 凹形端头扫掠：贝塞尔缓动 cubic-bezier(0.55, 0.05, 1, 0.55)——
-// 第一个控制点压低 → 前半段几乎平直（凹形加速扫掠）；
-// 第二个控制点 x=1 → 端头以竖直切线抵达端帽（直角自然成立，无凸角、无豁口）
+// ===== 笔压缓动控制点（cubic-bezier(x1, y1, x2, y2)），后续直观调整只需改这四个数字 =====
+
+// 直线笔画端头捺式扫掠：前半段几乎平直（凹形加速），端头以竖直切线抵达端帽（x2=1 → 直角自然成立）
+const EASE_STRAIGHT_END = [0.55, 0.05, 1, 0.55] as const
+
+// 圆圈/半圆平滑过渡：接缝处平缓起步、长距离过渡到最细（衔接处满字重、无尖头）
+const EASE_CIRCLE = [0.5, 0.03, 0.92, 0.35] as const
+
+// 圆弧衔接型（碗的起笔/收尾减细恢复）：平缓起步、中段加速、尾段平缓回满
+const EASE_ARC_RECOVER = [0.45, 0.04, 0.88, 0.5] as const
+
+// 凹形端头扫掠
 const concaveEndShape = (t: number) : number => {
-	return cubicBezierEase(t, 0.55, 0.05, 1, 0.55)
+	return cubicBezierEase(t, ...EASE_STRAIGHT_END)
 }
 
 // 直线笔画笔压（捺式凹形扫掠，两端镜像）：起笔端前 20% 为「反捺」（从 +25% 端帽加速收至原始字重），
@@ -506,6 +524,8 @@ const getBezierFn = (type: string) => {
 		return heitiPressureWaistFn
 	} else if (type === 'heitiPressureRing') {
 		return heitiPressureRingFn
+	} else if (type === 'heitiPressureCircleSmooth') {
+		return heitiPressureCircleSmoothFn
 	} else if (type === 'heitiPressureCircleStart') {
 		return heitiPressureCircleStartFn
 	} else if (type === 'heitiPressureStraight') {

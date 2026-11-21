@@ -7,7 +7,35 @@ const global_params = {
   weight: glyph.getParam('字重') || 40,
   serifType: glyph.getParam('衬线类型') || 0,
   serifSize: glyph.getParam('衬线大小') || 2.0,
+  curvature: glyph.getParam('弯曲度') ?? 1,
+  pressure: glyph.getParam('笔压') ?? 1,
 }
+// 弯曲度 → 三次贝塞尔曲线描述：弯曲度为 1 时与原二次贝塞尔（bend）完全一致；
+// 弯曲度越大，控制点离对应锚点越远，转角越饱满；为 0 时退化为直线（直角）
+const bendToCubic = (start, bend, end, segmentKey) => {
+  const k = (2 / 3) * global_params.curvature * (segmentCurvature[segmentKey] ?? 1)
+  return {
+    start,
+    control1: {
+      x: start.x + k * (bend.x - start.x),
+      y: start.y + k * (bend.y - start.y),
+    },
+    control2: {
+      x: end.x + k * (bend.x - end.x),
+      y: end.y + k * (bend.y - end.y),
+    },
+    end,
+  }
+}
+// 每段曲线的弯曲度系数（段名:序号 → 系数），当前全部为 1（统一跟随全局「弯曲度」参数）；
+// 之后要微调某一段转角时，只需改这里的系数，例如 'stroke1:0': 0.8 更平、1.2 更圆
+const segmentCurvature = {
+  'stroke1:0': 1,
+  'stroke1:1': 1,
+  'stroke1:2': 1,
+  'stroke1:3': 1,
+}
+
 const ascender = 800
 const descender = -200
 const width = 360
@@ -301,7 +329,7 @@ const refline = (p1, p2, type) => {
 
 const updateGlyphByParams = (params, global_params) => {
   const { h1, h2, w1 } = params
-  const { weight, serifType, serifSize } = global_params
+  const { weight, serifType, serifSize, curvature, pressure } = global_params
 
   const skeleton_0 = new FP.Joint('skeleton_0', {
     x: x0,
@@ -387,24 +415,28 @@ const updateGlyphByParams = (params, global_params) => {
 
 const getComponents = (skeleton, global_params) => {
   // 获取骨架以外的全局风格变量
-  const { weight } = global_params
+  const { weight, curvature, pressure } = global_params
 
   // 根据骨架计算轮廓关键点
   const { skeleton_0, skeleton_1, skeleton_2, skeleton_3, skeleton_4, skeleton_5, skeleton_6, skeleton_7, skeleton_8, skeleton_9 } = skeleton
 
   // out指上侧（外侧）轮廓线
   // in指下侧（内侧）轮廓线
-  const { out_stroke1_curves, out_stroke1_points, in_stroke1_curves, in_stroke1_points } = FP.getCurveContours2(
-    'stroke1',
-    [
-      { start: skeleton_0, bend: skeleton_1, end: skeleton_2 },
-      { start: skeleton_2, bend: skeleton_3, end: skeleton_4 },
-      { start: skeleton_4, bend: skeleton_5, end: skeleton_6 },
-      { start: skeleton_6, bend: skeleton_7, end: skeleton_0 },
-    ],
-    weight
-  )
-  const { out_stroke2_start, out_stroke2_end, in_stroke2_start, in_stroke2_end } = FP.getLineContours('stroke2', { stroke2_start: skeleton_8, stroke2_end: skeleton_9 }, weight)
+  const { out_stroke1_curves, out_stroke1_points, in_stroke1_curves, in_stroke1_points } = FP.getCurveContours2('stroke1', [
+      bendToCubic(skeleton_2, skeleton_3, skeleton_4, 'stroke1:1'),
+      bendToCubic(skeleton_4, skeleton_5, skeleton_6, 'stroke1:2'),
+      bendToCubic(skeleton_6, skeleton_7, skeleton_0, 'stroke1:3'),
+      bendToCubic(skeleton_0, skeleton_1, skeleton_2, 'stroke1:0'),
+    ], weight,
+    // 笔压（参照数字字形）：直线笔画两端捺式加粗
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+  const _stroke2_contours = FP.getLineContours2('stroke2', { stroke2_start: skeleton_9, stroke2_end: skeleton_8 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  const out_stroke2_curves = FP.fitCurvesByPoints(_stroke2_contours.out_stroke2_points, 1.5).curves
+  const in_stroke2_curves = FP.fitCurvesByPoints(_stroke2_contours.in_stroke2_points, 1.5).curves
+  const out_stroke2_start = out_stroke2_curves[0].start
+  const out_stroke2_end = out_stroke2_curves[out_stroke2_curves.length - 1].end
+  const in_stroke2_start = in_stroke2_curves[0].start
+  const in_stroke2_end = in_stroke2_curves[in_stroke2_curves.length - 1].end
 
   // 创建钢笔组件
   const pen1 = new FP.PenComponent()
@@ -426,9 +458,15 @@ const getComponents = (skeleton, global_params) => {
   const pen2 = new FP.PenComponent()
   pen2.beginPath()
   pen2.moveTo(out_stroke2_start.x, out_stroke2_start.y)
-  pen2.lineTo(out_stroke2_end.x, out_stroke2_end.y)
+  for (let i = 0; i < out_stroke2_curves.length; i++) {
+    const curve = out_stroke2_curves[i]
+    pen2.bezierTo(curve.control1.x, curve.control1.y, curve.control2.x, curve.control2.y, curve.end.x, curve.end.y)
+  }
   pen2.lineTo(in_stroke2_end.x, in_stroke2_end.y)
-  pen2.lineTo(in_stroke2_start.x, in_stroke2_start.y)
+  for (let i = in_stroke2_curves.length - 1; i >= 0; i--) {
+    const curve = in_stroke2_curves[i]
+    pen2.bezierTo(curve.control2.x, curve.control2.y, curve.control1.x, curve.control1.y, curve.start.x, curve.start.y)
+  }
   pen2.lineTo(out_stroke2_start.x, out_stroke2_start.y)
   pen2.closePath()
 

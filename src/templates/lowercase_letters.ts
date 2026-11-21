@@ -70,11 +70,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -125,11 +125,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -164,11 +164,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -219,11 +219,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -258,11 +258,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -305,11 +305,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -368,11 +368,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -415,11 +415,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -446,11 +446,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -501,11 +501,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -564,11 +564,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -587,11 +587,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -626,11 +626,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -665,11 +665,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -696,11 +696,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -751,11 +751,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -806,11 +806,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -845,11 +845,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -884,11 +884,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -939,11 +939,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -978,11 +978,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -1009,11 +1009,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -1040,11 +1040,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -1071,11 +1071,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -1126,11 +1126,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -1157,11 +1157,11 @@ let lowercaseLetters = [
     globalParams: [
       {
         name: '字重',
-        value: 40,
+        value: 80,
         min: 0,
         max: 100,
         step: 1,
-        default: 40,
+        default:  80,
       },
     ],
   },
@@ -1172,8 +1172,8 @@ lowercaseLetters = lowercaseLetters.map((letter) => {
     name: '衬线类型',
     // @ts-ignore
     type: ParameterType.Enum,
-    value: 1,
-    default: 1,
+    value: 0,
+    default: 0,
     options: [
       {
         value: 0,
@@ -1194,6 +1194,26 @@ lowercaseLetters = lowercaseLetters.map((letter) => {
     max: 3.0,
     step: 0.1,
     default: 2.0,
+  })
+  letter.globalParams.push({
+    name: '弯曲度',
+    // @ts-ignore
+    type: ParameterType.Number,
+    value: 0.8,
+    min: 0,
+    max: 2.0,
+    step: 0.01,
+    default: 0.8,
+  })
+  letter.globalParams.push({
+    name: '笔压',
+    // -ignore
+    type: ParameterType.Number,
+    value: 1,
+    min: 0.5,
+    max: 1.5,
+    step: 0.01,
+    default: 1,
   })
   return letter
 })

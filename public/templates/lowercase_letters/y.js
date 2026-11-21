@@ -9,7 +9,32 @@ const global_params = {
   weight: glyph.getParam('字重') || 40,
   serifType: glyph.getParam('衬线类型') || 0,
   serifSize: glyph.getParam('衬线大小') || 2.0,
+  curvature: glyph.getParam('弯曲度') ?? 1,
+  pressure: glyph.getParam('笔压') ?? 1,
 }
+// 弯曲度 → 三次贝塞尔曲线描述：弯曲度为 1 时与原二次贝塞尔（bend）完全一致；
+// 弯曲度越大，控制点离对应锚点越远，转角越饱满；为 0 时退化为直线（直角）
+const bendToCubic = (start, bend, end, segmentKey) => {
+  const k = (2 / 3) * global_params.curvature * (segmentCurvature[segmentKey] ?? 1)
+  return {
+    start,
+    control1: {
+      x: start.x + k * (bend.x - start.x),
+      y: start.y + k * (bend.y - start.y),
+    },
+    control2: {
+      x: end.x + k * (bend.x - end.x),
+      y: end.y + k * (bend.y - end.y),
+    },
+    end,
+  }
+}
+// 每段曲线的弯曲度系数（段名:序号 → 系数），当前全部为 1（统一跟随全局「弯曲度」参数）；
+// 之后要微调某一段转角时，只需改这里的系数，例如 'stroke1:0': 0.8 更平、1.2 更圆
+const segmentCurvature = {
+  'stroke2:0': 1,
+}
+
 const ascender = 800
 const descender = -200
 const width = 360
@@ -162,7 +187,7 @@ const refline = (p1, p2, type) => {
 
 const updateGlyphByParams = (params, global_params) => {
   const { h1, h2, w1, w2, w3 } = params
-  const { weight } = global_params
+  const { weight, curvature, pressure } = global_params
 
   const skeleton_0 = new FP.Joint('skeleton_0', {
     x: x0,
@@ -219,29 +244,29 @@ const updateGlyphByParams = (params, global_params) => {
 
 const getComponents = (skeleton, global_params) => {
   // 获取骨架以外的全局风格变量
-  const { weight, serifSize, serifType } = global_params
+  const { weight, serifSize, serifType, curvature, pressure } = global_params
 
   // 根据骨架计算轮廓关键点
   const { skeleton_0, skeleton_1, skeleton_2, skeleton_3, skeleton_4 } = skeleton
 
   // out指上侧（外侧）轮廓线
   // in指下侧（内侧）轮廓线
-  const { out_stroke1_start, out_stroke1_end, in_stroke1_start, in_stroke1_end } = FP.getLineContours('stroke1', { stroke1_start: skeleton_0, stroke1_end: skeleton_1 }, weight)
-  const { out_stroke2_curves, out_stroke2_points, in_stroke2_curves, in_stroke2_points } = FP.getCurveContours2(
-    'stroke2',
-    [
+  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_1, stroke1_end: skeleton_0 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  const out_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.out_stroke1_points, 1.5).curves
+  const in_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.in_stroke1_points, 1.5).curves
+  const out_stroke1_start = out_stroke1_curves[0].start
+  const out_stroke1_end = out_stroke1_curves[out_stroke1_curves.length - 1].end
+  const in_stroke1_start = in_stroke1_curves[0].start
+  const in_stroke1_end = in_stroke1_curves[in_stroke1_curves.length - 1].end
+  const { out_stroke2_curves, out_stroke2_points, in_stroke2_curves, in_stroke2_points } = FP.getCurveContours2('stroke2', [
       {
         start: skeleton_2,
         end: skeleton_1,
       },
-      {
-        start: skeleton_1,
-        bend: skeleton_3,
-        end: skeleton_4,
-      },
-    ],
-    weight
-  )
+      bendToCubic(skeleton_1, skeleton_3, skeleton_4, 'stroke2:0'),
+    ], weight,
+    // 笔压（参照数字字形）：直线笔画两端捺式加粗
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
 
   const end_serif_size = serifSize ? serifSize * weight : weight
   const end_serif_o = FP.getPointOnLine(
@@ -369,9 +394,15 @@ const getComponents = (skeleton, global_params) => {
   pen1.beginPath()
   if (serifType === 0) {
     pen1.moveTo(in_stroke1_start.x, in_stroke1_start.y)
-    pen1.lineTo(in_stroke1_end.x, in_stroke1_end.y)
+    for (let i = 0; i < in_stroke1_curves.length; i++) {
+      const curve = in_stroke1_curves[i]
+      pen1.bezierTo(curve.control1.x, curve.control1.y, curve.control2.x, curve.control2.y, curve.end.x, curve.end.y)
+    }
     pen1.lineTo(out_stroke1_end.x, out_stroke1_end.y)
-    pen1.lineTo(out_stroke1_start.x, out_stroke1_start.y)
+    for (let i = out_stroke1_curves.length - 1; i >= 0; i--) {
+      const curve = out_stroke1_curves[i]
+      pen1.bezierTo(curve.control2.x, curve.control2.y, curve.control1.x, curve.control1.y, curve.start.x, curve.start.y)
+    }
     pen1.lineTo(in_stroke1_start.x, in_stroke1_start.y)
   } else if (serifType === 1) {
     pen1.moveTo(stroke1_start_serif_p1.x, stroke1_start_serif_p1.y)

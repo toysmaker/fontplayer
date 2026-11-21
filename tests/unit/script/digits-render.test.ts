@@ -12,6 +12,8 @@ import { readFileSync, writeFileSync, mkdirSync, appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 import os from 'node:os'
 import { digits } from '@/templates/digits'
+import { lowercaseLetters } from '@/templates/lowercase_letters'
+import { capitalLetters } from '@/templates/capital_letters'
 import { useProjectStore } from '@/stores/project'
 import { ParameterType } from '@/core/types'
 
@@ -83,6 +85,15 @@ function runDigitScript(name: string, params: Record<string, any>): { glyph: any
   const script = readFileSync(join(PUBLIC_TEMPLATES, 'digits', `${name}.js`), 'utf8')
   const glyph = makeMockGlyph(params)
   const code = `function script_digit(glyph, constants, FP) {\n${script}\n}\nscript_digit(g, c, f)`
+  new Function('g', 'c', 'f', code)(glyph, {}, FP)
+  return { glyph, joints: glyph.getJoints(), reflines: glyph.getRefLines() }
+}
+
+/** 执行某个字母脚本（目录 lowercase_letters / capital_letters） */
+function runLetterScript(dir: string, name: string, params: Record<string, any>): { glyph: any; joints: any[]; reflines: any[] } {
+  const script = readFileSync(join(PUBLIC_TEMPLATES, dir, `${name}.js`), 'utf8')
+  const glyph = makeMockGlyph(params)
+  const code = `function script_letter(glyph, constants, FP) {\n${script}\n}\nscript_letter(g, c, f)`
   new Function('g', 'c', 'f', code)(glyph, {}, FP)
   return { glyph, joints: glyph.getJoints(), reflines: glyph.getRefLines() }
 }
@@ -586,6 +597,181 @@ describe('digits 模板渲染验证', () => {
       for (let j = 0; j < directPens[i].length; j++) {
         expect(pipelinePens[i][j].x).toBeCloseTo(directPens[i][j].x, 6)
         expect(pipelinePens[i][j].y).toBeCloseTo(directPens[i][j].y, 6)
+      }
+    }
+  })
+
+  it('字母笔迹绕向诊断（鞋带公式有向面积）', () => {
+    const lines: string[] = []
+    const signedArea = (poly: Array<{ x: number; y: number }>) => {
+      let a = 0
+      for (let i = 0; i < poly.length - 1; i++) {
+        a += poly[i].x * poly[i + 1].y - poly[i + 1].x * poly[i].y
+      }
+      return a / 2
+    }
+    const letterDirs: Array<[string, any[]]> = [['lowercase_letters', lowercaseLetters as any[]], ['capital_letters', capitalLetters as any[]]]
+    for (const [dir, letters] of letterDirs) {
+      for (const letter of letters) {
+        const params: Record<string, any> = {}
+        for (const p of letter.params) params[p.name] = p.value ?? p.default
+        for (const p of letter.globalParams) params[p.name] = p.value ?? p.default
+        const { glyph } = runLetterScript(dir, letter.name, params)
+        const signs = (glyph._components as any[]).map((pen) => {
+          const a = signedArea(penToPolygon(pen))
+          return Math.abs(a) < 1 ? '~' : a > 0 ? '+' : '-'
+        })
+        lines.push(`${letter.name}: ${signs.join(' ')}`)
+      }
+    }
+    mkdirSync(OUT_DIR, { recursive: true })
+    writeFileSync(join(OUT_DIR, 'winding.txt'), lines.join('\n'))
+    expect(lines.length).toBeGreaterThan(0)
+  })
+
+
+  it('大写字母交叉处诊断', () => {
+    const lines: string[] = []
+    for (const name of ['d', 'e', 'f', 'g', 'p', 'r']) {
+      const letter = (capitalLetters as any[]).find((l) => l.name === name)!
+      const params: Record<string, any> = {}
+      for (const p of letter.params) params[p.name] = p.value ?? p.default
+      for (const p of letter.globalParams) params[p.name] = p.value ?? p.default
+      const { glyph } = runLetterScript('capital_letters', name, params)
+      const polys = (glyph._components as any[]).map(penToPolygon)
+      lines.push('--- ' + name)
+      for (const y of [55, 60, 100, 420, 430, 440, 550, 790, 795, 800]) {
+        const ints = unionIntervals(polys.flatMap((p) => intervalsAtY(p, y)))
+        lines.push('  y=' + y + ': ' + ints.map(([a, b]) => '[' + Math.round(a) + ',' + Math.round(b) + ']').join(' '))
+      }
+    }
+    mkdirSync(OUT_DIR, { recursive: true })
+    writeFileSync(join(OUT_DIR, 'caps-crossing.txt'), lines.join('\n'))
+    expect(lines.length).toBeGreaterThan(0)
+  })
+
+
+  it('D逐笔诊断', () => {
+    const letter = (capitalLetters as any[]).find((l) => l.name === 'd')!
+    const params: Record<string, any> = {}
+    for (const p of letter.params) params[p.name] = p.value ?? p.default
+    for (const p of letter.globalParams) params[p.name] = p.value ?? p.default
+    const { glyph } = runLetterScript('capital_letters', 'd', params)
+    const lines: string[] = []
+    for (const y of [55, 60, 100, 400, 795]) {
+      lines.push('y=' + y + ':')
+      ;(glyph._components as any[]).forEach((pen, i) => {
+        const ints = intervalsAtY(penToPolygon(pen), y)
+        lines.push('  pen' + i + ': ' + ints.map(([a, b]) => '[' + Math.round(a) + ',' + Math.round(b) + ']').join(' ') || '(none)')
+      })
+    }
+    mkdirSync(OUT_DIR, { recursive: true })
+    writeFileSync(join(OUT_DIR, 'd-pens.txt'), lines.join('\n'))
+    expect(lines.length).toBeGreaterThan(0)
+  })
+
+
+  it('E逐笔诊断', () => {
+    const letter = (capitalLetters as any[]).find((l) => l.name === 'e')!
+    const params: Record<string, any> = {}
+    for (const p of letter.params) params[p.name] = p.value ?? p.default
+    for (const p of letter.globalParams) params[p.name] = p.value ?? p.default
+    const { glyph } = runLetterScript('capital_letters', 'e', params)
+    const lines: string[] = []
+    for (const y of [20, 35, 50, 55, 60, 75, 90, 770, 790, 800]) {
+      lines.push('y=' + y + ':')
+      ;(glyph._components as any[]).forEach((pen, i) => {
+        const ints = intervalsAtY(penToPolygon(pen), y)
+        lines.push('  pen' + i + ': ' + (ints.map(([a, b]) => '[' + Math.round(a) + ',' + Math.round(b) + ']').join(' ') || '(none)'))
+      })
+    }
+    mkdirSync(OUT_DIR, { recursive: true })
+    writeFileSync(join(OUT_DIR, 'e-pens.txt'), lines.join('\n'))
+    expect(lines.length).toBeGreaterThan(0)
+  })
+
+
+  it('F小写逐笔诊断', () => {
+    const letter = (lowercaseLetters as any[]).find((l) => l.name === 'f')!
+    const params: Record<string, any> = {}
+    for (const p of letter.params) params[p.name] = p.value ?? p.default
+    for (const p of letter.globalParams) params[p.name] = p.value ?? p.default
+    const { glyph } = runLetterScript('lowercase_letters', 'f', params)
+    const lines: string[] = []
+    for (const y of [210, 230, 250, 270, 290]) {
+      lines.push('y=' + y + ':')
+      ;(glyph._components as any[]).forEach((pen, i) => {
+        const ints = intervalsAtY(penToPolygon(pen), y)
+        lines.push('  pen' + i + ': ' + (ints.map(([a, b]) => '[' + Math.round(a) + ',' + Math.round(b) + ']').join(' ') || '(none)'))
+      })
+    }
+    mkdirSync(OUT_DIR, { recursive: true })
+    writeFileSync(join(OUT_DIR, 'f-pens.txt'), lines.join('\n'))
+    expect(lines.length).toBeGreaterThan(0)
+  })
+
+
+  it('G逐笔诊断', () => {
+    const letter = (capitalLetters as any[]).find((l) => l.name === 'g')!
+    const params: Record<string, any> = {}
+    for (const p of letter.params) params[p.name] = p.value ?? p.default
+    for (const p of letter.globalParams) params[p.name] = p.value ?? p.default
+    const { glyph } = runLetterScript('capital_letters', 'g', params)
+    const lines: string[] = []
+    for (const y of [80, 90, 100, 110, 120, 400]) {
+      lines.push('y=' + y + ':')
+      ;(glyph._components as any[]).forEach((pen, i) => {
+        const ints = intervalsAtY(penToPolygon(pen), y)
+        lines.push('  pen' + i + ': ' + (ints.map(([a, b]) => '[' + Math.round(a) + ',' + Math.round(b) + ']').join(' ') || '(none)'))
+      })
+    }
+    mkdirSync(OUT_DIR, { recursive: true })
+    writeFileSync(join(OUT_DIR, 'g-pens.txt'), lines.join('\n'))
+    expect(lines.length).toBeGreaterThan(0)
+  })
+
+  it('小写 f/h/m/n 剖面诊断', () => {
+    const lines: string[] = []
+    for (const name of ['a', 'd', 'e', 'f', 'v', 'w', 'm', 'n']) {
+      const letter = (lowercaseLetters as any[]).find((l) => l.name === name)!
+      const params: Record<string, any> = {}
+      for (const p of letter.params) params[p.name] = p.value ?? p.default
+      for (const p of letter.globalParams) params[p.name] = p.value ?? p.default
+      const { glyph } = runLetterScript('lowercase_letters', name, params)
+      const polys = (glyph._components as any[]).map(penToPolygon)
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+      for (const poly of polys) for (const pt of poly) {
+        minX = Math.min(minX, pt.x); maxX = Math.max(maxX, pt.x)
+        minY = Math.min(minY, pt.y); maxY = Math.max(maxY, pt.y)
+      }
+      lines.push(`--- ${name} bbox [${Math.round(minX)},${Math.round(minY)}]→[${Math.round(maxX)},${Math.round(maxY)}]`)
+      for (const y of [60, 150, 250, 400, 550, 700, 780, 795, 800]) {
+        const ints = unionIntervals(polys.flatMap((p) => intervalsAtY(p, y)))
+        lines.push(`  y=${y}: ${ints.map(([a, b]) => `[${Math.round(a)},${Math.round(b)}]`).join(' ')}`)
+      }
+    }
+    mkdirSync(OUT_DIR, { recursive: true })
+    writeFileSync(join(OUT_DIR, 'letters-fhmn.txt'), lines.join('\n'))
+    expect(lines.length).toBeGreaterThan(0)
+  })
+
+  it('所有字母脚本（大小写）输出轮廓点无 NaN 且落在合理包围盒内', () => {
+    const letterDirs: Array<[string, any[]]> = [['lowercase_letters', lowercaseLetters as any[]], ['capital_letters', capitalLetters as any[]]]
+    for (const [dir, letters] of letterDirs) {
+      for (const letter of letters) {
+        const params: Record<string, any> = {}
+        for (const p of letter.params) params[p.name] = p.value ?? p.default
+        for (const p of letter.globalParams) params[p.name] = p.value ?? p.default
+        const { glyph } = runLetterScript(dir, letter.name, params)
+        expect(glyph._components.length).toBeGreaterThan(0)
+        for (const pen of glyph._components) {
+          for (const p of pen.points || []) {
+            expect(Number.isFinite(p.x)).toBe(true)
+            expect(Number.isFinite(p.y)).toBe(true)
+            expect(Math.abs(p.x)).toBeLessThan(2000)
+            expect(Math.abs(p.y)).toBeLessThan(2000)
+          }
+        }
       }
     }
   })
