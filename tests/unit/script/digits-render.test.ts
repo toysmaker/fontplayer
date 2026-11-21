@@ -8,10 +8,12 @@
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 import os from 'node:os'
 import { digits } from '@/templates/digits'
+import { useProjectStore } from '@/stores/project'
+import { ParameterType } from '@/core/types'
 
 const PUBLIC_TEMPLATES = join(process.cwd(), 'public', 'templates')
 const OUT_DIR = join(os.tmpdir(), 'fontplayer-digits-render')
@@ -156,15 +158,14 @@ function renderDigit(name: string, params: Record<string, any>, label: string): 
 const gallerySvgCache = new Map<string, string>()
 
 function writeGallery(): void {
-  const curvLabels = ['serif1-curv-0', 'serif1-curv-0.5', 'serif1-curv-1', 'serif1-curv-1.5', 'serif1-curv-2']
-  const columns = [...curvLabels, 'serif0']
+  const curvLabels = ['serif0-curv-0.5', 'serif0-curv-0.8', 'serif0-curv-1', 'serif0-curv-1.5']
+  const columns = [...curvLabels, 'serif1']
   const headers = [
-    { main: '弯曲度 0', note: '直角', base: false },
-    { main: '弯曲度 0.5', note: '', base: false },
-    { main: '弯曲度 1', note: '与原二次一致', base: true },
-    { main: '弯曲度 1.5', note: '', base: false },
-    { main: '弯曲度 2', note: '最饱满', base: false },
-    { main: '无衬线', note: '弯曲度 1', base: false },
+    { main: '弯曲度 0.5', note: '更方', base: false },
+    { main: '弯曲度 0.8', note: '当前默认', base: true },
+    { main: '弯曲度 1', note: '原二次', base: false },
+    { main: '弯曲度 1.5', note: '更圆', base: false },
+    { main: '衬线类型1', note: '默认弯曲度', base: false },
   ]
   // SVG 内硬编码颜色替换为 CSS 变量，使试样瓷砖跟随页面主题
   const themeSvg = (svg: string) =>
@@ -254,7 +255,7 @@ h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; text-wrap: balance; }
 </style>
 <header>
   <h1>字玩数字试样</h1>
-  <p class="sub">digits 模板弯曲度改造验证：10 个数字 × 5 档弯曲度（衬线类型 1），最后一列为无衬线基准。弯曲度 1 的输出与原二次贝塞尔（bend）版本逐字节一致，弯曲度 0 为直角、2 为最饱满。</p>
+  <p class="sub">digits 模板渲染验证：10 个数字 × 4 档弯曲度（无衬线，当前默认弯曲度 0.8），最后一列为衬线类型 1 基准。弯曲度 1 的输出与原二次贝塞尔（bend）版本逐字节一致，弯曲度 0 为直角、2 为最饱满。</p>
   <div class="meta">
     <div class="legend"><span><i class="sw c"></i>轮廓</span><span><i class="sw j"></i>骨架关节</span><span><i class="sw r"></i>辅助线</span></div>
     <span>字身框 1000 · ascender 800 / descender −200 · 字重 40 · 衬线大小 2.0</span>
@@ -263,6 +264,137 @@ h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; text-wrap: balance; }
 <div class="cols"><div></div>${headerCells}</div>
 ${grid}`
   writeFileSync(join(OUT_DIR, 'gallery.html'), html)
+}
+
+/** 将 PenComponent 采样为多边形顶点数组（每段 40 采样） */
+function penToPolygon(pen: any): Array<{ x: number; y: number }> {
+  const pts = pen.points
+  const poly: Array<{ x: number; y: number }> = []
+  if (!pts || pts.length < 4) return poly
+  for (let i = 0; i < pts.length; i++) {
+    if (pts[i].type !== 'anchor') continue
+    // 找到上一个 anchor 作为曲线起点
+    let prevAnchor = -1
+    for (let j = i - 1; j >= 0; j--) {
+      if (pts[j].type === 'anchor') {
+        prevAnchor = j
+        break
+      }
+    }
+    if (prevAnchor < 0) continue
+    const p0 = pts[prevAnchor]
+    const c1 = pts[i - 2]
+    const c2 = pts[i - 1]
+    const p3 = pts[i]
+    for (let t = 0; t <= 40; t++) {
+      const u = t / 40
+      const v = 1 - u
+      poly.push({
+        x: v * v * v * p0.x + 3 * v * v * u * c1.x + 3 * v * u * u * c2.x + u * u * u * p3.x,
+        y: v * v * v * p0.y + 3 * v * v * u * c1.y + 3 * v * u * u * c2.y + u * u * u * p3.y,
+      })
+    }
+  }
+  if (pen.isClosed) poly.push(poly[0])
+  return poly
+}
+
+/** 单个多边形在某 y 高度的水平覆盖区间（偶数环绕规则，简单闭合形状即填充区） */
+function intervalsAtY(poly: Array<{ x: number; y: number }>, y: number): Array<[number, number]> {
+  const xs: number[] = []
+  for (let i = 0; i < poly.length - 1; i++) {
+    const a = poly[i]
+    const b = poly[i + 1]
+    if ((a.y <= y && b.y > y) || (b.y <= y && a.y > y)) {
+      xs.push(a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x))
+    }
+  }
+  xs.sort((m, n) => m - n)
+  const out: Array<[number, number]> = []
+  for (let i = 0; i + 1 < xs.length; i += 2) out.push([xs[i], xs[i + 1]])
+  return out
+}
+
+/** 多个多边形覆盖区间的并集 */
+function unionIntervals(list: Array<[number, number]>): Array<[number, number]> {
+  const sorted = [...list].sort((a, b) => a[0] - b[0])
+  const out: Array<[number, number]> = []
+  for (const [s, e] of sorted) {
+    if (!out.length || s > out[out.length - 1][1]) out.push([s, e])
+    else if (e > out[out.length - 1][1]) out[out.length - 1][1] = e
+  }
+  return out
+}
+
+/** 生成数字轮廓剖面报告：包围盒 + 关键高度切片（区间数与宽度），用于视错修正的数值验证 */
+function profileDigits(): string {
+  const lines: string[] = []
+  const fmt = (v: number) => (Math.round(v * 100) / 100).toString()
+  for (const digit of digits) {
+    const base = buildParams(digit)
+    for (const serifType of [1, 0]) {
+      const { glyph } = runDigitScript(digit.name, { ...base, 衬线类型: serifType })
+      const polys = glyph._components.map(penToPolygon)
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+      for (const p of polys) {
+        for (const pt of p) {
+          minX = Math.min(minX, pt.x); maxX = Math.max(maxX, pt.x)
+          minY = Math.min(minY, pt.y); maxY = Math.max(maxY, pt.y)
+        }
+      }
+      lines.push(`--- ${digit.name} serif${serifType} bbox [${fmt(minX)},${fmt(minY)}]→[${fmt(maxX)},${fmt(maxY)}] w=${fmt(maxX - minX)} h=${fmt(maxY - minY)} center_x=${fmt((minX + maxX) / 2)}`)
+      for (const y of [40, 60, 120, 250, 400, 425, 450, 550, 600, 700, 780, 795, 815]) {
+        const ints = unionIntervals(polys.flatMap((p) => intervalsAtY(p, y)))
+        const width = ints.reduce((s, [a, b]) => s + (b - a), 0)
+        const detail = ints.map(([a, b]) => `[${fmt(a)},${fmt(b)}]`).join(' ')
+        lines.push(`  y=${y}: n=${ints.length} width=${fmt(width)} ${detail}`)
+      }
+    }
+  }
+  return lines.join('\n')
+}
+
+/** 逐笔画覆盖诊断：输出每个 PenComponent 在指定高度的覆盖区间 */
+function debugPerPen(name: string, serifType: number, ys: number[]): string {
+  const base = buildParams(digits.find((d) => d.name === name)!)
+  const { glyph } = runDigitScript(name, { ...base, 衬线类型: serifType })
+  const lines: string[] = []
+  const fmt = (v: number) => (Math.round(v * 100) / 100).toString()
+  for (const y of ys) {
+    lines.push(`y=${y}:`)
+    glyph._components.forEach((pen: any, i: number) => {
+      const ints = intervalsAtY(penToPolygon(pen), y)
+      lines.push(`  pen${i}: ${ints.map(([a, b]) => `[${fmt(a)},${fmt(b)}]`).join(' ') || '(none)'}`)
+    })
+  }
+  return lines.join('\n')
+}
+
+/** 直连诊断：单段直线骨架 + heitiPressure，打印拟合前/后的真实笔画厚度 */
+function probePressure(): string {
+  const lines: string[] = []
+  const seg = [{ start: { x: 0, y: 0 }, end: { x: 0, y: 750 } }]
+  const r = FP.getCurveContours2('s', seg, 40, {
+    weightsVariation: 'bezier',
+    weightsVariationFnType: 'heitiPressure',
+    startWeight: 40,
+    endWeight: 26,
+  })
+  const dist = (a: any, b: any) => Math.hypot(a.x - b.x, a.y - b.y)
+  const fmt = (v: number) => Math.round(v * 100) / 100
+  const inPts = r.in_s_points
+  const outPts = r.out_s_points
+  lines.push(`points=${inPts.length}`)
+  const sample = (i: number) => fmt(dist(inPts[i], outPts[i]))
+  lines.push(`thickness@t0=${sample(0)} t0.25=${sample(Math.floor(inPts.length * 0.25))} t0.5=${sample(Math.floor(inPts.length * 0.5))} t0.75=${sample(Math.floor(inPts.length * 0.75))} t1=${sample(inPts.length - 1)}`)
+  // 拟合后曲线带：in/out 曲线成对的距离不易直接对应，打印拟合曲线数量与两端点距离
+  if (r.in_s_curves.length && r.out_s_curves.length) {
+    const ic = r.in_s_curves
+    const oc = r.out_s_curves
+    lines.push(`curves in=${ic.length} out=${oc.length}`)
+    lines.push(`fitted@start=${fmt(dist(ic[0].start, oc[0].start))} fitted@end=${fmt(dist(ic[ic.length - 1].end, oc[oc.length - 1].end))}`)
+  }
+  return lines.join('\n')
 }
 
 describe('digits 模板渲染验证', () => {
@@ -331,26 +463,146 @@ describe('digits 模板渲染验证', () => {
     expect(m2.y).toBeCloseTo(bend.y, 10)
   })
 
+  it('短笔画厚度分布探针（1 旗形 / 7 顶横）', () => {
+    const lines: string[] = []
+    const fmt = (v: number) => Math.round(v * 100) / 100
+    // 垂直切片：量笔画多边形在 x 处的 y 覆盖范围（画出来的真实带厚）
+    const extentAtX = (poly: Array<{ x: number; y: number }>, x: number) => {
+      const ys: number[] = []
+      for (let i = 0; i < poly.length - 1; i++) {
+        const a = poly[i]
+        const b = poly[i + 1]
+        if ((a.x <= x && b.x > x) || (b.x <= x && a.x > x)) {
+          ys.push(a.y + ((x - a.x) / (b.x - a.x)) * (b.y - a.y))
+        }
+      }
+      ys.sort((m, n) => m - n)
+      if (ys.length < 2) return null
+      return ys[ys.length - 1] - ys[0]
+    }
+    for (const name of ['1', '7', '5']) {
+      const base = buildParams(digits.find((d) => d.name === name)!)
+      const { glyph } = runDigitScript(name, { ...base, 衬线类型: 0 })
+      const pens = glyph._components as any[]
+      lines.push(`--- ${name} pens=${pens.length}`)
+      pens.forEach((pen, pi) => {
+        const poly = penToPolygon(pen)
+        if (!poly.length) return
+        const minX = Math.min(...poly.map((p: any) => p.x))
+        const maxX = Math.max(...poly.map((p: any) => p.x))
+        const fracs = [0.05, 0.15, 0.3, 0.5, 0.7, 0.85, 0.95]
+        const parts = fracs.map((f) => {
+          const x = minX + f * (maxX - minX)
+          const e = extentAtX(poly, x)
+          return e === null ? `${f}=?` : `${f}=${fmt(e)}`
+        })
+        lines.push(`  pen${pi} x-range=[${fmt(minX)},${fmt(maxX)}]: ${parts.join(' ')}`)
+      })
+    }
+    const report = lines.join('\n')
+    mkdirSync(OUT_DIR, { recursive: true })
+    writeFileSync(join(OUT_DIR, 'short-stroke-probe.txt'), report)
+    expect(report.length).toBeGreaterThan(0)
+  })
+
+  it('笔压探针：heitiPressure 的真实厚度分布', () => {
+    const report = probePressure()
+    mkdirSync(OUT_DIR, { recursive: true })
+    writeFileSync(join(OUT_DIR, 'pressure-probe.txt'), report)
+    expect(report.length).toBeGreaterThan(0)
+  })
+
+  it('逐笔画覆盖诊断（debug）', () => {
+    const report = debugPerPen('1', 0, [780, 782, 784, 786, 788, 790, 792, 794, 796, 798, 800])
+    mkdirSync(OUT_DIR, { recursive: true })
+    writeFileSync(join(OUT_DIR, 'debug.txt'), report)
+    expect(report.length).toBeGreaterThan(0)
+  })
+
+  it('输出轮廓剖面报告（切片测厚，用于视错修正验证）', () => {
+    const report = profileDigits()
+    mkdirSync(OUT_DIR, { recursive: true })
+    writeFileSync(join(OUT_DIR, 'profile.txt'), report)
+    expect(report.length).toBeGreaterThan(0)
+  })
+
   it('渲染全部 digits 到 SVG（含衬线/无衬线 × 多档弯曲度）', () => {
     for (const digit of digits) {
       const base = buildParams(digit)
-      for (const curv of [0, 0.5, 1, 1.5, 2]) {
-        renderDigit(digit.name, { ...base, 衬线类型: 1, 衬线大小: 2.0, 弯曲度: curv }, `serif1-curv-${curv}`)
+      for (const curv of [0.5, 0.8, 1, 1.5]) {
+        renderDigit(digit.name, { ...base, 衬线类型: 0, 弯曲度: curv }, `serif0-curv-${curv}`)
       }
-      renderDigit(digit.name, { ...base, 衬线类型: 0, 衬线大小: 2.0, 弯曲度: 1 }, 'serif0')
+      renderDigit(digit.name, { ...base, 衬线类型: 1 }, 'serif1')
     }
     writeGallery()
     expect(true).toBe(true)
   })
 
+  it('完整管线对照：executeGlyphScript 与直跑脚本生成的轮廓完全一致', async () => {
+    const digit = digits.find((d) => d.name === '3')!
+    const params = buildParams(digit)
+    const script = readFileSync(join(PUBLIC_TEMPLATES, 'digits', '3.js'), 'utf8')
+
+    // 直跑路径（本工具一直在用的方式）
+    const direct = runDigitScript('3', params)
+    const directPens = direct.glyph._components.map((p: any) => p.points)
+
+    // App 完整管线路径
+    const { createBaseGlyph } = await import('@/features/editor/menus/templatesHandlers')
+    const { executeGlyphScript } = await import('@/core/script/ScriptExecutor')
+    const { instanceManager } = await import('@/core/instance/InstanceManager')
+    const projectStore = useProjectStore()
+    const file: any = { uuid: 'file-pipeline-test', name: 't', glyphs: [], stroke_glyphs: [], radical_glyphs: [], comp_glyphs: [], components: [] }
+    projectStore.addFile(file)
+    projectStore.selectFile(file.uuid)
+
+    // 与 templatesHandlers.buildLetterOrDigitParams 相同的参数构造（该函数未导出）
+    const parameters: any[] = []
+    for (const p of digit.params) {
+      parameters.push({ uuid: `p-${p.name}`, name: p.name, type: ParameterType.Number, value: p.value ?? p.default, min: p.min ?? 0, max: p.max ?? 1000 })
+    }
+    for (const p of digit.globalParams) {
+      if ((p as any).type === ParameterType.Enum) {
+        parameters.push({ uuid: `g-${p.name}`, name: p.name, type: (p as any).type, value: p.value ?? p.default, options: (p as any).options })
+      } else {
+        parameters.push({ uuid: `g-${p.name}`, name: p.name, type: (p as any).type ?? ParameterType.Number, value: p.value ?? p.default, min: p.min ?? 0, max: p.max ?? 1000 })
+      }
+    }
+    const glyphData: any = createBaseGlyph('3', 'pipeline-test', `function script_glyph_pipeline_3 (glyph, constants, FP) {\n\t${script}\n}`, parameters)
+    glyphData.uuid = 'glyph-pipeline-3'
+    executeGlyphScript(glyphData)
+
+    const inst: any = instanceManager.acquireTemporaryInstance(
+      'glyph-pipeline-3',
+      () => { throw new Error('instance not pooled') },
+      'glyph'
+    )
+    expect(inst).toBeTruthy()
+    const pipelinePens = (inst._components || []).map((p: any) => p.points)
+
+    expect(pipelinePens.length).toBe(directPens.length)
+    for (let i = 0; i < directPens.length; i++) {
+      expect(pipelinePens[i].length).toBe(directPens[i].length)
+      for (let j = 0; j < directPens[i].length; j++) {
+        expect(pipelinePens[i][j].x).toBeCloseTo(directPens[i][j].x, 6)
+        expect(pipelinePens[i][j].y).toBeCloseTo(directPens[i][j].y, 6)
+      }
+    }
+  })
+
   it('所有 digits 脚本输出轮廓点无 NaN 且落在合理包围盒内', () => {
     for (const digit of digits) {
       const base = buildParams(digit)
-      for (const curv of [0, 0.5, 1, 1.5, 2]) {
+      for (const curv of [0, 0.5, 0.8, 1, 1.5, 2]) {
+        appendFileSync(join(OUT_DIR, 'bisect.txt'), digit.name + ' ' + curv + '\n')
         const { glyph } = runDigitScript(digit.name, { ...base, 衬线类型: 1, 弯曲度: curv })
         expect(glyph._components.length).toBeGreaterThan(0)
         for (const pen of glyph._components) {
           for (const p of pen.points || []) {
+            if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) >= 2000 || Math.abs(p.y) >= 2000) {
+              const pts = (pen.points || []).map((q: any, i: number) => `${i}:${q.type === 'anchor' ? 'A' : 'C'}(${Math.round(q.x)},${Math.round(q.y)})`).join(' ')
+              appendFileSync(join(OUT_DIR, 'wild.txt'), `digit=${digit.name} curv=${curv} penType=${pen.type} x=${p.x} y=${p.y}\n${pts}\n`)
+            }
             expect(Number.isFinite(p.x)).toBe(true)
             expect(Number.isFinite(p.y)).toBe(true)
             expect(Math.abs(p.x)).toBeLessThan(2000)

@@ -280,6 +280,136 @@ const bezierFn = (x: number) : number => {
 	return bezierCurve.q(bezier, x).y
 }
 
+// 黑体笔压函数（配合 weightsVariation: 'bezier' + startWeight=满字重/endWeight=0.75×字重）：
+// - 起笔：前 10% 内快速完成主要减细（f: 0 → 0.85，余弦缓动）
+// - 中段：0.85 → 1.0（最细）→ 0.85 平缓过渡
+// - 收笔：最后 10% 快速恢复满字重（0.85 → 0）
+const heitiPressureFn = (x: number) : number => {
+	if (x < 0.1) {
+		return 0.85 * (1 - Math.cos((x / 0.1) * Math.PI)) / 2
+	}
+	if (x > 0.9) {
+		return 0.85 * (1 - Math.cos(((1 - x) / 0.1) * Math.PI)) / 2
+	}
+	return 0.85 + 0.15 * (1 - Math.cos(((x - 0.1) / 0.8) * Math.PI * 2)) / 2
+}
+
+// 闭合圆圈专用笔压：两端满字重，中点（弯曲最深处）最细，全程平缓余弦变化——
+// 圆圈起收笔衔接处（如 6/9 的斜笔交汇点）需要保持满字重，不能在起笔处快速变化
+const heitiPressureMidFn = (x: number) : number => {
+	return (1 - Math.cos(x * Math.PI * 2)) / 2
+}
+
+// 衔接型笔画专用笔压：前 40% 保持满字重（与相邻笔画衔接处等宽），
+// 随后渐减至 70% 处最细，再恢复满字重收笔——竖画、尾笔等一端接驳的笔画使用
+const heitiPressureLateFn = (x: number) : number => {
+	if (x < 0.4) return 0
+	if (x < 0.7) return (1 - Math.cos(((x - 0.4) / 0.3) * Math.PI)) / 2
+	if (x < 0.95) return (1 - Math.cos(((0.95 - x) / 0.25) * Math.PI)) / 2
+	return 0
+}
+
+// 收笔侧加粗（捺式凹形扫掠）：前 80% 保持满字重（衔接处等宽），收笔端后 20% 内
+// 以 t² 加速扫掠加粗至 +25%，端头留 2% 满幅直线段（端帽角严格 90° 无豁口）——如 5 的顶横
+const heitiPressureEndFn = (x: number) : number => {
+	if (x < 0.7) return 0
+	if (x >= 0.99) return 1
+	return concaveEndShape((x - 0.7) / 0.29)
+}
+
+// 圆弧（含半圆）笔压（模仿成熟字体）：起笔/收笔（尖端与衔接处）略细，
+// 弧顶（笔画中部、最远处）最粗——2/3/5/6/9 的圆弧使用
+const heitiPressureCircleFn = (x: number) : number => {
+	return (1 + Math.cos(x * Math.PI * 2)) / 2
+}
+
+// 8 字专用：腰部（两圆交汇处）平缓收细（余弦渐变，过渡如椭圆），其余部分满字重
+const heitiPressureWaistFn = (x: number) : number => {
+	return (1 + Math.cos((x - 0.5) * Math.PI * 2)) / 2
+}
+
+// 0 字形专用：上下（水平走向段）略细，左右（竖直段）满字重——模仿成熟字体的 0
+const heitiPressureRingFn = (x: number) : number => {
+	return (1 + Math.cos(x * Math.PI * 4)) / 2
+}
+
+// 圆弧（衔接型）笔压：衔接处（x=0）收缩（75%），
+// 前 30% 内以 smoothstep 平滑恢复到满字重，之后保持满字重——收尾处与相邻笔画等宽（5/6 的碗）
+const heitiPressureCircleStartFn = (x: number) : number => {
+	if (x >= 0.3) return 0
+	return 1 - smoothstep(x / 0.3)
+}
+
+// smoothstep 缓动：两端斜率为 0，中间加速——捺式中段扫掠 + 端头与端帽相切（90° 直角，无豁角）
+const smoothstep = (t: number) : number => {
+	return t * t * (3 - 2 * t)
+}
+
+// CSS 风格三次贝塞尔缓动：输入 x∈[0,1]，返回 y（二分求参数）
+const cubicBezierEase = (x: number, x1: number, y1: number, x2: number, y2: number) : number => {
+	let lo = 0
+	let hi = 1
+	for (let i = 0; i < 40; i++) {
+		const u = (lo + hi) / 2
+		const v = 1 - u
+		const bx = 3 * v * v * u * x1 + 3 * v * u * u * x2 + u * u * u
+		if (bx < x) lo = u
+		else hi = u
+	}
+	const u = (lo + hi) / 2
+	const v = 1 - u
+	return 3 * v * v * u * y1 + 3 * v * u * u * y2 + u * u * u
+}
+
+// 凹形端头扫掠：贝塞尔缓动 cubic-bezier(0.55, 0.05, 1, 0.55)——
+// 第一个控制点压低 → 前半段几乎平直（凹形加速扫掠）；
+// 第二个控制点 x=1 → 端头以竖直切线抵达端帽（直角自然成立，无凸角、无豁口）
+const concaveEndShape = (t: number) : number => {
+	return cubicBezierEase(t, 0.55, 0.05, 1, 0.55)
+}
+
+// 直线笔画笔压（捺式凹形扫掠，两端镜像）：起笔端前 20% 为「反捺」（从 +25% 端帽加速收至原始字重），
+// 中段 20%~80% 保持原始字重平直，收笔端后 20% 为「正捺」（加速扫至 +25% 端帽），
+// 凹形：距端帽远时几乎不偏离、越接近扫出越陡；端头留 2% 满幅直线段（端帽角严格 90° 无豁口）——
+// 配合 startWeight=字重 / endWeight=字重×(1+0.25×笔压) 使用
+const heitiPressureStraightFn = (x: number) : number => {
+	if (x <= 0.01 || x >= 0.99) return 1
+	if (x < 0.3) return concaveEndShape((0.3 - x) / 0.29)
+	if (x > 0.7) return concaveEndShape((x - 0.7) / 0.29)
+	return 0
+}
+
+// 直线笔画（衔接型）笔压（捺式，与直线笔画同语言）：仅自由端（视觉起笔端）前 20% 内
+// 以「反捺」从 +25% 端帽加速收至原始字重（t² 凹形），端头留 2% 满幅直线段（端帽角严格 90°），
+// 其余保持原始字重——收尾处与相邻笔画衔接等宽（6 的撇、9 的尾笔）。
+// 配合 startWeight=字重 / endWeight=字重×(1+0.25×笔压) 使用
+const heitiPressureStraightStartFn = (x: number) : number => {
+	if (x <= 0.01) return 1
+	if (x >= 0.3) return 0
+	return concaveEndShape((0.3 - x) / 0.29)
+}
+
+// 圆弧（9 的碗）笔压：衔接处（x=1）收缩（75%），
+// 前推 30% 内以 smoothstep 平滑恢复到满字重——起笔处保持满字重（9 的碗）
+const heitiPressureCircleEndFn = (x: number) : number => {
+	if (x < 0.7) return 0
+	return 1 - smoothstep((1 - x) / 0.3)
+}
+
+// 圆弧（3 的碗）笔压：起收笔处保持满字重不变，仅弧顶（中部）相对原始字重加粗——
+// 配合 startWeight=字重 / endWeight=字重×(1+0.25×笔压) 使用
+const heitiPressureCircleMidFn = (x: number) : number => {
+	return (1 - Math.cos(x * Math.PI * 2)) / 2
+}
+
+// 2 的顶弧专用：起笔满字重，仅最上侧弯处（笔画 30% 位置附近）轻微局部减细（幅度减半、区间加宽），
+// 其余原始宽度——避免带边在弧线上形成明显起伏（扭曲感）
+const heitiPressureTopArcFn = (x: number) : number => {
+	const d = Math.abs(x - 0.3) / 0.18
+	if (d >= 1) return 0
+	return (1 + Math.cos(d * Math.PI)) / 4
+}
+
 const bezier1Fn = (x: number) : number => {
 	const bezier = [
 		{ x: 0, y: 0.3 },
@@ -362,6 +492,37 @@ const getBezierFn = (type: string) => {
 		return cloudFn
 	} else if (type === 'stroke') {
 		return strokeFn
+	} else if (type === 'heitiPressure') {
+		return heitiPressureFn
+	} else if (type === 'heitiPressureMid') {
+		return heitiPressureMidFn
+	} else if (type === 'heitiPressureLate') {
+		return heitiPressureLateFn
+	} else if (type === 'heitiPressureEnd') {
+		return heitiPressureEndFn
+	} else if (type === 'heitiPressureCircle') {
+		return heitiPressureCircleFn
+	} else if (type === 'heitiPressureWaist') {
+		return heitiPressureWaistFn
+	} else if (type === 'heitiPressureRing') {
+		return heitiPressureRingFn
+	} else if (type === 'heitiPressureCircleStart') {
+		return heitiPressureCircleStartFn
+	} else if (type === 'heitiPressureStraight') {
+		return heitiPressureStraightFn
+	} else if (type === 'heitiPressureStraightStart') {
+		return heitiPressureStraightStartFn
+	} else if (type === 'heitiPressureCircleEnd') {
+		return heitiPressureCircleEndFn
+	} else if (type === 'heitiPressureCircleMid') {
+		return heitiPressureCircleMidFn
+	} else if (type === 'heitiPressureTopArc') {
+		return heitiPressureTopArcFn
+	}
+	// 未知字重函数类型静默回退会把「笔压不生效」这类问题完全吞掉（曾真实发生：
+	// 模块缓存旧版导致新类型未注册，渲染仍成功但字形全错），必须在 DEV 下显式告警
+	if (import.meta.env.DEV) {
+		console.warn(`[FP.getBezierFn] Unknown weightsVariationFnType: "${type}", fallback to default bezierFn`)
 	}
 	return bezierFn
 }
@@ -438,7 +599,7 @@ const getCurveContours = (name, skeleton, weight, options: IGetContoursOption) =
 	// 逆时针方向，左下侧为out, 右上侧为in
 	const out_points = []
 	const in_points = []
-	const n = 100
+	const n = 200
 
 	const in_weights = []
 	const out_weights = []
@@ -1002,6 +1163,15 @@ const getCurveContoursVertical = (name, skeleton, weight, options: IGetContoursO
 	return contours
 }
 
+// 直线笔画轮廓（带笔压等变重支持）：
+// getLineContours 只输出 4 个角点（平行四边形），无法表达中段粗细变化；
+// 这里复用 getCurveContours2 的采样 + 变重 + 拟合管线，返回 out/in _points 与 _curves
+const getLineContours2 = (name, skeleton, weight, options: IGetContoursOption) => {
+	const start = skeleton[`${name}_start`]
+	const end = skeleton[`${name}_end`]
+	return getCurveContours2(name, [{ start, end }], weight, options)
+}
+
 // 多条连续贝塞尔曲线骨架，可以用这个方法获取轮廓
 const getCurveContours2 = (name, skeleton, weight, options: IGetContoursOption) => {
 	let { startWeight, endWeight, in_startWeight, in_endWeight, out_startWeight, out_endWeight } = options || {}
@@ -1189,7 +1359,8 @@ const getCurveContours2 = (name, skeleton, weight, options: IGetContoursOption) 
 	let lastPoint = bezierCurve.q(beziers[0], 0)
 	let lastK = bezierCurve.qprime(beziers[0], 0)
 	if (lastK.x === 0 && lastK.y === 0) {
-		lastK = { x: 0, y: 1 }
+		// 退化曲线（弯曲度为 0 时控制点重合）切向量为 0：回退到段弦方向，保证偏移方向正确
+		lastK = { x: beziers[0][3].x - beziers[0][0].x, y: beziers[0][3].y - beziers[0][0].y }
 	}
 	let lastAngle = Math.atan2(lastK.y, lastK.x)
 
@@ -1212,7 +1383,7 @@ const getCurveContours2 = (name, skeleton, weight, options: IGetContoursOption) 
 			point = bezierCurve.q(bezier, t_local / n)
 			k = bezierCurve.qprime(bezier, t_local / n)
 			if (k.x === 0 && k.y === 0) {
-				k = { x: 0, y: 1 }
+				k = { x: bezier[3].x - bezier[0].x, y: bezier[3].y - bezier[0].y }
 			}
 			angle = Math.atan2(k.y, k.x)
 		}
@@ -1862,7 +2033,7 @@ const calculateLineIntersection = (p1, p2, p3, p4) => {
 	};
 }
 
-const fitCurvesByPoints = (points: Array<{ x: number, y: number }>) => {
+const fitCurvesByPoints = (points: Array<{ x: number, y: number }>, tolerance: number = 1.5) => {
 	if (!points || points.length < 4) {
 		// 返回空对象而不是 null，避免解构错误
 		return {
@@ -1870,7 +2041,7 @@ const fitCurvesByPoints = (points: Array<{ x: number, y: number }>) => {
 		}
 	}
 	try {
-		const _curves = fitCurve(points, 3.5)
+		const _curves = fitCurve(points, tolerance)
 		const curves = []
 		if (_curves && Array.isArray(_curves)) {
 			for (let i = 0; i < _curves.length; i++) {
@@ -2675,6 +2846,7 @@ const FP = {
 	getAngle,
 	radiusToDegree,
 	getCurveContours2,
+	getLineContours2,
 	getCurveContours3,
 	getSquare,
 	getCircle,

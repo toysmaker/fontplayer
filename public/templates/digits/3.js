@@ -9,16 +9,17 @@ const global_params = {
   serifType: glyph.getParam('衬线类型') || 0,
   serifSize: glyph.getParam('衬线大小') || 2.0,
   curvature: glyph.getParam('弯曲度') ?? 1,
+  pressure: glyph.getParam('笔压') ?? 1,
 }
 // 每段曲线的弯曲度系数（段名:序号 → 系数），当前全部为 1（统一跟随全局「弯曲度」参数）；
 // 之后要微调某一段转角时，只需改这里的系数，例如 'stroke1:0': 0.8 更平、1.2 更圆
 const segmentCurvature = {
   'stroke1:0': 1,
   'stroke1:1': 1,
-  'stroke1:2': 1,
-  'stroke2:0': 1,
+  'stroke1:2': 0.9,
+  'stroke2:0': 0.9,
   'stroke2:1': 1,
-  'stroke2:2': 1,
+  'stroke2:2': 0.95,
 }
 // 弯曲度 → 三次贝塞尔曲线描述：最终弯曲度 = 全局弯曲度 × 段系数；
 // 弯曲度为 1 时与原二次贝塞尔（bend）完全一致；越大控制点离对应锚点越远、转角越饱满；为 0 时退化为直线（直角）
@@ -492,6 +493,9 @@ const updateGlyphByParams = (params, global_params) => {
   const { h1, h2, w1, w2 } = params
   const { weight } = global_params
 
+  // 视错修正：上碗比下碗略小（交汇点略高于中点），避免头重脚轻
+  const waistRatio = 0.48
+
   const skeleton_0 = new FP.Joint('skeleton_0', {
     x: x0,
     y: y0,
@@ -510,11 +514,11 @@ const updateGlyphByParams = (params, global_params) => {
   })
   const skeleton_4 = new FP.Joint('skeleton_4', {
     x: skeleton_3.x,
-    y: skeleton_3.y + h1 / 4,
+    y: skeleton_3.y + h1 * waistRatio / 2,
   })
   const skeleton_5 = new FP.Joint('skeleton_5', {
     x: skeleton_4.x,
-    y: skeleton_4.y + h1 / 4,
+    y: skeleton_3.y + h1 * waistRatio,
   })
   const skeleton_6 = new FP.Joint('skeleton_6', {
     x: skeleton_5.x - w2,
@@ -522,11 +526,11 @@ const updateGlyphByParams = (params, global_params) => {
   })
   const skeleton_7 = new FP.Joint('skeleton_7', {
     x: skeleton_6.x + w2,
-    y: skeleton_6.y + h1 / 4,
+    y: y0 + h1 - h2 - h1 / 4,
   })
   const skeleton_8 = new FP.Joint('skeleton_8', {
     x: skeleton_7.x,
-    y: skeleton_7.y + h1 / 4,
+    y: y0 + h1 - h2,
   })
   const skeleton_9 = new FP.Joint('skeleton_9', {
     x: skeleton_8.x - w1 / 2,
@@ -538,7 +542,8 @@ const updateGlyphByParams = (params, global_params) => {
   })
   const skeleton_11 = new FP.Joint('skeleton_11', {
     x: skeleton_10.x,
-    y: skeleton_10.y - h2,
+    // 视错修正：下碗左尖端独立于 h2（h2 只控上尖），避免上下尖同时向中部收缩形成「鸭嘴」
+    y: skeleton_10.y - 150,
   })
   const skeleton = {
     skeleton_0,
@@ -590,7 +595,7 @@ const updateGlyphByParams = (params, global_params) => {
 
 const getComponents = (skeleton, global_params) => {
   // 获取骨架以外的全局风格变量
-  const { weight, serifSize, serifType } = global_params
+  const { weight, serifSize, serifType, pressure } = global_params
 
   // 根据骨架计算轮廓关键点
   const { skeleton_0, skeleton_1, skeleton_2, skeleton_3, skeleton_4, skeleton_5, skeleton_6, skeleton_7, skeleton_8, skeleton_9, skeleton_10, skeleton_11 } = skeleton
@@ -604,7 +609,9 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_2, skeleton_3, skeleton_4, 'stroke1:1'),
       bendToCubic(skeleton_4, skeleton_5, skeleton_6, 'stroke1:2'),
     ],
-    weight
+    weight,
+    // 笔压模拟：起收笔满字重，弯曲处（碗顶）平滑减细
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleMid', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) }
   )
   const { out_stroke2_curves, out_stroke2_points, in_stroke2_curves, in_stroke2_points } = FP.getCurveContours2(
     'stroke2',
@@ -613,7 +620,9 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_7, skeleton_8, skeleton_9, 'stroke2:1'),
       bendToCubic(skeleton_9, skeleton_10, skeleton_11, 'stroke2:2'),
     ],
-    weight
+    weight,
+    // 下碗起笔与交汇点衔接：前 40% 保持满字重，笔压放在中后段（碗底方向）
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleMid', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) }
   )
 
   const start_serif_size = serifSize ? serifSize * weight : weight
@@ -645,7 +654,7 @@ const getComponents = (skeleton, global_params) => {
     end: in_stroke1_curves_final_2[0].control1,
   }).corner
 
-  const end_serif_size = 100
+  const end_serif_size = serifSize * weight
   const end_serif_o = FP.getPointOnLine(
     out_stroke2_curves[out_stroke2_curves.length - 1].end,
     in_stroke2_curves[in_stroke2_curves.length - 1].end,

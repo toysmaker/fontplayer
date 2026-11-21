@@ -28,7 +28,10 @@ import { paramsFromStroke, buildFangYuanStrokeParameters } from '@/templates/pri
 const TEMPLATES_BASE = ''
 
 function getScriptUrl(path: string): string {
-  return TEMPLATES_BASE ? `${TEMPLATES_BASE}${path}` : path
+  // 追加时间戳戳穿 HTTP 缓存：WKWebView 对 no-cache 的遵从不可靠，
+  // 曾导致「改了脚本但模板导入仍是旧内容」的随机缓存问题
+  const url = TEMPLATES_BASE ? `${TEMPLATES_BASE}${path}` : path
+  return `${url}${url.includes('?') ? '&' : '?'}v=${Date.now()}`
 }
 
 export function ensureStrokeGlyphs(file: any) {
@@ -178,7 +181,7 @@ export async function importTemplate2(): Promise<void> {
     const uuid = genUUID()
     const parameters = paramsFromStroke(stroke)
     addHeiStrokeExtraParams(parameters)
-    const res = await fetch(getScriptUrl(`/templates/templates2/${name}.js`))
+    const res = await fetch(getScriptUrl(`/templates/templates2/${name}.js`), { cache: "no-store" })
     const stroke_script = await res.text()
     const glyph = createBaseGlyph(
       name,
@@ -299,7 +302,7 @@ export async function importTemplate5(): Promise<void> {
       { uuid: genUUID(), name: '字重变化', type: ParameterType.Number, value: 0, min: 0, max: 2 },
       { uuid: genUUID(), name: '弯曲程度', type: ParameterType.Number, value: 1, min: 0, max: 2 },
     )
-    const res = await fetch(getScriptUrl(`/templates/stroke_template_song/${name}.js`))
+    const res = await fetch(getScriptUrl(`/templates/stroke_template_song/${name}.js`), { cache: "no-store" })
     const stroke_script = await res.text()
     const glyph = createBaseGlyph(
       name,
@@ -328,7 +331,7 @@ export async function importTemplate6(): Promise<void> {
     const 字重 = parameters.find(p => p.name === '字重')
     if (字重) 字重.value = 35
     addKaiLiExtraParams(parameters, 35)
-    const res = await fetch(getScriptUrl(`/templates/stroke_template_fangsong/${name}.js`))
+    const res = await fetch(getScriptUrl(`/templates/stroke_template_fangsong/${name}.js`), { cache: "no-store" })
     const stroke_script = await res.text()
     const glyph = createBaseGlyph(
       name,
@@ -357,7 +360,7 @@ export async function importTemplate7(): Promise<void> {
     const 字重 = parameters.find(p => p.name === '字重')
     if (字重) 字重.value = 60
     addKaiLiExtraParams(parameters, 60)
-    const res = await fetch(getScriptUrl(`/templates/stroke_template_kai/${name}.js`))
+    const res = await fetch(getScriptUrl(`/templates/stroke_template_kai/${name}.js`), { cache: "no-store" })
     const stroke_script = await res.text()
     const glyph = createBaseGlyph(
       name,
@@ -386,7 +389,7 @@ export async function importTemplate8(): Promise<void> {
     const 字重 = parameters.find(p => p.name === '字重')
     if (字重) 字重.value = 35
     addKaiLiExtraParams(parameters, 35)
-    const res = await fetch(getScriptUrl(`/templates/stroke_template_li/${name}.js`))
+    const res = await fetch(getScriptUrl(`/templates/stroke_template_li/${name}.js`), { cache: "no-store" })
     const stroke_script = await res.text()
     const glyph = createBaseGlyph(
       name,
@@ -453,7 +456,7 @@ export async function importTemplateDigits(): Promise<void> {
     const { name } = digit
     const uuid = genUUID()
     const parameters = buildLetterOrDigitParams(digit)
-    const res = await fetch(getScriptUrl(`/templates/digits/${name}.js`))
+    const res = await fetch(getScriptUrl(`/templates/digits/${name}.js`), { cache: "no-store" })
     const letter_script = await res.text()
     const glyph = createBaseGlyph(
       name,
@@ -479,7 +482,7 @@ export async function importTemplateLetters(): Promise<void> {
     const { name } = letter
     const uuid = genUUID()
     const parameters = buildLetterOrDigitParams(letter)
-    const res = await fetch(getScriptUrl(`/templates/lowercase_letters/${name}.js`))
+    const res = await fetch(getScriptUrl(`/templates/lowercase_letters/${name}.js`), { cache: "no-store" })
     const letter_script = await res.text()
     const glyph = createBaseGlyph(
       name,
@@ -495,7 +498,7 @@ export async function importTemplateLetters(): Promise<void> {
     const { name } = letter
     const uuid = genUUID()
     const parameters = buildLetterOrDigitParams(letter)
-    const res = await fetch(getScriptUrl(`/templates/capital_letters/${name}.js`))
+    const res = await fetch(getScriptUrl(`/templates/capital_letters/${name}.js`), { cache: "no-store" })
     const letter_script = await res.text()
     const glyph = createBaseGlyph(
       name,
@@ -524,7 +527,7 @@ export async function importTemplateSymbols(): Promise<void> {
       { uuid: genUUID(), name: '运笔样式', type: ParameterType.Enum, value: 0, options: [{ value: 0, label: '默认' }, { value: 1, label: '样式1' }] },
       { uuid: genUUID(), name: '运笔压力速率', type: ParameterType.Number, value: 1.0, min: 0, max: 2 },
     )
-    const res = await fetch(getScriptUrl(`/templates/symbols_en/${symbol.script_file_name}`))
+    const res = await fetch(getScriptUrl(`/templates/symbols_en/${symbol.script_file_name}`), { cache: "no-store" })
     const letter_script = await res.text()
     const glyph = createBaseGlyph(
       symbol.name,
@@ -543,7 +546,7 @@ export async function importTemplateSymbols(): Promise<void> {
       { uuid: genUUID(), name: '运笔样式', type: ParameterType.Enum, value: 0, options: [{ value: 0, label: '默认' }, { value: 1, label: '样式1' }] },
       { uuid: genUUID(), name: '运笔压力速率', type: ParameterType.Number, value: 1.0, min: 0, max: 10 },
     )
-    const res = await fetch(getScriptUrl(`/templates/symbols_zh/${symbol.script_file_name}`))
+    const res = await fetch(getScriptUrl(`/templates/symbols_zh/${symbol.script_file_name}`), { cache: "no-store" })
     const letter_script = await res.text()
     const glyph = createBaseGlyph(
       symbol.name,
@@ -572,7 +575,7 @@ export async function importTemplateTest(): Promise<void> {
     // 基础参数 + 通用参数 + 按笔画类型规则（统一封装在 private/v1/strokeParamBuilder）
     const parameters = buildFangYuanStrokeParameters(stroke)
 
-    const res = await fetch(getScriptUrl(`/templates/private/v1/${name}.js`))
+    const res = await fetch(getScriptUrl(`/templates/private/v1/${name}.js`), { cache: "no-store" })
     const stroke_script = await res.text()
     const glyph = createBaseGlyph(
       name,

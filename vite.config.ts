@@ -51,8 +51,10 @@ export default defineConfig({
     },
     // 监听文件变化
     watch: {
-      usePolling: false, // 在 Windows 上可能需要设置为 true
-      interval: 100, // 轮询间隔（仅在 usePolling 为 true 时有效）
+      // 必须用轮询：fsevents 对「同一文件短时间内多次写入」会漏事件，
+      // 曾导致 FPUtils 新函数已写入磁盘但模块缓存停在中间态、字形渲染静默使用旧逻辑
+      usePolling: true,
+      interval: 200, // 轮询间隔（仅在 usePolling 为 true 时有效）
       ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**'], // 忽略的文件
       // 确保监听 Vue 文件变化
       include: ['**/*.vue', '**/*.ts', '**/*.js'],

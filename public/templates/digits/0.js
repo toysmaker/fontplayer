@@ -7,6 +7,7 @@ const global_params = {
   serifType: glyph.getParam('衬线类型') || 0,
   serifSize: glyph.getParam('衬线大小') || 2.0,
   curvature: glyph.getParam('弯曲度') ?? 1,
+  pressure: glyph.getParam('笔压') ?? 1,
 }
 // 每段曲线的弯曲度系数（段名:序号 → 系数），当前全部为 1（统一跟随全局「弯曲度」参数）；
 // 之后要微调某一段转角时，只需改这里的系数，例如 'stroke1:0': 0.8 更平、1.2 更圆
@@ -387,10 +388,13 @@ const updateGlyphByParams = (params, global_params) => {
 
 const getComponents = (skeleton, global_params) => {
   // 获取骨架以外的全局风格变量
-  const { weight, serifType, serifSize } = global_params
+  const { weight, serifType, serifSize, pressure } = global_params
 
   // 根据骨架计算轮廓关键点
   const { skeleton_0, skeleton_1, skeleton_2, skeleton_3, skeleton_4, skeleton_5, skeleton_6, skeleton_7 } = skeleton
+
+  // 0 的圆环在视觉上比其它数字的直线笔画显细，脚本级加宽约 15%（不改字重参数）
+  const ringWeight = weight * 1.15
 
   // out指上侧（外侧）轮廓线
   // in指下侧（内侧）轮廓线
@@ -402,7 +406,9 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_4, skeleton_5, skeleton_6, 'stroke1:2'),
       bendToCubic(skeleton_6, skeleton_7, skeleton_0, 'stroke1:3'),
     ],
-    weight
+    ringWeight,
+    // 0 的圆圈笔压：上下（水平走向段）略细，左右（竖直段）满字重
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureRing', startWeight: ringWeight, endWeight: ringWeight * (1 - 0.25 * pressure) }
   )
 
   // 创建钢笔组件

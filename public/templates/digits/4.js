@@ -9,6 +9,7 @@ const global_params = {
   weight: glyph.getParam('字重') || 40,
   serifType: glyph.getParam('衬线类型') || 0,
   serifSize: glyph.getParam('衬线大小') || 2.0,
+  pressure: glyph.getParam('笔压') ?? 1,
 }
 const ascender = 800
 const descender = -200
@@ -200,16 +201,58 @@ const updateGlyphByParams = (params, global_params) => {
 
 const getComponents = (skeleton, global_params) => {
   // 获取骨架以外的全局风格变量
-  const { weight, serifType, serifSize } = global_params
+  const { weight, serifType, serifSize, pressure } = global_params
 
   // 根据骨架计算轮廓关键点
   const { skeleton_0, skeleton_1, skeleton_2, skeleton_3, skeleton_4 } = skeleton
 
-  // out指上侧（外侧）轮廓线
-  // in指下侧（内侧）轮廓线
-  const { out_stroke1_start, out_stroke1_end, in_stroke1_start, in_stroke1_end } = FP.getLineContours('stroke1', { stroke1_start: skeleton_0, stroke1_end: skeleton_1 }, weight)
-  const { out_stroke2_start, out_stroke2_end, in_stroke2_start, in_stroke2_end } = FP.getLineContours('stroke2', { stroke2_start: skeleton_1, stroke2_end: skeleton_2 }, weight)
-  const { out_stroke3_start, out_stroke3_end, in_stroke3_start, in_stroke3_end } = FP.getLineContours('stroke3', { stroke3_start: skeleton_3, stroke3_end: skeleton_4 }, weight)
+  // 直线笔画同样走带笔压的轮廓管线（起收笔满、中段减细）
+  const pressureOpts = (w) => ({
+    weightsVariation: 'bezier',
+    weightsVariationFnType: 'heitiPressureStraight',
+    startWeight: w,
+    endWeight: w * (1 + 0.25 * pressure),
+  })
+  // 顶点与圆顶数字视觉对齐：斜笔起笔上移 21（切面角点原在 31，上移至 10 ≈ cap 线上方 0.5×字重）
+  // 斜笔仅顶点（自由端）加粗，收尾（接交叉横处）保持原始字重等宽衔接
+  const { out_stroke1_curves, in_stroke1_curves } = FP.getLineContours2('stroke1', { stroke1_start: { x: skeleton_0.x, y: skeleton_0.y - 21 }, stroke1_end: skeleton_1 }, weight, {
+    weightsVariation: 'bezier',
+    weightsVariationFnType: 'heitiPressureStraightStart',
+    startWeight: weight,
+    endWeight: weight * (1 + 0.25 * pressure),
+  })
+  // 交叉横使用原始字重（细处宽度 = 原始字重）
+  const horizontalWeight = weight
+  const _stroke2_contours = FP.getLineContours2('stroke2', { stroke2_start: skeleton_1, stroke2_end: skeleton_2 }, horizontalWeight, {
+    weightsVariation: 'bezier',
+    weightsVariationFnType: 'heitiPressureStraight',
+    startWeight: horizontalWeight,
+    endWeight: horizontalWeight * (1 + 0.25 * pressure),
+  })
+  // 短笔画用紧拟合（容差 1.5），防止拟合曲线把压笔形状吃掉
+  const out_stroke2_curves = FP.fitCurvesByPoints(_stroke2_contours.out_stroke2_points, 1.5).curves
+  const in_stroke2_curves = FP.fitCurvesByPoints(_stroke2_contours.in_stroke2_points, 1.5).curves
+  // 竖干顶与斜笔同步上移 21，保持豁口（h3）不变；
+  // 上端与斜笔衔接处保持原始字重，仅底部（收笔侧）捺式加粗
+  const { out_stroke3_curves, in_stroke3_curves } = FP.getLineContours2('stroke3', { stroke3_start: { x: skeleton_3.x, y: skeleton_3.y - 21 }, stroke3_end: skeleton_4 }, weight, {
+    weightsVariation: 'bezier',
+    weightsVariationFnType: 'heitiPressureEnd',
+    startWeight: weight,
+    endWeight: weight * (1 + 0.25 * pressure),
+  })
+
+  const out_stroke1_start = out_stroke1_curves[0].start
+  const out_stroke1_end = out_stroke1_curves[out_stroke1_curves.length - 1].end
+  const in_stroke1_start = in_stroke1_curves[0].start
+  const in_stroke1_end = in_stroke1_curves[in_stroke1_curves.length - 1].end
+  const out_stroke2_start = out_stroke2_curves[0].start
+  const out_stroke2_end = out_stroke2_curves[out_stroke2_curves.length - 1].end
+  const in_stroke2_start = in_stroke2_curves[0].start
+  const in_stroke2_end = in_stroke2_curves[in_stroke2_curves.length - 1].end
+  const out_stroke3_start = out_stroke3_curves[0].start
+  const out_stroke3_end = out_stroke3_curves[out_stroke3_curves.length - 1].end
+  const in_stroke3_start = in_stroke3_curves[0].start
+  const in_stroke3_end = in_stroke3_curves[in_stroke3_curves.length - 1].end
 
   const corner_bottom = {
     x: in_stroke1_end.x,
@@ -234,7 +277,10 @@ const getComponents = (skeleton, global_params) => {
   if (skeleton_3.y === skeleton_0.y) {
     pen1.beginPath()
     pen1.moveTo(out_stroke1_start.x, out_stroke1_start.y)
-    pen1.lineTo(out_stroke1_end.x, out_stroke1_end.y)
+    for (let i = 0; i < out_stroke1_curves.length; i++) {
+      const curve = out_stroke1_curves[i]
+      pen1.bezierTo(curve.control1.x, curve.control1.y, curve.control2.x, curve.control2.y, curve.end.x, curve.end.y)
+    }
     pen1.lineTo(skeleton_1.x, skeleton_1.y)
     pen1.lineTo(corner_top.x, corner_top.y)
     pen1.lineTo(corner.x, corner.y)
@@ -244,10 +290,16 @@ const getComponents = (skeleton, global_params) => {
   } else {
     pen1.beginPath()
     pen1.moveTo(out_stroke1_start.x, out_stroke1_start.y)
-    pen1.lineTo(out_stroke1_end.x, out_stroke1_end.y)
+    for (let i = 0; i < out_stroke1_curves.length; i++) {
+      const curve = out_stroke1_curves[i]
+      pen1.bezierTo(curve.control1.x, curve.control1.y, curve.control2.x, curve.control2.y, curve.end.x, curve.end.y)
+    }
     pen1.lineTo(skeleton_1.x, skeleton_1.y)
     pen1.lineTo(corner_top.x, corner_top.y)
-    pen1.lineTo(in_stroke1_start.x, in_stroke1_start.y)
+    for (let i = in_stroke1_curves.length - 1; i >= 0; i--) {
+      const curve = in_stroke1_curves[i]
+      pen1.bezierTo(curve.control2.x, curve.control2.y, curve.control1.x, curve.control1.y, curve.start.x, curve.start.y)
+    }
     pen1.lineTo(out_stroke1_start.x, out_stroke1_start.y)
     pen1.closePath()
   }
@@ -257,8 +309,15 @@ const getComponents = (skeleton, global_params) => {
   pen2.moveTo(corner_top.x, corner_top.y)
   pen2.lineTo(skeleton_1.x, skeleton_1.y)
   pen2.lineTo(out_stroke2_start.x, out_stroke2_start.y)
-  pen2.lineTo(out_stroke2_end.x, out_stroke2_end.y)
+  for (let i = 0; i < out_stroke2_curves.length; i++) {
+    const curve = out_stroke2_curves[i]
+    pen2.bezierTo(curve.control1.x, curve.control1.y, curve.control2.x, curve.control2.y, curve.end.x, curve.end.y)
+  }
   pen2.lineTo(in_stroke2_end.x, in_stroke2_end.y)
+  for (let i = in_stroke2_curves.length - 1; i >= 0; i--) {
+    const curve = in_stroke2_curves[i]
+    pen2.bezierTo(curve.control2.x, curve.control2.y, curve.control1.x, curve.control1.y, curve.start.x, curve.start.y)
+  }
   pen2.lineTo(corner_bottom.x, corner_bottom.y)
   pen2.lineTo(corner_top.x, corner_top.y)
   pen2.closePath()
@@ -266,9 +325,15 @@ const getComponents = (skeleton, global_params) => {
   const pen3 = new FP.PenComponent()
   pen3.beginPath()
   pen3.moveTo(out_stroke3_start.x, out_stroke3_start.y)
-  pen3.lineTo(out_stroke3_end.x, out_stroke3_end.y)
+  for (let i = 0; i < out_stroke3_curves.length; i++) {
+    const curve = out_stroke3_curves[i]
+    pen3.bezierTo(curve.control1.x, curve.control1.y, curve.control2.x, curve.control2.y, curve.end.x, curve.end.y)
+  }
   pen3.lineTo(in_stroke3_end.x, in_stroke3_end.y)
-  pen3.lineTo(in_stroke3_start.x, in_stroke3_start.y)
+  for (let i = in_stroke3_curves.length - 1; i >= 0; i--) {
+    const curve = in_stroke3_curves[i]
+    pen3.bezierTo(curve.control2.x, curve.control2.y, curve.control1.x, curve.control1.y, curve.start.x, curve.start.y)
+  }
   pen3.lineTo(out_stroke3_start.x, out_stroke3_start.y)
   pen3.closePath()
 

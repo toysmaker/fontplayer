@@ -4,17 +4,19 @@ const params = {
   h3: glyph.getParam('h3'),
   h4: glyph.getParam('h4'),
   w1: glyph.getParam('w1'),
+  w3: glyph.getParam('w3'),
 }
 const global_params = {
   weight: glyph.getParam('字重') || 40,
   serifType: glyph.getParam('衬线类型') || 0,
   serifSize: glyph.getParam('衬线大小') || 2.0,
   curvature: glyph.getParam('弯曲度') ?? 1,
+  pressure: glyph.getParam('笔压') ?? 1,
 }
 // 每段曲线的弯曲度系数（段名:序号 → 系数），当前全部为 1（统一跟随全局「弯曲度」参数）；
 // 之后要微调某一段转角时，只需改这里的系数，例如 'stroke3:0': 0.8 更平、1.2 更圆
 const segmentCurvature = {
-  'stroke3:0': 1,
+  'stroke3:0': 0.85,
   'stroke3:1': 1,
   'stroke3:2': 1,
   'stroke3:3': 1,
@@ -254,29 +256,10 @@ const getJointsMap = (data) => {
       break
     }
     case 'skeleton_10': {
+      // 横长与碗宽分离：拖动横画端点只改 w3，不再联动碗身
       jointsMap['skeleton_10'] = {
         x: glyph.tempData['skeleton_10'].x + deltaX,
         y: glyph.tempData['skeleton_10'].y,
-      }
-      jointsMap['skeleton_4'] = {
-        x: glyph.tempData['skeleton_4'].x + deltaX,
-        y: glyph.tempData['skeleton_4'].y,
-      }
-      jointsMap['skeleton_4'] = {
-        x: glyph.tempData['skeleton_5'].x + deltaX,
-        y: glyph.tempData['skeleton_5'].y,
-      }
-      jointsMap['skeleton_6'] = {
-        x: glyph.tempData['skeleton_6'].x + deltaX,
-        y: glyph.tempData['skeleton_6'].y,
-      }
-      jointsMap['skeleton_3'] = {
-        x: glyph.tempData['skeleton_3'].x + deltaX / 2,
-        y: glyph.tempData['skeleton_3'].y,
-      }
-      jointsMap['skeleton_7'] = {
-        x: glyph.tempData['skeleton_7'].x + deltaX / 2,
-        y: glyph.tempData['skeleton_7'].y,
       }
       break
     }
@@ -319,6 +302,7 @@ glyph.onSkeletonDragEnd = (data) => {
   glyph.setParam('h3', _params.h3)
   glyph.setParam('h4', _params.h4)
   glyph.setParam('w1', _params.w1)
+  glyph.setParam('w3', _params.w3)
   glyph.tempData = null
 }
 
@@ -338,17 +322,21 @@ const computeParamsByJoints = (jointsMap) => {
   const h3_range = glyph.getParamRange('h3')
   const h4_range = glyph.getParamRange('h4')
   const w1_range = glyph.getParamRange('w1')
+  const w3_range = glyph.getParamRange('w3')
   const h1 = range(skeleton_8.y - skeleton_0.y, h1_range)
   const h2 = range(skeleton_2.y - skeleton_0.y, h2_range)
   const h3 = range(skeleton_1.y - skeleton_2.y, h3_range)
   const h4 = range(skeleton_8.y - skeleton_9.y, h4_range)
-  const w1 = range(skeleton_10.x - skeleton_0.x, w1_range)
+  // 碗宽由碗身关节点决定，横长由横画关节点决定（w1/w3 分离）
+  const w1 = range(skeleton_4.x - skeleton_2.x, w1_range)
+  const w3 = range(skeleton_10.x - skeleton_0.x, w3_range)
   return {
     h1,
     h2,
     h3,
     h4,
     w1,
+    w3,
   }
 }
 
@@ -365,7 +353,7 @@ const refline = (p1, p2, type) => {
 }
 
 const updateGlyphByParams = (params, global_params) => {
-  const { h1, h2, h3, h4, w1 } = params
+  const { h1, h2, h3, h4, w1, w3 } = params
   const { weight } = global_params
 
   const skeleton_0 = new FP.Joint('skeleton_0', {
@@ -409,7 +397,7 @@ const updateGlyphByParams = (params, global_params) => {
     y: skeleton_8.y - h4,
   })
   const skeleton_10 = new FP.Joint('skeleton_10', {
-    x: skeleton_9.x + w1,
+    x: skeleton_9.x + w3,
     y: skeleton_0.y,
   })
   const skeleton = {
@@ -460,13 +448,28 @@ const updateGlyphByParams = (params, global_params) => {
 
 const getComponents = (skeleton, global_params) => {
   // 获取骨架以外的全局风格变量
-  const { weight, serifSize, serifType } = global_params
+  const { weight, serifSize, serifType, pressure } = global_params
 
   // 根据骨架计算轮廓关键点
   const { skeleton_0, skeleton_1, skeleton_2, skeleton_3, skeleton_4, skeleton_5, skeleton_6, skeleton_7, skeleton_8, skeleton_9, skeleton_10 } = skeleton
 
-  const { out_stroke1_start, out_stroke1_end, in_stroke1_start, in_stroke1_end } = FP.getLineContours('stroke1', { stroke1_start: skeleton_0, stroke1_end: skeleton_10 }, weight)
-  const { out_stroke2_start, out_stroke2_end, in_stroke2_start, in_stroke2_end } = FP.getLineContours('stroke2', { stroke2_start: skeleton_0, stroke2_end: skeleton_1 }, weight)
+  // 视错修正：顶横视觉显粗 → 比竖画略细（0.9 倍字重）；
+  // 平顶与圆顶视觉对齐：上缘 = 上层骨架上方再加 0.5×字重（轮廓顶至 cap 线上方 40）
+  const horizontalWeight = weight * 0.9
+  const _stroke1_contours = FP.getLineContours2('stroke1', {
+    stroke1_start: { x: skeleton_0.x, y: y0 - weight / 2 + horizontalWeight / 2 },
+    stroke1_end: { x: skeleton_10.x, y: y0 - weight / 2 + horizontalWeight / 2 },
+  }, horizontalWeight,
+  // 顶横笔压：起笔侧（与竖画衔接）保持满字重，收笔侧上下对称加粗
+  {
+    weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureEnd',
+    startWeight: horizontalWeight, endWeight: horizontalWeight * (1 + 0.25 * pressure),
+  })
+  // 短笔画用紧拟合（容差 1.5），防止拟合曲线把笔压形状吃掉
+  const out_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.out_stroke1_points, 1.5).curves
+  const in_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.in_stroke1_points, 1.5).curves
+  // 竖画上延至顶横上缘（保持衔接），轮廓起点抬高 0.5×字重
+  const { out_stroke2_start, out_stroke2_end, in_stroke2_start, in_stroke2_end } = FP.getLineContours('stroke2', { stroke2_start: { x: skeleton_0.x, y: skeleton_0.y - weight / 2 }, stroke2_end: skeleton_1 }, weight)
   const { out_stroke3_curves, out_stroke3_points, in_stroke3_curves, in_stroke3_points } = FP.getCurveContours2(
     'stroke3',
     [
@@ -475,11 +478,10 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_5, skeleton_6, skeleton_7, 'stroke3:2'),
       bendToCubic(skeleton_7, skeleton_8, skeleton_9, 'stroke3:3'),
     ],
-    weight
+    weight,
+    // 碗口与竖画衔接：前 40% 保持满字重，笔压放在中后段（碗底方向）
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) }
   )
-
-  out_stroke1_start.x -= weight / 2
-  in_stroke1_start.x -= weight / 2
 
   const end_serif_size = serifSize ? serifSize * weight : weight
   const end_serif_o = FP.getPointOnLine(
@@ -516,11 +518,17 @@ const getComponents = (skeleton, global_params) => {
   // 创建钢笔组件
   const pen1 = new FP.PenComponent()
   pen1.beginPath()
-  pen1.moveTo(in_stroke1_start.x, in_stroke1_start.y)
-  pen1.lineTo(in_stroke1_end.x, in_stroke1_end.y)
-  pen1.lineTo(out_stroke1_end.x, out_stroke1_end.y)
-  pen1.lineTo(out_stroke1_start.x, out_stroke1_start.y)
-  pen1.lineTo(in_stroke1_start.x, in_stroke1_start.y)
+  pen1.moveTo(in_stroke1_curves[0].start.x, in_stroke1_curves[0].start.y)
+  for (let i = 0; i < in_stroke1_curves.length; i++) {
+    const curve = in_stroke1_curves[i]
+    pen1.bezierTo(curve.control1.x, curve.control1.y, curve.control2.x, curve.control2.y, curve.end.x, curve.end.y)
+  }
+  pen1.lineTo(out_stroke1_curves[out_stroke1_curves.length - 1].end.x, out_stroke1_curves[out_stroke1_curves.length - 1].end.y)
+  for (let i = out_stroke1_curves.length - 1; i >= 0; i--) {
+    const curve = out_stroke1_curves[i]
+    pen1.bezierTo(curve.control2.x, curve.control2.y, curve.control1.x, curve.control1.y, curve.start.x, curve.start.y)
+  }
+  pen1.lineTo(in_stroke1_curves[0].start.x, in_stroke1_curves[0].start.y)
   pen1.closePath()
 
   const pen2 = new FP.PenComponent()

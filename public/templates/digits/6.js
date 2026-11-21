@@ -10,11 +10,13 @@ const global_params = {
   serifType: glyph.getParam('衬线类型') || 0,
   serifSize: glyph.getParam('衬线大小') || 2.0,
   curvature: glyph.getParam('弯曲度') ?? 1,
+  pressure: glyph.getParam('笔压') ?? 1,
 }
 // 每段曲线的弯曲度系数（段名:序号 → 系数），当前全部为 1（统一跟随全局「弯曲度」参数）；
 // 之后要微调某一段转角时，只需改这里的系数，例如 'stroke2:0': 0.8 更平、1.2 更圆
 const segmentCurvature = {
-  'stroke1:0': 1,
+  // 斜笔的弓深：bend 已上移（h3 默认 200），系数 0.6 让起笔弧明显但不夸张
+  'stroke1:0': 0.6,
   'stroke2:0': 1,
   'stroke2:1': 1,
   'stroke2:2': 1,
@@ -445,7 +447,7 @@ const updateGlyphByParams = (params, global_params) => {
 
 const getComponents = (skeleton, global_params) => {
   // 获取骨架以外的全局风格变量
-  const { weight, serifSize, serifType } = global_params
+  const { weight, serifSize, serifType, pressure } = global_params
 
   // 根据骨架计算轮廓关键点
   const { skeleton_0, skeleton_1, skeleton_2, skeleton_3, skeleton_4, skeleton_5, skeleton_6, skeleton_7, skeleton_8, skeleton_9 } = skeleton
@@ -455,7 +457,9 @@ const getComponents = (skeleton, global_params) => {
     [
       bendToCubic(skeleton_0, skeleton_1, skeleton_2, 'stroke1:0'),
     ],
-    weight
+    weight,
+    // 直线笔压：中段为原始字重，起收笔两端相对原始字重加粗
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraightStart', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) }
   )
   const { out_stroke2_curves, out_stroke2_points, in_stroke2_curves, in_stroke2_points } = FP.getCurveContours2(
     'stroke2',
@@ -465,7 +469,9 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_6, skeleton_5, skeleton_4, 'stroke2:2'),
       bendToCubic(skeleton_4, skeleton_3, skeleton_2, 'stroke2:3'),
     ],
-    weight
+    weight,
+    // 笔压模拟：闭合圆圈两端满字重、中点（碗底）最细，全程平缓（斜笔交汇处保持满字重衔接）
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) }
   )
 
   const start_serif_size = serifSize ? serifSize * weight : weight

@@ -7,6 +7,7 @@ const global_params = {
   serifType: glyph.getParam('衬线类型') || 0,
   serifSize: glyph.getParam('衬线大小') || 2.0,
   curvature: glyph.getParam('弯曲度') ?? 1,
+  pressure: glyph.getParam('笔压') ?? 1,
 }
 // 每段曲线的弯曲度系数（段名:序号 → 系数），当前全部为 1（统一跟随全局「弯曲度」参数）；
 // 之后要微调某一段转角时，只需改这里的系数，例如 'stroke1:0': 0.8 更平、1.2 更圆
@@ -573,12 +574,16 @@ const updateGlyphByParams = (params, global_params) => {
   const { h1, w1 } = params
   const { weight } = global_params
 
+  // 视错修正：上碗比下碗略小（腰线高于中点），且上碗略窄——否则上下等大时视觉头重脚轻
+  const waistRatio = 0.47
+  const upperBowlWidthRatio = 0.96
+
   const skeleton_0 = new FP.Joint('skeleton_0', {
     x: x0,
     y: y0,
   })
   const skeleton_1 = new FP.Joint('skeleton_1', {
-    x: skeleton_0.x - w1 / 2,
+    x: skeleton_0.x - (w1 / 2) * upperBowlWidthRatio,
     y: skeleton_0.y,
   })
   const skeleton_2 = new FP.Joint('skeleton_2', {
@@ -587,43 +592,43 @@ const updateGlyphByParams = (params, global_params) => {
   })
   const skeleton_3 = new FP.Joint('skeleton_3', {
     x: skeleton_2.x,
-    y: skeleton_2.y + h1 / 4,
+    y: y0 + h1 * waistRatio,
   })
   const skeleton_4 = new FP.Joint('skeleton_4', {
-    x: skeleton_3.x + w1 / 2,
+    x: skeleton_0.x,
     y: skeleton_3.y,
   })
   const skeleton_5 = new FP.Joint('skeleton_5', {
-    x: skeleton_4.x + w1 / 2,
+    x: skeleton_0.x + (w1 / 2) * upperBowlWidthRatio,
     y: skeleton_4.y,
   })
   const skeleton_6 = new FP.Joint('skeleton_6', {
-    x: skeleton_5.x,
-    y: skeleton_5.y + h1 / 4,
+    x: skeleton_0.x + w1 / 2,
+    y: y0 + h1 * 0.75,
   })
   const skeleton_7 = new FP.Joint('skeleton_7', {
     x: skeleton_6.x,
-    y: skeleton_6.y + h1 / 4,
+    y: y0 + h1,
   })
   const skeleton_8 = new FP.Joint('skeleton_8', {
-    x: skeleton_7.x - w1 / 2,
+    x: skeleton_0.x,
     y: skeleton_7.y,
   })
   const skeleton_9 = new FP.Joint('skeleton_9', {
-    x: skeleton_8.x - w1 / 2,
+    x: skeleton_0.x - w1 / 2,
     y: skeleton_8.y,
   })
   const skeleton_10 = new FP.Joint('skeleton_10', {
     x: skeleton_9.x,
-    y: skeleton_9.y - h1 / 4,
+    y: y0 + h1 * 0.75,
   })
   const skeleton_11 = new FP.Joint('skeleton_11', {
-    x: skeleton_1.x + w1,
+    x: skeleton_0.x + (w1 / 2) * upperBowlWidthRatio,
     y: skeleton_1.y + h1 / 4,
   })
   const skeleton_12 = new FP.Joint('skeleton_12', {
     x: skeleton_11.x,
-    y: skeleton_11.y - h1 / 4,
+    y: skeleton_1.y,
   })
   const skeleton = {
     skeleton_0,
@@ -675,14 +680,14 @@ const updateGlyphByParams = (params, global_params) => {
 
 const getComponents = (skeleton, global_params) => {
   // 获取骨架以外的全局风格变量
-  const { weight, serifType, serifSize } = global_params
+  const { weight, serifType, serifSize, pressure } = global_params
 
   // 根据骨架计算轮廓关键点
   const { skeleton_0, skeleton_1, skeleton_2, skeleton_3, skeleton_4, skeleton_5, skeleton_6, skeleton_7, skeleton_8, skeleton_9, skeleton_10, skeleton_11, skeleton_12 } = skeleton
 
   // out指上侧（外侧）轮廓线
   // in指下侧（内侧）轮廓线
-  const { out_stroke1_curves, out_stroke1_points, in_stroke1_curves, in_stroke1_points } = FP.getCurveContours2(
+  const _stroke1_contours = FP.getCurveContours2(
     'stroke1',
     [
       bendToCubic(skeleton_0, skeleton_12, skeleton_11, 'stroke1:0'),
@@ -690,10 +695,17 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_4, skeleton_3, skeleton_10, 'stroke1:2'),
       bendToCubic(skeleton_10, skeleton_9, skeleton_8, 'stroke1:3'),
     ],
-    weight
+    weight,
+    // 笔压模拟：上下两端满字重，弯曲处（腰部）平滑减细
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureWaist', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure * 0.5) }
   )
+  // 紧拟合（容差 1.5）消除上下接缝处的拟合偏差凹痕
+  const out_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.out_stroke1_points, 1.5).curves
+  const in_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.in_stroke1_points, 1.5).curves
+  const out_stroke1_points = _stroke1_contours.out_stroke1_points
+  const in_stroke1_points = _stroke1_contours.in_stroke1_points
 
-  const { out_stroke2_curves, out_stroke2_points, in_stroke2_curves, in_stroke2_points } = FP.getCurveContours2(
+  const _stroke2_contours = FP.getCurveContours2(
     'stroke2',
     [
       bendToCubic(skeleton_0, skeleton_1, skeleton_2, 'stroke2:0'),
@@ -701,8 +713,15 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_4, skeleton_5, skeleton_6, 'stroke2:2'),
       bendToCubic(skeleton_6, skeleton_7, skeleton_8, 'stroke2:3'),
     ],
-    weight
+    weight,
+    // 笔压模拟：上下两端满字重，弯曲处（腰部）平滑减细
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureWaist', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure * 0.5) }
   )
+  // 紧拟合（容差 1.5）消除上下接缝处的拟合偏差凹痕
+  const out_stroke2_curves = FP.fitCurvesByPoints(_stroke2_contours.out_stroke2_points, 1.5).curves
+  const in_stroke2_curves = FP.fitCurvesByPoints(_stroke2_contours.in_stroke2_points, 1.5).curves
+  const out_stroke2_points = _stroke2_contours.out_stroke2_points
+  const in_stroke2_points = _stroke2_contours.in_stroke2_points
 
   const pen1 = new FP.PenComponent()
   pen1.beginPath()

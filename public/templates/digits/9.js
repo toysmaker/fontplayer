@@ -10,6 +10,7 @@ const global_params = {
   serifType: glyph.getParam('衬线类型') || 0,
   serifSize: glyph.getParam('衬线大小') || 2.0,
   curvature: glyph.getParam('弯曲度') ?? 1,
+  pressure: glyph.getParam('笔压') ?? 1,
 }
 // 每段曲线的弯曲度系数（段名:序号 → 系数），当前全部为 1（统一跟随全局「弯曲度」参数）；
 // 之后要微调某一段转角时，只需改这里的系数，例如 'stroke1:0': 0.8 更平、1.2 更圆
@@ -17,8 +18,9 @@ const segmentCurvature = {
   'stroke1:0': 1,
   'stroke1:1': 1,
   'stroke1:2': 1,
-  'stroke1:3': 1,
-  'stroke2:0': 1,
+  'stroke1:3': 0.85,
+  // 尾笔向外弓的深度（参照 6 的斜笔起笔弧）
+  'stroke2:0': 0.8,
 }
 // 弯曲度 → 三次贝塞尔曲线描述：最终弯曲度 = 全局弯曲度 × 段系数；
 // 弯曲度为 1 时与原二次贝塞尔（bend）完全一致；越大控制点离对应锚点越远、转角越饱满；为 0 时退化为直线（直角）
@@ -444,7 +446,7 @@ const updateGlyphByParams = (params, global_params) => {
 
 const getComponents = (skeleton, global_params) => {
   // 获取骨架以外的全局风格变量
-  const { weight, serifSize, serifType } = global_params
+  const { weight, serifSize, serifType, pressure } = global_params
 
   // 根据骨架计算轮廓关键点
   const { skeleton_0, skeleton_1, skeleton_2, skeleton_3, skeleton_4, skeleton_5, skeleton_6, skeleton_7, skeleton_8, skeleton_9 } = skeleton
@@ -457,23 +459,30 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_4, skeleton_5, skeleton_6, 'stroke1:2'),
       bendToCubic(skeleton_6, skeleton_9, skeleton_0, 'stroke1:3'),
     ],
-    weight
+    weight,
+    // 闭合圆圈两端满字重、中点（碗底）最细，全程平缓（尾笔交汇处保持满字重衔接）
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleEnd', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) }
   )
+  // 尾笔（与 6 的斜笔相同的衔接方案）：笔画从尾端起笔走向碗身，收笔在碗身上——
+  // 收笔端为满字重平台（与碗身等宽无缝衔接），起笔端为自由尾端（斜切自然收尖）
+  const tail_end = { x: skeleton_8.x, y: skeleton_8.y - weight * 0.3125 }
   const { out_stroke2_curves, out_stroke2_points, in_stroke2_curves, in_stroke2_points } = FP.getCurveContours2(
     'stroke2',
     [
-      bendToCubic(skeleton_0, skeleton_7, skeleton_8, 'stroke2:0'),
+      bendToCubic(tail_end, skeleton_7, skeleton_0, 'stroke2:0'),
     ],
-    weight
+    weight,
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraightStart', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) }
   )
 
   const end_serif_size = serifSize ? serifSize * weight : weight
+  // 尾笔反转后，尾端在曲线的起点（curves[0].start）
   const end_serif_o = FP.getPointOnLine(
-    out_stroke2_curves[out_stroke2_curves.length - 1].end,
-    in_stroke2_curves[in_stroke2_curves.length - 1].end,
+    out_stroke2_curves[0].start,
+    in_stroke2_curves[0].start,
     end_serif_size / 2,
   )
-  const end_serif_angle = Math.atan2(in_stroke2_curves[in_stroke2_curves.length - 1].end.y - out_stroke2_curves[out_stroke2_curves.length - 1].end.y, (in_stroke2_curves[in_stroke2_curves.length - 1].end.x - out_stroke2_curves[out_stroke2_curves.length - 1].end.x))
+  const end_serif_angle = Math.atan2(in_stroke2_curves[0].start.y - out_stroke2_curves[0].start.y, (in_stroke2_curves[0].start.x - out_stroke2_curves[0].start.x))
   const end_serif_curves = FP.getCircle(end_serif_o, end_serif_size / 2, -end_serif_angle, true)
   const {
     tangent: end_serif_tangent_1,
@@ -490,7 +499,9 @@ const getComponents = (skeleton, global_params) => {
     final_curves: in_stroke2_curves_final_2,
     final_points: test_points,
   } = FP.getRadiusPointsOnCurve(in_stroke2_points.slice(0, end_serif_corner_data.corner_index[1] + 1), end_serif_size, true, true)
-  const end_serif_control = FP.getIntersection({
+  // 极端曲率下球头与点列可能无交点：衬线数据缺失时回退到无衬线画法
+  const serifReady = Array.isArray(in_stroke2_curves_final_2) && in_stroke2_curves_final_2.length > 0
+  const end_serif_control = serifReady ? FP.getIntersection({
     type: 'line',
     start: end_serif_curves_final[end_serif_curves_final.length - 1].control2,
     end: end_serif_curves_final[end_serif_curves_final.length - 1].end,
@@ -498,7 +509,7 @@ const getComponents = (skeleton, global_params) => {
     type: 'line',
     start: in_stroke2_curves_final_2[0].start,
     end: in_stroke2_curves_final_2[0].control1,
-  }).corner
+  }).corner : null
 
   const pen1 = new FP.PenComponent()
   pen1.beginPath()
@@ -529,7 +540,7 @@ const getComponents = (skeleton, global_params) => {
       pen2.bezierTo(curve.control2.x, curve.control2.y, curve.control1.x, curve.control1.y, curve.start.x, curve.start.y)
     }
     pen2.lineTo(in_stroke2_curves[0].start.x, in_stroke2_curves[0].start.y)
-  } else if (serifType === 1) {
+  } else if (serifType === 1 && serifReady) {
     pen2.moveTo(in_stroke2_curves_final_2[in_stroke2_curves_final_2.length - 1].end.x, in_stroke2_curves_final_2[in_stroke2_curves_final_2.length - 1].end.y)
     for (let i = in_stroke2_curves_final_2.length - 1; i >= 0; i--) {
       const curve = in_stroke2_curves_final_2[i]
@@ -540,9 +551,10 @@ const getComponents = (skeleton, global_params) => {
       const curve = end_serif_curves_final[i]
       pen2.bezierTo(curve.control2.x, curve.control2.y, curve.control1.x, curve.control1.y, curve.start.x, curve.start.y)
     }
-    for (let i = out_stroke2_curves.length - 1; i >= 0; i--) {
+    // 尾笔反转后：外侧曲线从尾端（起点）走向碗身（终点）
+    for (let i = 0; i < out_stroke2_curves.length; i++) {
       const curve = out_stroke2_curves[i]
-      pen2.bezierTo(curve.control2.x, curve.control2.y, curve.control1.x, curve.control1.y, curve.start.x, curve.start.y)
+      pen2.bezierTo(curve.control1.x, curve.control1.y, curve.control2.x, curve.control2.y, curve.end.x, curve.end.y)
     }
     pen2.lineTo(in_stroke2_curves_final_2[in_stroke2_curves_final_2.length - 1].end.x, in_stroke2_curves_final_2[in_stroke2_curves_final_2.length - 1].end.y)
   }
