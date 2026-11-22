@@ -1207,7 +1207,7 @@ lowercaseLetters = lowercaseLetters.map((letter) => {
   })
   letter.globalParams.push({
     name: '笔压',
-    // -ignore
+    // @ts-ignore
     type: ParameterType.Number,
     value: 1,
     min: 0.5,
