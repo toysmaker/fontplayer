@@ -213,11 +213,11 @@ const getComponents = (skeleton, global_params) => {
   const out_stroke1_end = out_stroke1_curves[out_stroke1_curves.length - 1].end
   const in_stroke1_start = in_stroke1_curves[0].start
   const in_stroke1_end = in_stroke1_curves[in_stroke1_curves.length - 1].end
+  // 分叉右臂：保持原曲线形状与恒定宽度（无笔压），收笔不倾斜
   const { out_stroke2_curves, out_stroke2_points, in_stroke2_curves, in_stroke2_points } = FP.getCurveContours2('stroke2', [
       bendToCubic(skeleton_3, skeleton_4, skeleton_2, 'stroke2:0'),
     ], weight,
-    // 笔压（参照数字字形）：直线笔画两端捺式加粗
-    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight })
 
   const start_serif_size = serifSize ? serifSize * weight : weight
   const start_serif_o = FP.getPointOnLine(in_stroke2_curves[0].start, out_stroke2_curves[0].start, start_serif_size / 2)

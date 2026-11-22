@@ -270,7 +270,21 @@ const getComponents = (skeleton, global_params) => {
   pen3.closePath()
   pen3.reversePath()
 
-  return [ pen1, pen2, pen3 ]
+  // 两处拐角的外角凹陷填补：顶横顶边 + 斜笔右下边（右上角）；斜笔右下边 + 底横底边（左下角）
+  const pen4 = new FP.PenComponent()
+  pen4.beginPath()
+  pen4.moveTo(skeleton_1.x, skeleton_1.y)
+  pen4.lineTo(in_stroke1_start.x, in_stroke1_start.y)
+  pen4.lineTo(in_stroke2_end.x, in_stroke2_end.y)
+  pen4.closePath()
+  const pen5 = new FP.PenComponent()
+  pen5.beginPath()
+  pen5.moveTo(skeleton_2.x, skeleton_2.y)
+  pen5.lineTo(out_stroke2_start.x, out_stroke2_start.y)
+  pen5.lineTo(out_stroke3_end.x, out_stroke3_end.y)
+  pen5.closePath()
+
+  return [ pen1, pen2, pen3, pen4, pen5 ]
 }
 
 updateGlyphByParams(params, global_params)

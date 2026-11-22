@@ -376,7 +376,23 @@ const getComponents = (skeleton, global_params) => {
   // pen2.lineTo(out_stroke2_start.x, out_stroke2_start.y)
   // pen2.closePath()
 
-  return [ pen1, pen2 ]
+  // 底部交汇凹陷填补：两笔起笔端帽在骨架点交叉，端帽线之间形成外角/内角两个三角形凹陷，
+  // 用边缘连线三角形补齐（顶点 = 骨架点 + 两笔外侧边端点 / 内侧边端点）
+  const pen3 = new FP.PenComponent()
+  pen3.beginPath()
+  pen3.moveTo(skeleton_1.x, skeleton_1.y)
+  pen3.lineTo(out_stroke1_start.x, out_stroke1_start.y)
+  pen3.lineTo(in_stroke2_start.x, in_stroke2_start.y)
+  pen3.closePath()
+
+  const pen4 = new FP.PenComponent()
+  pen4.beginPath()
+  pen4.moveTo(skeleton_1.x, skeleton_1.y)
+  pen4.lineTo(in_stroke1_start.x, in_stroke1_start.y)
+  pen4.lineTo(out_stroke2_start.x, out_stroke2_start.y)
+  pen4.closePath()
+
+  return [ pen1, pen2, pen3, pen4 ]
 }
 
 updateGlyphByParams(params, global_params)

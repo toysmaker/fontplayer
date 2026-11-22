@@ -633,7 +633,8 @@ const getComponents = (skeleton, global_params) => {
         end: skeleton_13,
       },
       bendToCubic(skeleton_13, skeleton_9, skeleton_10, 'stroke2:0'),
-      bendToCubic(skeleton_10, skeleton_11, skeleton_12, 'stroke2:1'),
+      // 下弯钩收笔：bend 左移 → 端帽向右下斜切，不要竖直收笔
+      bendToCubic(skeleton_10, { x: skeleton_11.x - weight / 2, y: skeleton_11.y }, skeleton_12, 'stroke2:1'),
     ], weight,
     // 笔压（参照数字字形）：直线笔画两端捺式加粗
     { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })

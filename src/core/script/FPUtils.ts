@@ -428,6 +428,18 @@ const heitiPressureTopArcFn = (x: number) : number => {
 	return (1 + Math.cos(d * Math.PI)) / 4
 }
 
+// S 字形专用：起收笔与中点满字重，仅起始部分（15%）与下部分（85%）附近各留 30% 路径
+// 长度的减细过渡缓动（smoothstep），其余保持正常宽度
+// 配合 startWeight=字重×(1−0.15×笔压) / endWeight=字重 使用（减细到 85%）
+const heitiPressureSFn = (x: number) : number => {
+	const dent = (c: number) => {
+		const d = Math.abs(x - c) / 0.15
+		if (d >= 1) return 1
+		return smoothstep(d)
+	}
+	return Math.min(dent(0.15), dent(0.85))
+}
+
 const bezier1Fn = (x: number) : number => {
 	const bezier = [
 		{ x: 0, y: 0.3 },
@@ -538,6 +550,8 @@ const getBezierFn = (type: string) => {
 		return heitiPressureCircleMidFn
 	} else if (type === 'heitiPressureTopArc') {
 		return heitiPressureTopArcFn
+	} else if (type === 'heitiPressureS') {
+		return heitiPressureSFn
 	}
 	// 未知字重函数类型静默回退会把「笔压不生效」这类问题完全吞掉（曾真实发生：
 	// 模块缓存旧版导致新类型未注册，渲染仍成功但字形全错），必须在 DEV 下显式告警

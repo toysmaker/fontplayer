@@ -428,8 +428,8 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_6, skeleton_7, skeleton_0, 'stroke1:3'),
       bendToCubic(skeleton_0, skeleton_1, skeleton_2, 'stroke1:0'),
     ], weight,
-    // 笔压（参照数字字形）：直线笔画两端捺式加粗
-    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+    // 全环无笔压（接缝处满字重），仅上下（水平走向段）变细——参照 0 字形
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureRing', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
   const _stroke2_contours = FP.getLineContours2('stroke2', { stroke2_start: skeleton_9, stroke2_end: skeleton_8 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke2_curves = FP.fitCurvesByPoints(_stroke2_contours.out_stroke2_points, 1.5).curves
   const in_stroke2_curves = FP.fitCurvesByPoints(_stroke2_contours.in_stroke2_points, 1.5).curves

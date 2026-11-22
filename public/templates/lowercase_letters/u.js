@@ -398,8 +398,8 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_1, skeleton_2, skeleton_3, 'stroke1:0'),
       bendToCubic(skeleton_3, skeleton_4, skeleton_5, 'stroke1:1'),
     ], weight,
-    // 笔压（参照数字字形）：直线笔画两端捺式加粗
-    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+    // 起笔加重（+25%）后 smoothstep 平缓过渡回原字重，收尾与右竖衔接等宽
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
 
   // 创建钢笔组件
   const pen1 = new FP.PenComponent()

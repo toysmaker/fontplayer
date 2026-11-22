@@ -588,8 +588,21 @@ const getComponents = (skeleton, global_params) => {
 
   // out指上侧（外侧）轮廓线
   // in指下侧（内侧）轮廓线
+  // 起笔端：原切线竖直向上，向右上倾斜（c1 右移、y 保持原公式；c2 保持原弯曲形状）
+  const stroke1_0_control2 = {
+    x: skeleton_2.x + (2 / 3) * global_params.curvature * (segmentCurvature['stroke1:0'] ?? 1) * (skeleton_1.x - skeleton_2.x),
+    y: skeleton_2.y + (2 / 3) * global_params.curvature * (segmentCurvature['stroke1:0'] ?? 1) * (skeleton_1.y - skeleton_2.y),
+  }
   const { out_stroke1_curves, out_stroke1_points, in_stroke1_curves, in_stroke1_points } = FP.getCurveContours2('stroke1', [
-      bendToCubic(skeleton_0, skeleton_1, skeleton_2, 'stroke1:0'),
+      {
+        start: skeleton_0,
+        control1: {
+          x: skeleton_0.x + weight / 2,
+          y: skeleton_0.y + (2 / 3) * global_params.curvature * (segmentCurvature['stroke1:0'] ?? 1) * (skeleton_1.y - skeleton_0.y),
+        },
+        control2: stroke1_0_control2,
+        end: skeleton_2,
+      },
       bendToCubic(skeleton_2, skeleton_3, skeleton_4, 'stroke1:1'),
       {
         start: skeleton_4,
@@ -602,7 +615,8 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_6, skeleton_7, skeleton_8, 'stroke2:0'),
       bendToCubic(skeleton_8, skeleton_9, skeleton_10, 'stroke2:1'),
       bendToCubic(skeleton_10, skeleton_11, skeleton_12, 'stroke2:2'),
-      bendToCubic(skeleton_12, skeleton_13, skeleton_14, 'stroke2:3'),
+      // 尾巴收笔：切线倾斜（端帽随切线垂直），不要竖直收笔
+      bendToCubic(skeleton_12, { x: skeleton_13.x - weight / 2, y: skeleton_13.y }, skeleton_14, 'stroke2:3'),
     ], weight,
     // 笔压（参照数字字形）：直线笔画两端捺式加粗
     { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })

@@ -475,10 +475,11 @@ const getComponents = (skeleton, global_params) => {
   let in_stroke1_start = in_stroke1_curves[0].start
   let in_stroke1_end = in_stroke1_curves[in_stroke1_curves.length - 1].end
   let { out_stroke2_curves, out_stroke2_points, in_stroke2_curves, in_stroke2_points } = FP.getCurveContours2('stroke2', [
+      // 起笔端保持垂直；仅下弯钩收笔端切线倾斜（端帽随切线垂直）
       bendToCubic(skeleton_1, skeleton_2, skeleton_3, 'stroke2:0'),
       bendToCubic(skeleton_3, skeleton_4, skeleton_0, 'stroke2:1'),
       bendToCubic(skeleton_0, skeleton_5, skeleton_6, 'stroke2:2'),
-      bendToCubic(skeleton_6, skeleton_7, skeleton_8, 'stroke2:3')
+      bendToCubic(skeleton_6, { x: skeleton_7.x - weight / 2, y: skeleton_7.y }, skeleton_8, 'stroke2:3')
     ], weight,
     // 笔压（参照数字字形）：直线笔画两端捺式加粗
     { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })

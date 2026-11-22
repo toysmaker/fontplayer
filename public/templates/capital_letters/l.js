@@ -175,7 +175,8 @@ const getComponents = (skeleton, global_params) => {
   const out_stroke1_end = out_stroke1_curves[out_stroke1_curves.length - 1].end
   const in_stroke1_start = in_stroke1_curves[0].start
   const in_stroke1_end = in_stroke1_curves[in_stroke1_curves.length - 1].end
-  const _stroke2_contours = FP.getLineContours2('stroke2', { stroke2_start: { x: skeleton_2.x, y: skeleton_2.y - weight / 2 }, stroke2_end: { x: skeleton_1.x, y: skeleton_1.y - weight / 2 } }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  // 底横右端（与竖衔接处）缩进 0.5×字重，端帽落于竖干远缘
+  const _stroke2_contours = FP.getLineContours2('stroke2', { stroke2_start: { x: skeleton_2.x, y: skeleton_2.y - weight / 2 }, stroke2_end: { x: skeleton_1.x - weight / 2, y: skeleton_1.y - weight / 2 } }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke2_curves = FP.fitCurvesByPoints(_stroke2_contours.out_stroke2_points, 1.5).curves
   const in_stroke2_curves = FP.fitCurvesByPoints(_stroke2_contours.in_stroke2_points, 1.5).curves
   const out_stroke2_start = out_stroke2_curves[0].start

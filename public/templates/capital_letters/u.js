@@ -324,14 +324,16 @@ const getComponents = (skeleton, global_params) => {
   // 根据骨架计算轮廓关键点
   const { skeleton_0, skeleton_1, skeleton_2, skeleton_3, skeleton_4, skeleton_5, skeleton_6 } = skeleton
 
-  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_1, stroke1_end: skeleton_0 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  // 竖从自由端起笔（捺式加重），收笔（与 U 底衔接处）无笔压——与底两侧等宽
+  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_0, stroke1_end: skeleton_1 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraightStart', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.out_stroke1_points, 1.5).curves
   const in_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.in_stroke1_points, 1.5).curves
   const out_stroke1_start = out_stroke1_curves[0].start
   const out_stroke1_end = out_stroke1_curves[out_stroke1_curves.length - 1].end
   const in_stroke1_start = in_stroke1_curves[0].start
   const in_stroke1_end = in_stroke1_curves[in_stroke1_curves.length - 1].end
-  const _stroke3_contours = FP.getLineContours2('stroke3', { stroke3_start: skeleton_5, stroke3_end: skeleton_6 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  // 竖从自由端起笔（捺式加重），收笔（与 U 底衔接处）无笔压——与底两侧等宽
+  const _stroke3_contours = FP.getLineContours2('stroke3', { stroke3_start: skeleton_6, stroke3_end: skeleton_5 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraightStart', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke3_curves = FP.fitCurvesByPoints(_stroke3_contours.out_stroke3_points, 1.5).curves
   const in_stroke3_curves = FP.fitCurvesByPoints(_stroke3_contours.in_stroke3_points, 1.5).curves
   const out_stroke3_start = out_stroke3_curves[0].start
@@ -343,8 +345,8 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_1, skeleton_2, skeleton_3, 'stroke2:0'),
       bendToCubic(skeleton_3, skeleton_4, skeleton_5, 'stroke2:1'),
     ], weight,
-    // 笔压（参照数字字形）：直线笔画两端捺式加粗
-    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+    // U 底两侧（与竖衔接处）无笔压满字重，仅中间变细（75%）
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircle', startWeight: weight * (1 - 0.25 * pressure), endWeight: weight })
 
   const serif_w1 = serifSize * 100
   const serif_h1 = 100

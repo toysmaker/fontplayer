@@ -256,8 +256,9 @@ const getComponents = (skeleton, global_params) => {
   const in_stroke2_end = in_stroke2_curves[in_stroke2_curves.length - 1].end
   const { out_stroke1_curves, out_stroke1_points, in_stroke1_curves, in_stroke1_points } = FP.getCurveContours2('stroke1', [
       {
+        // 上弯钩顶端：切线倾斜（端帽随切线垂直），不要竖直收笔
         start: skeleton_0,
-        control1: skeleton_1,
+        control1: { x: skeleton_1.x - weight / 2, y: skeleton_1.y },
         control2: skeleton_2,
         end: skeleton_3,
       },

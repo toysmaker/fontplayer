@@ -637,16 +637,31 @@ const getComponents = (skeleton, global_params) => {
 
   // out指上侧（外侧）轮廓线
   // in指下侧（内侧）轮廓线
+  // 下弯钩收笔：切线向右下倾斜（端帽随切线垂直）；段首控制点保持原弯曲形状
+  const stroke1_5_control1 = {
+    x: skeleton_10.x + (2 / 3) * global_params.curvature * (segmentCurvature['stroke1:5'] ?? 1) * (skeleton_11.x - skeleton_10.x),
+    y: skeleton_10.y + (2 / 3) * global_params.curvature * (segmentCurvature['stroke1:5'] ?? 1) * (skeleton_11.y - skeleton_10.y),
+  }
   const { out_stroke1_curves, out_stroke1_points, in_stroke1_curves, in_stroke1_points } = FP.getCurveContours2('stroke1', [
-      bendToCubic(skeleton_0, skeleton_1, skeleton_2, 'stroke1:0'),
+      // 上端起笔钩：切线倾斜（端帽随切线垂直），不要竖直收笔
+      bendToCubic(skeleton_0, { x: skeleton_1.x - weight / 2, y: skeleton_1.y }, skeleton_2, 'stroke1:0'),
       bendToCubic(skeleton_2, skeleton_3, skeleton_4, 'stroke1:1'),
       bendToCubic(skeleton_4, skeleton_5, skeleton_6, 'stroke1:2'),
       bendToCubic(skeleton_6, skeleton_7, skeleton_8, 'stroke1:3'),
       bendToCubic(skeleton_8, skeleton_9, skeleton_10, 'stroke1:4'),
-      bendToCubic(skeleton_10, skeleton_11, skeleton_12, 'stroke1:5'),
+      {
+        start: skeleton_10,
+        control1: stroke1_5_control1,
+        // control2 向 start（右）移动（y 保持原 bend 公式）→ 端帽向右下斜切，不要竖直收笔
+        control2: {
+          x: skeleton_12.x + weight / 2,
+          y: skeleton_12.y + (2 / 3) * global_params.curvature * (segmentCurvature['stroke1:5'] ?? 1) * (skeleton_11.y - skeleton_12.y),
+        },
+        end: skeleton_12,
+      },
     ], weight,
-    // 笔压（参照数字字形）：直线笔画两端捺式加粗
-    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+    // 起笔收笔无笔压（正常宽度），仅上下弧度处各 10% 长度局部减细（85%）
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureS', startWeight: weight * (1 - 0.15 * pressure), endWeight: weight })
 
   const pen1 = new FP.PenComponent()
   pen1.beginPath()

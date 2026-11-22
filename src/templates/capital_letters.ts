@@ -1042,6 +1042,14 @@ capitalLetters = capitalLetters.map((letter) => {
   return letter
 })
 
+// D 的碗转角更圆润：弯曲度默认值高于全局默认（0.8 → 1.2）
+const dLetter = capitalLetters.find((l) => l.name === 'd')
+const dCurvature = dLetter?.globalParams.find((p) => p.name === '弯曲度')
+if (dCurvature) {
+  dCurvature.value = 1.2
+  dCurvature.default = 1.2
+}
+
 export {
   capitalLetters,
 }

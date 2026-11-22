@@ -282,7 +282,8 @@ const getComponents = (skeleton, global_params) => {
   // 根据骨架计算轮廓关键点
   const { skeleton_0, skeleton_1, skeleton_2, skeleton_3, skeleton_4, skeleton_5 } = skeleton
 
-  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_1, stroke1_end: skeleton_0 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  // 竖从自由端起笔（捺式加重），收笔（与钩衔接处）无笔压——与钩起笔等宽
+  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_0, stroke1_end: skeleton_1 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraightStart', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.out_stroke1_points, 1.5).curves
   const in_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.in_stroke1_points, 1.5).curves
   const out_stroke1_start = out_stroke1_curves[0].start
@@ -293,8 +294,8 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_1, skeleton_2, skeleton_3, 'stroke2:0'),
       bendToCubic(skeleton_3, skeleton_4, skeleton_5, 'stroke2:1'),
     ], weight,
-    // 笔压（参照数字字形）：直线笔画两端捺式加粗
-    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+    // 钩起笔（与竖衔接处）无笔压、收笔满字重，仅弯笔处微细（90%）
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircle', startWeight: weight * (1 - 0.1 * pressure), endWeight: weight })
 
   const serif_w1 = serifSize * 100
   const serif_h1 = 100

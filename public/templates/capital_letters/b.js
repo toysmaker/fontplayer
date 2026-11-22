@@ -453,30 +453,31 @@ const getComponents = (skeleton, global_params) => {
   let out_stroke1_end = out_stroke1_curves[out_stroke1_curves.length - 1].end
   let in_stroke1_start = in_stroke1_curves[0].start
   let in_stroke1_end = in_stroke1_curves[in_stroke1_curves.length - 1].end
+  // 上下碗与竖的衔接：碗两端各缩进 0.5×字重（端帽落于竖干远缘），消除豁口
   const { out_stroke2_curves, out_stroke2_points, in_stroke2_curves, in_stroke2_points } = FP.getCurveContours2('stroke2', [
       {
-        start: skeleton_0,
+        start: { x: skeleton_0.x - weight / 2, y: skeleton_0.y },
         end: skeleton_2,
       },
       bendToCubic(skeleton_2, skeleton_3, skeleton_4, 'stroke2:0'),
       bendToCubic(skeleton_4, skeleton_5, skeleton_6, 'stroke2:1'),
       {
         start: skeleton_6,
-        end: skeleton_7,
+        end: { x: skeleton_7.x - weight / 2, y: skeleton_7.y },
       },
     ], weight,
     // 笔压（参照数字字形）：直线笔画两端捺式加粗
     { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
   const { out_stroke3_curves, out_stroke3_points, in_stroke3_curves, in_stroke3_points } = FP.getCurveContours2('stroke3', [
       {
-        start: skeleton_7,
+        start: { x: skeleton_7.x - weight / 2, y: skeleton_7.y },
         end: skeleton_6,
       },
       bendToCubic(skeleton_6, skeleton_5, skeleton_8, 'stroke3:0'),
       bendToCubic(skeleton_8, skeleton_9, skeleton_10, 'stroke3:1'),
       {
         start: skeleton_10,
-        end: skeleton_1,
+        end: { x: skeleton_1.x - weight / 2, y: skeleton_1.y },
       },
     ], weight,
     // 笔压（参照数字字形）：直线笔画两端捺式加粗

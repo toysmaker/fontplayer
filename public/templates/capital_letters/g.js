@@ -447,8 +447,19 @@ const getComponents = (skeleton, global_params) => {
   // in指下侧（内侧）轮廓线
   // 横竖连接处修正：环的开口段向下延伸 0.5×字重（接缝降到横画上缘以下），
   // 横画起笔端延伸 0.5×字重进入环内（到环的外缘），防豁角
+  // 环起笔端（半圆弧度起笔）：切线向左上倾斜（顺应环向左弯），端帽随切线垂直；
+  // 段尾控制点保持原弯曲形状，避免整段变形
+  const stroke1_0_control2 = {
+    x: skeleton_2.x + (2 / 3) * global_params.curvature * (segmentCurvature['stroke1:0'] ?? 1) * (skeleton_1.x - skeleton_2.x),
+    y: skeleton_2.y + (2 / 3) * global_params.curvature * (segmentCurvature['stroke1:0'] ?? 1) * (skeleton_1.y - skeleton_2.y),
+  }
   const { out_stroke1_curves, out_stroke1_points, in_stroke1_curves, in_stroke1_points } = FP.getCurveContours2('stroke1', [
-      bendToCubic(skeleton_0, skeleton_1, skeleton_2, 'stroke1:0'),
+      {
+        start: skeleton_0,
+        control1: { x: skeleton_0.x - weight / 4, y: skeleton_0.y - weight / 2 },
+        control2: stroke1_0_control2,
+        end: skeleton_2,
+      },
       bendToCubic(skeleton_2, skeleton_3, skeleton_4, 'stroke1:1'),
       bendToCubic(skeleton_4, skeleton_5, skeleton_6, 'stroke1:2'),
       bendToCubic(skeleton_6, skeleton_7, skeleton_8, 'stroke1:3'),
@@ -457,8 +468,8 @@ const getComponents = (skeleton, global_params) => {
         end: { x: skeleton_9.x, y: skeleton_9.y - weight / 2 },
       }
     ], weight,
-    // 笔压（参照数字字形）：直线笔画两端捺式加粗
-    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+    // 环起笔无笔压（正常宽度），上下弧度处减细——与 O/o/Q/C 统一
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureRing', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
   const _stroke2_contours = FP.getLineContours2('stroke2', { stroke2_start: { x: skeleton_9.x + weight / 2, y: skeleton_9.y }, stroke2_end: skeleton_10 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke2_curves = FP.fitCurvesByPoints(_stroke2_contours.out_stroke2_points, 1.5).curves
   const in_stroke2_curves = FP.fitCurvesByPoints(_stroke2_contours.in_stroke2_points, 1.5).curves
