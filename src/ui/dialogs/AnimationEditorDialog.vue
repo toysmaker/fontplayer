@@ -519,6 +519,9 @@ function renderCurrentKeyframe() {
   playback.pause()
   const kf = selectedKeyframe.value
   if (!kf) return
+  // 对话框不可见时直接返回: modal 内容未挂载、canvas 恒为 null,若走下方重试
+  // 会在后台形成 60fps 的 rAF 死循环(常驻主线程: 拖拽卡顿、持续耗电发热的来源)
+  if (!props.visible) return
   // 对话框刚打开时 canvas 可能尚未挂载（n-modal 内容延迟渲染），下一帧重试
   if (!previewCanvasRef.value) {
     requestAnimationFrame(() => renderCurrentKeyframe())
