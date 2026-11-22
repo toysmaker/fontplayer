@@ -440,6 +440,49 @@ const heitiPressureSFn = (x: number) : number => {
 	return Math.min(dent(0.15), dent(0.85))
 }
 
+// g 的 descender 竖专用：起笔加重（+25%）仅在开头 5% 路径内完成 smoothstep 过渡，
+// 其余全程满字重——避免长梯形渐变
+// 配合 startWeight=字重 / endWeight=字重×(1+0.25×笔压) 使用
+const heitiPressureGStemFn = (x: number) : number => {
+	if (x >= 0.05) return 0
+	return 1 - smoothstep(x / 0.05)
+}
+
+// B 双碗专用：起笔 75%（保持），前段恢复满字重，碗中间部分减细（87.5%），收笔满字重衔接竖
+// 配合 startWeight=字重 / endWeight=字重×(1−0.25×笔压) 使用
+const heitiPressureBBowlFn = (x: number) : number => {
+	if (x <= 0.02) return 1
+	if (x < 0.25) return smoothstep((0.25 - x) / 0.23)
+	if (x < 0.35) return 0
+	if (x < 0.5) return 0.5 * smoothstep((x - 0.35) / 0.15)
+	if (x < 0.65) return 0.5 * (1 - smoothstep((x - 0.5) / 0.15))
+	return 0
+}
+
+// e 的弧专用：左侧保持满字重，前后两端缓动减细（93.75%，比中间横稍粗）
+// 配合 startWeight=字重 / endWeight=字重×(1−0.0625×笔压) 使用
+const heitiPressureELoopFn = (x: number) : number => {
+	if (x < 0.2) return 1 - smoothstep(x / 0.2)
+	if (x < 0.6) return 0
+	return smoothstep((x - 0.6) / 0.4)
+}
+
+// B 上碗专用：起笔满字重，末尾 45% 处开始线性缓动减细（75%），末尾 30% 处以后保持同样粗细
+// 配合 startWeight=字重 / endWeight=字重×(1−0.25×笔压) 使用
+const heitiPressureBEnd30Fn = (x: number) : number => {
+	if (x < 0.55) return 0
+	if (x < 0.7) return (x - 0.55) / 0.15
+	return 1
+}
+
+// B 下碗专用（与上碗镜像）：起笔 30% 保持细（75%），30%~45% 线性缓动恢复满字重，其余保持满字重
+// 配合 startWeight=字重 / endWeight=字重×(1−0.25×笔压) 使用
+const heitiPressureBStart30Fn = (x: number) : number => {
+	if (x < 0.3) return 1
+	if (x < 0.45) return 1 - (x - 0.3) / 0.15
+	return 0
+}
+
 const bezier1Fn = (x: number) : number => {
 	const bezier = [
 		{ x: 0, y: 0.3 },
@@ -552,6 +595,16 @@ const getBezierFn = (type: string) => {
 		return heitiPressureTopArcFn
 	} else if (type === 'heitiPressureS') {
 		return heitiPressureSFn
+	} else if (type === 'heitiPressureGStem') {
+		return heitiPressureGStemFn
+	} else if (type === 'heitiPressureBBowl') {
+		return heitiPressureBBowlFn
+	} else if (type === 'heitiPressureELoop') {
+		return heitiPressureELoopFn
+	} else if (type === 'heitiPressureBEnd30') {
+		return heitiPressureBEnd30Fn
+	} else if (type === 'heitiPressureBStart30') {
+		return heitiPressureBStart30Fn
 	}
 	// 未知字重函数类型静默回退会把「笔压不生效」这类问题完全吞掉（曾真实发生：
 	// 模块缓存旧版导致新类型未注册，渲染仍成功但字形全错），必须在 DEV 下显式告警

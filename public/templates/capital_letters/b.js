@@ -263,6 +263,13 @@ const getJointsMap = (data) => {
       break
     }
   }
+  // skeleton_11 是派生拐点：始终 = 上碗右缘 x + 中缝高 y
+  if (jointsMap['skeleton_4'] && jointsMap['skeleton_5']) {
+    jointsMap['skeleton_11'] = {
+      x: jointsMap['skeleton_4'].x,
+      y: jointsMap['skeleton_5'].y,
+    }
+  }
   return jointsMap
 }
 
@@ -317,7 +324,8 @@ const computeParamsByJoints = (jointsMap) => {
   const w1_range = glyph.getParamRange('w1')
   const w2_range = glyph.getParamRange('w2')
   const h1 = range(skeleton_1.y - skeleton_0.y, h1_range)
-  const w1 = range(skeleton_3.x - skeleton_0.x, w1_range)
+  // w1 取下碗右缘（s5），上碗为 0.9×w1 的视错缩窄
+  const w1 = range(skeleton_5.x - skeleton_0.x, w1_range)
   const w2 = range(skeleton_6.x - skeleton_7.x, w2_range)
   return {
     h1,
@@ -354,17 +362,18 @@ const updateGlyphByParams = (params, global_params) => {
     x: skeleton_0.x + w2,
     y: skeleton_0.y,
   })
+  // 视错修正：上碗略窄（横向 90%）且略矮（45%），下碗 55%
   const skeleton_3 = new FP.Joint('skeleton_3', {
-    x: skeleton_0.x + w1,
+    x: skeleton_0.x + w1 * 0.9,
     y: skeleton_0.y,
   })
   const skeleton_4 = new FP.Joint('skeleton_4', {
     x: skeleton_3.x,
-    y: skeleton_3.y + h1 / 4,
+    y: skeleton_3.y + h1 * 0.45 / 2,
   })
   const skeleton_5 = new FP.Joint('skeleton_5', {
-    x: skeleton_4.x,
-    y: skeleton_4.y + h1 / 4,
+    x: skeleton_0.x + w1,
+    y: skeleton_4.y + h1 * 0.45 / 2,
   })
   const skeleton_6 = new FP.Joint('skeleton_6', {
     x: skeleton_0.x + w2,
@@ -372,19 +381,24 @@ const updateGlyphByParams = (params, global_params) => {
   })
   const skeleton_7 = new FP.Joint('skeleton_7', {
     x: skeleton_0.x,
-    y: skeleton_0.y + h1 / 2,
+    y: skeleton_0.y + h1 * 0.45,
   })
   const skeleton_8 = new FP.Joint('skeleton_8', {
     x: skeleton_5.x,
-    y: skeleton_5.y + h1 / 4,
+    y: skeleton_5.y + h1 * 0.55 / 2,
   })
   const skeleton_9 = new FP.Joint('skeleton_9', {
     x: skeleton_8.x,
-    y: skeleton_8.y + h1 / 4,
+    y: skeleton_8.y + h1 * 0.55 / 2,
   })
   const skeleton_10 = new FP.Joint('skeleton_10', {
     x: skeleton_0.x + w2,
     y: skeleton_9.y,
+  })
+  // 视错修正（上碗 0.9×w1 窄碗）的拐点：上碗右侧直线下移与中缝连线的交点
+  const skeleton_11 = new FP.Joint('skeleton_11', {
+    x: skeleton_4.x,
+    y: skeleton_5.y,
   })
   const skeleton = {
     skeleton_0,
@@ -398,8 +412,9 @@ const updateGlyphByParams = (params, global_params) => {
     skeleton_8,
     skeleton_9,
     skeleton_10,
+    skeleton_11,
   }
-  
+
   glyph.addJoint(skeleton_0)
   glyph.addJoint(skeleton_1)
   glyph.addJoint(skeleton_2)
@@ -411,12 +426,14 @@ const updateGlyphByParams = (params, global_params) => {
   glyph.addJoint(skeleton_8)
   glyph.addJoint(skeleton_9)
   glyph.addJoint(skeleton_10)
-  
+  glyph.addJoint(skeleton_11)
+
   glyph.addRefLine(refline(skeleton_0, skeleton_1))
   glyph.addRefLine(refline(skeleton_0, skeleton_2))
   glyph.addRefLine(refline(skeleton_2, skeleton_3))
   glyph.addRefLine(refline(skeleton_3, skeleton_4))
-  glyph.addRefLine(refline(skeleton_4, skeleton_5))
+  glyph.addRefLine(refline(skeleton_4, skeleton_11))
+  glyph.addRefLine(refline(skeleton_11, skeleton_6))
   glyph.addRefLine(refline(skeleton_5, skeleton_6))
   glyph.addRefLine(refline(skeleton_6, skeleton_7))
   glyph.addRefLine(refline(skeleton_5, skeleton_8))
@@ -446,7 +463,7 @@ const getComponents = (skeleton, global_params) => {
 
   // out指上侧（外侧）轮廓线
   // in指下侧（内侧）轮廓线
-  let _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_0, stroke1_end: skeleton_1 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  let _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_0, stroke1_end: skeleton_1 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight })
   let out_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.out_stroke1_points, 1.5).curves
   let in_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.in_stroke1_points, 1.5).curves
   let out_stroke1_start = out_stroke1_curves[0].start
@@ -454,20 +471,21 @@ const getComponents = (skeleton, global_params) => {
   let in_stroke1_start = in_stroke1_curves[0].start
   let in_stroke1_end = in_stroke1_curves[in_stroke1_curves.length - 1].end
   // 上下碗与竖的衔接：碗两端各缩进 0.5×字重（端帽落于竖干远缘），消除豁口
+  // 拐点 skeleton_11 = 上碗右侧直线（x=0.9×w1）下移与中缝连线的交点——直角 bend 逻辑不变
   const { out_stroke2_curves, out_stroke2_points, in_stroke2_curves, in_stroke2_points } = FP.getCurveContours2('stroke2', [
       {
         start: { x: skeleton_0.x - weight / 2, y: skeleton_0.y },
         end: skeleton_2,
       },
       bendToCubic(skeleton_2, skeleton_3, skeleton_4, 'stroke2:0'),
-      bendToCubic(skeleton_4, skeleton_5, skeleton_6, 'stroke2:1'),
+      bendToCubic(skeleton_4, skeleton_11, skeleton_6, 'stroke2:1'),
       {
         start: skeleton_6,
         end: { x: skeleton_7.x - weight / 2, y: skeleton_7.y },
       },
     ], weight,
-    // 笔压（参照数字字形）：直线笔画两端捺式加粗
-    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+    // 上碗起笔无笔压（满字重），收笔处减细（末尾 45% 起缓动、末尾 30% 后保持）
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureBEnd30', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
   const { out_stroke3_curves, out_stroke3_points, in_stroke3_curves, in_stroke3_points } = FP.getCurveContours2('stroke3', [
       {
         start: { x: skeleton_7.x - weight / 2, y: skeleton_7.y },
@@ -481,7 +499,7 @@ const getComponents = (skeleton, global_params) => {
       },
     ], weight,
     // 笔压（参照数字字形）：直线笔画两端捺式加粗
-    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureBStart30', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
 
   // 创建钢笔组件
   const pen1 = new FP.PenComponent()

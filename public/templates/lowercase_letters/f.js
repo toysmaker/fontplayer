@@ -263,8 +263,9 @@ const getComponents = (skeleton, global_params) => {
         end: skeleton_3,
       },
       {
+        // 竖加长 0.5×字重再补 1/8：端帽下缘（850）与 e 的带下缘（855）对齐，骨架中心线对准基线
         start: skeleton_3,
-        end: skeleton_4,
+        end: { x: skeleton_4.x, y: skeleton_4.y + weight / 2 + weight / 8 },
       },
     ], weight,
     // 笔压（参照数字字形）：直线笔画两端捺式加粗

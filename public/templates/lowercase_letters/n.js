@@ -280,7 +280,7 @@ const getComponents = (skeleton, global_params) => {
 
   // out指上侧（外侧）轮廓线
   // in指下侧（内侧）轮廓线
-  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_1, stroke1_end: skeleton_7 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: { x: skeleton_1.x, y: skeleton_1.y + weight / 2 + weight / 8 }, stroke1_end: skeleton_7 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.out_stroke1_points, 1.5).curves
   const in_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.in_stroke1_points, 1.5).curves
   const out_stroke1_start = out_stroke1_curves[0].start
@@ -292,7 +292,7 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_3, skeleton_4, skeleton_5, 'stroke2:1'),
       {
         start: skeleton_5,
-        end: skeleton_6,
+        end: { x: skeleton_6.x, y: skeleton_6.y + weight / 2 + weight / 8 },
       },
     ], weight,
     // 笔压（参照数字字形）：直线笔画两端捺式加粗

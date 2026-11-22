@@ -206,10 +206,10 @@ const computeParamsByJoints = (jointsMap) => {
   const h3_range = glyph.getParamRange('h3')
   const h4_range = glyph.getParamRange('h4')
   const w1_range = glyph.getParamRange('w1')
-  const h1 = range(skeleton_3.y - skeleton_0.y, h1_range)
+  const h1 = range(skeleton_3.y - skeleton_0.y + (glyph.getParam('字重') || 40) / 2, h1_range)
   const h2 = range(skeleton_1.y - skeleton_0.y, h2_range)
   const h3 = range(skeleton_5.y - skeleton_6.y, h3_range)
-  const h4 = range(skeleton_2.y - skeleton_1.y, h4_range)
+  const h4 = range(skeleton_2.y - skeleton_1.y + (glyph.getParam('字重') || 40) / 2, h4_range)
   const w1 = range(skeleton_0.x - skeleton_5.x, w1_range)
   return {
     h1,
@@ -244,13 +244,15 @@ const updateGlyphByParams = (params, global_params) => {
     x: skeleton_0.x,
     y: skeleton_0.y + h2,
   })
+  // 内侧竖与钩连接点也上移 0.5×字重（与钩底上移一致）
   const skeleton_2 = new FP.Joint('skeleton_2', {
     x: skeleton_1.x,
-    y: skeleton_1.y + h4,
+    y: skeleton_1.y + h4 - weight / 2,
   })
+  // 钩减短 0.5×字重（骨架数据偏移，不动度量参数）
   const skeleton_3 = new FP.Joint('skeleton_3', {
     x: skeleton_2.x,
-    y: skeleton_0.y + h1,
+    y: skeleton_0.y + h1 - weight / 2,
   })
   const skeleton_4 = new FP.Joint('skeleton_4', {
     x: skeleton_3.x - w1 / 2,
@@ -319,8 +321,8 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_2, skeleton_3, skeleton_4, 'stroke2:0'),
       bendToCubic(skeleton_4, skeleton_5, skeleton_6, 'stroke2:1'),
     ], weight,
-    // 笔压（参照数字字形）：直线笔画两端捺式加粗
-    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+    // 钩起笔加重（+25%）仅开头 5% 路径快速过渡，收笔保持字重不变
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureGStem', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
 
   const serif2_w1 = weight * 1.5 * serifSize
   const serif2_h1 = serif2_w1 * 0.5

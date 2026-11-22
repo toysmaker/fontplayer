@@ -552,7 +552,7 @@ const getComponents = (skeleton, global_params) => {
   // out指上侧（外侧）轮廓线
   // in指下侧（内侧）轮廓线
   // 横竖连接处修正：竖干上端延伸至碗顶外缘（碗接缝为 75% 字重）；下端为自由端，保持基线
-  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_1, stroke1_end: { x: skeleton_0.x, y: skeleton_0.y - weight / 2 * (1 - 0.25 * pressure) } }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_1, stroke1_end: { x: skeleton_0.x, y: skeleton_0.y - weight / 2 * (1 - 0.25 * pressure) } }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraightStart', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.out_stroke1_points, 1.5).curves
   const in_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.in_stroke1_points, 1.5).curves
   const out_stroke1_start = out_stroke1_curves[0].start
@@ -572,7 +572,7 @@ const getComponents = (skeleton, global_params) => {
       }
     ], weight,
     // 笔压（参照数字字形）：直线笔画两端捺式加粗
-    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleEnd', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
   const _stroke3_contours = FP.getLineContours2('stroke3', { stroke3_start: skeleton_7, stroke3_end: skeleton_6 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke3_curves = FP.fitCurvesByPoints(_stroke3_contours.out_stroke3_points, 1.5).curves
   const in_stroke3_curves = FP.fitCurvesByPoints(_stroke3_contours.in_stroke3_points, 1.5).curves

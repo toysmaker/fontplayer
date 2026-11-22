@@ -160,7 +160,8 @@ const getComponents = (skeleton, global_params) => {
   // out指上侧（外侧）轮廓线
   // in指下侧（内侧）轮廓线
   const stroke1_beziers = FP.getCircle(skeleton_0, weight / 2)
-  const _stroke2_contours = FP.getLineContours2('stroke2', { stroke2_start: skeleton_2, stroke2_end: skeleton_1 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  // 竖底端帽下缘对齐 e（骨架中心线对准基线，带下缘 850）
+  const _stroke2_contours = FP.getLineContours2('stroke2', { stroke2_start: { x: skeleton_2.x, y: skeleton_2.y + weight / 2 + weight / 8 }, stroke2_end: skeleton_1 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke2_curves = FP.fitCurvesByPoints(_stroke2_contours.out_stroke2_points, 1.5).curves
   const in_stroke2_curves = FP.fitCurvesByPoints(_stroke2_contours.in_stroke2_points, 1.5).curves
   const out_stroke2_start = out_stroke2_curves[0].start

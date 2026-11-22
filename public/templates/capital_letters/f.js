@@ -207,7 +207,7 @@ const getComponents = (skeleton, global_params) => {
   // 根据骨架计算轮廓关键点
   const { skeleton_0, skeleton_1, skeleton_2, skeleton_3, skeleton_4 } = skeleton
 
-  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: { x: skeleton_4.x, y: skeleton_4.y + weight / 2 }, stroke1_end: { x: skeleton_0.x, y: skeleton_0.y - weight / 2 } }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: { x: skeleton_4.x, y: skeleton_4.y + weight / 2 }, stroke1_end: { x: skeleton_0.x, y: skeleton_0.y - weight / 2 } }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraightStart', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.out_stroke1_points, 1.5).curves
   const in_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.in_stroke1_points, 1.5).curves
   const out_stroke1_start = out_stroke1_curves[0].start

@@ -595,45 +595,46 @@ const getComponents = (skeleton, global_params) => {
   // pen4.lineTo(out_stroke4_start.x, out_stroke4_start.y)
   // pen4.closePath()
 
-  // 三处交汇的凹陷填补（外角/内角三角形）
+// 三角描边补偿：底边两端各沿底边法向（远离顶点 s0 的方向）凸起 5 像素，再封口
+const triStep = (s0, p1, p2) => {
+  const dx = p2.x - p1.x
+  const dy = p2.y - p1.y
+  const len = Math.hypot(dx, dy) || 1
+  let nx = -dy / len
+  let ny = dx / len
+  const mx = (p1.x + p2.x) / 2
+  const my = (p1.y + p2.y) / 2
+  if (nx * (s0.x - mx) + ny * (s0.y - my) > 0) {
+    nx = -nx
+    ny = -ny
+  }
+  return [
+    p1,
+    { x: p1.x + nx * 5, y: p1.y + ny * 5 },
+    { x: p2.x + nx * 5, y: p2.y + ny * 5 },
+    p2,
+  ]
+}
+  const tri_w1 = triStep(skeleton_1, out_stroke1_start, in_stroke2_start)
   const pen5 = new FP.PenComponent()
   pen5.beginPath()
   pen5.moveTo(skeleton_1.x, skeleton_1.y)
-  pen5.lineTo(out_stroke1_start.x, out_stroke1_start.y)
-  pen5.lineTo(in_stroke2_start.x, in_stroke2_start.y)
+  for (const pt of tri_w1) pen5.lineTo(pt.x, pt.y)
   pen5.closePath()
+  const tri_w2 = triStep(skeleton_2, out_stroke2_end, in_stroke3_end)
   const pen6 = new FP.PenComponent()
   pen6.beginPath()
-  pen6.moveTo(skeleton_1.x, skeleton_1.y)
-  pen6.lineTo(in_stroke1_start.x, in_stroke1_start.y)
-  pen6.lineTo(out_stroke2_start.x, out_stroke2_start.y)
+  pen6.moveTo(skeleton_2.x, skeleton_2.y)
+  for (const pt of tri_w2) pen6.lineTo(pt.x, pt.y)
   pen6.closePath()
+  const tri_w3 = triStep(skeleton_3, out_stroke3_start, in_stroke4_start)
   const pen7 = new FP.PenComponent()
   pen7.beginPath()
-  pen7.moveTo(skeleton_2.x, skeleton_2.y)
-  pen7.lineTo(out_stroke2_end.x, out_stroke2_end.y)
-  pen7.lineTo(in_stroke3_end.x, in_stroke3_end.y)
+  pen7.moveTo(skeleton_3.x, skeleton_3.y)
+  for (const pt of tri_w3) pen7.lineTo(pt.x, pt.y)
   pen7.closePath()
-  const pen8 = new FP.PenComponent()
-  pen8.beginPath()
-  pen8.moveTo(skeleton_2.x, skeleton_2.y)
-  pen8.lineTo(in_stroke2_end.x, in_stroke2_end.y)
-  pen8.lineTo(out_stroke3_end.x, out_stroke3_end.y)
-  pen8.closePath()
-  const pen9 = new FP.PenComponent()
-  pen9.beginPath()
-  pen9.moveTo(skeleton_3.x, skeleton_3.y)
-  pen9.lineTo(out_stroke3_start.x, out_stroke3_start.y)
-  pen9.lineTo(in_stroke4_start.x, in_stroke4_start.y)
-  pen9.closePath()
-  const pen10 = new FP.PenComponent()
-  pen10.beginPath()
-  pen10.moveTo(skeleton_3.x, skeleton_3.y)
-  pen10.lineTo(in_stroke3_start.x, in_stroke3_start.y)
-  pen10.lineTo(out_stroke4_start.x, out_stroke4_start.y)
-  pen10.closePath()
 
-  return [ pen1, pen2, pen3, pen4, pen5, pen6, pen7, pen8, pen9, pen10 ]
+  return [ pen1, pen2, pen3, pen4, pen5, pen6, pen7 ]
 }
 
 updateGlyphByParams(params, global_params)

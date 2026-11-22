@@ -13,6 +13,26 @@ const global_params = {
   curvature: glyph.getParam('弯曲度') ?? 1,
   pressure: glyph.getParam('笔压') ?? 1,
 }
+// 弯曲度 → 三次贝塞尔曲线描述：弯曲度为 1 时与原二次贝塞尔（bend）完全一致
+const bendToCubic = (start, bend, end, segmentKey) => {
+  const k = (2 / 3) * global_params.curvature * (segmentCurvature[segmentKey] ?? 1)
+  return {
+    start,
+    control1: {
+      x: start.x + k * (bend.x - start.x),
+      y: start.y + k * (bend.y - start.y),
+    },
+    control2: {
+      x: end.x + k * (bend.x - end.x),
+      y: end.y + k * (bend.y - end.y),
+    },
+    end,
+  }
+}
+const segmentCurvature = {
+  'stroke3:0': 1,
+}
+
 const ascender = 800
 const descender = -200
 const width = 360
@@ -176,8 +196,9 @@ const updateGlyphByParams = (params, global_params) => {
     x: skeleton_0.x,
     y: skeleton_0.y + h1,
   })
+  // 上臂右侧缩短（视错）：顶点 x 为 0.85×w1
   const skeleton_2 = new FP.Joint('skeleton_2', {
-    x: skeleton_0.x + w1,
+    x: skeleton_0.x + w1 * 0.85,
     y: skeleton_0.y + h2,
   })
   const skeleton_3 = new FP.Joint('skeleton_3', {
@@ -188,6 +209,7 @@ const updateGlyphByParams = (params, global_params) => {
     x: skeleton_0.x + w1,
     y: skeleton_1.y,
   })
+  // 下臂起笔位置保持原逻辑：上臂延长线上的点
   const skeleton_4_coords = FP.getPointOnLine(skeleton_3, skeleton_2, w2)
   const skeleton_4 = new FP.Joint('skeleton_4', {
     x: skeleton_4_coords.x,
@@ -235,7 +257,8 @@ const getComponents = (skeleton, global_params) => {
 
   // out指上侧（外侧）轮廓线
   // in指下侧（内侧）轮廓线
-  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_1, stroke1_end: skeleton_0 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  // 竖底端延长 0.4×字重：带下缘与下臂带下缘（约 832）对齐
+  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: { x: skeleton_1.x, y: skeleton_1.y + weight * 0.4 }, stroke1_end: skeleton_0 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.out_stroke1_points, 1.5).curves
   const in_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.in_stroke1_points, 1.5).curves
   const out_stroke1_start = out_stroke1_curves[0].start
@@ -249,6 +272,7 @@ const getComponents = (skeleton, global_params) => {
   const out_stroke2_end = out_stroke2_curves[out_stroke2_curves.length - 1].end
   const in_stroke2_start = in_stroke2_curves[0].start
   const in_stroke2_end = in_stroke2_curves[in_stroke2_curves.length - 1].end
+  // 下臂保持直线：收笔端帽自然垂直于切线
   const _stroke3_contours = FP.getLineContours2('stroke3', { stroke3_start: skeleton_5, stroke3_end: skeleton_4 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke3_curves = FP.fitCurvesByPoints(_stroke3_contours.out_stroke3_points, 1.5).curves
   const in_stroke3_curves = FP.fitCurvesByPoints(_stroke3_contours.in_stroke3_points, 1.5).curves

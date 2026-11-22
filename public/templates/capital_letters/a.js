@@ -10,6 +10,48 @@ const global_params = {
   curvature: glyph.getParam('弯曲度') ?? 1,
   pressure: glyph.getParam('笔压') ?? 1,
 }
+// 弯曲度 → 三次贝塞尔曲线描述：弯曲度为 1 时与原二次贝塞尔（bend）完全一致
+const bendToCubic = (start, bend, end, segmentKey) => {
+  const k = (2 / 3) * global_params.curvature * (segmentCurvature[segmentKey] ?? 1)
+  return {
+    start,
+    control1: {
+      x: start.x + k * (bend.x - start.x),
+      y: start.y + k * (bend.y - start.y),
+    },
+    control2: {
+      x: end.x + k * (bend.x - end.x),
+      y: end.y + k * (bend.y - end.y),
+    },
+    end,
+  }
+}
+// 三角描边补偿：底边两端各沿底边法向（远离顶点 s0 的方向）凸起 5 像素，再封口
+const triStep = (s0, p1, p2) => {
+  const dx = p2.x - p1.x
+  const dy = p2.y - p1.y
+  const len = Math.hypot(dx, dy) || 1
+  let nx = -dy / len
+  let ny = dx / len
+  const mx = (p1.x + p2.x) / 2
+  const my = (p1.y + p2.y) / 2
+  if (nx * (s0.x - mx) + ny * (s0.y - my) > 0) {
+    nx = -nx
+    ny = -ny
+  }
+  return [
+    p1,
+    { x: p1.x + nx * 5, y: p1.y + ny * 5 },
+    { x: p2.x + nx * 5, y: p2.y + ny * 5 },
+    p2,
+  ]
+}
+
+const segmentCurvature = {
+  'stroke1:1': 1,
+  'stroke2:1': 1,
+}
+
 const ascender = 800
 const descender = -200
 const width = 360
@@ -257,8 +299,8 @@ const getComponents = (skeleton, global_params) => {
   const out_stroke2_end = out_stroke2_curves[out_stroke2_curves.length - 1].end
   const in_stroke2_start = in_stroke2_curves[0].start
   const in_stroke2_end = in_stroke2_curves[in_stroke2_curves.length - 1].end
-  // 交叉横两端各延伸 0.5×字重进入两斜笔（端帽落在斜笔远缘），防豁角
-  const _stroke3_contours = FP.getLineContours2('stroke3', { stroke3_start: { x: skeleton_4.x + weight / 2, y: skeleton_4.y }, stroke3_end: { x: skeleton_3.x - weight / 2, y: skeleton_3.y } }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  // 交叉横两端各延伸 0.25×字重进入两斜笔（不过多超出斜笔外缘）
+  const _stroke3_contours = FP.getLineContours2('stroke3', { stroke3_start: { x: skeleton_4.x + weight / 4, y: skeleton_4.y }, stroke3_end: { x: skeleton_3.x - weight / 4, y: skeleton_3.y } }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke3_curves = FP.fitCurvesByPoints(_stroke3_contours.out_stroke3_points, 1.5).curves
   const in_stroke3_curves = FP.fitCurvesByPoints(_stroke3_contours.in_stroke3_points, 1.5).curves
   const out_stroke3_start = out_stroke3_curves[0].start
@@ -460,7 +502,24 @@ const getComponents = (skeleton, global_params) => {
   pen3.lineTo(in_stroke3_start.x, in_stroke3_start.y)
   pen3.closePath()
 
-  return [ pen1, pen2, pen3 ]
+  // 顶部上三角填补：顶点直接取最终 pen 的点数据（pen1/pen2 中 y 最小的 anchor = 端帽上端），
+  // 保证与带轮廓位对位一致（不使用 fit 曲线数据计算）
+  let apexLeft = { x: Infinity, y: Infinity }
+  for (const p of pen1.points) {
+    if (p.type === 'anchor' && p.y < apexLeft.y) apexLeft = p
+  }
+  let apexRight = { x: Infinity, y: Infinity }
+  for (const p of pen2.points) {
+    if (p.type === 'anchor' && p.y < apexRight.y) apexRight = p
+  }
+  const tri_a = triStep(skeleton_0, apexLeft, apexRight)
+  const pen4 = new FP.PenComponent()
+  pen4.beginPath()
+  pen4.moveTo(skeleton_0.x, skeleton_0.y)
+  for (const pt of tri_a) pen4.lineTo(pt.x, pt.y)
+  pen4.closePath()
+
+  return [ pen1, pen2, pen3, pen4 ]
 }
 
 updateGlyphByParams(params, global_params)

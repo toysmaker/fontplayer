@@ -265,7 +265,8 @@ const getComponents = (skeleton, global_params) => {
 
   // out指上侧（外侧）轮廓线
   // in指下侧（内侧）轮廓线
-  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_1, stroke1_end: skeleton_0 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  // 竖底端帽下缘对齐 e（骨架中心线对准基线，带下缘 850）
+  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: { x: skeleton_1.x, y: skeleton_1.y + weight / 2 + weight / 8 }, stroke1_end: skeleton_0 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.out_stroke1_points, 1.5).curves
   const in_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.in_stroke1_points, 1.5).curves
   const out_stroke1_start = out_stroke1_curves[0].start
@@ -279,7 +280,7 @@ const getComponents = (skeleton, global_params) => {
   const out_stroke2_end = out_stroke2_curves[out_stroke2_curves.length - 1].end
   const in_stroke2_start = in_stroke2_curves[0].start
   const in_stroke2_end = in_stroke2_curves[in_stroke2_curves.length - 1].end
-  const _stroke3_contours = FP.getLineContours2('stroke3', { stroke3_start: skeleton_5, stroke3_end: skeleton_4 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  const _stroke3_contours = FP.getLineContours2('stroke3', { stroke3_start: { x: skeleton_5.x, y: skeleton_5.y + weight / 2 + weight / 8 }, stroke3_end: skeleton_4 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
   const out_stroke3_curves = FP.fitCurvesByPoints(_stroke3_contours.out_stroke3_points, 1.5).curves
   const in_stroke3_curves = FP.fitCurvesByPoints(_stroke3_contours.in_stroke3_points, 1.5).curves
   const out_stroke3_start = out_stroke3_curves[0].start

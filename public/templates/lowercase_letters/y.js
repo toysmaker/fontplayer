@@ -159,7 +159,7 @@ const computeParamsByJoints = (jointsMap) => {
   const w1_range = glyph.getParamRange('w1')
   const w2_range = glyph.getParamRange('w2')
   const w3_range = glyph.getParamRange('w3')
-  const h1 = range(skeleton_3.y - skeleton_0.y, h1_range)
+  const h1 = range(skeleton_3.y - skeleton_0.y + (glyph.getParam('字重') || 40) / 2, h1_range)
   const h2 = range(skeleton_1.y - skeleton_0.y, h2_range)
   const w1 = range(skeleton_2.x - skeleton_4.x, w1_range)
   const w2 = range(skeleton_3.x - skeleton_4.x, w2_range)
@@ -197,13 +197,14 @@ const updateGlyphByParams = (params, global_params) => {
     x: skeleton_0.x + w3,
     y: skeleton_0.y,
   })
+  // descender 骨架底上移 0.5×字重（带下缘贴 descender 线 1000）
   const skeleton_3 = new FP.Joint('skeleton_3', {
     x: skeleton_2.x - w1 + w2,
-    y: skeleton_0.y + h1,
+    y: skeleton_0.y + h1 - weight / 2,
   })
   const skeleton_4 = new FP.Joint('skeleton_4', {
     x: skeleton_2.x - w1,
-    y: skeleton_2.y + h1,
+    y: skeleton_2.y + h1 - weight / 2,
   })
   const angle = Math.atan2(skeleton_3.y - skeleton_2.y, skeleton_2.x - skeleton_3.x)
   const _dy = h2
@@ -266,7 +267,8 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_1, skeleton_3, skeleton_4, 'stroke2:0'),
     ], weight,
     // 笔压（参照数字字形）：直线笔画两端捺式加粗
-    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+    // 主笔（右斜）：起笔加重（+25%）smoothstep 过渡，收笔保持字重
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
 
   const end_serif_size = serifSize ? serifSize * weight : weight
   const end_serif_o = FP.getPointOnLine(

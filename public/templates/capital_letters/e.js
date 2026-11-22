@@ -209,11 +209,13 @@ const updateGlyphByParams = (params, global_params) => {
   })
   const skeleton_2 = new FP.Joint('skeleton_2', {
     x: skeleton_0.x,
-    y: skeleton_0.y + h1 / 2,
+    // 视错修正：中横略高于几何中线
+    y: skeleton_0.y + h1 * 0.48,
   })
   const skeleton_3 = new FP.Joint('skeleton_3', {
     x: skeleton_1.x,
-    y: skeleton_0.y + h1 / 2,
+    // 视错修正：中横略高于几何中线
+    y: skeleton_0.y + h1 * 0.48,
   })
   const skeleton_4 = new FP.Joint('skeleton_4', {
     x: skeleton_0.x,
@@ -265,7 +267,7 @@ const getComponents = (skeleton, global_params) => {
 
   // out指上侧（外侧）轮廓线
   // in指下侧（内侧）轮廓线
-  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: { x: skeleton_4.x, y: skeleton_4.y + weight / 2 }, stroke1_end: { x: skeleton_0.x, y: skeleton_0.y - weight / 2 } }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: { x: skeleton_4.x, y: skeleton_4.y + weight / 2 }, stroke1_end: { x: skeleton_0.x, y: skeleton_0.y - weight / 2 } }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight })
   const out_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.out_stroke1_points, 1.5).curves
   const in_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.in_stroke1_points, 1.5).curves
   const out_stroke1_start = out_stroke1_curves[0].start

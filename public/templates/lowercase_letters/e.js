@@ -467,7 +467,7 @@ const getComponents = (skeleton, global_params) => {
 
   // out指起点右侧轮廓线
   // in指起点左侧轮廓线
-  let _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_0, stroke1_end: skeleton_1 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
+  let _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_0, stroke1_end: skeleton_1 }, weight * (1 - 0.125 * pressure), { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureStraight', startWeight: weight * (1 - 0.125 * pressure), endWeight: weight * (1 - 0.125 * pressure) * (1 + 0.25 * pressure) })
   let out_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.out_stroke1_points, 1.5).curves
   let in_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.in_stroke1_points, 1.5).curves
   let out_stroke1_start = out_stroke1_curves[0].start
@@ -482,7 +482,8 @@ const getComponents = (skeleton, global_params) => {
       bendToCubic(skeleton_6, { x: skeleton_7.x - weight / 2, y: skeleton_7.y }, skeleton_8, 'stroke2:3')
     ], weight,
     // 笔压（参照数字字形）：直线笔画两端捺式加粗
-    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+    // 弧：左侧保持字重，前后两端缓动减细（比横稍粗）
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureELoop', startWeight: weight, endWeight: weight * (1 - 0.0625 * pressure) })
   const out_corner = {
     x: in_stroke2_curves[0].start.x,
     y: in_stroke1_end.y,

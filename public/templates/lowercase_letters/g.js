@@ -49,7 +49,8 @@ const capitalHeight = 750
 const ox = 500
 const oy = 500
 const x0 = 500 + width / 2
-const y0 = ascender - descender - params.h1 + params.h3 + global_params.weight / 2
+// descender 带下缘贴齐 descender 线（1000）：骨架底 960 + 半字重 40——与 p/q 视觉平齐
+const y0 = ascender - descender - params.h1 + params.h3 - global_params.weight / 2
 
 const getJointsMap = (data) => {
   const { draggingJoint, deltaX, deltaY } = data
@@ -633,11 +634,11 @@ const getComponents = (skeleton, global_params) => {
         end: skeleton_13,
       },
       bendToCubic(skeleton_13, skeleton_9, skeleton_10, 'stroke2:0'),
-      // 下弯钩收笔：bend 左移 → 端帽向右下斜切，不要竖直收笔
-      bendToCubic(skeleton_10, { x: skeleton_11.x - weight / 2, y: skeleton_11.y }, skeleton_12, 'stroke2:1'),
+      // 下弯钩收笔：bend 向 start（右）移动 → 端帽向右下斜切（与 s 一致），不要竖直收笔
+      bendToCubic(skeleton_10, { x: skeleton_11.x + weight / 2, y: skeleton_11.y }, skeleton_12, 'stroke2:1'),
     ], weight,
-    // 笔压（参照数字字形）：直线笔画两端捺式加粗
-    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.25 * pressure) })
+    // 竖起笔加粗（+25%），仅开头 5% 路径完成过渡，收笔保持满字重不减细
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureGStem', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
 
   // 创建钢笔组件
   const pen1 = new FP.PenComponent()

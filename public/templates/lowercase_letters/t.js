@@ -220,9 +220,10 @@ const updateGlyphByParams = (params, global_params) => {
     x: skeleton_0.x,
     y: skeleton_0.y + h1 - h3,
   })
+  // 钩底骨架下移 0.5×字重：钩带下缘与 s 的底部（850）对齐
   const skeleton_2 = new FP.Joint('skeleton_2', {
     x: skeleton_1.x,
-    y: skeleton_1.y + h3,
+    y: skeleton_1.y + h3 + weight / 2,
   })
   const skeleton_3 = new FP.Joint('skeleton_3', {
     x: skeleton_2.x + w1 / 2 - weight / 2,
@@ -294,39 +295,20 @@ const getComponents = (skeleton, global_params) => {
   const out_stroke2_end = out_stroke2_curves[out_stroke2_curves.length - 1].end
   const in_stroke2_start = in_stroke2_curves[0].start
   const in_stroke2_end = in_stroke2_curves[in_stroke2_curves.length - 1].end
-  // 竖钩拆三段笔迹（权重单调限制）：竖（起笔加重→原字重）、钩前半（原字重→钩中减细）、
-  // 钩后半（钩中减细→收笔回原字重）；拼接处端帽平行重合，无缝
-  const _stroke1_contours = FP.getLineContours2('stroke1', { stroke1_start: skeleton_0, stroke1_end: skeleton_1 }, weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
-  const out_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.out_stroke1_points, 1.5).curves
-  const in_stroke1_curves = FP.fitCurvesByPoints(_stroke1_contours.in_stroke1_points, 1.5).curves
-  const out_stroke1_start = out_stroke1_curves[0].start
-  const out_stroke1_end = out_stroke1_curves[out_stroke1_curves.length - 1].end
-  const in_stroke1_start = in_stroke1_curves[0].start
-  const in_stroke1_end = in_stroke1_curves[in_stroke1_curves.length - 1].end
-  // 钩曲线 de Casteljau 切分（t=0.5 处取钩中）
-  const hookP0 = skeleton_1
-  const hookP1 = skeleton_2
-  const hookP2 = skeleton_3
-  const hookP3 = skeleton_4
-  const hookMid = {
-    x: (hookP0.x + 3 * hookP1.x + 3 * hookP2.x + hookP3.x) / 8,
-    y: (hookP0.y + 3 * hookP1.y + 3 * hookP2.y + hookP3.y) / 8,
-  }
-  const hookFirst = {
-    start: hookP0,
-    control1: { x: (hookP0.x + hookP1.x) / 2, y: (hookP0.y + hookP1.y) / 2 },
-    control2: { x: (hookP0.x + 2 * hookP1.x + hookP2.x) / 4, y: (hookP0.y + 2 * hookP1.y + hookP2.y) / 4 },
-    end: hookMid,
-  }
-  const hookSecond = {
-    start: hookMid,
-    control1: { x: (hookP1.x + 2 * hookP2.x + hookP3.x) / 4, y: (hookP1.y + 2 * hookP2.y + hookP3.y) / 4 },
-    // 钩尖收笔：切线倾斜（端帽随切线垂直），不要竖直收笔
-    control2: { x: (hookP2.x + hookP3.x) / 2 - weight / 2, y: (hookP2.y + hookP3.y) / 2 },
-    end: hookP3,
-  }
-  const { out_stroke1b_curves, out_stroke1b_points, in_stroke1b_curves, in_stroke1b_points } = FP.getCurveContours2('stroke1b', [hookFirst], weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight * (1 - 0.125 * pressure), endWeight: weight })
-  const { out_stroke1c_curves, out_stroke1c_points, in_stroke1c_curves, in_stroke1c_points } = FP.getCurveContours2('stroke1c', [hookSecond], weight, { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureCircleStart', startWeight: weight, endWeight: weight * (1 - 0.125 * pressure) })
+  // 竖钩单条路径：仅起笔加重（+25%，开头 5% 快速过渡），之后全程保持原字重
+  const { out_stroke1_curves, out_stroke1_points, in_stroke1_curves, in_stroke1_points } = FP.getCurveContours2('stroke1', [
+      {
+        start: skeleton_0,
+        end: skeleton_1,
+      },
+      {
+        start: skeleton_1,
+        control1: skeleton_2,
+        control2: skeleton_3,
+        end: skeleton_4,
+      },
+    ], weight,
+    { weightsVariation: 'bezier', weightsVariationFnType: 'heitiPressureGStem', startWeight: weight, endWeight: weight * (1 + 0.25 * pressure) })
 
   // 创建钢笔组件
   const pen1 = new FP.PenComponent()
@@ -346,50 +328,20 @@ const getComponents = (skeleton, global_params) => {
 
   const pen2 = new FP.PenComponent()
   pen2.beginPath()
-  pen2.moveTo(out_stroke1b_curves[0].start.x, out_stroke1b_curves[0].start.y)
-  for (let i = 0; i < out_stroke1b_curves.length; i++) {
-    const curve = out_stroke1b_curves[i]
-    pen2.bezierTo(curve.control1.x, curve.control1.y, curve.control2.x, curve.control2.y, curve.end.x, curve.end.y)
-  }
-  pen2.lineTo(in_stroke1b_curves[in_stroke1b_curves.length - 1].end.x, in_stroke1b_curves[in_stroke1b_curves.length - 1].end.y)
-  for (let i = in_stroke1b_curves.length - 1; i >= 0; i--) {
-    const curve = in_stroke1b_curves[i]
-    pen2.bezierTo(curve.control2.x, curve.control2.y, curve.control1.x, curve.control1.y, curve.start.x, curve.start.y)
-  }
-  pen2.lineTo(out_stroke1b_curves[0].start.x, out_stroke1b_curves[0].start.y)
-  pen2.closePath()
-
-  const pen3 = new FP.PenComponent()
-  pen3.beginPath()
-  pen3.moveTo(out_stroke1c_curves[0].start.x, out_stroke1c_curves[0].start.y)
-  for (let i = 0; i < out_stroke1c_curves.length; i++) {
-    const curve = out_stroke1c_curves[i]
-    pen3.bezierTo(curve.control1.x, curve.control1.y, curve.control2.x, curve.control2.y, curve.end.x, curve.end.y)
-  }
-  pen3.lineTo(in_stroke1c_curves[in_stroke1c_curves.length - 1].end.x, in_stroke1c_curves[in_stroke1c_curves.length - 1].end.y)
-  for (let i = in_stroke1c_curves.length - 1; i >= 0; i--) {
-    const curve = in_stroke1c_curves[i]
-    pen3.bezierTo(curve.control2.x, curve.control2.y, curve.control1.x, curve.control1.y, curve.start.x, curve.start.y)
-  }
-  pen3.lineTo(out_stroke1c_curves[0].start.x, out_stroke1c_curves[0].start.y)
-  pen3.closePath()
-
-  const pen4 = new FP.PenComponent()
-  pen4.beginPath()
-  pen4.moveTo(out_stroke2_start.x, out_stroke2_start.y)
+  pen2.moveTo(out_stroke2_start.x, out_stroke2_start.y)
   for (let i = 0; i < out_stroke2_curves.length; i++) {
     const curve = out_stroke2_curves[i]
-    pen4.bezierTo(curve.control1.x, curve.control1.y, curve.control2.x, curve.control2.y, curve.end.x, curve.end.y)
+    pen2.bezierTo(curve.control1.x, curve.control1.y, curve.control2.x, curve.control2.y, curve.end.x, curve.end.y)
   }
-  pen4.lineTo(in_stroke2_end.x, in_stroke2_end.y)
+  pen2.lineTo(in_stroke2_end.x, in_stroke2_end.y)
   for (let i = in_stroke2_curves.length - 1; i >= 0; i--) {
     const curve = in_stroke2_curves[i]
-    pen4.bezierTo(curve.control2.x, curve.control2.y, curve.control1.x, curve.control1.y, curve.start.x, curve.start.y)
+    pen2.bezierTo(curve.control2.x, curve.control2.y, curve.control1.x, curve.control1.y, curve.start.x, curve.start.y)
   }
-  pen4.lineTo(out_stroke2_start.x, out_stroke2_start.y)
-  pen4.closePath()
+  pen2.lineTo(out_stroke2_start.x, out_stroke2_start.y)
+  pen2.closePath()
 
-  return [ pen1, pen2, pen3, pen4 ]
+  return [ pen1, pen2 ]
 }
 
 updateGlyphByParams(params, global_params)
