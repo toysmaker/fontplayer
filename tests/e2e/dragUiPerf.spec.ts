@@ -220,6 +220,214 @@ test('drag UI perf', async ({ page }) => {
   test.info().annotations.push({ type: 'perf', description: JSON.stringify({ dragWallMs, ...result, idleFrames }) })
 })
 
+test('drag with 7000 chars and 8 glyph components', async ({ page }) => {
+  const pageErrors: string[] = []
+  page.on('pageerror', (err) => pageErrors.push('PAGEERROR: ' + String(err).slice(0, 300)))
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') pageErrors.push('CONSOLE: ' + msg.text().slice(0, 300))
+  })
+  await seedProject(page)
+
+  // 扩展: 7000 字符元数据 + 编辑字符含 8 个 glyph 组件
+  await page.evaluate(async () => {
+    const scriptText = await (await fetch('/templates/digits/8.js')).text()
+    const { useProjectStore } = await import('/src/stores/project.ts')
+    const projectStore = useProjectStore()
+    const file: any = projectStore.selectedFile
+    const base = file.characterList[0]
+
+    // 编辑字符: 8 个脚本字形组件
+    const editing = JSON.parse(JSON.stringify(base))
+    editing.uuid = 'seed-char-8'
+    editing.components = []
+    editing.orderedList = []
+    for (let i = 0; i < 8; i++) {
+      const gv: any = JSON.parse(JSON.stringify(base.components[0].value))
+      gv.uuid = `seed-glyph-8-${i}`
+      gv.script = `function script_seed_glyph_8_${i}(glyph, constants, FP) {\n${scriptText}\n}`
+      gv.name = `stroke${i}`
+      editing.components.push({ type: 'glyph', uuid: `seed-glyph-8-${i}`, ox: i * 50 - 175, oy: 0, usedInCharacter: true, value: gv })
+      editing.orderedList.push({ type: 'component', uuid: `seed-glyph-8-${i}` })
+    }
+    file.characterList = [editing]
+
+    // 7000 个元数据字符
+    for (let i = 1; i < 7000; i++) {
+      file.characterList.push({
+        uuid: `bulk-char-${i}`,
+        type: 'character',
+        character: { text: String.fromCodePoint(0x4e00 + (i % 20000)), unicode: 0x4e00 + (i % 20000) },
+      })
+    }
+    const { characterDataManager } = await import('/src/core/storage/CharacterDataManager.ts')
+    await characterDataManager.updateCharacter(file.uuid, JSON.parse(JSON.stringify(editing)))
+  })
+
+  await page.goto('http://localhost:5173/#/editor')
+  await page.waitForLoadState('networkidle')
+  const characterItem = page.locator('[data-testid="character-item"]').first()
+  await characterItem.waitFor({ state: 'visible', timeout: 15000 })
+  await characterItem.click({ timeout: 10000 })
+  await page.waitForTimeout(2000)
+
+  const glyphComp = page.locator('[data-testid="component-item"][data-type="glyph"]').first()
+  await glyphComp.waitFor({ state: 'visible', timeout: 10000 })
+  await glyphComp.click({ timeout: 10000 })
+  await page.waitForTimeout(800)
+
+  const canvas = page.locator('canvas.editor-canvas').first()
+  await canvas.waitFor({ state: 'visible', timeout: 10000 })
+  const box = await canvas.boundingBox()
+  if (!box) throw new Error('no canvas')
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+
+  // 拖拽前启动栈采样(区分每帧时间花在谁身上)
+  await page.evaluate(() => {
+    const w = window as any
+    w.__samp = {}
+    w.__sampTimer = setInterval(() => {
+      const raw = new Error().stack || ''
+      const lines = raw.split('\n')
+      const top = (lines[1] || lines[0] || '?').trim().slice(0, 140)
+      w.__samp[top] = (w.__samp[top] || 0) + 1
+    }, 0)
+  })
+
+  const t0 = Date.now()
+  await page.mouse.move(cx, cy)
+  await page.mouse.down()
+  for (let i = 1; i <= 150; i++) {
+    await page.mouse.move(cx + i, cy + i)
+  }
+  await page.mouse.up()
+  const dragWallMs = Date.now() - t0
+  await page.waitForTimeout(200)
+
+  const samp = await page.evaluate(() => {
+    const w = window as any
+    clearInterval(w.__sampTimer)
+    const tot = Object.values(w.__samp).reduce((a: any, b: any) => a + b, 0)
+    const top = Object.entries(w.__samp).sort((a: any, b: any) => b[1] - a[1]).slice(0, 8)
+      .map(([fn, c]: any) => `${((100 * c) / tot).toFixed(0)}% ${fn}`)
+    return top
+  })
+
+  console.log(`[UI-DRAG] engine=${test.info().project.name} 7000chars: perMove=${(dragWallMs / 150).toFixed(1)}ms errors=${pageErrors.length}`)
+  for (const s of samp) console.log('[UI-DRAG] sample: ' + s)
+  if (pageErrors.length) console.log('[UI-DRAG] errors:\n' + pageErrors.slice(0, 4).join('\n---\n'))
+  test.info().annotations.push({ type: 'perf', description: JSON.stringify({ dragWallMs, perMove: dragWallMs / 150, samp }) })
+})
+
+test('joint drag vs whole-glyph drag with 8 glyph components', async ({ page }) => {
+  const pageErrors: string[] = []
+  page.on('pageerror', (err) => pageErrors.push('PAGEERROR: ' + String(err).slice(0, 300)))
+  await seedProject(page)
+
+  // 编辑字符扩展为 8 个脚本字形组件
+  await page.evaluate(async () => {
+    const scriptText = await (await fetch('/templates/digits/8.js')).text()
+    const { useProjectStore } = await import('/src/stores/project.ts')
+    const projectStore = useProjectStore()
+    const file: any = projectStore.selectedFile
+    const base = JSON.parse(JSON.stringify(file.characterList[0]))
+    base.components = []
+    base.orderedList = []
+    for (let i = 0; i < 8; i++) {
+      if (i === 0) {
+        // 第一个用原种子组件
+        const orig = JSON.parse(JSON.stringify(file.characterList[0].components[0].value))
+        base.components.push({ type: 'glyph', uuid: 'seed-glyph-8', ox: 0, oy: 0, usedInCharacter: true, value: orig })
+        base.orderedList.push({ type: 'component', uuid: 'seed-glyph-8' })
+        continue
+      }
+      const gv2: any = JSON.parse(JSON.stringify(file.characterList[0].components[0].value))
+      gv2.uuid = `seed-glyph-8-${i}`
+      gv2.script = `function script_seed_glyph_8_${i}(glyph, constants, FP) {\n${scriptText}\n}`
+      base.components.push({ type: 'glyph', uuid: `seed-glyph-8-${i}`, ox: i * 40 - 140, oy: i * 40 - 140, usedInCharacter: true, value: gv2 })
+      base.orderedList.push({ type: 'component', uuid: `seed-glyph-8-${i}` })
+    }
+    file.characterList[0] = base
+    const { characterDataManager } = await import('/src/core/storage/CharacterDataManager.ts')
+    await characterDataManager.updateCharacter(file.uuid, base)
+  })
+
+  await page.goto('http://localhost:5173/#/editor')
+  await page.waitForLoadState('networkidle')
+  const characterItem = page.locator('[data-testid="character-item"]').first()
+  await characterItem.waitFor({ state: 'visible', timeout: 15000 })
+  await characterItem.click({ timeout: 10000 })
+  await page.waitForTimeout(2000)
+  const glyphComp = page.locator('[data-testid="component-item"][data-type="glyph"]').first()
+  await glyphComp.waitFor({ state: 'visible', timeout: 10000 })
+  await glyphComp.click({ timeout: 10000 })
+  await page.waitForTimeout(800)
+
+  const canvas = page.locator('canvas.editor-canvas').first()
+  await canvas.waitFor({ state: 'visible', timeout: 10000 })
+  const box = await canvas.boundingBox()
+  if (!box) throw new Error('no canvas')
+
+  // 读取第一个字形实例的关节坐标(单位→页面坐标)
+  const jointInfo = await page.evaluate(() => {
+    return import('/src/core/instance/InstanceManager.ts').then(({ instanceManager }) => {
+      const inst: any = instanceManager.getPooledInstance('seed-glyph-8')
+      const joints = inst?.getJoints?.() || []
+      const withXY = joints.filter((j: any) => typeof j.x === 'number' && typeof j.y === 'number')
+      return withXY.slice(0, 3).map((j: any) => ({ name: j.name, x: j.x, y: j.y }))
+    })
+  })
+  console.log('[UI-DRAG] joints:', JSON.stringify(jointInfo))
+  if (!jointInfo.length) throw new Error('no joints found')
+
+  const j = jointInfo[0]
+  const scaleX = box.width / 1000
+  const scaleY = box.height / 1000
+  const jx = box.x + j.x * scaleX
+  const jy = box.y + j.y * scaleY
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+
+  // 渲染计数(clearRect 次数 = 整幅重绘次数)
+  await page.evaluate(() => {
+    const w = window as any
+    w.__clearCount = 0
+    const orig = CanvasRenderingContext2D.prototype.clearRect
+    CanvasRenderingContext2D.prototype.clearRect = function (...args: any[]) {
+      w.__clearCount++
+      return orig.apply(this, args as any)
+    }
+  })
+
+  // A. 关节拖拽(点中第一个关节)
+  let t0 = Date.now()
+  await page.mouse.move(jx, jy)
+  await page.mouse.down()
+  for (let i = 1; i <= 120; i++) {
+    await page.mouse.move(jx + i, jy + i)
+  }
+  await page.mouse.up()
+  const jointDragMs = Date.now() - t0
+  await page.waitForTimeout(300)
+  const clearsAfterJoint = await page.evaluate(() => (window as any).__clearCount)
+
+  // B. 整体拖拽(组件中心)
+  t0 = Date.now()
+  await page.mouse.move(cx, cy)
+  await page.mouse.down()
+  for (let i = 1; i <= 120; i++) {
+    await page.mouse.move(cx + i, cy + i)
+  }
+  await page.mouse.up()
+  const wholeDragMs = Date.now() - t0
+  await page.waitForTimeout(300)
+  const clearsAfterWhole = await page.evaluate(() => (window as any).__clearCount)
+
+  console.log(`[UI-DRAG] engine=${test.info().project.name} jointDrag: ${(jointDragMs / 120).toFixed(1)}ms/move renders=${clearsAfterJoint} | wholeDrag: ${(wholeDragMs / 120).toFixed(1)}ms/move renders=${clearsAfterWhole - clearsAfterJoint} errors=${pageErrors.length}`)
+  if (pageErrors.length) console.log('[UI-DRAG] errors:\n' + pageErrors.slice(0, 4).join('\n---\n'))
+  test.info().annotations.push({ type: 'perf', description: JSON.stringify({ jointDragMs, wholeDragMs, clearsAfterJoint, clearsAfterWhole }) })
+})
+
 test('drag after font build (memory pressure)', async ({ page }) => {
   const pageErrors: string[] = []
   page.on('pageerror', (err) => pageErrors.push('PAGEERROR: ' + String(err).slice(0, 300)))

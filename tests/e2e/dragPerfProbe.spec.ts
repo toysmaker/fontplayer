@@ -185,8 +185,8 @@ test('session snapshot tick probe', async ({ page }) => {
       components: [],
     })
 
-    // 构造真实规模工程: 150 个字符, 每个含一个 digit8 字形组件
-    const N = 150
+    // 构造真实规模工程: 600 个字符, 每个含一个 digit8 字形组件
+    const N = 600
     const characters: any[] = []
     for (let i = 0; i < N; i++) {
       const gv = makeGlyphValue(`glyph-${i}`)

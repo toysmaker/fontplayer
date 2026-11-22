@@ -130,6 +130,17 @@ export abstract class BaseGlyphDragger {
     16,
     { leading: true, trailing: true }
   )
+
+  /** 关节拖拽渲染节流: 吸附几何仍每 mousemove 计算, 但整幅重绘按 16ms 节流
+   *  (此前每 mousemove 都 onRender, 实测 120 步触发 92 次整幅重绘; WKWebView
+   *   软件画布下每帧 Paint/Composite + 每帧分配放大 GC 压力, 是拖拽卡顿主因之一) */
+  private throttledJointDragRender = throttle(
+    () => {
+      this.config.onRender?.()
+    },
+    16,
+    { leading: true, trailing: true }
+  )
   
   constructor(config: IDraggerConfig) {
     this.canvas = config.canvas
@@ -669,7 +680,7 @@ export abstract class BaseGlyphDragger {
       this.throttledGlyphDrag(adjDx, adjDy)
     } else if (this.draggingJoint && !this.isDraggingFirstJoint && this.context.glyph) {
       this.applySnapDelta(dx, dy, false, this.pointerSnapSuppressed(e))
-      this.config.onRender?.()
+      this.throttledJointDragRender()
       this.throttledSkeletonSync(this.context.glyph, this.context.componentUUID)
     }
     
@@ -885,6 +896,9 @@ export abstract class BaseGlyphDragger {
     }
     if (typeof (this.throttledGlyphDrag as any).cancel === 'function') {
       (this.throttledGlyphDrag as any).cancel()
+    }
+    if (typeof (this.throttledJointDragRender as any).cancel === 'function') {
+      (this.throttledJointDragRender as any).cancel()
     }
   }
   

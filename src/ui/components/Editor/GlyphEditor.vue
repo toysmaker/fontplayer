@@ -797,6 +797,9 @@ watch(() => editorStore.variablePreviewEnabled, async () => {
 // 监听组件列表变化，重新渲染（含 deep 以响应参数等深层变化；防重入避免渲染路径写入触发循环）
 watch(() => (glyphStore as any).orderedListWithItemsForCurrentGlyph, async () => {
   if (isRenderingFromWatch.value) return
+  // 拖拽中：dragger 已按 16ms 节流渲染，这里跳过，避免每帧双重整幅重绘
+  // （与 CharacterEditor 同步修复：每帧双重整幅重绘会放大 Paint/GC 压力）
+  if (dragger && dragger.isDragging()) return
   isRenderingFromWatch.value = true
   try {
     renderCanvas()
@@ -810,6 +813,9 @@ watch(() => (glyphStore as any).orderedListWithItemsForCurrentGlyph, async () =>
 // 监听选中组件变化（含 deep 以响应属性变化；防重入避免循环）
 watch(() => (glyphStore as any).selectedComponent, async () => {
   if (isRenderingFromWatch.value) return
+  // 拖拽中：reinitSelectDraggerIfNeeded 的拖拽分支会无条件 renderCanvas，
+  // 与 dragger 自身的节流渲染叠加成每帧双重重绘；拖拽中直接跳过（与 CharacterEditor 同步）
+  if (dragger && dragger.isDragging()) return
   isRenderingFromWatch.value = true
   try {
     await reinitSelectDraggerIfNeeded()
