@@ -23,10 +23,13 @@ import { ConstantsMap } from '@/core/script/ConstantsMap'
 import { getGlobalConstantsMap, setGlobalConstantsMap } from '@/core/script/ParametersMap'
 import {
   orderedListWithItemsForCharacterFile,
-  formatContainerGlyphComponents,
-  formatGridComponents,
 } from '@/features/editor/services/FormatGlyphService'
 import { defaultGridItem, ensureCharacterInfoGridSettings } from '@/stores/character'
+import {
+  planWholeStyleReplace,
+  replaceGlyphComponentValueWithTarget,
+  ensureStrokeParamCompatibility,
+} from '@/features/strokeStyleReplace'
 import type { IGridItem } from '@/core/types'
 import { ContourConverter } from '@/core/font/converter'
 import { renderAdvancedEditPreview, renderZoomedCharacterPreview as renderZoomedPreviewCanvas } from '@/core/canvas/advancedEditPreview'
@@ -34,12 +37,6 @@ import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { glyphSkeletonBindFromRefGlyph, glyphSkeletonRebind, calculatePointBones, applyGlyphSkeletonTransformation } from '@/features/glyphSkeletonBind'
 import { orderedListWithItemsForGlyph, parameterRowsForGlyph } from '@/core/utils/glyph'
-import {
-  applySharedSerifConstantsPatch,
-  isSerifStylePreset,
-  processCharacterAfterSongStyleSwitch,
-  processCharacterBeforeSerifStyleSwitch,
-} from '../features/advancedEdit/styleSwitchPostProcess'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { collectProjectConstantUsageHitsForUuidsAsync } from '@/features/editor/globalParam/traverseConstantUsages'
@@ -76,8 +73,8 @@ export const PanelType = {
   GlobalVariables: 'globalVariables',
   ConditionFilter: 'conditionFilter',
   Script: 'script',
-  StrokeReplace: 'strokeReplace',
-  StyleSwitch: 'styleSwitch',
+  /** 笔画替换 + 风格切换 合并后的统一面板 */
+  StrokeStyleReplace: 'strokeStyleReplace',
   FangYuanStyleDesign: 'fangYuanStyleDesign',
   FreeLayout: 'freeLayout',
 } as const
@@ -209,6 +206,27 @@ function rewriteGlyphParamsForAdvancedPreview(root: ICharacterFileLite) {
   }
 }
 
+/**
+ * 样例预览专用：改写顶层组件的 uuid 与 orderedList 引用（加 __advprev 后缀）。
+ * 预览克隆与真实字符共用组件 uuid 时，脚本执行/骨架重绑会以相同 key 写入实例池，
+ * 污染真实字符的实例 → 样例空白、字符列表笔画缺失。改写后预览全部落在独立实例上。
+ */
+function uniquifyComponentUUIDsForPreview(ch: ICharacterFileLite) {
+  const remap = new Map<string, string>()
+  for (const comp of ch.components || []) {
+    const next = `${comp.uuid}__advprev`
+    remap.set(comp.uuid, next)
+    comp.uuid = next
+  }
+  if (Array.isArray(ch.orderedList)) {
+    for (const item of ch.orderedList as Array<{ uuid?: string }>) {
+      if (item.uuid && remap.has(item.uuid)) {
+        item.uuid = remap.get(item.uuid)!
+      }
+    }
+  }
+}
+
 export const useAdvancedEditStore = defineStore('advancedEdit', () => {
   const projectStore = useProjectStore()
   const characterStore = useCharacterStore()
@@ -246,24 +264,30 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     strokeList.value.find((s) => s.uuid === selectedStrokeUUID.value),
   )
 
-  const selectedStyleUUID = ref('default')
-  const styles = ref<StyleSwitchPreset[]>([])
+  /** 整体笔画风格替换：已确认的待应用风格（供「一键更新全部字库」重复应用） */
+  const wholeReplaceStyle = ref('')
 
-  function initStyleSwitchTemplates() {
-    if (styles.value.length) return
-    styles.value = STYLE_SWITCH_PRESETS.map((p) => R.clone(p))
-  }
-
-  /** 当前字库笔画池中是否存在该风格（任一笔画即可） */
-  function projectHasStrokeStyle(strokeStyle: string): boolean {
+  /** 按风格名取笔画池字形（与选择对话框的风格匹配口径一致：trim 后比较）
+   *  读取时顺带治愈历史数据（幂等）：补齐脚本需要的别名参数 +
+   *  对不自行解析常量的脚本，把常量 UUID 字符串值解析为数值 */
+  function getStrokeGlyphsByStyle(style: string): ICustomGlyph[] {
     const f = projectStore.selectedFile
-    if (!f?.stroke_glyphs?.length) return false
-    return f.stroke_glyphs.some((g) => g.style === strokeStyle)
-  }
-
-  function isStyleSwitchOptionEnabled(preset: StyleSwitchPreset): boolean {
-    if (preset.uuid === 'default') return true
-    return projectHasStrokeStyle(preset.strokeStyle)
+    if (!f?.stroke_glyphs?.length) return []
+    const list = f.stroke_glyphs.filter((g) => (g.style || '').trim() === style.trim())
+    const resolveConstant = (uuid: string): number | undefined => {
+      const cm = projectStore.constantsMap as unknown as { getByUUID?: (u: string) => unknown } | undefined
+      const v = cm?.getByUUID?.(uuid)
+      return typeof v === 'number' ? v : undefined
+    }
+    let healed = false
+    for (const g of list) {
+      const before = JSON.stringify(g.parameters ?? [])
+      ensureStrokeParamCompatibility(g, undefined, resolveConstant)
+      if (JSON.stringify(g.parameters ?? []) !== before) healed = true
+    }
+    // 池数据被治愈（别名补齐 / 常量解析），标记未保存以便持久化
+    if (healed) projectStore.markFileUnsaved(f.uuid)
+    return list
   }
 
   function setActivePanel(p: PanelTypeId) {
@@ -652,24 +676,43 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     await refreshStrokeReplacePreviews()
   }
 
-  function replaceStrokeForCharacter(characterFile: ICharacterFileLite, stroke: (typeof strokeList.value)[0]) {
+  function replaceStrokeForCharacter(
+    characterFile: ICharacterFileLite,
+    stroke: (typeof strokeList.value)[0],
+    opts?: { matchByName?: boolean; ignoreTempDataGuard?: boolean },
+  ) {
     const originUUID = stroke.uuid
     const targetUUID = stroke.replacement!.uuid
     const source = strokeMap.get(targetUUID)
     if (!source) return
-    const targetStrokeGlyph = R.clone(source)
     for (let i = 0; i < characterFile.components.length; i++) {
       const component = characterFile.components[i]
       const gc = component as IGlyphComponent
       const cur = gc.value as ICustomGlyph
-      if (component.type === 'glyph' && cur.uuid === originUUID) {
-        const glyph = targetStrokeGlyph
+      const matched =
+        component.type === 'glyph' &&
+        (cur.uuid === originUUID || (opts?.matchByName && cur.name === stroke.name))
+      if (matched) {
+        // JSON 深拷贝：避免 ramda clone 对 Vue 响应式代理的别名问题污染笔画池
+        const glyph = JSON.parse(JSON.stringify(source)) as ICustomGlyph
         const destParams = parameterRowsForGlyph(glyph) ?? []
         const srcParams = parameterRowsForGlyph(cur) ?? []
         for (let j = 0; j < destParams.length; j++) {
           const parameter = destParams[j]
           const originParameter = srcParams.find((q: { name: string }) => q.name === parameter.name)
           if (!originParameter) continue
+          if (originParameter.value === undefined || originParameter.value === null) continue
+          // 兼容处理 1：Enum 参数是风格专属语义，跨风格复制会带错值，目标保留自身枚举默认值
+          if (originParameter.type === ParameterType.Enum || parameter.type === ParameterType.Enum) continue
+          // 兼容处理 2：内置模板笔画参数值可能是常量 UUID 字符串（源脚本自行解析），
+          // 目标风格脚本期望普通数值；类型不一致时保留目标风格默认值，避免 NaN 导致空白
+          if (
+            originParameter.type !== ParameterType.Constant &&
+            originParameter.type !== ParameterType.AdvancedEditConstant &&
+            typeof originParameter.value !== typeof parameter.value
+          ) {
+            continue
+          }
           if (
             originParameter.type !== ParameterType.Constant &&
             originParameter.type !== ParameterType.AdvancedEditConstant
@@ -684,7 +727,19 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
           }
         }
         gc.value = glyph
-        executeGlyphScript(glyph, component.uuid)
+        // 通用参数兼容：目标风格脚本读取的参数名与目标参数列表不一致时按源笔画补齐；
+        // 并解析目标参数里的常量 UUID 字符串值（治愈被历史复制污染的笔画池）
+        const resolveConstant = (uuid: string): number | undefined => {
+          const cm = projectStore.constantsMap as unknown as { getByUUID?: (u: string) => unknown } | undefined
+          const v = cm?.getByUUID?.(uuid)
+          return typeof v === 'number' ? v : undefined
+        }
+        ensureStrokeParamCompatibility(glyph, cur, resolveConstant)
+        executeGlyphScript(
+          glyph,
+          component.uuid,
+          opts?.ignoreTempDataGuard ? { ignoreTempDataGuard: true } : undefined,
+        )
       }
     }
   }
@@ -711,8 +766,10 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     const next: ICharacterFileLite[] = []
     for (const orig of originSampleCharactersList.value) {
       const c = R.clone(orig)
+      uniquifyComponentUUIDsForPreview(c)
       for (const s of strokeList.value) {
-        if (s.replaced) replaceStrokeForCharacter(c, s)
+        // uuid 已改写为预览专用，改用名称匹配
+        if (s.replaced) replaceStrokeForCharacter(c, s, { matchByName: true })
       }
       rewriteGlyphParamsForAdvancedPreview(c)
       next.push(c)
@@ -780,8 +837,31 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
   }
 
   /**
-   * 自由布局：将共享的 initialGrid → currentGrid 变换批量应用到工程全部字符。
-   * 复用 formatContainerGlyphComponents + formatGridComponents，与字符编辑器「应用布局变换」逻辑一致。
+   * 整体笔画风格替换（样例规划）：对样例字符按名称+关键点匹配规划替换对，不写数据。
+   * 仅用于「一键替换所有笔画」的校验提示；样例预览与工程级写入分别由
+   * refreshMergedStyleStrokePreviews 与 applyMergedStrokeReplacementsToEntireProject 完成。
+   */
+  async function planWholeStyleReplaceForSamples(
+    style: string,
+  ): Promise<{ totalPairs: number; skippedNames: string[] } | null> {
+    const styledStrokes = getStrokeGlyphsByStyle(style)
+    if (!styledStrokes.length) return null
+    const skippedNames = new Map<string, string>()
+    let totalPairs = 0
+    for (const ch of originSampleCharactersList.value) {
+      const plan = planWholeStyleReplace(ch, style, styledStrokes)
+      totalPairs += plan.pairs.length
+      for (const s of plan.skipped) {
+        if (!skippedNames.has(s.name)) skippedNames.set(s.name, s.reason)
+      }
+    }
+    return { totalPairs, skippedNames: Array.from(skippedNames.keys()) }
+  }
+
+  /**
+   * 自由布局：将共享的 initialGrid → currentGrid 变换批量写入工程全部字符。
+   * 非破坏式：只写布局数据（info.gridSettings + useSkeletonGrid），不展开字形组件、
+   * 不改写组件坐标；渲染/预览/导出时按布局数据变换（与字符编辑器布局变换一致）。
    */
   async function applyFreeLayoutToEntireProject() {
     const file = projectStore.selectedFile
@@ -795,21 +875,21 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     let lastYield = performance.now()
     let bulkCompleted = false
     try {
-      const grid = {
-        initialGrid: freeLayoutInitialGrid.value,
-        currentGrid: freeLayoutCurrentGrid.value,
-      }
+      const initialGrid = R.clone(freeLayoutInitialGrid.value)
+      const currentGrid = R.clone(freeLayoutCurrentGrid.value)
       for (let i = 0; i < list.length; i++) {
         const meta = list[i]
         const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
         if (!ch) continue
         ensureCharacterInfoGridSettings(ch)
-        formatContainerGlyphComponents(ch)
-        formatGridComponents(orderedListWithItemsForCharacterFile(ch), {
-          grid,
-          offset: { x: 0, y: 0 },
-          useSkeletonGrid: true,
-        })
+        const gs = ch.info!.gridSettings!
+        gs.initialGrid = R.clone(initialGrid)
+        gs.currentGrid = R.clone(currentGrid)
+        gs.dx = currentGrid.dx
+        gs.dy = currentGrid.dy
+        gs.size = currentGrid.width
+        gs.centerSquareSize = (currentGrid.width / 3) * currentGrid.centerSquareScale
+        ch.info!.useSkeletonGrid = true
         await characterDataManager.updateCharacter(file.uuid, ch)
         projectStore.loadingProgress = i + 1
         const now = performance.now()
@@ -840,89 +920,14 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     return f.stroke_glyphs.filter((g) => g.style === strokeStyle)
   }
 
-  function mergeStyleConstantsInto(target: IConstant[], style: StyleSwitchPreset) {
-    for (const c of target) {
-      for (const sc of style.constants) {
-        if (c.name === sc.name) c.value = sc.value
-      }
-    }
+  /** 当前字库笔画池中是否存在该风格（任一笔画即可） */
+  function projectHasStrokeStyle(strokeStyle: string): boolean {
+    const f = projectStore.selectedFile
+    if (!f?.stroke_glyphs?.length) return false
+    return f.stroke_glyphs.some((g) => g.style === strokeStyle)
   }
 
-  /** 仅替换笔画数据；不在此执行脚本，避免与 ContourConverter 内 executeGlyphScript 重复执行（tempData 会导致第二次跳过，预览错位） */
-  function applyStyleStrokeReplacementsToCharacter(
-    characterFile: ICharacterFileLite,
-    style: StyleSwitchPreset | undefined,
-  ) {
-    if (!style) return
-    const strokeListByStyle = getStrokeListByStyle(style.strokeStyle)
-    for (const strokeGlyph of strokeListByStyle) {
-      const strokeName = strokeGlyph.name
-      for (const comp of characterFile.components) {
-        if (comp.type !== 'glyph') continue
-        const gc = comp as IGlyphComponent
-        const cur = gc.value as ICustomGlyph
-        if (cur.name !== strokeName) continue
-        const glyph = R.clone(strokeGlyph)
-        const destParams = parameterRowsForGlyph(glyph) ?? []
-        const srcParams = parameterRowsForGlyph(cur) ?? []
-        for (let j = 0; j < destParams.length; j++) {
-          const parameter = destParams[j]
-          const originParameter = srcParams.find((q: { name: string }) => q.name === parameter.name)
-          if (originParameter && originParameter.type !== ParameterType.AdvancedEditConstant) {
-            let replaced = false
-            for (const sp of style.parameters) {
-              if (parameter.name === sp.name) {
-                parameter.value = sp.value
-                replaced = true
-              }
-            }
-            if (!replaced) parameter.value = originParameter.value
-          } else if (originParameter && originParameter.type === ParameterType.AdvancedEditConstant) {
-            parameter.type = ParameterType.AdvancedEditConstant
-            parameter.value = originParameter.value
-          }
-        }
-        gc.value = glyph
-      }
-    }
-  }
-
-  function switchStyle2OnCharacter(characterFile: ICharacterFileLite, style: StyleSwitchPreset | undefined) {
-    if (!style) return
-    const strokeListByStyle = getStrokeListByStyle(style.strokeStyle)
-    for (const strokeGlyph of strokeListByStyle) {
-      const strokeName = strokeGlyph.name
-      for (const comp of characterFile.components) {
-        if (comp.type !== 'glyph') continue
-        const gc = comp as IGlyphComponent
-        const cur = gc.value as ICustomGlyph
-        if (cur.name !== strokeName) continue
-        const glyph = R.clone(strokeGlyph)
-        const destParams = parameterRowsForGlyph(glyph) ?? []
-        const srcParams = parameterRowsForGlyph(cur) ?? []
-        for (let j = 0; j < destParams.length; j++) {
-          const parameter = destParams[j]
-          const originParameter = srcParams.find((q: { name: string }) => q.name === parameter.name)
-          if (originParameter && originParameter.type !== ParameterType.Constant) {
-            let replaced = false
-            for (const sp of style.parameters) {
-              if (parameter.name === sp.name) {
-                parameter.value = sp.value
-                replaced = true
-              }
-            }
-            if (!replaced) parameter.value = originParameter.value
-          } else if (originParameter && originParameter.type === ParameterType.Constant) {
-            parameter.type = ParameterType.Constant
-            parameter.value = originParameter.value
-          }
-        }
-        gc.value = glyph
-      }
-    }
-  }
-
-  /** 写回全库时与原版 switchStyle2 一致：替换后执行字形脚本 */
+  /** 写回全库时与原版 switchStyle2 一致：替换后执行字形脚本（训练数据脚本 trainingDataV1/V2 使用） */
   function switchStyle2OnCharacterWithScripts(
     characterFile: ICharacterFileLite,
     style: StyleSwitchPreset | undefined,
@@ -963,98 +968,105 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     }
   }
 
-  async function refreshStyleSwitchPreviews() {
-    const style = styles.value.find((s) => s.uuid === selectedStyleUUID.value)
+  /** 合并面板样例预览：按应用顺序 (a) 整体替换 → (b) 单笔画替换 合成预览 */
+  async function refreshMergedStyleStrokePreviews() {
+    const wholeStyle = wholeReplaceStyle.value
+    const styledStrokes = wholeStyle ? getStrokeGlyphsByStyle(wholeStyle) : []
     await updateSampleCharactersList()
-    const mergedConstants = R.clone(constants.value)
-    if (style) mergeStyleConstantsInto(mergedConstants, style)
-    if (style && isSerifStylePreset(style)) applySharedSerifConstantsPatch(mergedConstants)
-    const tempMap = ConstantsMap.createLocal(mergedConstants)
-    const prevG = getGlobalConstantsMap()
-    setGlobalConstantsMap(tempMap)
-    try {
-      const next: ICharacterFileLite[] = []
-      for (const orig of originSampleCharactersList.value) {
-        const c = R.clone(orig)
-        if (style?.uuid === 'ss-fangsong') {
-          processCharacterBeforeSerifStyleSwitch(c, mergedConstants, 'fangsong')
-        } else if (style?.uuid === 'ss-kai') {
-          processCharacterBeforeSerifStyleSwitch(c, mergedConstants, 'kai')
-        } else if (style?.uuid === 'ss-li') {
-          processCharacterBeforeSerifStyleSwitch(c, mergedConstants, 'li')
+    const next: ICharacterFileLite[] = []
+    for (const orig of originSampleCharactersList.value) {
+      const c = R.clone(orig)
+      // 预览克隆使用专用组件 uuid，避免脚本执行/骨架重绑污染真实字符的实例池
+      uniquifyComponentUUIDsForPreview(c)
+      // (a) 整体替换（规划在 uniquify 之后，替换对携带预览专用 uuid）
+      if (wholeStyle && styledStrokes.length) {
+        const plan = planWholeStyleReplace(c, wholeStyle, styledStrokes)
+        for (const pair of plan.pairs) {
+          replaceGlyphComponentValueWithTarget(c, pair.componentUuid, pair.targetGlyph)
         }
-        applyStyleStrokeReplacementsToCharacter(c, style)
-        if (style?.uuid === 'ss-song') {
-          processCharacterAfterSongStyleSwitch(c, mergedConstants)
-        }
-        rewriteGlyphParamsForAdvancedPreview(c)
-        next.push(c)
       }
-      sampleCharactersList.value = next
-      await nextTick()
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            for (const character of sampleCharactersList.value) {
-              const canvas = document.getElementById(
-                `advanced-edit-preview-canvas-${character.uuid}`,
-              ) as HTMLCanvasElement | null
-              if (!canvas) continue
-              const m = getFontMetrics()
-              const ordered = orderedListWithItemsForCharacterFile(character)
-              const contours = ContourConverter.componentsToContours(
-                ordered,
-                { ...m, preview: true, forceUpdate: true, advancedEdit: true },
-                { x: 0, y: 0 },
-              )
-              const fillColors = ContourConverter.getFillColors(ordered as IComponent[])
-              renderAdvancedEditPreview(canvas, contours, fillColors, projectStore.fontPreviewStyle)
-            }
-            resolve()
-          })
-        })
-      })
-    } finally {
-      setGlobalConstantsMap(prevG)
+      // (b) 单笔画替换（显式设置最终生效；名称回退因为 (a) 可能已换过 value）
+      for (const s of strokeList.value) {
+        if (s.replaced) replaceStrokeForCharacter(c, s, { matchByName: true })
+      }
+      rewriteGlyphParamsForAdvancedPreview(c)
+      next.push(c)
     }
+    sampleCharactersList.value = next
+    await waitForAdvancedEditSampleGridPaint()
+    runWithAdvancedConstantsMap(() => {
+      for (const character of sampleCharactersList.value) {
+        const canvas = document.getElementById(
+          `advanced-edit-preview-canvas-${character.uuid}`,
+        ) as HTMLCanvasElement | null
+        if (!canvas) continue
+        const m = getFontMetrics()
+        const ordered = orderedListWithItemsForCharacterFile(character)
+        const contours = ContourConverter.componentsToContours(
+          ordered,
+          { ...m, preview: true, forceUpdate: true, advancedEdit: true },
+          { x: 0, y: 0 },
+        )
+        const fillColors = ContourConverter.getFillColors(ordered as IComponent[])
+        renderAdvancedEditPreview(canvas, contours, fillColors, projectStore.fontPreviewStyle)
+      }
+    })
+    await redrawStrokeListPreviews()
   }
 
-  async function applyStyleToEntireProject() {
-    const style = styles.value.find((s) => s.uuid === selectedStyleUUID.value)
+  /**
+   * 合并面板「一键更新全部字库」：单遍逐字符，按顺序应用
+   * (a) 整体笔画风格替换（wholeReplaceStyle）→ (b) 单笔画替换（显式设置最终生效）。
+   * 未配置的部分自动跳过。
+   */
+  async function applyMergedStrokeReplacementsToEntireProject() {
     const file = projectStore.selectedFile
-    if (!style || !file) return
-    if (style.uuid !== 'default' && !projectHasStrokeStyle(style.strokeStyle)) return
+    if (!file) return
+    const wholeStyle = wholeReplaceStyle.value
+    const styledStrokes = wholeStyle ? getStrokeGlyphsByStyle(wholeStyle) : []
+    const wholeSelected = !!wholeStyle && styledStrokes.length > 0
+    const anyPerStroke = strokeList.value.some((s) => s.replaced)
+    if (!wholeSelected && !anyPerStroke) return
 
     const list = file.characterList ?? []
     const n = Math.max(1, list.length)
     projectStore.loading = true
     projectStore.loadingTotal = n
     projectStore.loadingProgress = 0
-    projectStore.loadingMessage = '正在应用风格到全部字符…'
+    projectStore.loadingMessage = '正在应用笔画风格替换到全部字符…'
     let lastYield = performance.now()
     let bulkCompleted = false
 
     try {
-      if (!file.constants) file.constants = []
-      mergeStyleConstantsInto(file.constants, style)
-      if (isSerifStylePreset(style)) applySharedSerifConstantsPatch(file.constants)
-
+      let failedCount = 0
       for (let i = 0; i < list.length; i++) {
         const meta = list[i]
-        const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
-        if (!ch) continue
-        if (style.uuid === 'ss-fangsong') {
-          processCharacterBeforeSerifStyleSwitch(ch, file.constants, 'fangsong')
-        } else if (style.uuid === 'ss-kai') {
-          processCharacterBeforeSerifStyleSwitch(ch, file.constants, 'kai')
-        } else if (style.uuid === 'ss-li') {
-          processCharacterBeforeSerifStyleSwitch(ch, file.constants, 'li')
+        try {
+          const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
+          if (!ch) continue
+          // (a) 整体笔画风格替换（名称+关键点匹配，跳过不匹配）
+          if (wholeSelected) {
+            const plan = planWholeStyleReplace(ch, wholeStyle, styledStrokes)
+            for (const pair of plan.pairs) {
+              replaceGlyphComponentValueWithTarget(ch, pair.componentUuid, pair.targetGlyph)
+            }
+          }
+          // (b) 单笔画替换（名称回退匹配；整体替换已对同 uuid 执行过脚本，须绕过 tempData 守卫）
+          if (anyPerStroke) {
+            for (const s of strokeList.value) {
+              if (s.replaced) {
+                replaceStrokeForCharacter(ch, s, { matchByName: true, ignoreTempDataGuard: true })
+              }
+            }
+          }
+          await characterDataManager.updateCharacter(file.uuid, ch)
+        } catch (err) {
+          // 单个字符数据异常不应中断全库治愈，跳过并记录
+          failedCount++
+          if (import.meta.env.DEV) {
+            console.warn(`[applyMerged] char ${meta.uuid} failed:`, err)
+          }
         }
-        switchStyle2OnCharacterWithScripts(ch, style)
-        if (style.uuid === 'ss-song') {
-          processCharacterAfterSongStyleSwitch(ch, file.constants)
-        }
-        await characterDataManager.updateCharacter(file.uuid, ch)
         projectStore.loadingProgress = i + 1
         const now = performance.now()
         if (now - lastYield >= 16) {
@@ -1062,11 +1074,12 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
           lastYield = performance.now()
         }
       }
-      constants.value = R.clone(file.constants)
+      if (failedCount > 0 && import.meta.env.DEV) {
+        console.warn(`[applyMerged] ${failedCount} characters failed`)
+      }
       projectStore.markFileUnsaved(file.uuid)
-      restoreProjectConstantsMap()
       await characterStore.invalidateAllCachedCharacterPreviews()
-      await refreshStyleSwitchPreviews()
+      await refreshMergedStyleStrokePreviews()
       bulkCompleted = true
     } finally {
       projectStore.loading = false
@@ -1217,6 +1230,8 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     let idx = 0
     for (const orig of originSampleCharactersList.value) {
       const c = R.clone(orig)
+      // 预览克隆使用专用组件 uuid，避免脚本执行/骨架重绑污染真实字符的实例池
+      uniquifyComponentUUIDsForPreview(c)
       applyFangYuanStylesToCharacterData(c, idx, options)
       if (strokeStyleTagSelected.value) {
         replaceGlyphComponentsByStyleTag(c, strokeStyleTagSelected.value)
@@ -1456,6 +1471,8 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     const chars: ICharacterFileLite[] = []
     for (const orig of originSampleCharactersList.value) {
       const c = R.clone(orig)
+      // 预览克隆使用专用组件 uuid，避免脚本执行/骨架重绑污染真实字符的实例池
+      uniquifyComponentUUIDsForPreview(c)
       if (tag) replaceGlyphComponentsByStyleTag(c, tag)
       chars.push(c)
     }
@@ -1573,16 +1590,15 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     setReplacementStroke,
     refreshStrokeReplacePreviews,
     applyStrokeReplacementsToAll,
-    styles,
-    selectedStyleUUID,
-    initStyleSwitchTemplates,
-    isStyleSwitchOptionEnabled,
-    projectHasStrokeStyle,
-    refreshStyleSwitchPreviews,
-    applyStyleToEntireProject,
+    wholeReplaceStyle,
+    getStrokeGlyphsByStyle,
+    planWholeStyleReplaceForSamples,
+    refreshMergedStyleStrokePreviews,
+    applyMergedStrokeReplacementsToEntireProject,
     getGlyphByUUID,
     switchStyle2OnCharacterWithScripts,
     getStrokeListByStyle,
+    projectHasStrokeStyle,
     fangYuanStyleItems,
     fangYuanStyleSelections,
     fangYuanStyleNumericValues,

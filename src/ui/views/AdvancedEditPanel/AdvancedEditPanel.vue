@@ -10,8 +10,7 @@ import { DEFAULT_TEMPLATE_PROJECT_TAG, AI_FEATURE_TEST_TAG } from '@/features/ed
 import GlobalParamsPanel from './GlobalParamsPanel.vue'
 import ConditionFilterPanel from './ConditionFilterPanel.vue'
 import ScriptsPanel from './ScriptsPanel.vue'
-import StrokeReplacePanel from './StrokeReplacePanel.vue'
-import StyleSwitchPanel from './StyleSwitchPanel.vue'
+import StrokeStyleReplacePanel from './StrokeStyleReplacePanel.vue'
 import FangYuanStylePanel from './FangYuanStylePanel.vue'
 
 const advancedEdit = useAdvancedEditStore()
@@ -71,25 +70,17 @@ onUnmounted(() => {
         </n-button>
         <n-button
           size="small"
-          :type="advancedEdit.activePanel === PanelType.StrokeReplace ? 'primary' : 'default'"
-          @pointerdown="() => advancedEdit.setActivePanel(PanelType.StrokeReplace)"
+          :type="advancedEdit.activePanel === PanelType.StrokeStyleReplace ? 'primary' : 'default'"
+          @pointerdown="() => advancedEdit.setActivePanel(PanelType.StrokeStyleReplace)"
         >
           <template #icon>
             <font-awesome-icon :icon="['fas', 'wrench']" />
           </template>
-          笔画替换
+          笔画风格替换
         </n-button>
+        <!-- 条件筛选待开发，先隐藏入口（PanelType 与面板组件保留，开发完成后再放开） -->
         <n-button
-          size="small"
-          :type="advancedEdit.activePanel === PanelType.StyleSwitch ? 'primary' : 'default'"
-          @pointerdown="() => advancedEdit.setActivePanel(PanelType.StyleSwitch)"
-        >
-          <template #icon>
-            <font-awesome-icon :icon="['fas', 'wrench']" />
-          </template>
-          风格切换
-        </n-button>
-        <n-button
+          v-if="false"
           size="small"
           :type="advancedEdit.activePanel === PanelType.ConditionFilter ? 'primary' : 'default'"
           @pointerdown="() => advancedEdit.setActivePanel(PanelType.ConditionFilter)"
@@ -129,11 +120,10 @@ onUnmounted(() => {
     </header>
     <main class="advanced-edit-panel-main">
       <GlobalParamsPanel v-if="advancedEdit.activePanel === PanelType.GlobalVariables" />
-      <ConditionFilterPanel v-else-if="advancedEdit.activePanel === PanelType.ConditionFilter" />
+      <ConditionFilterPanel v-else-if="false && advancedEdit.activePanel === PanelType.ConditionFilter" />
       <FangYuanStylePanel v-else-if="showFangYuanTab && advancedEdit.activePanel === PanelType.FangYuanStyleDesign" />
       <ScriptsPanel v-else-if="showScriptTab && advancedEdit.activePanel === PanelType.Script" />
-      <StrokeReplacePanel v-else-if="advancedEdit.activePanel === PanelType.StrokeReplace" />
-      <StyleSwitchPanel v-else-if="advancedEdit.activePanel === PanelType.StyleSwitch" />
+      <StrokeStyleReplacePanel v-else-if="advancedEdit.activePanel === PanelType.StrokeStyleReplace" />
     </main>
   </div>
 </template>

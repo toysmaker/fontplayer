@@ -169,6 +169,7 @@ export class CharacterRenderer {
             advanceWidth: unitsPerEm,
             preview: true,
             grid: layoutGrid,
+            useSkeletonGrid: characterFile.info?.useSkeletonGrid ?? false,
           },
           { x: 0, y: 0 },
           solidFlagsOut,

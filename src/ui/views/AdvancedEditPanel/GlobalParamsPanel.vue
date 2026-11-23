@@ -12,11 +12,20 @@ import {
 } from 'naive-ui'
 import { useAdvancedEditStore } from '@/stores/advancedEdit'
 import { ParameterType } from '@/core/types'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 import CharacterZoomPreview from './CharacterZoomPreview.vue'
 
 const advancedEdit = useAdvancedEditStore()
 const { constants, sampleCharactersList } = storeToRefs(advancedEdit)
 const zoomedIndex = ref<number | null>(null)
+
+/** Tauri webview 下 click 可能被 input blur 吃掉：click+pointerup 双层 + 防抖防止双重触发 */
+const handleApplyConstants = createDebouncedHandler(
+  () => {
+    void advancedEdit.applyConstantsToEntireProject()
+  },
+  'GlobalParamsPanel.applyConstantsToEntireProject',
+)
 
 /** v-if 切回本 Tab 时会新建 canvas，必须等 DOM 就绪后再画，否则会一直黑屏 */
 function redrawPreviewsWhenCanvasesReady() {
@@ -76,7 +85,13 @@ watch(
           </n-button>
         </div>
         <div class="update-section">
-          <n-button type="error" size="large" block @click="void advancedEdit.applyConstantsToEntireProject()">
+          <n-button
+            type="error"
+            size="large"
+            block
+            @click="handleApplyConstants"
+            @pointerup="handleApplyConstants"
+          >
             一键更新全部字库
           </n-button>
         </div>

@@ -107,6 +107,16 @@ export function contoursForCharacterFile(
   removeOverlap: boolean
 ): IContours {
   const components = ContourConverter.getComponentsForCharacter(char)
+  // 非破坏式布局变换：与字符编辑器/列表预览一致，从 info.gridSettings 构建布局数据并在轮廓计算时应用
+  const gs = char.info?.gridSettings
+  const layoutGrid =
+    gs?.initialGrid && gs?.currentGrid
+      ? {
+          initialGrid: gs.initialGrid,
+          currentGrid: gs.currentGrid,
+          gridEditTarget: 'currentGrid' as const,
+        }
+      : undefined
   const solidFlags: boolean[] = []
   let contours = ContourConverter.componentsToContours(
     components,
@@ -116,6 +126,8 @@ export function contoursForCharacterFile(
       advanceWidth: fs.unitsPerEm,
       preview: false,
       forceUpdate: true,
+      grid: layoutGrid,
+      useSkeletonGrid: char.info?.useSkeletonGrid ?? false,
     },
     { x: 0, y: 0 },
     solidFlags

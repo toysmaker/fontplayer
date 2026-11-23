@@ -24,6 +24,7 @@ import { digits } from '@/templates/digits'
 import { symbols_en, symbols_zh } from '@/templates/symbols'
 import { strokes } from '@/templates/private/v1/strokes'
 import { paramsFromStroke, buildFangYuanStrokeParameters } from '@/templates/private/v1/strokeParamBuilder'
+import { ensureStrokeParamCompatibility } from '@/features/strokeStyleReplace'
 
 const TEMPLATES_BASE = ''
 
@@ -311,6 +312,9 @@ export async function importTemplate5(): Promise<void> {
       parameters,
     )
     glyph.uuid = uuid
+    // 兼容处理：宋体脚本读取的参数名与 strokes 数据存在别名（originParam「竖-长度」等、
+    // 弯曲度→弯曲游标），补上别名参数，避免脚本 getParam 拿 undefined 产生 NaN 空笔画
+    ensureStrokeParamCompatibility(glyph)
     file.stroke_glyphs!.push(glyph)
   }
   projectStore.markFileUnsaved(file.uuid)

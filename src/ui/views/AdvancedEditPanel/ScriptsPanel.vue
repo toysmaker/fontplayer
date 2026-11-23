@@ -26,6 +26,7 @@ import { updateHorizontalComponentsRatio } from '@/features/advancedEdit/scripts
 import { updateVerticalComponentsRatio } from '@/features/advancedEdit/scripts/vertical_components_ratio'
 import { componentsScriptsArr } from '@/features/advancedEdit/scripts/components_scripts'
 import { defaultGridItem } from '@/stores/character'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 import type { ICharacterFileLite } from '@/core/types'
 
 const advancedEdit = useAdvancedEditStore()
@@ -255,6 +256,14 @@ function backToScriptSelection() {
   parameters.value = []
 }
 
+/** Tauri webview 下 click 可能被 input blur 吃掉：click+pointerup 双层 + 防抖防止双重触发 */
+const handleApplyScript = createDebouncedHandler(
+  () => {
+    void applyScriptToEntireProject()
+  },
+  'ScriptsPanel.applyScriptToEntireProject',
+)
+
 async function applyScriptToEntireProject() {
   if (activeScript.value === 'freeLayout') {
     await advancedEdit.applyFreeLayoutToEntireProject()
@@ -402,7 +411,13 @@ async function applyScriptToEntireProject() {
           </n-button>
         </div>
         <div class="update-section">
-          <n-button type="error" size="large" block @click="applyScriptToEntireProject">
+          <n-button
+            type="error"
+            size="large"
+            block
+            @click="handleApplyScript"
+            @pointerup="handleApplyScript"
+          >
             一键更新全部字库
           </n-button>
         </div>

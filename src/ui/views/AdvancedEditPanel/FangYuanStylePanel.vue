@@ -11,6 +11,7 @@ import {
 } from 'naive-ui'
 import { useAdvancedEditStore } from '@/stores/advancedEdit'
 import { getValueParamName, VALUE_PARAM_DEFAULTS } from '@/features/advancedEdit/fangYuanStyleConfig'
+import { createDebouncedHandler } from '@/utils/debounce-click'
 import CharacterZoomPreview from './CharacterZoomPreview.vue'
 
 const advancedEdit = useAdvancedEditStore()
@@ -18,6 +19,14 @@ const { fangYuanStyleItems, fangYuanStyleSelections, fangYuanStyleNumericValues,
   strokeStyleTagSelected, strokeStyleTagOptions } =
   storeToRefs(advancedEdit)
 const zoomedIndex = ref<number | null>(null)
+
+/** Tauri webview 下 click 可能被 input blur 吃掉：click+pointerup 双层 + 防抖防止双重触发 */
+const handleApplyFangYuan = createDebouncedHandler(
+  () => {
+    void advancedEdit.applyFangYuanStylesToEntireProject()
+  },
+  'FangYuanStylePanel.applyFangYuanStylesToEntireProject',
+)
 
 function fullRefresh() {
   nextTick(() => {
@@ -132,7 +141,8 @@ function getNumericConfig(itemLabel: string) {
             type="error"
             size="large"
             block
-            @click="void advancedEdit.applyFangYuanStylesToEntireProject()"
+            @click="handleApplyFangYuan"
+            @pointerup="handleApplyFangYuan"
           >
             一键更新全部字库
           </n-button>

@@ -59,12 +59,24 @@ export function generateColorFontLayers(
 ): NonNullable<ICharacter['layers']> {
   const components = ContourConverter.getComponentsForCharacter(char)
   const layers: NonNullable<ICharacter['layers']> = []
+  // 非破坏式布局变换：与 contoursForCharacterFile 一致，从 info.gridSettings 构建布局数据
+  const gs = char.info?.gridSettings
+  const layoutGrid =
+    gs?.initialGrid && gs?.currentGrid
+      ? {
+          initialGrid: gs.initialGrid,
+          currentGrid: gs.currentGrid,
+          gridEditTarget: 'currentGrid' as const,
+        }
+      : undefined
   const opts = {
     unitsPerEm: fs.unitsPerEm,
     descender: fs.descender,
     advanceWidth: fs.unitsPerEm,
     preview: false,
     forceUpdate: false,
+    grid: layoutGrid,
+    useSkeletonGrid: char.info?.useSkeletonGrid ?? false,
   }
   // 传入 fillColorsOut 获取每个轮廓对应的颜色（脚本内置组件 setFillColor 的颜色在此体现），
   // fillUnitsOut 标识填充单元（glyph 组件的同色子轮廓共享同一单元）
