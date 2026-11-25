@@ -121,7 +121,7 @@ export class CharacterRenderer {
             }
           }
         } catch (error) {
-          console.warn(`[CharacterRenderer] Failed to load preview from IndexedDB for ${characterFile.uuid}:`, error)
+          if (import.meta.env.DEV) { console.warn(`[CharacterRenderer] Failed to load preview from IndexedDB for ${characterFile.uuid}:`, error) }
           nonzeroContours = null
         }
       }

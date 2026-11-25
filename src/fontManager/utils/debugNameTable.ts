@@ -103,17 +103,17 @@ export function calculateNameTableSize(table: INameTable): number {
  * Print name table details for debugging
  */
 export function debugPrintNameTable(table: INameTable): void {
-  console.log('=== Name Table Debug Info ===')
-  console.log(`Version: ${table.version}`)
-  console.log(`Count: ${table.count}`)
-  console.log(`StorageOffset: ${table.storageOffset}`)
-  console.log(`Actual nameRecord count: ${table.nameRecord?.length}`)
-  console.log(`StringPool size: ${table.stringPool?.length} bytes`)
+  if (import.meta.env.DEV) { console.log('=== Name Table Debug Info ===') }
+  if (import.meta.env.DEV) { console.log(`Version: ${table.version}`) }
+  if (import.meta.env.DEV) { console.log(`Count: ${table.count}`) }
+  if (import.meta.env.DEV) { console.log(`StorageOffset: ${table.storageOffset}`) }
+  if (import.meta.env.DEV) { console.log(`Actual nameRecord count: ${table.nameRecord?.length}`) }
+  if (import.meta.env.DEV) { console.log(`StringPool size: ${table.stringPool?.length} bytes`) }
   
   const expectedSize = calculateNameTableSize(table)
-  console.log(`Expected total size: ${expectedSize} bytes`)
+  if (import.meta.env.DEV) { console.log(`Expected total size: ${expectedSize} bytes`) }
   
-  console.log('\n=== Name Records ===')
+  if (import.meta.env.DEV) { console.log('\n=== Name Records ===') }
   table.nameRecord?.forEach((record, index) => {
     console.log(`[${index}] nameID=${record.nameID}, platform=${record.platformID}, ` +
                 `encoding=${record.encodingID}, language=${record.languageID}, ` +
@@ -122,15 +122,17 @@ export function debugPrintNameTable(table: INameTable): void {
   
   // 验证
   const validation = validateNameTable(table)
-  console.log('\n=== Validation ===')
+  if (import.meta.env.DEV) { console.log('\n=== Validation ===') }
   if (validation.valid) {
-    console.log('✅ Name table is valid')
+    if (import.meta.env.DEV) { console.log('✅ Name table is valid') }
   } else {
-    console.log('❌ Name table has issues:')
-    validation.issues.forEach(issue => console.log(`  - ${issue}`))
+    if (import.meta.env.DEV) { console.log('❌ Name table has issues:') }
+    validation.issues.forEach((issue) => {
+      if (import.meta.env.DEV) { console.log(`  - ${issue}`) }
+    })
   }
   
-  console.log('=============================\n')
+  if (import.meta.env.DEV) { console.log('=============================\n') }
 }
 
 /**
@@ -150,8 +152,8 @@ export function validateNameTableBinary(data: number[], expectedSize?: number): 
   const count = (data[2] << 8) | data[3]
   const storageOffset = (data[4] << 8) | data[5]
   
-  console.log(`Binary data: version=${version}, count=${count}, storageOffset=${storageOffset}`)
-  console.log(`Binary data total size: ${data.length} bytes`)
+  if (import.meta.env.DEV) { console.log(`Binary data: version=${version}, count=${count}, storageOffset=${storageOffset}`) }
+  if (import.meta.env.DEV) { console.log(`Binary data total size: ${data.length} bytes`) }
   
   // 检查数据大小
   const minExpectedSize = 6 + count * 12

@@ -6,6 +6,7 @@
 import { throttle } from '@/utils/performance'
 import { JointManager } from './JointManager'
 import { ScriptExecutor } from './ScriptExecutor'
+import { glyphDragActive, glyphDragComponentUUID } from '../dragState'
 import type { IDragContext, IDraggerConfig, IJoint } from './types'
 import type { ICustomGlyph, IComponent, IGlyphComponent } from '@/core/types'
 import { computeGlyphComponentBoundingBox } from '@/core/utils/glyphBounds'
@@ -124,19 +125,51 @@ export abstract class BaseGlyphDragger {
   
   private throttledGlyphDrag = throttle(
     (dx: number, dy: number) => {
+      const t0 = import.meta.env.DEV ? performance.now() : 0
       this.handleGlyphDrag(dx, dy)
+      const t1 = import.meta.env.DEV ? performance.now() : 0
       this.config.onRender?.()
+      const t2 = import.meta.env.DEV ? performance.now() : 0
+      if (import.meta.env.DEV) {
+        console.log(
+          `[dragCost][whole] 移动 ${(t1 - t0).toFixed(2)}ms | 渲染 ${(t2 - t1).toFixed(2)}ms | 组件数 ${(this.context.character?.components?.length) ?? '?'}`,
+        )
+      }
     },
     16,
     { leading: true, trailing: true }
   )
 
-  /** 关节拖拽渲染节流: 吸附几何仍每 mousemove 计算, 但整幅重绘按 16ms 节流
-   *  (此前每 mousemove 都 onRender, 实测 120 步触发 92 次整幅重绘; WKWebView
-   *   软件画布下每帧 Paint/Composite + 每帧分配放大 GC 压力, 是拖拽卡顿主因之一) */
-  private throttledJointDragRender = throttle(
-    () => {
+  /** 关节拖拽步进节流: 每 mousemove 的 executeDrag×2(原始+吸附) + 整幅重绘 + 值回写
+   *  统一按 16ms 节流(leading+trailing)。此前渲染已节流但 applySnapDelta 仍每 move
+   *  执行两次脚本骨架变换, 是"纯脚本组件骨架拖拽"卡顿的 JS 大头(时间线 JS 40%)。
+   *  delta 为相对 mousedown 的累计位移, 节流不改变语义; mouseup 走最终落点补齐。 */
+  // DEV 开销分解: 每 60 步统计一次 applySnapDelta(脚本变换+吸附)与 onRender 的平均耗时
+  private devStepCost = { n: 0, transformMs: 0, renderMs: 0 }
+  private devRawMoveCount = 0
+
+  private throttledJointDragStep = throttle(
+    (dx: number, dy: number, snapSuppressed: boolean) => {
+      // trailing 回调可能在 mouseup 后触发, 需防御 context 已清空
+      if (!this.context.glyph || !this.draggingJoint) return
+      const t0 = import.meta.env.DEV ? performance.now() : 0
+      this.applySnapDelta(dx, dy, false, snapSuppressed)
+      const t1 = import.meta.env.DEV ? performance.now() : 0
       this.config.onRender?.()
+      const t2 = import.meta.env.DEV ? performance.now() : 0
+      this.throttledSkeletonSync(this.context.glyph, this.context.componentUUID)
+      if (import.meta.env.DEV) {
+        this.devStepCost.n++
+        this.devStepCost.transformMs += t1 - t0
+        this.devStepCost.renderMs += t2 - t1
+        // 每 60 步输出一次均值(降低 console 输出对测量本身的干扰)
+        if (this.devStepCost.n >= 60) {
+          console.log(
+            `[dragCost] 60步均值: 变换+吸附 ${(this.devStepCost.transformMs / this.devStepCost.n).toFixed(2)}ms | 渲染 ${(this.devStepCost.renderMs / this.devStepCost.n).toFixed(2)}ms | 组件数 ${(this.context.character?.components?.length) ?? '?'}`,
+          )
+          this.devStepCost = { n: 0, transformMs: 0, renderMs: 0 }
+        }
+      }
     },
     16,
     { leading: true, trailing: true }
@@ -375,13 +408,20 @@ export abstract class BaseGlyphDragger {
   }
 
   /** 其它顶层字形组件提供的参考线（不含当前拖拽组件） */
+  /** 拖拽会话级吸附线缓存: peer 组件(除被拖组件外的全部组件)在拖拽期间静止,
+   *  其吸附参考线恒定 —— 首步计算后整个会话复用, 避免每步全量扫描所有组件
+   *  (20+ 组件字符的每步 JS 大头之一) */
+  private cachedSnapKeyLines: SnapAxisLine[] | null = null
+
   private getAutoSnapKeyLines(): SnapAxisLine[] {
+    if (this.cachedSnapKeyLines) return this.cachedSnapKeyLines
     const peers = this.getSnapKeyLinePeers(this.context.componentUUID)
     // requireExistingInstance=true：只使用已存在的实例，不为 peer 创建空实例
     const groups = peers.map((p) =>
       this.getSnapLinesForGlyphComponent(p, p.ox ?? 0, p.oy ?? 0, true),
     )
-    return mergeSnapAxisLines(groups)
+    this.cachedSnapKeyLines = mergeSnapAxisLines(groups)
+    return this.cachedSnapKeyLines
   }
 
   /**
@@ -515,11 +555,15 @@ export abstract class BaseGlyphDragger {
     const adjDx = dx + ev.dx
     const adjDy = dy + ev.dy
 
-    ScriptExecutor.executeDrag(glyph, comp.uuid, {
-      draggingJoint: joint,
-      deltaX: adjDx,
-      deltaY: adjDy,
-    })
+    // 吸附未生效时(远离参考线), 吸附结果与原始执行相同 —— 跳过第二次完整脚本变换,
+    // 每步省一半脚本执行开销(20+ 组件字符拖拽的 JS 大头)
+    if (ev.dx !== 0 || ev.dy !== 0) {
+      ScriptExecutor.executeDrag(glyph, comp.uuid, {
+        draggingJoint: joint,
+        deltaX: adjDx,
+        deltaY: adjDy,
+      })
+    }
 
     return { adjDx, adjDy }
   }
@@ -600,6 +644,10 @@ export abstract class BaseGlyphDragger {
 
     this._isDragging = true
     this.glyphDragMovedBeyondTap = false
+    glyphDragActive.value = true
+    glyphDragComponentUUID.value = this.context.componentUUID
+    // 新拖拽会话: 吸附线缓存失效(首个吸附步重建)
+    this.cachedSnapKeyLines = null
     // 拖拽时清除悬停关键点，避免高亮显示在原位置
     this.hoverJoint = null
     // 将显示坐标转换为坐标尺寸，用于计算拖拽增量
@@ -628,6 +676,15 @@ export abstract class BaseGlyphDragger {
   }
   
   protected onMouseMove = (e: MouseEvent) => {
+    // DEV 底层探针: 在节流之前计数, 用于确认拖拽事件是否真的到达本 dragger
+    if (import.meta.env.DEV && this._isDragging) {
+      this.devRawMoveCount++
+      if (this.devRawMoveCount % 120 === 1) {
+        console.log(
+          `[dragProbe] rawMove #${this.devRawMoveCount} joint=${!!this.draggingJoint} firstJoint=${this.isDraggingFirstJoint} mode=${this.context?.mode ?? '?'}`,
+        )
+      }
+    }
     // Tauri focus 切换可能吞掉 mouseup，导致 cleanup 永不被调用。
     // 若此时鼠标按键已松开（buttons 不含左键），则自动收尾拖拽状态。
     if (this._isDragging && !(e.buttons & 1)) {
@@ -679,9 +736,7 @@ export abstract class BaseGlyphDragger {
       )
       this.throttledGlyphDrag(adjDx, adjDy)
     } else if (this.draggingJoint && !this.isDraggingFirstJoint && this.context.glyph) {
-      this.applySnapDelta(dx, dy, false, this.pointerSnapSuppressed(e))
-      this.throttledJointDragRender()
-      this.throttledSkeletonSync(this.context.glyph, this.context.componentUUID)
+      this.throttledJointDragStep(dx, dy, this.pointerSnapSuppressed(e))
     }
     
     // 注意：不要更新 lastX 和 lastY！
@@ -739,6 +794,10 @@ export abstract class BaseGlyphDragger {
         this.draggingJoint &&
         !this.isDraggingFirstJoint
       ) {
+        // 取消挂起的节流步进(最终态由下方 executeDragEnd 补齐)
+        if (typeof (this.throttledJointDragStep as any).cancel === 'function') {
+          ;(this.throttledJointDragStep as any).cancel()
+        }
         const { adjDx, adjDy } = this.applySnapDelta(
           dx,
           dy,
@@ -822,6 +881,9 @@ export abstract class BaseGlyphDragger {
   
   private cleanup() {
     this._isDragging = false
+    glyphDragActive.value = false
+    glyphDragComponentUUID.value = null
+    this.cachedSnapKeyLines = null
     // glyphDragMovedBeyondTap 不在此处重置——onMouseUp 末尾立即置 false 会导致
     // 后续触发的 SelectTool.onMouseUp 读取时为 false，从而误触发 handleClickSelection。
     // 改为在下一轮 onMouseDown 时重置（已在 onMouseDown 第 584 行处理）。
@@ -864,6 +926,13 @@ export abstract class BaseGlyphDragger {
     return this._isDragging
   }
 
+  /** 拖拽中当前被拖拽的字形组件 UUID（供拖拽期局部重绘：静态层排除该组件、每帧只重绘它） */
+  getDraggedComponentUUID(): string | null {
+    return this._isDragging && (this.draggingJoint || this.isDraggingFirstJoint || this.glyphDragMovedBeyondTap)
+      ? this.context.componentUUID
+      : null
+  }
+
   /** 供 SelectTool：本 mouse 手势在字形拖拽中是否已产生位移（用于抑制重叠点击轮换） */
   shouldSuppressOverlapPickAfterGlyphDrag(): boolean {
     return this.glyphDragMovedBeyondTap
@@ -897,8 +966,8 @@ export abstract class BaseGlyphDragger {
     if (typeof (this.throttledGlyphDrag as any).cancel === 'function') {
       (this.throttledGlyphDrag as any).cancel()
     }
-    if (typeof (this.throttledJointDragRender as any).cancel === 'function') {
-      (this.throttledJointDragRender as any).cancel()
+    if (typeof (this.throttledJointDragStep as any).cancel === 'function') {
+      (this.throttledJointDragStep as any).cancel()
     }
   }
   

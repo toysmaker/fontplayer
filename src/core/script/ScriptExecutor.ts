@@ -46,7 +46,7 @@ function getScript(glyph: ICustomGlyph, projectStore?: ReturnType<typeof useProj
         return originGlyph.script
       }
     }
-    console.warn(`Script reference ${glyph.script_reference} not found`)
+    if (import.meta.env.DEV) { console.warn(`Script reference ${glyph.script_reference} not found`) }
   }
   return null
 }
@@ -94,7 +94,7 @@ export type ExecuteGlyphScriptOptions = {
 
 function logGlyphSelScript(verbose: boolean | undefined, payload: Record<string, unknown>): void {
   if (!import.meta.env.DEV || !verbose) return
-  console.log('[GlyphSel] script', payload)
+  if (import.meta.env.DEV) { console.log('[GlyphSel] script', payload) }
 }
 
 /**
@@ -346,7 +346,7 @@ export function executeGlyphScript(
           const fn = new Function(scriptCode)
           fn()
           if (import.meta.env.DEV && (targetGlyph.skeleton as any)?.type === 'glyphSkeleton') {
-            console.log('[ScriptExecutor] glyphSkeleton script executed, reflines:', glyphInstance.getRefLines()?.length, 'joints:', glyphInstance.getJoints()?.length)
+            if (import.meta.env.DEV) { console.log('[ScriptExecutor] glyphSkeleton script executed, reflines:', glyphInstance.getRefLines()?.length, 'joints:', glyphInstance.getJoints()?.length) }
           }
           logGlyphSelScript(options?.glyphSelVerbose, {
             phase: 'after_main_script_fn',

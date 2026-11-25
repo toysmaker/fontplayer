@@ -129,8 +129,8 @@ const update = (originCharacters, characters, _parameters) => {
           yOffset = (parentBounds.y + parentBounds.height / 2 - oy) * parameters['高度缩放比例']
         }
 
-        console.log('scaleX, scaleY', scaleX, scaleY)
-        console.log('xOffset, yOffset', xOffset, yOffset)
+        if (import.meta.env.DEV) { console.log('scaleX, scaleY', scaleX, scaleY) }
+        if (import.meta.env.DEV) { console.log('xOffset, yOffset', xOffset, yOffset) }
 
         const transform = {
           xScale: scaleX,
@@ -190,7 +190,7 @@ const update = (originCharacters, characters, _parameters) => {
           // }
 
           let newStartX = rt0.getJoints()[0].x + ns0.ox
-          console.log('new joints', rt0.getJoints())
+          if (import.meta.env.DEV) { console.log('new joints', rt0.getJoints()) }
           let newEndX = rt0.getJoints()[1].x + ns0.ox
 
           const delta = (parentBounds.width / 2 - (newEndX - newStartX) - originGap / 2) * parameters['离散度']
@@ -214,7 +214,7 @@ const update = (originCharacters, characters, _parameters) => {
           }
 
           glyphRuntime(strokes[0][0])!.setParam('水平延伸', newEndX - newStartX)
-          console.log('newStartX, newEndX', newStartX, newEndX)
+          if (import.meta.env.DEV) { console.log('newStartX, newEndX', newStartX, newEndX) }
           glyphRuntime(strokes[0][0])!.setParam('竖直延伸', newEndY - newStartY)
           if (newEndX === newStartX || newEndY === newStartY) {
             glyphRuntime(strokes[0][0])!.setParam('弯曲度', -10 * Number(glyphRuntime(origin_strokes[0][0])!.getParam('弯曲程度')))

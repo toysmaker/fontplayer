@@ -161,7 +161,7 @@ export function createImportHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
       try {
         glyph = GlyphImportExportService.hydrateGlyphFromPlain(plain)
       } catch (e) {
-        console.warn('[importGlyphs] skip invalid glyph', e)
+        if (import.meta.env.DEV) { console.warn('[importGlyphs] skip invalid glyph', e) }
         continue
       }
       if (!glyph.uuid) continue

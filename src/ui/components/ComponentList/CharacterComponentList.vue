@@ -288,7 +288,7 @@ const toggleVisibility = createDebouncedHandler(_toggleVisibility, 'CharacterCom
 
 // 切换包含在字符轮廓中
 const _toggleUsedInCharacter = (uuid: string, usedInCharacter: boolean, type: string) => {
-  console.log('toggleUsedInCharacter', uuid, usedInCharacter, type)
+  if (import.meta.env.DEV) { console.log('toggleUsedInCharacter', uuid, usedInCharacter, type) }
   if (type === 'picture' || type === 'pressPen') return
   characterStore.modifyComponent(uuid, { usedInCharacter })
 }

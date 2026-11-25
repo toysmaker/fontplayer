@@ -139,17 +139,17 @@ export async function createVariableFontWithInstances(characters: ICharacter[]) 
   })
 
   // 5. 检查自动分配的nameID
-  console.log('=== Axes nameIDs ===')
+  if (import.meta.env.DEV) { console.log('=== Axes nameIDs ===') }
   axes.forEach(axis => {
-    console.log(`${axis.name} (${axis.tag}): nameID = ${axis.nameID}`)
+    if (import.meta.env.DEV) { console.log(`${axis.name} (${axis.tag}): nameID = ${axis.nameID}`) }
   })
 
-  console.log('\n=== Instances nameIDs ===')
+  if (import.meta.env.DEV) { console.log('\n=== Instances nameIDs ===') }
   instances.forEach(instance => {
-    console.log(`${instance.subfamilyName}:`)
-    console.log(`  subfamilyNameID = ${instance.subfamilyNameID}`)
-    console.log(`  postScriptName = ${instance.postScriptName} (自动生成)`)
-    console.log(`  postScriptNameID = ${instance.postScriptNameID}`)
+    if (import.meta.env.DEV) { console.log(`${instance.subfamilyName}:`) }
+    if (import.meta.env.DEV) { console.log(`  subfamilyNameID = ${instance.subfamilyNameID}`) }
+    if (import.meta.env.DEV) { console.log(`  postScriptName = ${instance.postScriptName} (自动生成)`) }
+    if (import.meta.env.DEV) { console.log(`  postScriptNameID = ${instance.postScriptNameID}`) }
   })
 
   return { font, axes, instances }
@@ -310,17 +310,17 @@ export function validateVariantsNameIDs(axes: IVariationAxis[], instances: IVari
  * 使用示例
  */
 export async function runExample(characters: ICharacter[]) {
-  console.log('Creating variable font with instances...\n')
+  if (import.meta.env.DEV) { console.log('Creating variable font with instances...\n') }
   
   const { font, axes, instances } = await createVariableFontWithInstances(characters)
   
   // 验证nameID
   const isValid = validateVariantsNameIDs(axes, instances)
-  console.log(`\nValidation result: ${isValid ? 'PASS ✓' : 'FAIL ✗'}`)
+  if (import.meta.env.DEV) { console.log(`\nValidation result: ${isValid ? 'PASS ✓' : 'FAIL ✗'}`) }
   
   // 创建fvar表数据
   const fvarTableData = createFvarTableFromVariants(axes, instances)
-  console.log('\nfvar table data:', JSON.stringify(fvarTableData, null, 2))
+  if (import.meta.env.DEV) { console.log('\nfvar table data:', JSON.stringify(fvarTableData, null, 2)) }
   
   return font
 }

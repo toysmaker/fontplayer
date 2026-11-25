@@ -275,9 +275,9 @@ function mergeAtJunction(
         mergeTwoPolylines(polylines[epList[i].polyIdx], polylines[epList[bestJ].polyIdx]),
       ))
     } else if (bestJ >= 0 && import.meta.env.DEV) {
-      console.log(`[Merge]     NO PAIR: poly#${epList[i].polyIdx} best=#${epList[bestJ].polyIdx} dot=${bestDot.toFixed(3)} (> -0.65, not collinear)`)
+      if (import.meta.env.DEV) { console.log(`[Merge]     NO PAIR: poly#${epList[i].polyIdx} best=#${epList[bestJ].polyIdx} dot=${bestDot.toFixed(3)} (> -0.65, not collinear)`) }
     } else if (import.meta.env.DEV) {
-      console.log(`[Merge]     UNPAIRED: poly#${epList[i].polyIdx} (no partner found)`)
+      if (import.meta.env.DEV) { console.log(`[Merge]     UNPAIRED: poly#${epList[i].polyIdx} (no partner found)`) }
     }
   }
 
@@ -353,7 +353,7 @@ export function mergePolylines(polylines: Vec2[][]): Vec2[][] {
       console.log(`[Merge] Pass ${iter} result (${next.length} polylines):`, next.map(p => ({ len: p.length, start: p[0], end: p[p.length - 1] })))
     }
     if (next.length === current.length) {
-      if (import.meta.env.DEV && iter > 0) console.log(`[Merge] Converged after ${iter + 1} passes`)
+      if (import.meta.env.DEV) { console.log(`[Merge] Converged after ${iter + 1} passes`) }
       return next
     }
     current = next

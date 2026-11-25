@@ -101,7 +101,7 @@ export function generateAndAddGlyphComponents() {
   const characterStore = useCharacterStore()
   const ch = characterStore.editingCharacter
   if (!ch?.skeleton?.strokes?.length) {
-    if (import.meta.env.DEV) console.warn('[SkeletonGen] No skeleton strokes')
+    if (import.meta.env.DEV) { console.warn('[SkeletonGen] No skeleton strokes') }
     return
   }
 

@@ -164,7 +164,7 @@ const calculateDeltas = (
   
   // 如果点数太多，打印警告
   if (defaultPoints.length > 500) {
-    console.warn(`⚠️ Large glyph detected: ${defaultPoints.length} points. This may be slow.`)
+    if (import.meta.env.DEV) { console.warn(`⚠️ Large glyph detected: ${defaultPoints.length} points. This may be slow.`) }
   }
   
   const deltas: PointDelta[] = []
@@ -183,9 +183,9 @@ const calculateDeltas = (
   
   // 调试：报告非零 delta 数量（只在第一个字形或有问题时打印）
   if (nonZeroCount === 0 && defaultPoints.length > 0) {
-    console.warn(`⚠️ All deltas are zero! (${defaultPoints.length} points checked)`)
-    console.warn(`  First default point: (${defaultPoints[0]?.x.toFixed(2)}, ${defaultPoints[0]?.y.toFixed(2)})`)
-    console.warn(`  First variant point: (${variantPoints[0]?.x.toFixed(2)}, ${variantPoints[0]?.y.toFixed(2)})`)
+    if (import.meta.env.DEV) { console.warn(`⚠️ All deltas are zero! (${defaultPoints.length} points checked)`) }
+    if (import.meta.env.DEV) { console.warn(`  First default point: (${defaultPoints[0]?.x.toFixed(2)}, ${defaultPoints[0]?.y.toFixed(2)})`) }
+    if (import.meta.env.DEV) { console.warn(`  First variant point: (${variantPoints[0]?.x.toFixed(2)}, ${variantPoints[0]?.y.toFixed(2)})`) }
   }
   
   return deltas
@@ -770,24 +770,24 @@ const createGvarTable = async (_variants, characters) => {
   table.glyphVariationData = []
 
   // 调试：检查接收到的数据
-  console.log('🔍 createGvarTable received:')
-  console.log(`  _variants: ${!!_variants}`)
-  console.log(`  _variants.combinations: ${!!_variants?.combinations}`)
-  console.log(`  _variants.combinations.length: ${_variants?.combinations?.length || 0}`)
+  if (import.meta.env.DEV) { console.log('🔍 createGvarTable received:') }
+  if (import.meta.env.DEV) { console.log(`  _variants: ${!!_variants}`) }
+  if (import.meta.env.DEV) { console.log(`  _variants.combinations: ${!!_variants?.combinations}`) }
+  if (import.meta.env.DEV) { console.log(`  _variants.combinations.length: ${_variants?.combinations?.length || 0}`) }
 
   // 检查是否有combinations数据
   if (!_variants.combinations || _variants.combinations.length === 0) {
     // 如果没有combinations，返回空的gvar表
-    console.warn('⚠️ No variation combinations provided, creating empty gvar table')
+    if (import.meta.env.DEV) { console.warn('⚠️ No variation combinations provided, creating empty gvar table') }
     return table
   }
 
   // 为每个字符创建variation data（分块计数并让步，避免大字符集同步阻塞）
-  console.log(`📝 Processing ${characters.length} glyphs for gvar table...`)
+  if (import.meta.env.DEV) { console.log(`📝 Processing ${characters.length} glyphs for gvar table...`) }
   reserveProgressBudget(characters.length)
   for (let i = 0; i < characters.length; i++) {
     if (i % 5 === 0) {
-      console.log(`  Processing glyph ${i}/${characters.length}...`)
+      if (import.meta.env.DEV) { console.log(`  Processing glyph ${i}/${characters.length}...`) }
     }
     
     const character = characters[i]
@@ -800,7 +800,7 @@ const createGvarTable = async (_variants, characters) => {
                     defaultContours.every(contour => !contour || contour.length === 0)
     
     if (isEmpty) {
-      console.log(`  ⏭️  Glyph ${i} (${characters[i]?.name || 'unnamed'}): Empty glyph, skipping variation data`)
+      if (import.meta.env.DEV) { console.log(`  ⏭️  Glyph ${i} (${characters[i]?.name || 'unnamed'}): Empty glyph, skipping variation data`) }
       table.glyphVariationData.push({
         tupleVariationHeaders: [],
         pointDeltas: [],
@@ -809,10 +809,10 @@ const createGvarTable = async (_variants, characters) => {
     } else {
       // 调试：检查默认轮廓
       if (i === 2) {
-        console.log(`  📍 Glyph ${i}: defaultContours has ${defaultContours?.length || 0} contours`)
+        if (import.meta.env.DEV) { console.log(`  📍 Glyph ${i}: defaultContours has ${defaultContours?.length || 0} contours`) }
         if (defaultContours && defaultContours.length > 0) {
           const totalPaths = defaultContours.reduce((sum, contour) => sum + contour.length, 0)
-          console.log(`     Total paths: ${totalPaths}`)
+          if (import.meta.env.DEV) { console.log(`     Total paths: ${totalPaths}`) }
         }
       }
 
@@ -849,7 +849,7 @@ const createGvarTable = async (_variants, characters) => {
     incrementProgress(undefined, 1)
     await yieldToEventLoop(i + 1, 50)
   }
-  console.log(`✅ Processed all ${characters.length} glyphs`)
+  if (import.meta.env.DEV) { console.log(`✅ Processed all ${characters.length} glyphs`) }
 
   return table
 }

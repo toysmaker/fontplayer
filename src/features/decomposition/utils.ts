@@ -365,7 +365,7 @@ export function assignStrokesToParts(
       const part = parts.find((p) => p.match.join(',') === match.join(','))
       let partIndex = 0
       if (!part) {
-        console.log(`未找到匹配的部件: ${decomp}`)
+        if (import.meta.env.DEV) { console.log(`未找到匹配的部件: ${decomp}`) }
       } else {
         partIndex = parts.findIndex((p) => p.match.join(',') === match.join(','))
       }
@@ -723,7 +723,7 @@ export function getDecomposition2(character: CharacterWithDecompositionList): st
         if (THREE_PART_OPS.includes(op)) {
           const firstPartLength = findPartEnd(rest, 0)
           if (firstPartLength === -1 || firstPartLength > rest.length) {
-            console.warn(`[getDecomposition2] Failed to parse first part for three-part operator: ${op}, decomp: ${decomp}`)
+            if (import.meta.env.DEV) { console.warn(`[getDecomposition2] Failed to parse first part for three-part operator: ${op}, decomp: ${decomp}`) }
             return ''
           }
 
@@ -732,7 +732,7 @@ export function getDecomposition2(character: CharacterWithDecompositionList): st
 
           const secondPartLength = findPartEnd(remaining, 0)
           if (secondPartLength === -1 || secondPartLength > remaining.length) {
-            console.warn(`[getDecomposition2] Failed to parse second part for three-part operator: ${op}, decomp: ${decomp}`)
+            if (import.meta.env.DEV) { console.warn(`[getDecomposition2] Failed to parse second part for three-part operator: ${op}, decomp: ${decomp}`) }
             return ''
           }
 
@@ -757,7 +757,7 @@ export function getDecomposition2(character: CharacterWithDecompositionList): st
         if (TWO_PART_OPS.includes(op)) {
           const firstPartLength = findPartEnd(rest, 0)
           if (firstPartLength === -1 || firstPartLength > rest.length) {
-            console.warn(`[getDecomposition2] Failed to parse first part for two-part operator: ${op}, decomp: ${decomp}`)
+            if (import.meta.env.DEV) { console.warn(`[getDecomposition2] Failed to parse first part for two-part operator: ${op}, decomp: ${decomp}`) }
             return ''
           }
 
@@ -780,7 +780,7 @@ export function getDecomposition2(character: CharacterWithDecompositionList): st
       }
     }
 
-    console.warn(`[getDecomposition2] Cannot parse decomposition (no valid operator found): ${decomp}`)
+    if (import.meta.env.DEV) { console.warn(`[getDecomposition2] Cannot parse decomposition (no valid operator found): ${decomp}`) }
     return ''
   }
 

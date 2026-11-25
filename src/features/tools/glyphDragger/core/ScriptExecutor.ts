@@ -78,7 +78,7 @@ export class ScriptExecutor {
     setSkeletonTransformPreview(true)
     const glyphInstance = this.getGlyphInstance(glyph, componentUUID)
     if (!glyphInstance) {
-      console.warn('[ScriptExecutor.executeDragStart] No glyph instance found for', componentUUID)
+      if (import.meta.env.DEV) { console.warn('[ScriptExecutor.executeDragStart] No glyph instance found for', componentUUID) }
       return
     }
     
@@ -127,7 +127,7 @@ export class ScriptExecutor {
   ): void {
     const glyphInstance = this.getGlyphInstance(glyph, componentUUID)
     if (!glyphInstance) {
-      console.warn('[ScriptExecutor.executeDrag] No glyph instance found for', componentUUID)
+      if (import.meta.env.DEV) { console.warn('[ScriptExecutor.executeDrag] No glyph instance found for', componentUUID) }
       return
     }
     

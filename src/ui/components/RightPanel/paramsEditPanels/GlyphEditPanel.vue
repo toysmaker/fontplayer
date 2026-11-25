@@ -1407,7 +1407,7 @@ async function applyPostProcessRules() {
   try {
     executeGlyphScript(glyphValue, compUUID, { ignoreTempDataGuard: true })
   } catch (e) {
-    if (import.meta.env.DEV) console.warn('[applyPostProcessRules] script execution failed:', e)
+    if (import.meta.env.DEV) { console.warn('[applyPostProcessRules] script execution failed:', e) }
   }
 
   postProcessEditMode.value = false

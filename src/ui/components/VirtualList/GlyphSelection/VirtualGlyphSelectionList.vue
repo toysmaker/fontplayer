@@ -268,7 +268,7 @@ async function tauriRefreshPaintedCanvases(
 
 async function renderVisiblePreviews() {
   if (props.visible === false) {
-    if (import.meta.env.DEV) console.log('[GlyphSel] renderVisiblePreviews: skip (visible=false)')
+    if (import.meta.env.DEV) { console.log('[GlyphSel] renderVisiblePreviews: skip (visible=false)') }
     return
   }
   /** 与迭代一致：在同步阶段从 glyphList 切片，避免 await 后 visibleItems 被下一轮 watch 改掉导致 done total:0 等假象 */
@@ -277,7 +277,7 @@ async function renderVisiblePreviews() {
   const gen = ++previewGeneration
   const fontSettings = projectStore.selectedFile?.fontSettings
   if (!projectStore.selectedFile) {
-    if (import.meta.env.DEV) console.log('[GlyphSel] renderVisiblePreviews: skip (no selectedFile)')
+    if (import.meta.env.DEV) { console.log('[GlyphSel] renderVisiblePreviews: skip (no selectedFile)') }
     return
   }
 
@@ -297,7 +297,7 @@ async function renderVisiblePreviews() {
   await nextTick()
   await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))
   if (gen !== previewGeneration) {
-    if (import.meta.env.DEV) console.log(`[GlyphSel] renderVisiblePreviews: cancelled after RAF (gen=${gen}, current=${previewGeneration})`)
+    if (import.meta.env.DEV) { console.log(`[GlyphSel] renderVisiblePreviews: cancelled after RAF (gen=${gen}, current=${previewGeneration})`) }
     return
   }
 
@@ -307,7 +307,7 @@ async function renderVisiblePreviews() {
   let missCount = 0
   for (let i = 0; i < itemsToRender.length; i++) {
     if (gen !== previewGeneration) {
-      if (import.meta.env.DEV) console.log(`[GlyphSel] renderVisiblePreviews: cancelled in loop (gen=${gen}, current=${previewGeneration})`)
+      if (import.meta.env.DEV) { console.log(`[GlyphSel] renderVisiblePreviews: cancelled in loop (gen=${gen}, current=${previewGeneration})`) }
       return
     }
     const g = itemsToRender[i]!

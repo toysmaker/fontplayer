@@ -47,12 +47,12 @@ export async function loadDecompositionData(): Promise<void> {
     try {
       const existing = await readRowsFromIdb()
       if (existing) {
-        if (import.meta.env.DEV) console.log(`[decomposition] loadDecompositionData: IDB 命中，${existing.length} 条记录`)
+        if (import.meta.env.DEV) { console.log(`[decomposition] loadDecompositionData: IDB 命中，${existing.length} 条记录`) }
         setCache(existing)
         store.markReady()
         return
       }
-      if (import.meta.env.DEV) console.log('[decomposition] loadDecompositionData: IDB 无缓存，尝试 fetch /data/character_list_final_v2.json ...')
+      if (import.meta.env.DEV) { console.log('[decomposition] loadDecompositionData: IDB 无缓存，尝试 fetch /data/character_list_final_v2.json ...') }
 
       const res = await fetch('/data/character_list_final_v2.json')
       if (!res.ok) {
@@ -62,7 +62,7 @@ export async function loadDecompositionData(): Promise<void> {
       if (!Array.isArray(json) || json.length === 0) {
         throw new Error('[decomposition] invalid JSON payload')
       }
-      if (import.meta.env.DEV) console.log(`[decomposition] loadDecompositionData: fetch 成功，${json.length} 条记录，写入 IDB`)
+      if (import.meta.env.DEV) { console.log(`[decomposition] loadDecompositionData: fetch 成功，${json.length} 条记录，写入 IDB`) }
       await indexedDBManager.set(DECOMPOSITION_CHARACTER_LIST_IDB_KEY, json)
       setCache(json)
       store.markReady()
@@ -135,7 +135,7 @@ export async function buildDecompositionForOpenedProjectCharacters(
     map = await ensureLookup()
   }
   if (metadataList.length === 0 || !map) {
-    if (import.meta.env.DEV) console.log(`[decomposition] buildDecompositionForOpenedProjectCharacters: skip — metaList=${metadataList.length}, map=${!!map}`)
+    if (import.meta.env.DEV) { console.log(`[decomposition] buildDecompositionForOpenedProjectCharacters: skip — metaList=${metadataList.length}, map=${!!map}`) }
     return
   }
 
@@ -205,7 +205,7 @@ export async function buildDecompositionForCharacter(
     character.orderedList ?? [],
   )
   if (!strokes) {
-    if (import.meta.env.DEV) console.log(`[decomposition] buildDecompositionForCharacter: "${charText}" strokes 构建失败（orderedList 可能为空）`)
+    if (import.meta.env.DEV) { console.log(`[decomposition] buildDecompositionForCharacter: "${charText}" strokes 构建失败（orderedList 可能为空）`) }
     return false
   }
 

@@ -442,16 +442,16 @@ export async function replaceTemplateComponentsForOpenedProject(
     }
   }
 
-  console.log('[replaceTemplateComponents] to_be_modified_str', to_be_modified_str)
-  console.log('[replaceTemplateComponents] stroke_undefined_str', stroke_undefined_str)
-  console.log('[replaceTemplateComponents] origin_stroke_undefined_str', origin_stroke_undefined_str)
-  console.log('[replaceTemplateComponents] part_undefined_str', part_undefined_str)
-  console.log('[replaceTemplateComponents] to_be_added_dic_str', to_be_added_dic_str)
-  console.log('[replaceTemplateComponents] to_be_modified_str_1', to_be_modified_str_1)
-  console.log('[replaceTemplateComponents] to_be_modified_str_2', to_be_modified_str_2)
-  console.log('[replaceTemplateComponents] has_same_comp_str', has_same_comp_str)
-  console.log('[replaceTemplateComponents] has_same_comp_diff_variation_str', has_same_comp_diff_variation_str)
-  console.log('[replaceTemplateComponents] target_character_not_found_str', target_character_not_found_str)
+  if (import.meta.env.DEV) { console.log('[replaceTemplateComponents] to_be_modified_str', to_be_modified_str) }
+  if (import.meta.env.DEV) { console.log('[replaceTemplateComponents] stroke_undefined_str', stroke_undefined_str) }
+  if (import.meta.env.DEV) { console.log('[replaceTemplateComponents] origin_stroke_undefined_str', origin_stroke_undefined_str) }
+  if (import.meta.env.DEV) { console.log('[replaceTemplateComponents] part_undefined_str', part_undefined_str) }
+  if (import.meta.env.DEV) { console.log('[replaceTemplateComponents] to_be_added_dic_str', to_be_added_dic_str) }
+  if (import.meta.env.DEV) { console.log('[replaceTemplateComponents] to_be_modified_str_1', to_be_modified_str_1) }
+  if (import.meta.env.DEV) { console.log('[replaceTemplateComponents] to_be_modified_str_2', to_be_modified_str_2) }
+  if (import.meta.env.DEV) { console.log('[replaceTemplateComponents] has_same_comp_str', has_same_comp_str) }
+  if (import.meta.env.DEV) { console.log('[replaceTemplateComponents] has_same_comp_diff_variation_str', has_same_comp_diff_variation_str) }
+  if (import.meta.env.DEV) { console.log('[replaceTemplateComponents] target_character_not_found_str', target_character_not_found_str) }
 
   const total = metadataList.length
   const yieldToMain = options.yieldToMain

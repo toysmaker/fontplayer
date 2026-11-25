@@ -72,7 +72,7 @@ const createConfig = (config: ITableConfig) => {
 	
 	if (sfntVersionBytes) {
 		data = data.concat(sfntVersionBytes)
-		console.log(`✅ sfntVersion encoded: ${sfntVersionBytes.length} bytes [${sfntVersionBytes.join(', ')}]`)
+		if (import.meta.env.DEV) { console.log(`✅ sfntVersion encoded: ${sfntVersionBytes.length} bytes [${sfntVersionBytes.join(', ')}]`) }
 	} else {
 		console.error('❌ Failed to encode sfntVersion:', sfntVersion)
 	}
@@ -88,7 +88,7 @@ const createConfig = (config: ITableConfig) => {
 		}
 	}
 	
-	console.log(`✅ Config header: ${data.length} bytes total (expected: 12)`)
+	if (import.meta.env.DEV) { console.log(`✅ Config header: ${data.length} bytes total (expected: 12)`) }
 	if (data.length !== 12) {
 		console.error(`❌ Config header size mismatch! Got ${data.length}, expected 12`)
 	}
@@ -211,11 +211,11 @@ const create = async (tables: any, mark: string = '') => {
 	const hasCFFOutlines = !!tables['CFF ']
 	const sfntVersion = hasTrueTypeOutlines ? 0x00010000 : 'OTTO'
 	
-	console.log(`\n=== Font Format Detection ===`)
-	console.log(`Has glyf table: ${hasTrueTypeOutlines}`)
-	console.log(`Has CFF table: ${hasCFFOutlines}`)
-	console.log(`sfntVersion: ${typeof sfntVersion === 'number' ? '0x' + sfntVersion.toString(16).padStart(8, '0') : sfntVersion} (${hasTrueTypeOutlines ? 'TrueType' : 'CFF'})`)
-	console.log(`==============================\n`)
+	if (import.meta.env.DEV) { console.log(`\n=== Font Format Detection ===`) }
+	if (import.meta.env.DEV) { console.log(`Has glyf table: ${hasTrueTypeOutlines}`) }
+	if (import.meta.env.DEV) { console.log(`Has CFF table: ${hasCFFOutlines}`) }
+	if (import.meta.env.DEV) { console.log(`sfntVersion: ${typeof sfntVersion === 'number' ? '0x' + sfntVersion.toString(16).padStart(8, '0') : sfntVersion} (${hasTrueTypeOutlines ? 'TrueType' : 'CFF'})`) }
+	if (import.meta.env.DEV) { console.log(`==============================\n`) }
 	
 	const configData = createConfig({
 		sfntVersion: sfntVersion,
@@ -257,13 +257,13 @@ const create = async (tables: any, mark: string = '') => {
 		count++
 	}
 	
-	console.log(`\n📋 Processing ${keys.length} tables in order: ${keys.join(', ')}\n`)
+	if (import.meta.env.DEV) { console.log(`\n📋 Processing ${keys.length} tables in order: ${keys.join(', ')}\n`) }
 	reserveProgressBudget(keys.length + 1)
 	setProgressMessage('序列化 SFNT 表中…')
 	
 	for (let i = 0; i < keys.length; i++) {
 		const key = keys[i]
-		console.log(`⏳ [${i+1}/${keys.length}] Creating table: ${key}...`)
+		if (import.meta.env.DEV) { console.log(`⏳ [${i+1}/${keys.length}] Creating table: ${key}...`) }
 		const t = tables[key]
 		let tableData = null
 		const tableStart = Date.now()
@@ -273,11 +273,11 @@ const create = async (tables: any, mark: string = '') => {
 		if (key === 'loca' && (t as any)._needsRealOffsets) {
 			const glyfTableRef = (t as any)._glyfTableRef
 			if (glyfTableRef && (glyfTableRef as any)._generatedOffsets) {
-				console.log('\n=== Creating loca table with real offsets ===')
+				if (import.meta.env.DEV) { console.log('\n=== Creating loca table with real offsets ===') }
 				const realOffsets = (glyfTableRef as any)._generatedOffsets
-				console.log(`Using real offsets from glyf serialization: ${realOffsets.length} entries`)
-				console.log(`First offsets: [${realOffsets.slice(0, 5).join(', ')}...]`)
-				console.log(`Last offsets: [...${realOffsets.slice(-5).join(', ')}]`)
+				if (import.meta.env.DEV) { console.log(`Using real offsets from glyf serialization: ${realOffsets.length} entries`) }
+				if (import.meta.env.DEV) { console.log(`First offsets: [${realOffsets.slice(0, 5).join(', ')}...]`) }
+				if (import.meta.env.DEV) { console.log(`Last offsets: [...${realOffsets.slice(-5).join(', ')}]`) }
 				
 				// 创建正确的loca表对象
 				const realLocaTable = {
@@ -286,7 +286,7 @@ const create = async (tables: any, mark: string = '') => {
 				}
 				
 				tableData = tableTool[key].create(realLocaTable, { version: realLocaTable.version })
-				console.log('✅ loca table created with real offsets\n')
+				if (import.meta.env.DEV) { console.log('✅ loca table created with real offsets\n') }
 			} else {
 				console.error('❌ ERROR: glyf table was not serialized yet or has no offsets!')
 				tableData = tableTool[key].create(t)
@@ -299,13 +299,13 @@ const create = async (tables: any, mark: string = '') => {
 		if (tableData && typeof (tableData as any).then === 'function') {
 			tableData = await tableData
 		}
-		console.log(`   ✅ Table ${key} created: ${tableData.length} bytes`)
+		if (import.meta.env.DEV) { console.log(`   ✅ Table ${key} created: ${tableData.length} bytes`) }
 
-		console.log(`   ⏳ Computing checksum for ${key}...`)
+		if (import.meta.env.DEV) { console.log(`   ⏳ Computing checksum for ${key}...`) }
 		tablesDataMap[key] = tableData
 		let checkSum = computeCheckSum(tableData)
 		checkSum %= 0x100000000
-		console.log(`   ✅ Checksum for ${key}: 0x${checkSum.toString(16)}`)
+		if (import.meta.env.DEV) { console.log(`   ✅ Checksum for ${key}: 0x${checkSum.toString(16)}`) }
 		
 		if (key === 'head' && mark === 'final') {
 			const t2 = R.clone(t)
@@ -338,19 +338,19 @@ const create = async (tables: any, mark: string = '') => {
 		})
 		
 		if (key === 'name') {
-			console.log('=== NAME TABLE DEBUG ===')
-			console.log('Total checksum before name:', checksum)
-			console.log('Name table offset:', offset)
-			console.log('Name table length:', tableLength)
-			console.log('Name record data:', recordData)
-			console.log('Name checksum:', checkSum)
+			if (import.meta.env.DEV) { console.log('=== NAME TABLE DEBUG ===') }
+			if (import.meta.env.DEV) { console.log('Total checksum before name:', checksum) }
+			if (import.meta.env.DEV) { console.log('Name table offset:', offset) }
+			if (import.meta.env.DEV) { console.log('Name table length:', tableLength) }
+			if (import.meta.env.DEV) { console.log('Name record data:', recordData) }
+			if (import.meta.env.DEV) { console.log('Name checksum:', checkSum) }
 		}
 		
 		// 立即拼接recordData（按排序后的顺序）
 		recordsData = recordsData.concat(recordData)
 		
 		const tableDuration = Date.now() - tableStart
-		console.log(`   ⏱ ${key} table serialized in ${tableDuration}ms`)
+		if (import.meta.env.DEV) { console.log(`   ⏱ ${key} table serialized in ${tableDuration}ms`) }
 
 		checksum += computeCheckSum(recordData)
 		checksum %= 0x100000000 // 每次累加后都做模运算，防止溢出
@@ -377,29 +377,29 @@ const create = async (tables: any, mark: string = '') => {
 
 	checksum %= 0x100000000 // 最终确保checksum在32位范围内
 	
-	console.log('\n=== FINAL DATA ASSEMBLY ===')
-	console.log('Config data length:', configData.length)
-	console.log('Records data length:', recordsData.length)
-	console.log('Tables data length:', tablesData.length)
-	console.log('Total:', configData.length + recordsData.length + tablesData.length)
+	if (import.meta.env.DEV) { console.log('\n=== FINAL DATA ASSEMBLY ===') }
+	if (import.meta.env.DEV) { console.log('Config data length:', configData.length) }
+	if (import.meta.env.DEV) { console.log('Records data length:', recordsData.length) }
+	if (import.meta.env.DEV) { console.log('Tables data length:', tablesData.length) }
+	if (import.meta.env.DEV) { console.log('Total:', configData.length + recordsData.length + tablesData.length) }
 	
 	// 验证name record在最终数据中的位置
 	const nameRecordIndex = keys.indexOf('name')
 	if (nameRecordIndex >= 0) {
 		const nameRecordStart = configData.length + nameRecordIndex * 16
-		console.log('\n=== NAME RECORD VERIFICATION ===')
-		console.log('Name record index in sorted keys:', nameRecordIndex)
-		console.log('Name record should start at:', nameRecordStart)
+		if (import.meta.env.DEV) { console.log('\n=== NAME RECORD VERIFICATION ===') }
+		if (import.meta.env.DEV) { console.log('Name record index in sorted keys:', nameRecordIndex) }
+		if (import.meta.env.DEV) { console.log('Name record should start at:', nameRecordStart) }
 		
 		const finalData = [...configData, ...recordsData, ...tablesData]
-		console.log('Name record in final data [' + nameRecordStart + '-' + (nameRecordStart + 15) + ']:')
-		console.log(finalData.slice(nameRecordStart, nameRecordStart + 16))
-		console.log('  Tag:', finalData.slice(nameRecordStart, nameRecordStart + 4).map(b => String.fromCharCode(b)).join(''))
-		console.log('  CheckSum:', [finalData[nameRecordStart + 4], finalData[nameRecordStart + 5], finalData[nameRecordStart + 6], finalData[nameRecordStart + 7]])
-		console.log('  Offset:', (finalData[nameRecordStart + 8] << 24) | (finalData[nameRecordStart + 9] << 16) | (finalData[nameRecordStart + 10] << 8) | finalData[nameRecordStart + 11])
-		console.log('  Length:', (finalData[nameRecordStart + 12] << 24) | (finalData[nameRecordStart + 13] << 16) | (finalData[nameRecordStart + 14] << 8) | finalData[nameRecordStart + 15])
+		if (import.meta.env.DEV) { console.log('Name record in final data [' + nameRecordStart + '-' + (nameRecordStart + 15) + ']:') }
+		if (import.meta.env.DEV) { console.log(finalData.slice(nameRecordStart, nameRecordStart + 16)) }
+		if (import.meta.env.DEV) { console.log('  Tag:', finalData.slice(nameRecordStart, nameRecordStart + 4).map(b => String.fromCharCode(b)).join('')) }
+		if (import.meta.env.DEV) { console.log('  CheckSum:', [finalData[nameRecordStart + 4], finalData[nameRecordStart + 5], finalData[nameRecordStart + 6], finalData[nameRecordStart + 7]]) }
+		if (import.meta.env.DEV) { console.log('  Offset:', (finalData[nameRecordStart + 8] << 24) | (finalData[nameRecordStart + 9] << 16) | (finalData[nameRecordStart + 10] << 8) | finalData[nameRecordStart + 11]) }
+		if (import.meta.env.DEV) { console.log('  Length:', (finalData[nameRecordStart + 12] << 24) | (finalData[nameRecordStart + 13] << 16) | (finalData[nameRecordStart + 14] << 8) | finalData[nameRecordStart + 15]) }
 	}
-	console.log('===============================\n')
+	if (import.meta.env.DEV) { console.log('===============================\n') }
 	incrementProgress('合并 SFNT 数据', 1)
 
 	return {

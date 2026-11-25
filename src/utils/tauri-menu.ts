@@ -12,7 +12,7 @@ import { isTauri } from '@/utils/env'
  */
 export async function initTauriMenu() {
   if (!isTauri()) {
-    console.warn('initTauriMenu: Not in Tauri environment')
+    if (import.meta.env.DEV) { console.warn('initTauriMenu: Not in Tauri environment') }
     return
   }
 
@@ -32,7 +32,7 @@ export async function initTauriMenu() {
     // 注意：这些事件名称需要与 Rust 端发送的事件名称匹配
     // 在 Tauri 2.x 中，菜单事件通过 app.emit() 发送
     listen('create-file', async () => {
-      console.log('File -> New')
+      if (import.meta.env.DEV) { console.log('File -> New') }
       try {
         const { useProjectStore } = await import('@/stores/project')
         const projectStore = useProjectStore()
@@ -58,7 +58,7 @@ export async function initTauriMenu() {
     })
     
     listen('open-file', async () => {
-      console.log('File -> Open')
+      if (import.meta.env.DEV) { console.log('File -> Open') }
       try {
         const { useProjectStore } = await import('@/stores/project')
         const projectStore = useProjectStore()
@@ -78,7 +78,7 @@ export async function initTauriMenu() {
     })
     
     listen('save-file', async () => {
-      console.log('File -> Save')
+      if (import.meta.env.DEV) { console.log('File -> Save') }
       try {
         const { fileHandler } = await import('@/features/editor/menus/FileHandler')
         await fileHandler.saveProjectTauriRememberPath()
@@ -88,7 +88,7 @@ export async function initTauriMenu() {
     })
     
     listen('save-as', async () => {
-      console.log('File -> Save As')
+      if (import.meta.env.DEV) { console.log('File -> Save As') }
       try {
         const { fileHandler } = await import('@/features/editor/menus/FileHandler')
         await fileHandler.saveProjectTauriAs()
@@ -114,7 +114,7 @@ export async function initTauriMenu() {
     })
     
     listen('export-svg', () => {
-      console.log('File -> Export SVG')
+      if (import.meta.env.DEV) { console.log('File -> Export SVG') }
       // TODO: 实现导出 SVG 逻辑
     })
 
@@ -132,12 +132,12 @@ export async function initTauriMenu() {
     
     // 监听编辑菜单事件
     listen('undo', () => {
-      console.log('Edit -> Undo')
+      if (import.meta.env.DEV) { console.log('Edit -> Undo') }
       // TODO: 实现撤销逻辑
     })
     
     listen('redo', () => {
-      console.log('Edit -> Redo')
+      if (import.meta.env.DEV) { console.log('Edit -> Redo') }
       // TODO: 实现重做逻辑
     })
     
@@ -192,7 +192,7 @@ export async function initTauriMenu() {
       window.dispatchEvent(new CustomEvent('editor-component-boolean', { detail: { operation: 'intersect' } }))
     })
     listen('export-icon-dataset', async () => {
-      if (import.meta.env.DEV) console.log('[tauri-menu] export-icon-dataset triggered')
+      if (import.meta.env.DEV) { console.log('[tauri-menu] export-icon-dataset triggered') }
       try {
         const { exportIconDataset } = await import('@/features/editor/services/ExportIconDatasetService')
         await exportIconDataset((msg) => alert(msg))
@@ -203,7 +203,7 @@ export async function initTauriMenu() {
     })
 
     listen('save-char-pngs', async () => {
-      if (import.meta.env.DEV) console.warn('[tauri-menu] save-char-pngs event received!')
+      if (import.meta.env.DEV) { console.warn('[tauri-menu] save-char-pngs event received!') }
       try {
         const { useProjectStore } = await import('@/stores/project')
         const file = useProjectStore().selectedFile
@@ -298,7 +298,7 @@ export async function initTauriMenu() {
 
     // 生成训练数据 v1
     listen('generate-training-data-v1', async () => {
-      if (import.meta.env.DEV) console.log('[tauri-menu] generate-training-data-v1 triggered')
+      if (import.meta.env.DEV) { console.log('[tauri-menu] generate-training-data-v1 triggered') }
       try {
         const { generateTrainingDataV1 } = await import(
           '@/features/advancedEdit/scripts/trainingDataV1'
@@ -312,7 +312,7 @@ export async function initTauriMenu() {
 
     // 生成训练数据 v2（宋体/仿宋字重强制改为 50）
     listen('generate-training-data-v2', async () => {
-      if (import.meta.env.DEV) console.log('[tauri-menu] generate-training-data-v2 triggered')
+      if (import.meta.env.DEV) { console.log('[tauri-menu] generate-training-data-v2 triggered') }
       try {
         const { generateTrainingDataV2 } = await import(
           '@/features/advancedEdit/scripts/trainingDataV2'
@@ -403,7 +403,7 @@ export async function initTauriMenu() {
 
     // 保存笔画训练数据：按风格标签分组，使用指定字重
     listen('save-stroke-training-data', async () => {
-      if (import.meta.env.DEV) console.log('[tauri-menu] save-stroke-training-data triggered')
+      if (import.meta.env.DEV) { console.log('[tauri-menu] save-stroke-training-data triggered') }
       try {
         const { useProjectStore } = await import('@/stores/project')
         const file = useProjectStore().selectedFile
@@ -542,12 +542,12 @@ export async function initTauriMenu() {
 
     // 监听字符菜单事件
     listen('add-character', () => {
-      console.log('Character -> Add Character')
+      if (import.meta.env.DEV) { console.log('Character -> Add Character') }
       window.dispatchEvent(new CustomEvent('editor-add-character'))
     })
 
     listen('add-icon', () => {
-      console.log('Character -> Add Icon')
+      if (import.meta.env.DEV) { console.log('Character -> Add Icon') }
       window.dispatchEvent(new CustomEvent('editor-add-icon'))
     })
 
@@ -571,7 +571,7 @@ export async function initTauriMenu() {
       })
     }
     
-    console.log('Tauri menu event listeners initialized')
+    if (import.meta.env.DEV) { console.log('Tauri menu event listeners initialized') }
   } catch (error) {
     console.error('Failed to initialize Tauri menu listeners:', error)
   }

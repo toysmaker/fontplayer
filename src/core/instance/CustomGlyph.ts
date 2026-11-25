@@ -348,7 +348,7 @@ export class CustomGlyph implements IInstance {
     if (!isGlyphSkeleton) {
     this._components.forEach((component: any, index: number) => {
       if (component._postProcessed && component.contour?.length) {
-        if (import.meta.env.DEV) console.log('[render] drawEditContour glyph=' + this._glyph.name + ' offset=(' + offset.x + ',' + offset.y + ')')
+        if (import.meta.env.DEV) { console.log('[render] drawEditContour glyph=' + this._glyph.name + ' offset=(' + offset.x + ',' + offset.y + ')') }
         this.drawEditContour(ctx, component.contour as IContour, offset, scale)
       } else if (component.render) {
         const hasOwnColor = fontRenderStyle.value === 'color' && !!component.fillColor
@@ -774,7 +774,7 @@ export class CustomGlyph implements IInstance {
   setData(data: any) {
     // TODO: 实现数据设置逻辑
     // 需要从原代码迁移 setData 方法
-    console.warn('CustomGlyph.setData() not implemented yet')
+    if (import.meta.env.DEV) { console.warn('CustomGlyph.setData() not implemented yet') }
   }
 
   /**
@@ -1004,7 +1004,7 @@ export class CustomGlyph implements IInstance {
   getRatioLayout(value: string): number {
     // TODO: 实现 getRatioLayout 函数
     // 简化版本：返回 0
-    console.warn('getRatioLayout not fully implemented')
+    if (import.meta.env.DEV) { console.warn('getRatioLayout not fully implemented') }
     return 0
   }
 

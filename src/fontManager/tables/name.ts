@@ -949,7 +949,7 @@ const addAxisNamesToTable = (
 				'opsz': 'Optical Size'
 			}
 			axisName = defaultNames[axisTag] || axisTag.toUpperCase()
-			console.warn(`⚠️ Axis '${axisTag}' has no name, using default: '${axisName}'`)
+			if (import.meta.env.DEV) { console.warn(`⚠️ Axis '${axisTag}' has no name, using default: '${axisName}'`) }
 		}
 		
 		maxNameID++
@@ -958,7 +958,7 @@ const addAxisNamesToTable = (
 		// 更新axis对象的nameID（如果传入的是引用，会直接修改）
 		axis.nameID = axisNameID
 		
-		console.log(`📝 Creating axis name: tag='${axisTag}', name='${axisName}', nameID=${axisNameID}`)
+		if (import.meta.env.DEV) { console.log(`📝 Creating axis name: tag='${axisTag}', name='${axisName}', nameID=${axisNameID}`) }
 		
 		// 添加英文名称
 		names.push({
@@ -1017,7 +1017,7 @@ const generatePostScriptName = (familyName: string, subfamilyName: string): stri
 	// 连接为 FamilyName-SubfamilyName 格式
 	const psName = `${psFamily}-${psSubfamily}`.slice(0, 63)
 	
-	console.log(`📝 Generated PostScript Name: "${familyName}" + "${subfamilyName}" → "${psName}"`)
+	if (import.meta.env.DEV) { console.log(`📝 Generated PostScript Name: "${familyName}" + "${subfamilyName}" → "${psName}"`) }
 	
 	return psName
 }
@@ -1208,11 +1208,11 @@ const createTable2 = (names: Array<any>, variants?: any) => {
 	}
 	
 	// 调试输出
-	console.log('=== createTable2 Result ===')
-	console.log(`nameRecord.length: ${nameRecord.length}`)
-	console.log(`storageOffset: ${nameTable.storageOffset}`)
-	console.log(`stringPool.length: ${stringPool.length}`)
-	console.log(`Expected table size: ${nameTable.storageOffset + stringPool.length}`)
+	if (import.meta.env.DEV) { console.log('=== createTable2 Result ===') }
+	if (import.meta.env.DEV) { console.log(`nameRecord.length: ${nameRecord.length}`) }
+	if (import.meta.env.DEV) { console.log(`storageOffset: ${nameTable.storageOffset}`) }
+	if (import.meta.env.DEV) { console.log(`stringPool.length: ${stringPool.length}`) }
+	if (import.meta.env.DEV) { console.log(`Expected table size: ${nameTable.storageOffset + stringPool.length}`) }
 	
 	return nameTable
 }
@@ -1415,10 +1415,10 @@ const create = (table: INameTable) => {
 	// name表必须按照严格的顺序写入数据
 	// name table must be written in strict order
 	
-	console.log('\n=== Name Table Binary Generation ===')
-	console.log(`Input: version=${table.version}, count=${table.count}, storageOffset=${table.storageOffset}`)
-	console.log(`nameRecord count: ${table.nameRecord?.length}`)
-	console.log(`stringPool size: ${table.stringPool?.length}`)
+	if (import.meta.env.DEV) { console.log('\n=== Name Table Binary Generation ===') }
+	if (import.meta.env.DEV) { console.log(`Input: version=${table.version}, count=${table.count}, storageOffset=${table.storageOffset}`) }
+	if (import.meta.env.DEV) { console.log(`nameRecord count: ${table.nameRecord?.length}`) }
+	if (import.meta.env.DEV) { console.log(`stringPool size: ${table.stringPool?.length}`) }
 	
 	// 1. 写入表头 (6字节)
 	// Write table header (6 bytes)
@@ -1475,20 +1475,20 @@ const create = (table: INameTable) => {
 	const beforeStringPool = data.length
 	if (table.stringPool && table.stringPool.length > 0) {
 		data = data.concat(table.stringPool)
-		console.log(`StringPool added: ${data.length - beforeStringPool} bytes`)
+		if (import.meta.env.DEV) { console.log(`StringPool added: ${data.length - beforeStringPool} bytes`) }
 	} else {
-		console.log('StringPool is empty or undefined')
+		if (import.meta.env.DEV) { console.log('StringPool is empty or undefined') }
 	}
 	
-	console.log(`\nFinal binary size: ${data.length} bytes`)
-	console.log(`Expected: ${6 + (table.nameRecord?.length || 0) * 12 + (table.stringPool?.length || 0)} bytes`)
+	if (import.meta.env.DEV) { console.log(`\nFinal binary size: ${data.length} bytes`) }
+	if (import.meta.env.DEV) { console.log(`Expected: ${6 + (table.nameRecord?.length || 0) * 12 + (table.stringPool?.length || 0)} bytes`) }
 	
 	if (data.length !== (6 + (table.nameRecord?.length || 0) * 12 + (table.stringPool?.length || 0))) {
 		console.error('❌ Binary size mismatch!')
 	} else {
-		console.log('✅ Binary size correct')
+		if (import.meta.env.DEV) { console.log('✅ Binary size correct') }
 	}
-	console.log('=====================================\n')
+	if (import.meta.env.DEV) { console.log('=====================================\n') }
 	
 	return data
 }

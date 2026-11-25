@@ -147,14 +147,14 @@ export function createFromCharacters(characters: Array<any>): ICOLRTable {
   // 验证：确保所有 baseGlyphRecords 的 glyphID 都在有效范围内
   for (const baseRecord of baseGlyphRecords) {
     if (baseRecord.glyphID < 0 || baseRecord.glyphID >= characters.length) {
-      console.warn(`⚠️ Warning: BaseGlyphRecord glyphID ${baseRecord.glyphID} is out of range [0, ${characters.length - 1}]`)
+      if (import.meta.env.DEV) { console.warn(`⚠️ Warning: BaseGlyphRecord glyphID ${baseRecord.glyphID} is out of range [0, ${characters.length - 1}]`) }
     }
     // 验证 firstLayerIndex 和 numLayers
     if (baseRecord.firstLayerIndex < 0 || baseRecord.firstLayerIndex >= layerRecords.length) {
-      console.warn(`⚠️ Warning: BaseGlyphRecord firstLayerIndex ${baseRecord.firstLayerIndex} is out of range [0, ${layerRecords.length - 1}]`)
+      if (import.meta.env.DEV) { console.warn(`⚠️ Warning: BaseGlyphRecord firstLayerIndex ${baseRecord.firstLayerIndex} is out of range [0, ${layerRecords.length - 1}]`) }
     }
     if (baseRecord.firstLayerIndex + baseRecord.numLayers > layerRecords.length) {
-      console.warn(`⚠️ Warning: BaseGlyphRecord layer range [${baseRecord.firstLayerIndex}, ${baseRecord.firstLayerIndex + baseRecord.numLayers}) exceeds layerRecords length ${layerRecords.length}`)
+      if (import.meta.env.DEV) { console.warn(`⚠️ Warning: BaseGlyphRecord layer range [${baseRecord.firstLayerIndex}, ${baseRecord.firstLayerIndex + baseRecord.numLayers}) exceeds layerRecords length ${layerRecords.length}`) }
     }
   }
   
@@ -227,24 +227,24 @@ export function createFromCharactersV0(
   const minLayerGlyphID = characters.length
   const maxLayerGlyphID = totalGlyphs - 1
   
-  console.log(`\n🔍 COLR Table Validation:`)
-  console.log(`   Base glyphs: ${characters.length} (IDs: 0-${characters.length - 1})`)
-  console.log(`   Layer glyphs: ${layerRecords.length} (IDs: ${minLayerGlyphID}-${maxLayerGlyphID})`)
-  console.log(`   BaseGlyphRecords: ${baseGlyphRecords.length}`)
+  if (import.meta.env.DEV) { console.log(`\n🔍 COLR Table Validation:`) }
+  if (import.meta.env.DEV) { console.log(`   Base glyphs: ${characters.length} (IDs: 0-${characters.length - 1})`) }
+  if (import.meta.env.DEV) { console.log(`   Layer glyphs: ${layerRecords.length} (IDs: ${minLayerGlyphID}-${maxLayerGlyphID})`) }
+  if (import.meta.env.DEV) { console.log(`   BaseGlyphRecords: ${baseGlyphRecords.length}`) }
   
   for (let i = 0; i < baseGlyphRecords.length; i++) {
     const baseRecord = baseGlyphRecords[i]
-    console.log(`   BaseGlyph[${i}]: glyphID=${baseRecord.glyphID}, firstLayerIndex=${baseRecord.firstLayerIndex}, numLayers=${baseRecord.numLayers}`)
+    if (import.meta.env.DEV) { console.log(`   BaseGlyph[${i}]: glyphID=${baseRecord.glyphID}, firstLayerIndex=${baseRecord.firstLayerIndex}, numLayers=${baseRecord.numLayers}`) }
     
     if (baseRecord.glyphID < 0 || baseRecord.glyphID >= characters.length) {
-      console.warn(`   ⚠️ Warning: BaseGlyphRecord[${i}] glyphID ${baseRecord.glyphID} is out of range [0, ${characters.length - 1}]`)
+      if (import.meta.env.DEV) { console.warn(`   ⚠️ Warning: BaseGlyphRecord[${i}] glyphID ${baseRecord.glyphID} is out of range [0, ${characters.length - 1}]`) }
     }
     // 验证 firstLayerIndex 和 numLayers
     if (baseRecord.firstLayerIndex < 0 || baseRecord.firstLayerIndex >= layerRecords.length) {
-      console.warn(`   ⚠️ Warning: BaseGlyphRecord[${i}] firstLayerIndex ${baseRecord.firstLayerIndex} is out of range [0, ${layerRecords.length - 1}]`)
+      if (import.meta.env.DEV) { console.warn(`   ⚠️ Warning: BaseGlyphRecord[${i}] firstLayerIndex ${baseRecord.firstLayerIndex} is out of range [0, ${layerRecords.length - 1}]`) }
     }
     if (baseRecord.firstLayerIndex + baseRecord.numLayers > layerRecords.length) {
-      console.warn(`   ⚠️ Warning: BaseGlyphRecord[${i}] layer range [${baseRecord.firstLayerIndex}, ${baseRecord.firstLayerIndex + baseRecord.numLayers}) exceeds layerRecords length ${layerRecords.length}`)
+      if (import.meta.env.DEV) { console.warn(`   ⚠️ Warning: BaseGlyphRecord[${i}] layer range [${baseRecord.firstLayerIndex}, ${baseRecord.firstLayerIndex + baseRecord.numLayers}) exceeds layerRecords length ${layerRecords.length}`) }
     }
     
     // 显示该 base glyph 的所有 layer records
@@ -252,14 +252,14 @@ export function createFromCharactersV0(
       const layerIdx = baseRecord.firstLayerIndex + j
       if (layerIdx < layerRecords.length) {
         const layerRecord = layerRecords[layerIdx]
-        console.log(`     Layer[${j}]: glyphID=${layerRecord.glyphID}, paletteIndex=${layerRecord.paletteIndex}`)
+        if (import.meta.env.DEV) { console.log(`     Layer[${j}]: glyphID=${layerRecord.glyphID}, paletteIndex=${layerRecord.paletteIndex}`) }
         if (layerRecord.glyphID < minLayerGlyphID || layerRecord.glyphID > maxLayerGlyphID) {
-          console.warn(`       ⚠️ Warning: LayerRecord glyphID ${layerRecord.glyphID} is out of range [${minLayerGlyphID}, ${maxLayerGlyphID}]`)
+          if (import.meta.env.DEV) { console.warn(`       ⚠️ Warning: LayerRecord glyphID ${layerRecord.glyphID} is out of range [${minLayerGlyphID}, ${maxLayerGlyphID}]`) }
         }
       }
     }
   }
-  console.log(`\n`)
+  if (import.meta.env.DEV) { console.log(`\n`) }
   
   return {
     version: 0,

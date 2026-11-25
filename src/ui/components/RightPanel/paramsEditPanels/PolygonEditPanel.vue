@@ -64,7 +64,7 @@ const clearPolyFillColor = () => handleChangeFillColor(null)
 
 const transformToPath = () => {
   // TODO: 实现转换为路径功能
-  console.warn('transformToPath not implemented yet')
+  if (import.meta.env.DEV) { console.warn('transformToPath not implemented yet') }
 }
 </script>
 

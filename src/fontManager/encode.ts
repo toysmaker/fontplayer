@@ -75,7 +75,7 @@ const encoder = {
 		]
 		// 只对版本号打印日志（大于0x00010000的值）
 		if (v >= 0x00010000 || v === 0x00030000 || v === 0x00005000) {
-			console.log(`[encoder.Fixed] Version: input=0x${v.toString(16).padStart(8, '0')}, scaled=${scaledValue}, bytes=[${result.join(', ')}]`)
+			if (import.meta.env.DEV) { console.log(`[encoder.Fixed] Version: input=0x${v.toString(16).padStart(8, '0')}, scaled=${scaledValue}, bytes=[${result.join(', ')}]`) }
 		}
 		return result
 	},
@@ -126,7 +126,7 @@ const encoder = {
 		
 		// Version16Dot16 通常传入的是已编码的十六进制数（如 0x00010000）
 		// 不需要再乘以 0x10000，直接拆分为4个字节即可
-		console.log(`[encoder.Version16Dot16] Input: 0x${v.toString(16).padStart(8, '0')} (${v})`)
+		if (import.meta.env.DEV) { console.log(`[encoder.Version16Dot16] Input: 0x${v.toString(16).padStart(8, '0')} (${v})`) }
 		
 		const result = [
 			(v >> 24) & 0xFF,
@@ -135,7 +135,7 @@ const encoder = {
 			v & 0xFF
 		]
 		
-		console.log(`[encoder.Version16Dot16] Output: [${result.join(', ')}]`)
+		if (import.meta.env.DEV) { console.log(`[encoder.Version16Dot16] Output: [${result.join(', ')}]`) }
 		return result
 	},
 	Card8: (v: IValue) => {

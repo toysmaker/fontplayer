@@ -119,8 +119,8 @@ const create = (table: IMaxpTable) => {
 	const version = table.version || 0x00005000
 	const isTrueType = version === 0x00010000
 	
-	console.log(`\n=== Creating maxp table ===`)
-	console.log(`Version: 0x${version.toString(16).padStart(8, '0')} (${isTrueType ? 'TrueType' : 'CFF'})`)
+	if (import.meta.env.DEV) { console.log(`\n=== Creating maxp table ===`) }
+	if (import.meta.env.DEV) { console.log(`Version: 0x${version.toString(16).padStart(8, '0')} (${isTrueType ? 'TrueType' : 'CFF'})`) }
 	
 	// 按照OpenType规范的严格字段顺序输出
 	// 1. version (4字节)
@@ -155,15 +155,15 @@ const create = (table: IMaxpTable) => {
 			if (bytes) data = data.concat(bytes)
 		}
 		
-		console.log(`TrueType maxp: ${data.length} bytes`)
-		console.log(`  numGlyphs: ${table.numGlyphs}`)
-		console.log(`  maxPoints: ${table.maxPoints || 0}`)
-		console.log(`  maxContours: ${table.maxContours || 0}`)
+		if (import.meta.env.DEV) { console.log(`TrueType maxp: ${data.length} bytes`) }
+		if (import.meta.env.DEV) { console.log(`  numGlyphs: ${table.numGlyphs}`) }
+		if (import.meta.env.DEV) { console.log(`  maxPoints: ${table.maxPoints || 0}`) }
+		if (import.meta.env.DEV) { console.log(`  maxContours: ${table.maxContours || 0}`) }
 	} else {
-		console.log(`CFF maxp: ${data.length} bytes`)
+		if (import.meta.env.DEV) { console.log(`CFF maxp: ${data.length} bytes`) }
 	}
 	
-	console.log(`===========================\n`)
+	if (import.meta.env.DEV) { console.log(`===========================\n`) }
 	
 	return data
 }

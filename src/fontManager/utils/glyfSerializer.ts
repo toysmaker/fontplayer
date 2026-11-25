@@ -174,7 +174,7 @@ export function serializeSimpleGlyph(glyph: IGlyphTable): number[] {
 	}
 	
 	if (allPoints.length === 0) {
-		console.warn('⚠️ Glyph has contours but no points!')
+		if (import.meta.env.DEV) { console.warn('⚠️ Glyph has contours but no points!') }
 		return data
 	}
 	
@@ -243,8 +243,8 @@ export async function serializeGlyfTable(
 	data: number[]
 	offsets: number[]
 }> {
-	console.log('\n=== Serializing glyf Table (OpenType compliant) ===')
-	console.log(`Processing ${glyphTables.length} glyphs...`)
+	if (import.meta.env.DEV) { console.log('\n=== Serializing glyf Table (OpenType compliant) ===') }
+	if (import.meta.env.DEV) { console.log(`Processing ${glyphTables.length} glyphs...`) }
 	
 	const allData: number[] = []
 	const offsets: number[] = []
@@ -264,9 +264,9 @@ export async function serializeGlyfTable(
 		if (glyph.numberOfContours === 0) {
 			// 空字形不添加数据，offset保持不变
 			if (i < 3 || i >= glyphTables.length - 1) {
-				console.log(`  Glyph ${i}: empty (0 bytes)`)
+				if (import.meta.env.DEV) { console.log(`  Glyph ${i}: empty (0 bytes)`) }
 			} else if (i === 3) {
-				console.log(`  ...`)
+				if (import.meta.env.DEV) { console.log(`  ...`) }
 			}
 			incrementProgress(undefined, 1)
 			await yieldToEventLoop(i + 1, chunkSize)
@@ -284,9 +284,9 @@ export async function serializeGlyfTable(
 		if (glyph.contours?.length) {
 			const totalPoints = glyph.contours.reduce((sum, c) => sum + c.points.length, 0)
 			if (i < 3 || i >= glyphTables.length - 1) {
-				console.log(`  Glyph ${i}: ${glyphData.length} bytes, ${totalPoints} points, offset ${currentOffset}`)
+				if (import.meta.env.DEV) { console.log(`  Glyph ${i}: ${glyphData.length} bytes, ${totalPoints} points, offset ${currentOffset}`) }
 			} else if (i === 3) {
-				console.log('  ...')
+				if (import.meta.env.DEV) { console.log('  ...') }
 			}
 		}
 		
@@ -299,11 +299,11 @@ export async function serializeGlyfTable(
 	// 最后一个offset（指向表末尾）
 	offsets.push(currentOffset)
 	
-	console.log(`✅ glyf table serialized: ${allData.length} bytes total`)
-	console.log(`   Offsets: ${offsets.length} entries`)
-	console.log(`   First offsets: [${offsets.slice(0, 5).join(', ')}...]`)
-	console.log(`   Last offsets: [...${offsets.slice(-5).join(', ')}]`)
-	console.log('==============================================\n')
+	if (import.meta.env.DEV) { console.log(`✅ glyf table serialized: ${allData.length} bytes total`) }
+	if (import.meta.env.DEV) { console.log(`   Offsets: ${offsets.length} entries`) }
+	if (import.meta.env.DEV) { console.log(`   First offsets: [${offsets.slice(0, 5).join(', ')}...]`) }
+	if (import.meta.env.DEV) { console.log(`   Last offsets: [...${offsets.slice(-5).join(', ')}]`) }
+	if (import.meta.env.DEV) { console.log('==============================================\n') }
 	
 	return {
 		data: allData,

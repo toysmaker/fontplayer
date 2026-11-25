@@ -154,7 +154,7 @@ const _handleConfirm = async () => {
     if (!existingStyles.has(selectedStyle)) {
       const allStrokes = await tmplStore.getStrokes()
       const matched = allStrokes.filter((g: any) => g.style === selectedStyle)
-      if (import.meta.env.DEV) console.log('[AddChar] style:', selectedStyle, 'existingStyles:', [...existingStyles], 'cachedStrokes:', allStrokes.length, 'matched:', matched.length)
+      if (import.meta.env.DEV) { console.log('[AddChar] style:', selectedStyle, 'existingStyles:', [...existingStyles], 'cachedStrokes:', allStrokes.length, 'matched:', matched.length) }
       if (matched.length > 0) {
         for (const sg of matched) {
           const clone = JSON.parse(JSON.stringify(sg)); if (file.stroke_glyphs!.some((g: any) => g.uuid === clone.uuid)) clone.uuid = genUUID()

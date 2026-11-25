@@ -98,7 +98,7 @@ function logGlyphSel(
   extra?: Record<string, unknown>,
 ): void {
   if (!devOnly) return
-  console.log(`[GlyphSel] ${phase}`, { uuid: glyph.uuid, name: glyph.name, ...(extra ?? {}) })
+  if (import.meta.env.DEV) { console.log(`[GlyphSel] ${phase}`, { uuid: glyph.uuid, name: glyph.name, ...(extra ?? {}) }) }
 }
 
 function sampleCanvasCenterAlpha(canvas: HTMLCanvasElement): number | null {
@@ -188,7 +188,7 @@ export class GlyphRenderer {
             }
           }
         } catch (error) {
-          console.warn(`[GlyphRenderer] Failed to load preview from IndexedDB for ${glyph.uuid}:`, error)
+          if (import.meta.env.DEV) { console.warn(`[GlyphRenderer] Failed to load preview from IndexedDB for ${glyph.uuid}:`, error) }
           nonzeroContours = null
         }
       }
@@ -235,14 +235,14 @@ export class GlyphRenderer {
                   ...summarizeGlyphInstanceForSel(instanceForContours, glyph, instanceKey, poolGet),
                   note: '优先使用 getPooledInstance(key)；与 acquire 时变量应为同一引用（否则曾存在双单例）',
                 })
-                console.log('[GlyphSel] instanceAfterScript_rawObject', instanceForContours)
+                if (import.meta.env.DEV) { console.log('[GlyphSel] instanceAfterScript_rawObject', instanceForContours) }
               }
               components = instanceForContours.components || []
             } finally {
               instanceManager.releaseTemporaryInstance(instanceKey)
             }
           } catch (error) {
-            console.warn(`[GlyphRenderer] Failed to execute script for ${glyph.uuid}:`, error)
+            if (import.meta.env.DEV) { console.warn(`[GlyphRenderer] Failed to execute script for ${glyph.uuid}:`, error) }
           }
         }
 

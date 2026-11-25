@@ -11,6 +11,7 @@ import { distance, rotatePoint, inComponentBound, leftTop, leftBottom, rightTop,
 import { mapCanvasX, mapCanvasY, mapCanvasWidth, mapCanvasHeight } from '@/utils/canvas'
 import type { IComponent, IPenComponent, IGlyphComponent, ICustomGlyph, IPolygonComponent, IRectangleComponent, IEllipseComponent } from '@/core/types'
 import { computeGlyphComponentBoundingBox } from '@/core/utils/glyphBounds'
+import { glyphDragActive } from '@/features/tools/glyphDragger/dragState'
 import { getStrokeWidth } from '@/utils/canvas-utils'
 import { PenSelectTool } from './PenSelectTool'
 import { instanceManager } from '@/core/instance/InstanceManager'
@@ -613,10 +614,15 @@ export class SelectTool extends BaseTool {
    * 鼠标移动事件
    */
   private onMouseMove(e: MouseEvent): void {
+    // 字形拖拽期间: 命中测试(逐组件遍历)对每 mousemove 来说是 20+ 组件字符的昂贵开销,
+    // 拖拽由 glyphDragger 全权处理, 这里直接跳过
+    if (glyphDragActive.value) {
+      return
+    }
     const characterStore = useCharacterStore()
     const glyphStore = useGlyphStore()
     const isGlyph = this.config.mode === 'glyph'
-    
+
     const selectedComponent = isGlyph ? (glyphStore as any).selectedComponent : (characterStore as any).selectedComponent
     
     // 检查是否是钢笔组件且处于编辑模式
@@ -631,10 +637,12 @@ export class SelectTool extends BaseTool {
     
     // 如果选中的是字形组件，且正在拖拽（mousedown），让 glyphDragger 处理，SelectTool 不处理
     if (this.mousedown && selectedComponent && selectedComponent.type === 'glyph') {
-      console.log('[SelectTool.onMouseMove] Skipping - glyph component drag handled by glyphDragger:', {
-        componentUUID: selectedComponent.uuid,
-        selectControl: this.selectControl
-      })
+      if (import.meta.env.DEV) {
+        console.log('[SelectTool.onMouseMove] Skipping - glyph component drag handled by glyphDragger:', {
+          componentUUID: selectedComponent.uuid,
+          selectControl: this.selectControl
+        })
+      }
       return
     }
     

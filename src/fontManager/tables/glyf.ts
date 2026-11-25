@@ -413,10 +413,10 @@ const parseGlyphCoordinate = (decoder, flag, previousValue, shortVectorBitMask, 
  * @returns 原始数据数组
  */
 const create = async (table: IGlyfTable) => {
-	console.log('\n=== glyf.create() called ===')
-	console.log('table type:', typeof table)
-	console.log('table.glyphTables exists?', !!table.glyphTables)
-	console.log('table.glyphTables is array?', Array.isArray(table.glyphTables))
+	if (import.meta.env.DEV) { console.log('\n=== glyf.create() called ===') }
+	if (import.meta.env.DEV) { console.log('table type:', typeof table) }
+	if (import.meta.env.DEV) { console.log('table.glyphTables exists?', !!table.glyphTables) }
+	if (import.meta.env.DEV) { console.log('table.glyphTables is array?', Array.isArray(table.glyphTables)) }
 	
 	// 验证输入
 	if (!table || !table.glyphTables || !Array.isArray(table.glyphTables)) {
@@ -434,7 +434,7 @@ const create = async (table: IGlyfTable) => {
 	// 注意：这是一个临时方案，理想情况下应该重构架构
 	;(table as any)._generatedOffsets = result.offsets
 	
-	console.log('glyf.create() complete\n')
+	if (import.meta.env.DEV) { console.log('glyf.create() complete\n') }
 	
 	return result.data
 }

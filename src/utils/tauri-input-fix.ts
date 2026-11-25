@@ -76,7 +76,7 @@ export async function ensureInputBlur(formData?: any, formRef?: any): Promise<vo
         })
       }
     } catch (error) {
-      console.warn('Failed to sync input values:', error)
+      if (import.meta.env.DEV) { console.warn('Failed to sync input values:', error) }
     }
   }
 

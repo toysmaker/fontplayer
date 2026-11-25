@@ -198,7 +198,7 @@ export function createFromLayers(characters: Array<any>): ICPALTable {
         color.green < 0 || color.green > 255 ||
         color.blue < 0 || color.blue > 255 ||
         color.alpha < 0 || color.alpha > 255) {
-      console.warn(`⚠️ Warning: Color value out of range: rgba(${color.red}, ${color.green}, ${color.blue}, ${color.alpha})`)
+      if (import.meta.env.DEV) { console.warn(`⚠️ Warning: Color value out of range: rgba(${color.red}, ${color.green}, ${color.blue}, ${color.alpha})`) }
     }
   }
   

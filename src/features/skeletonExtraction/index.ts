@@ -139,7 +139,7 @@ export function buildSkeletonFromPolylines(
   // 过滤掉 joints 为空的笔画（被 filterShortArcs 删除的）
   const validStrokes = strokes.filter(s => Object.keys(s.joints).length >= 2)
   if (import.meta.env.DEV && validStrokes.length < strokes.length) {
-    console.log(`[SkeletonExtraction] Filtered ${strokes.length - validStrokes.length} empty-joint strokes`)
+    if (import.meta.env.DEV) { console.log(`[SkeletonExtraction] Filtered ${strokes.length - validStrokes.length} empty-joint strokes`) }
   }
 
   // 保持与 mergePolylines 输出一致的顺序
@@ -162,7 +162,7 @@ export async function extractSkeletonFromImageFile(): Promise<ICharacterSkeleton
     const imageData = await loadImageToCanvas()
 
     if (!imageData) {
-      if (import.meta.env.DEV) console.log('[SkeletonExtraction] No image selected')
+      if (import.meta.env.DEV) { console.log('[SkeletonExtraction] No image selected') }
       return null
     }
 
@@ -201,7 +201,7 @@ export async function extractSkeletonFromImageFile(): Promise<ICharacterSkeleton
     }
 
     if (!polylines || polylines.length === 0) {
-      if (import.meta.env.DEV) console.warn('[SkeletonExtraction] No polylines extracted')
+      if (import.meta.env.DEV) { console.warn('[SkeletonExtraction] No polylines extracted') }
       return null
     }
 
@@ -349,7 +349,7 @@ function traceSkeletonInJS(imageData: ImageData): Array<Array<[number, number]>>
     if (gray[i] < 128) darkCount++
   }
   if (darkCount > W*H/2) {
-    if (import.meta.env.DEV) console.log('[SkeletonExtraction] Auto-inverting')
+    if (import.meta.env.DEV) { console.log('[SkeletonExtraction] Auto-inverting') }
     for (let i = 0; i < W*H; i++) gray[i] = 255 - gray[i]
   }
 
@@ -373,7 +373,7 @@ function traceSkeletonInJS(imageData: ImageData): Array<Array<[number, number]>>
     const blurRadius = level === 'brush' ? 3 : 2
     const closeIter = level === 'brush' ? 6 : 4
     spurLen = level === 'brush' ? 35 : 25
-    if (import.meta.env.DEV) console.log(`[SkeletonExtraction] ${level} (holes=${holes}) → blur=${blurRadius} close=${closeIter} spur=${spurLen}`)
+    if (import.meta.env.DEV) { console.log(`[SkeletonExtraction] ${level} (holes=${holes}) → blur=${blurRadius} close=${closeIter} spur=${spurLen}`) }
     // 高斯模糊（毛笔用更大核半径）
     const blurred = gaussianBlurN(gray, W, H, blurRadius)
     const binBlur = new Uint8Array(W * H)
@@ -650,7 +650,7 @@ function pruneSpurs(pixels: Uint8Array, w: number, h: number, minLen: number): U
 
   if (import.meta.env.DEV && iter > 1) {
     const remaining = result.reduce((c, v) => c + v, 0)
-    console.log(`[SkeletonExtraction] Spur pruning: ${iter} passes, ${remaining} pixels remain`)
+    if (import.meta.env.DEV) { console.log(`[SkeletonExtraction] Spur pruning: ${iter} passes, ${remaining} pixels remain`) }
   }
   return result
 }

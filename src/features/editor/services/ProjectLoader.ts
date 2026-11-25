@@ -122,17 +122,17 @@ export class ProjectLoader {
       console.log(`[decomposition] runDecompositionAfterCharacterLoad: fileUuid=${fileUuid}, metaList.length=${metaList.length}, withReplaceTemplate=${!!opts?.withReplaceTemplate}`)
     }
     if (metaList.length === 0) {
-      if (import.meta.env.DEV) console.log('[decomposition] runDecompositionAfterCharacterLoad: metaList is empty, skip')
+      if (import.meta.env.DEV) { console.log('[decomposition] runDecompositionAfterCharacterLoad: metaList is empty, skip') }
       return
     }
 
     const store = this.projectStore
     const map = await tryEnsureDecompositionLookup()
     if (!map) {
-      if (import.meta.env.DEV) console.warn('[decomposition] runDecompositionAfterCharacterLoad: tryEnsureDecompositionLookup returned null — 字典未加载，分解跳过！请检查 IDB 中是否有 decomposition_character_list_v3 数据，或 public/data/character_list_final_v2.json 是否存在')
+      if (import.meta.env.DEV) { console.warn('[decomposition] runDecompositionAfterCharacterLoad: tryEnsureDecompositionLookup returned null — 字典未加载，分解跳过！请检查 IDB 中是否有 decomposition_character_list_v3 数据，或 public/data/character_list_final_v2.json 是否存在') }
       return
     }
-    if (import.meta.env.DEV) console.log(`[decomposition] runDecompositionAfterCharacterLoad: map ready, size=${map.size}`)
+    if (import.meta.env.DEV) { console.log(`[decomposition] runDecompositionAfterCharacterLoad: map ready, size=${map.size}`) }
 
     // 部件分解
     {
@@ -159,7 +159,7 @@ export class ProjectLoader {
             if (!Array.isArray(params)) continue
             for (const p of params) {
               if (p.type === 0 || p.type === 'Number' || p.type === 'number') {
-                console.log(`[aiWiden] decomp后IDB确认 — 字符「${verifyCh.character?.text}」参数 "${p.name}": min=${p.min} max=${p.max}`)
+                if (import.meta.env.DEV) { console.log(`[aiWiden] decomp后IDB确认 — 字符「${verifyCh.character?.text}」参数 "${p.name}": min=${p.min} max=${p.max}`) }
               }
             }
           }
@@ -622,7 +622,7 @@ export class ProjectLoader {
     const aiWiden =
       import.meta.env.DEV && typeof file?.tag === 'string' && file.tag === AI_FEATURE_TEST_TAG
     if (aiWiden && import.meta.env.DEV) {
-      console.log('[aiWiden] processCharactersFromFpz: AI功能测试 tag 检测到，将放宽 Number 参数范围')
+      if (import.meta.env.DEV) { console.log('[aiWiden] processCharactersFromFpz: AI功能测试 tag 检测到，将放宽 Number 参数范围') }
     }
     // END 临时代码
     const fontSettings = file.fontSettings
@@ -631,7 +631,7 @@ export class ProjectLoader {
     const metadataList: ICharacterFileMetadata[] = []
 
     if (strokeGlyphNameToUuid && strokeGlyphNameToUuid.size > 0 && import.meta.env.DEV) {
-      console.log('[ProjectLoader] 同步字符列表中字形组件脚本引用 (private/v1)…')
+      if (import.meta.env.DEV) { console.log('[ProjectLoader] 同步字符列表中字形组件脚本引用 (private/v1)…') }
       // 加载中途 store 尚未就绪，注册字形库以解析 script_reference（供笔画组合合并执行脚本用）
       setGlyphScriptLookupExtras(glyphLibrary)
     }
@@ -673,7 +673,7 @@ export class ProjectLoader {
           if (!Array.isArray(params)) continue
           for (const p of params) {
             if (p.type === 0 || p.type === 'Number' || p.type === 'number') {
-              console.log(`[aiWiden] 写入IDB前确认 — 字符「${characterLite.character?.text}」参数 "${p.name}": min=${p.min} max=${p.max}`)
+              if (import.meta.env.DEV) { console.log(`[aiWiden] 写入IDB前确认 — 字符「${characterLite.character?.text}」参数 "${p.name}": min=${p.min} max=${p.max}`) }
             }
           }
         }

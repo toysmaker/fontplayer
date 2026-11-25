@@ -184,7 +184,7 @@ const renderJoints = (rootComponent, canvas) => {
 						return
 					}
 				} catch (e) {
-					console.warn('[renderJoints] glyphSkeleton script execution failed:', e)
+					if (import.meta.env.DEV) { console.warn('[renderJoints] glyphSkeleton script execution failed:', e) }
 				} finally {
 					_component.value.script = savedScript
 				}

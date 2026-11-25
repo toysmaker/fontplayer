@@ -188,10 +188,10 @@ const standardTransformStrokes = (strokes: Array<Array<IGlyphComponent>>, transf
           fn.updateParamsByJoints(parameters, inst)
           executeGlyphScript(gv, gc.uuid)
         } catch (e) {
-          console.warn('[standardTransformStrokes] private/v1 joint/param update failed', strokeName, e)
+          if (import.meta.env.DEV) { console.warn('[standardTransformStrokes] private/v1 joint/param update failed', strokeName, e) }
         }
       } else {
-        console.warn('[standardTransformStrokes] private/v1 strokeFnMap missing', strokeName)
+        if (import.meta.env.DEV) { console.warn('[standardTransformStrokes] private/v1 strokeFnMap missing', strokeName) }
       }
     } else {
       const instAny = inst as unknown as {
@@ -204,7 +204,7 @@ const standardTransformStrokes = (strokes: Array<Array<IGlyphComponent>>, transf
           instAny.updateParamsByJoints(parameters)
           executeGlyphScript(gv, gc.uuid)
         } catch (e) {
-          console.warn('[standardTransformStrokes] instance joint/param update failed', strokeName, e)
+          if (import.meta.env.DEV) { console.warn('[standardTransformStrokes] instance joint/param update failed', strokeName, e) }
         }
       } else {
         const fn = strokeFnMap[strokeName as keyof typeof strokeFnMap] as
@@ -216,7 +216,7 @@ const standardTransformStrokes = (strokes: Array<Array<IGlyphComponent>>, transf
             fn.updateParamsByJoints(parameters, inst)
             executeGlyphScript(gv, gc.uuid)
           } catch (e) {
-            console.warn('[standardTransformStrokes] kai strokeFnMap joint/param update failed', strokeName, e)
+            if (import.meta.env.DEV) { console.warn('[standardTransformStrokes] kai strokeFnMap joint/param update failed', strokeName, e) }
           }
         }
       }
@@ -570,8 +570,8 @@ const chainTransformStrokes = (parts, character, ordered_components, strokes_id,
           width: bound1.width,
           height: (1000 - endY - topGap1 - bottomGap1 - bottomGap2) * bound1.height / (bound1.height + bound2.height)
         }
-        console.log('newbound1', newBound1)
-        console.log('bound1', bound1)
+        if (import.meta.env.DEV) { console.log('newbound1', newBound1) }
+        if (import.meta.env.DEV) { console.log('bound1', bound1) }
         const transform1 = getTransformByBounds(bound1, newBound1)
         standardTransformStrokes(strokes1, transform1, character)
 

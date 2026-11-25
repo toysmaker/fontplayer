@@ -121,7 +121,7 @@ const showEmptyLines = computed(() => {
     return false
   } catch (error) {
     // 如果检查失败（可能 canvas 已被销毁），不显示红线
-    console.warn('Failed to check canvas content:', error)
+    if (import.meta.env.DEV) { console.warn('Failed to check canvas content:', error) }
     return false
   }
 })
@@ -393,12 +393,12 @@ watch(() => props.character, (newChar, oldChar) => {
             try {
               hasRendered.value = CanvasManager.hasContent(canvasRef.value)
             } catch (error) {
-              console.warn('Failed to check canvas content after render:', error)
+              if (import.meta.env.DEV) { console.warn('Failed to check canvas content after render:', error) }
               hasRendered.value = false
             }
           }
         }).catch((error) => {
-          console.warn('Render preview failed:', error)
+          if (import.meta.env.DEV) { console.warn('Render preview failed:', error) }
           hasRendered.value = false
         })
       }
@@ -426,12 +426,12 @@ watch(() => props.character, (newChar, oldChar) => {
             try {
               hasRendered.value = CanvasManager.hasContent(canvasRef.value)
             } catch (error) {
-              console.warn('Failed to check canvas content after render:', error)
+              if (import.meta.env.DEV) { console.warn('Failed to check canvas content after render:', error) }
               hasRendered.value = false
             }
           }
         }).catch((error) => {
-          console.warn('Render preview failed:', error)
+          if (import.meta.env.DEV) { console.warn('Render preview failed:', error) }
           hasRendered.value = false
         })
       }

@@ -148,11 +148,11 @@ export function create(table: ISTATTable, options?: any): number[] {
 		data.push(...(encoder.Fixed(axisValue.value) || [])) // 8-11: value (4 bytes)
 	}
 	
-	console.log(`📊 STAT table created:`)
-	console.log(`   Version: ${table.majorVersion}.${table.minorVersion}`)
-	console.log(`   Design axes: ${table.designAxisCount}`)
-	console.log(`   Axis values: ${table.axisValueCount}`)
-	console.log(`   Table size: ${data.length} bytes`)
+	if (import.meta.env.DEV) { console.log(`📊 STAT table created:`) }
+	if (import.meta.env.DEV) { console.log(`   Version: ${table.majorVersion}.${table.minorVersion}`) }
+	if (import.meta.env.DEV) { console.log(`   Design axes: ${table.designAxisCount}`) }
+	if (import.meta.env.DEV) { console.log(`   Axis values: ${table.axisValueCount}`) }
+	if (import.meta.env.DEV) { console.log(`   Table size: ${data.length} bytes`) }
 	
 	return data
 }

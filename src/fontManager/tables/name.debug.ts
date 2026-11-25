@@ -9,7 +9,7 @@ import { encoder } from '../encode'
 export function createWithDebug(table: INameTable) {
   let data: Array<number> = []
   
-  console.log('\n=== Name Table Binary Generation Debug ===')
+  if (import.meta.env.DEV) { console.log('\n=== Name Table Binary Generation Debug ===') }
   console.log('Input table:', {
     version: table.version,
     count: table.count,
@@ -19,23 +19,23 @@ export function createWithDebug(table: INameTable) {
   })
   
   // 1. 写入表头
-  console.log('\n1. Writing header...')
+  if (import.meta.env.DEV) { console.log('\n1. Writing header...') }
   const versionBytes = encoder.uint16(table.version)
   const countBytes = encoder.uint16(table.count)
   const storageOffsetBytes = encoder.uint16(table.storageOffset)
   
-  console.log(`  version=${table.version}, bytes:`, versionBytes)
-  console.log(`  count=${table.count}, bytes:`, countBytes)
-  console.log(`  storageOffset=${table.storageOffset}, bytes:`, storageOffsetBytes)
+  if (import.meta.env.DEV) { console.log(`  version=${table.version}, bytes:`, versionBytes) }
+  if (import.meta.env.DEV) { console.log(`  count=${table.count}, bytes:`, countBytes) }
+  if (import.meta.env.DEV) { console.log(`  storageOffset=${table.storageOffset}, bytes:`, storageOffsetBytes) }
   
   if (versionBytes) data = data.concat(versionBytes)
   if (countBytes) data = data.concat(countBytes)
   if (storageOffsetBytes) data = data.concat(storageOffsetBytes)
   
-  console.log(`  Header size: ${data.length} bytes (expected 6)`)
+  if (import.meta.env.DEV) { console.log(`  Header size: ${data.length} bytes (expected 6)`) }
   
   // 2. 写入nameRecord数组
-  console.log('\n2. Writing nameRecord array...')
+  if (import.meta.env.DEV) { console.log('\n2. Writing nameRecord array...') }
   if (table.nameRecord) {
     for (let i = 0; i < table.nameRecord.length; i++) {
       const record = table.nameRecord[i]
@@ -56,7 +56,7 @@ export function createWithDebug(table: INameTable) {
       if (stringOffsetBytes) data = data.concat(stringOffsetBytes)
       
       const recordSize = data.length - startSize
-      console.log(`  Record[${i}]: nameID=${record.nameID}, size=${recordSize} bytes (expected 12)`)
+      if (import.meta.env.DEV) { console.log(`  Record[${i}]: nameID=${record.nameID}, size=${recordSize} bytes (expected 12)`) }
       
       if (recordSize !== 12) {
         console.error(`    ❌ ERROR: Record size mismatch!`)
@@ -65,29 +65,29 @@ export function createWithDebug(table: INameTable) {
   }
   
   const headerAndRecordsSize = data.length
-  console.log(`  Total header+records size: ${headerAndRecordsSize} bytes`)
-  console.log(`  Expected: ${6 + (table.nameRecord?.length || 0) * 12} bytes`)
+  if (import.meta.env.DEV) { console.log(`  Total header+records size: ${headerAndRecordsSize} bytes`) }
+  if (import.meta.env.DEV) { console.log(`  Expected: ${6 + (table.nameRecord?.length || 0) * 12} bytes`) }
   
   // 3. 写入stringPool
-  console.log('\n3. Writing stringPool...')
+  if (import.meta.env.DEV) { console.log('\n3. Writing stringPool...') }
   if (table.stringPool && table.stringPool.length > 0) {
-    console.log(`  StringPool size: ${table.stringPool.length} bytes`)
+    if (import.meta.env.DEV) { console.log(`  StringPool size: ${table.stringPool.length} bytes`) }
     data = data.concat(table.stringPool)
   } else {
-    console.log(`  StringPool is empty or undefined`)
+    if (import.meta.env.DEV) { console.log(`  StringPool is empty or undefined`) }
   }
   
-  console.log(`\n=== Final Result ===`)
-  console.log(`Total data size: ${data.length} bytes`)
-  console.log(`Expected size: ${6 + (table.nameRecord?.length || 0) * 12 + (table.stringPool?.length || 0)} bytes`)
+  if (import.meta.env.DEV) { console.log(`\n=== Final Result ===`) }
+  if (import.meta.env.DEV) { console.log(`Total data size: ${data.length} bytes`) }
+  if (import.meta.env.DEV) { console.log(`Expected size: ${6 + (table.nameRecord?.length || 0) * 12 + (table.stringPool?.length || 0)} bytes`) }
   
   if (data.length !== (6 + (table.nameRecord?.length || 0) * 12 + (table.stringPool?.length || 0))) {
     console.error('❌ Size mismatch detected!')
   } else {
-    console.log('✅ Size matches expected')
+    if (import.meta.env.DEV) { console.log('✅ Size matches expected') }
   }
   
-  console.log('===================================\n')
+  if (import.meta.env.DEV) { console.log('===================================\n') }
   
   return data
 }

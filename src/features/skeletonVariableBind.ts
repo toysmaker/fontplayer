@@ -121,7 +121,7 @@ export function calculateSkeletonVariablePoints(
     for (const kf of variable.keyframes) {
       const kfComps = getPenComponentsInLayerForGlyph(rawGlyph, kf.layer)
       if (kfComps.length !== defaultLayerComps.length) {
-        console.warn(`Layer "${kf.layer}" has ${kfComps.length} pen components, default has ${defaultLayerComps.length}`)
+        if (import.meta.env.DEV) { console.warn(`Layer "${kf.layer}" has ${kfComps.length} pen components, default has ${defaultLayerComps.length}`) }
         return result
       }
     }

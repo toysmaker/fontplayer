@@ -547,15 +547,15 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 	
 	// ⚠️ 如果这是彩色字体，输出 OS/2 表的关键信息用于调试
 	if (options.isColorFont) {
-		console.log('\n📊 OS/2 Table for Color Font:')
-		console.log(`   version: 0x${os2Table.version.toString(16).padStart(4, '0')}`)
-		console.log(`   fsSelection: ${os2Table.fsSelection} (0x${os2Table.fsSelection.toString(16).padStart(4, '0')})`)
-		console.log(`   usWinAscent: ${os2Table.usWinAscent}`)
-		console.log(`   usWinDescent: ${os2Table.usWinDescent}`)
-		console.log(`   usWeightClass: ${os2Table.usWeightClass}`)
-		console.log(`   usWidthClass: ${os2Table.usWidthClass}`)
-		console.log(`   ulCodePageRange1: 0x${os2Table.ulCodePageRange1.toString(16).padStart(8, '0')}`)
-		console.log(`\n`)
+		if (import.meta.env.DEV) { console.log('\n📊 OS/2 Table for Color Font:') }
+		if (import.meta.env.DEV) { console.log(`   version: 0x${os2Table.version.toString(16).padStart(4, '0')}`) }
+		if (import.meta.env.DEV) { console.log(`   fsSelection: ${os2Table.fsSelection} (0x${os2Table.fsSelection.toString(16).padStart(4, '0')})`) }
+		if (import.meta.env.DEV) { console.log(`   usWinAscent: ${os2Table.usWinAscent}`) }
+		if (import.meta.env.DEV) { console.log(`   usWinDescent: ${os2Table.usWinDescent}`) }
+		if (import.meta.env.DEV) { console.log(`   usWeightClass: ${os2Table.usWeightClass}`) }
+		if (import.meta.env.DEV) { console.log(`   usWidthClass: ${os2Table.usWidthClass}`) }
+		if (import.meta.env.DEV) { console.log(`   ulCodePageRange1: 0x${os2Table.ulCodePageRange1.toString(16).padStart(8, '0')}`) }
+		if (import.meta.env.DEV) { console.log(`\n`) }
 	}
 
 	// 定义hmtx表
@@ -710,7 +710,7 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 			const after = checkGlyphPaths(converted, i)
 
 			if (i === 7 || i === 11 || i === 12) {
-				console.log(`  Glyph ${i}: cubic=${before.cubicCount}, quad=${before.quadCount}, line=${before.lineCount} → quad=${after.quadCount}, line=${after.lineCount}`)
+				if (import.meta.env.DEV) { console.log(`  Glyph ${i}: cubic=${before.cubicCount}, quad=${before.quadCount}, line=${before.lineCount} → quad=${after.quadCount}, line=${after.lineCount}`) }
 			}
 
 			convertedCharacters.push(converted)
@@ -718,9 +718,9 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 			await yieldToEventLoop(i + 1, 50)
 		}
 
-		console.log(`✅ Converted ${convertedCharacters.length} glyphs to quadratic Bezier`)
+		if (import.meta.env.DEV) { console.log(`✅ Converted ${convertedCharacters.length} glyphs to quadratic Bezier`) }
 		
-		console.log('\n📦 Step 2: Building glyf and loca tables...')
+		if (import.meta.env.DEV) { console.log('\n📦 Step 2: Building glyf and loca tables...') }
 		
 		// 2. 构建glyf表（使用转换后的轮廓）
 		const { glyfTable } = await buildGlyfAndLocaTables(
@@ -744,7 +744,7 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 			_glyfTableRef: glyfTable, // 引用glyf表
 		}
 		
-		console.log('✅ glyf table created (loca will use real offsets after serialization)')
+		if (import.meta.env.DEV) { console.log('✅ glyf table created (loca will use real offsets after serialization)') }
 		
 		// 从glyf表重新计算head表的边界框
 		let globalXMin = Infinity
@@ -767,7 +767,7 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 			headTable.yMin = globalYMin
 			headTable.xMax = globalXMax
 			headTable.yMax = globalYMax
-			console.log(`✅ Updated head table bounding box: (${globalXMin}, ${globalYMin}) to (${globalXMax}, ${globalYMax})`)
+			if (import.meta.env.DEV) { console.log(`✅ Updated head table bounding box: (${globalXMin}, ${globalYMin}) to (${globalXMax}, ${globalYMax})`) }
 		}
 		
 		// 从hmtx重新计算hhea表的度量值
@@ -796,7 +796,7 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 			hheaTable.minLeftSideBearing = minLeftSideBearing
 			hheaTable.minRightSideBearing = minRightSideBearing
 			hheaTable.xMaxExtent = xMaxExtent
-			console.log(`✅ Updated hhea table metrics: lsb=${minLeftSideBearing}, rsb=${minRightSideBearing}, extent=${xMaxExtent}`)
+			if (import.meta.env.DEV) { console.log(`✅ Updated hhea table metrics: lsb=${minLeftSideBearing}, rsb=${minRightSideBearing}, extent=${xMaxExtent}`) }
 		}
 		
 		// 从glyf表计算maxp表的值
@@ -824,15 +824,15 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 
 	if (options.variants) {
 		// ========== 可变字体：使用TrueType格式（glyf + loca + gvar） ==========
-		console.log('\n🎨 === Creating Variable Font ===')
-		console.log('Axes:', options.variants.axes?.map(a => `${a.tag || a.name || 'unknown'} (${a.minValue}-${a.maxValue})`).join(', ') || 'none')
-		console.log('Combinations:', options.variants.combinations?.length || 0)
+		if (import.meta.env.DEV) { console.log('\n🎨 === Creating Variable Font ===') }
+		if (import.meta.env.DEV) { console.log('Axes:', options.variants.axes?.map(a => `${a.tag || a.name || 'unknown'} (${a.minValue}-${a.maxValue})`).join(', ') || 'none') }
+		if (import.meta.env.DEV) { console.log('Combinations:', options.variants.combinations?.length || 0) }
 		
 		// 调试：显示完整的axes数据
 		if (options.variants.axes && options.variants.axes.length > 0) {
-			console.log('Axes details:', options.variants.axes)
+			if (import.meta.env.DEV) { console.log('Axes details:', options.variants.axes) }
 		} else {
-			console.warn('⚠️ WARNING: No axes defined in variants!')
+			if (import.meta.env.DEV) { console.warn('⚠️ WARNING: No axes defined in variants!') }
 		}
 		
 		// ⚠️ 重要：可变字体需要使用TrueType格式（glyf + gvar）
@@ -840,9 +840,9 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 		
 		// 删除CFF表
 		delete tables['CFF ']
-		console.log('✅ Removed CFF table (using TrueType format for variable font)')
+		if (import.meta.env.DEV) { console.log('✅ Removed CFF table (using TrueType format for variable font)') }
 		
-		console.log('\n📐 Step 1: Converting cubic Bezier to quadratic...')
+		if (import.meta.env.DEV) { console.log('\n📐 Step 1: Converting cubic Bezier to quadratic...') }
 		
 		// 调试：检查原始轮廓的路径类型
 		const checkGlyphPaths = (char: any, index: number) => {
@@ -890,9 +890,9 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 		// 	return converted
 		// })
 		
-		console.log(`✅ Converted ${convertedCharacters.length} glyphs to quadratic Bezier`)
+		if (import.meta.env.DEV) { console.log(`✅ Converted ${convertedCharacters.length} glyphs to quadratic Bezier`) }
 		
-		console.log('\n📦 Step 2: Building glyf and loca tables...')
+		if (import.meta.env.DEV) { console.log('\n📦 Step 2: Building glyf and loca tables...') }
 		
 		// 2. 构建glyf表（使用转换后的轮廓）
 		const { glyfTable } = await buildGlyfAndLocaTables(
@@ -916,7 +916,7 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 			_glyfTableRef: glyfTable, // 引用glyf表
 		}
 		
-		console.log('✅ glyf table created (loca will use real offsets after serialization)')
+		if (import.meta.env.DEV) { console.log('✅ glyf table created (loca will use real offsets after serialization)') }
 		
 		// 从glyf表重新计算head表的边界框
 		let globalXMin = Infinity
@@ -939,7 +939,7 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 			headTable.yMin = globalYMin
 			headTable.xMax = globalXMax
 			headTable.yMax = globalYMax
-			console.log(`✅ Updated head table bounding box: (${globalXMin}, ${globalYMin}) to (${globalXMax}, ${globalYMax})`)
+			if (import.meta.env.DEV) { console.log(`✅ Updated head table bounding box: (${globalXMin}, ${globalYMin}) to (${globalXMax}, ${globalYMax})`) }
 		}
 		
 		// 从hmtx重新计算hhea表的度量值
@@ -968,7 +968,7 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 			hheaTable.minLeftSideBearing = minLeftSideBearing
 			hheaTable.minRightSideBearing = minRightSideBearing
 			hheaTable.xMaxExtent = xMaxExtent
-			console.log(`✅ Updated hhea table metrics: lsb=${minLeftSideBearing}, rsb=${minRightSideBearing}, extent=${xMaxExtent}`)
+			if (import.meta.env.DEV) { console.log(`✅ Updated hhea table metrics: lsb=${minLeftSideBearing}, rsb=${minRightSideBearing}, extent=${xMaxExtent}`) }
 		}
 		
 		// 从glyf表计算maxp表的值
@@ -991,45 +991,45 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 		// 更新maxp表
 		maxpTable.maxPoints = maxPoints
 		maxpTable.maxContours = maxContours
-		console.log(`✅ Updated maxp table: maxPoints=${maxPoints}, maxContours=${maxContours}`)
+		if (import.meta.env.DEV) { console.log(`✅ Updated maxp table: maxPoints=${maxPoints}, maxContours=${maxContours}`) }
 		
-		console.log('\n🎯 Step 3: Creating variation tables...')
+		if (import.meta.env.DEV) { console.log('\n🎯 Step 3: Creating variation tables...') }
 		
 		// 3. 创建fvar表（定义变体轴）
 		const fvarTable = createFvarTable(options.variants)
 		tables['fvar'] = fvarTable
-		console.log('✅ fvar table created')
+		if (import.meta.env.DEV) { console.log('✅ fvar table created') }
 		
 		// 4. 创建gvar表（定义字形变体）
 		// 注意：gvar表也需要使用转换后的字符
-		console.log('⏳ Creating gvar table (this may take a while for complex fonts)...')
+		if (import.meta.env.DEV) { console.log('⏳ Creating gvar table (this may take a while for complex fonts)...') }
 		
 		// 调试：检查传入的 variants 数据
-		console.log('🔍 Checking options.variants:')
-		console.log(`  options.variants exists: ${!!options.variants}`)
-		console.log(`  options.variants.combinations exists: ${!!options.variants?.combinations}`)
-		console.log(`  options.variants.combinations.length: ${options.variants?.combinations?.length || 0}`)
+		if (import.meta.env.DEV) { console.log('🔍 Checking options.variants:') }
+		if (import.meta.env.DEV) { console.log(`  options.variants exists: ${!!options.variants}`) }
+		if (import.meta.env.DEV) { console.log(`  options.variants.combinations exists: ${!!options.variants?.combinations}`) }
+		if (import.meta.env.DEV) { console.log(`  options.variants.combinations.length: ${options.variants?.combinations?.length || 0}`) }
 		
 		console.time('gvar table creation')
 		const gvarTable = await createGvarTable(options.variants, convertedCharacters)
 		console.timeEnd('gvar table creation')
 		tables['gvar'] = gvarTable
-		console.log('✅ gvar table created')
+		if (import.meta.env.DEV) { console.log('✅ gvar table created') }
 		
 		// 5. 创建STAT表（样式属性表，macOS和PS需要）
 		const STATTable = createStatTable(fvarTable, {
 			elidedFallbackNameID: 2 // 使用 subfamily name
 		})
 		tables['STAT'] = STATTable
-		console.log('✅ STAT table created (required for macOS/Photoshop)')
+		if (import.meta.env.DEV) { console.log('✅ STAT table created (required for macOS/Photoshop)') }
 		
-		console.log('\n🎉 Variable font tables complete!')
-		console.log('================================\n')
+		if (import.meta.env.DEV) { console.log('\n🎉 Variable font tables complete!') }
+		if (import.meta.env.DEV) { console.log('================================\n') }
 	}
 
 	// 处理彩色字体
 	if (options.isColorFont) {
-		console.log('\n🎨 === Creating Color Font ===')
+		if (import.meta.env.DEV) { console.log('\n🎨 === Creating Color Font ===') }
 		
 		// 检查是否有字符包含图层
 		let hasLayers = false
@@ -1042,7 +1042,7 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 		
 		if (hasLayers) {
 			// 彩色字体需要扩展字形数组，为每个图层创建单独的字形
-			console.log('⏳ Creating extended glyph array for color layers...')
+			if (import.meta.env.DEV) { console.log('⏳ Creating extended glyph array for color layers...') }
 			
 			// 计算需要添加的图层字形数量
 			let totalLayerGlyphs = 0
@@ -1052,9 +1052,9 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 				}
 			}
 			
-			console.log(`Original glyphs: ${characters.length}`)
-			console.log(`Layer glyphs to add: ${totalLayerGlyphs}`)
-			console.log(`Total glyphs: ${characters.length + totalLayerGlyphs}`)
+			if (import.meta.env.DEV) { console.log(`Original glyphs: ${characters.length}`) }
+			if (import.meta.env.DEV) { console.log(`Layer glyphs to add: ${totalLayerGlyphs}`) }
+			if (import.meta.env.DEV) { console.log(`Total glyphs: ${characters.length + totalLayerGlyphs}`) }
 			
 			// 为图层创建字形（如果使用 CFF）
 			// 图层字形会被 COLR 表引用
@@ -1075,7 +1075,7 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 						const validContours = layerContours.filter(contour => contour && contour.length > 0)
 						
 						if (validContours.length === 0 && layerContourNum > 0) {
-							console.warn(`⚠️ Warning: Layer for glyph ${char.name || 'unnamed'} has no valid contours (all contours are empty)`)
+							if (import.meta.env.DEV) { console.warn(`⚠️ Warning: Layer for glyph ${char.name || 'unnamed'} has no valid contours (all contours are empty)`) }
 						}
 						
 						// 使用过滤后的轮廓
@@ -1116,16 +1116,16 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 			
 			// 创建 CPAL 表（调色板）
 			// ⚠️ 重要：CPAL 表必须在 COLR 表之前创建，因为 COLR 表需要引用 CPAL 表的颜色索引
-			console.log('⏳ Creating CPAL table...')
+			if (import.meta.env.DEV) { console.log('⏳ Creating CPAL table...') }
 			const cpalTable = createCpalTable(characters)
 			tables['CPAL'] = cpalTable
-			console.log(`✅ CPAL table created with ${cpalTable.numColorRecords} colors`)
-			console.log(`   - numPaletteEntries: ${cpalTable.numPaletteEntries}`)
-			console.log(`   - numPalettes: ${cpalTable.numPalettes}`)
+			if (import.meta.env.DEV) { console.log(`✅ CPAL table created with ${cpalTable.numColorRecords} colors`) }
+			if (import.meta.env.DEV) { console.log(`   - numPaletteEntries: ${cpalTable.numPaletteEntries}`) }
+			if (import.meta.env.DEV) { console.log(`   - numPalettes: ${cpalTable.numPalettes}`) }
 			incrementProgress('创建 CPAL 表…', 1)
 			
 			// 创建 COLR 表（彩色图层定义）
-			console.log('⏳ Creating COLR table...')
+			if (import.meta.env.DEV) { console.log('⏳ Creating COLR table...') }
 			const totalGlyphs = characters.length + layerGlyphs.length
 			
 			// ⚠️ 验证：确保所有有图层的 base glyph 都有有效的轮廓数据
@@ -1136,41 +1136,41 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 						char.contours.some(contour => contour && contour.length > 0)
 					
 					if (!hasValidContours) {
-						console.warn(`⚠️ Warning: Base glyph ${char.name || 'unnamed'} (glyphID=${characters.indexOf(char)}) has layers but no valid contours`)
-						console.warn(`   This may cause Windows PS to fail rendering the color font`)
+						if (import.meta.env.DEV) { console.warn(`⚠️ Warning: Base glyph ${char.name || 'unnamed'} (glyphID=${characters.indexOf(char)}) has layers but no valid contours`) }
+						if (import.meta.env.DEV) { console.warn(`   This may cause Windows PS to fail rendering the color font`) }
 					}
 				}
 			}
 			
 			const colrTable = createColrTable(characters, totalGlyphs)
 			tables['COLR'] = colrTable
-			console.log(`✅ COLR table created with ${colrTable.numBaseGlyphRecords} base glyphs and ${colrTable.numLayerRecords} layers`)
-			console.log(`   - Total glyphs in font: ${totalGlyphs}`)
-			console.log(`   - Base glyphs: 0 to ${characters.length - 1}`)
-			console.log(`   - Layer glyphs: ${characters.length} to ${totalGlyphs - 1}`)
+			if (import.meta.env.DEV) { console.log(`✅ COLR table created with ${colrTable.numBaseGlyphRecords} base glyphs and ${colrTable.numLayerRecords} layers`) }
+			if (import.meta.env.DEV) { console.log(`   - Total glyphs in font: ${totalGlyphs}`) }
+			if (import.meta.env.DEV) { console.log(`   - Base glyphs: 0 to ${characters.length - 1}`) }
+			if (import.meta.env.DEV) { console.log(`   - Layer glyphs: ${characters.length} to ${totalGlyphs - 1}`) }
 			
 			// 验证：确保所有 layerRecords 的 paletteIndex 都在 CPAL 表的有效范围内
 			for (const layerRecord of colrTable.layerRecords) {
 				if (layerRecord.paletteIndex >= cpalTable.numColorRecords) {
-					console.warn(`⚠️ Warning: LayerRecord paletteIndex ${layerRecord.paletteIndex} is out of range [0, ${cpalTable.numColorRecords - 1}]`)
+					if (import.meta.env.DEV) { console.warn(`⚠️ Warning: LayerRecord paletteIndex ${layerRecord.paletteIndex} is out of range [0, ${cpalTable.numColorRecords - 1}]`) }
 				}
 			}
 			
 			// ⚠️ 重要提示：Windows PS 2021 可能不完全支持 COLR/CPAL 格式
 			// Photoshop 主要支持 OpenType-SVG 彩色字体格式
 			// 建议在浏览器中测试字体是否正常显示彩色效果
-			console.log(`\n⚠️ 重要提示：`)
-			console.log(`   Windows PS 2021 主要支持 OpenType-SVG 彩色字体格式`)
-			console.log(`   当前使用的是 COLR/CPAL 格式，可能在 PS 中无法显示`)
-			console.log(`   建议在浏览器（Chrome/Edge）中测试字体是否能正常显示彩色`)
-			console.log(`   如果在浏览器中可以显示，说明字体文件是正确的`)
-			console.log(`\n`)
+			if (import.meta.env.DEV) { console.log(`\n⚠️ 重要提示：`) }
+			if (import.meta.env.DEV) { console.log(`   Windows PS 2021 主要支持 OpenType-SVG 彩色字体格式`) }
+			if (import.meta.env.DEV) { console.log(`   当前使用的是 COLR/CPAL 格式，可能在 PS 中无法显示`) }
+			if (import.meta.env.DEV) { console.log(`   建议在浏览器（Chrome/Edge）中测试字体是否能正常显示彩色`) }
+			if (import.meta.env.DEV) { console.log(`   如果在浏览器中可以显示，说明字体文件是正确的`) }
+			if (import.meta.env.DEV) { console.log(`\n`) }
 			
 			incrementProgress('创建 COLR 表…', 1)
 			
 			// 如果使用 CFF 格式，需要重新创建 CFF 表包含图层字形
 			if (tables['CFF ']) {
-				console.log('⏳ Updating CFF table with layer glyphs...')
+				if (import.meta.env.DEV) { console.log('⏳ Updating CFF table with layer glyphs...') }
 				
 				// 验证图层字形是否有有效的轮廓数据
 				for (let i = 0; i < layerGlyphs.length; i++) {
@@ -1180,11 +1180,11 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 						layerGlyph.contours.some(contour => contour && contour.length > 0)
 					
 					if (!hasValidContours) {
-						console.warn(`⚠️ Warning: Layer glyph ${glyphID} (${layerGlyph.name || 'unnamed'}) has no valid contours`)
+						if (import.meta.env.DEV) { console.warn(`⚠️ Warning: Layer glyph ${glyphID} (${layerGlyph.name || 'unnamed'}) has no valid contours`) }
 					} else {
 						// 统计轮廓数量
 						const totalPaths = layerGlyph.contours.reduce((sum, contour) => sum + (contour?.length || 0), 0)
-						console.log(`   Layer glyph ${glyphID}: ${layerGlyph.contourNum} contours, ${totalPaths} paths, bbox=[${layerGlyph.xMin}, ${layerGlyph.yMin}, ${layerGlyph.xMax}, ${layerGlyph.yMax}]`)
+						if (import.meta.env.DEV) { console.log(`   Layer glyph ${glyphID}: ${layerGlyph.contourNum} contours, ${totalPaths} paths, bbox=[${layerGlyph.xMin}, ${layerGlyph.yMin}, ${layerGlyph.xMax}, ${layerGlyph.yMax}]`) }
 					}
 				}
 				
@@ -1200,34 +1200,34 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 					fontBBox: [0, globals.yMin, globals.ascender, globals.advanceWidthMax]
 				})
 				tables['CFF '] = updatedCffTable
-				console.log(`✅ CFF table updated with ${allGlyphs.length} total glyphs`)
-				console.log(`   - Base glyphs: 0 to ${characters.length - 1}`)
-				console.log(`   - Layer glyphs: ${characters.length} to ${allGlyphs.length - 1}`)
+				if (import.meta.env.DEV) { console.log(`✅ CFF table updated with ${allGlyphs.length} total glyphs`) }
+				if (import.meta.env.DEV) { console.log(`   - Base glyphs: 0 to ${characters.length - 1}`) }
+				if (import.meta.env.DEV) { console.log(`   - Layer glyphs: ${characters.length} to ${allGlyphs.length - 1}`) }
 				
 				// 更新 maxp 表的字形数量
 				maxpTable.numGlyphs = allGlyphs.length
-				console.log(`✅ Updated maxp.numGlyphs to ${allGlyphs.length}`)
+				if (import.meta.env.DEV) { console.log(`✅ Updated maxp.numGlyphs to ${allGlyphs.length}`) }
 				
 				// 更新 hmtx 表 - 为图层字形添加度量信息
-				console.log('⏳ Updating hmtx table with layer glyph metrics...')
+				if (import.meta.env.DEV) { console.log('⏳ Updating hmtx table with layer glyph metrics...') }
 				for (const layerGlyph of layerGlyphs) {
 					hmtxTable.hMetrics.push({
 						advanceWidth: layerGlyph.advanceWidth || 0,
 						lsb: Math.round(layerGlyph.leftSideBearing || 0),
 					})
 				}
-				console.log(`✅ Updated hmtx table with ${hmtxTable.hMetrics.length} total metrics`)
+				if (import.meta.env.DEV) { console.log(`✅ Updated hmtx table with ${hmtxTable.hMetrics.length} total metrics`) }
 				
 				// 更新 hhea 表的 numberOfHMetrics
 				hheaTable.numberOfHMetrics = hmtxTable.hMetrics.length
-				console.log(`✅ Updated hhea.numberOfHMetrics to ${hheaTable.numberOfHMetrics}`)
+				if (import.meta.env.DEV) { console.log(`✅ Updated hhea.numberOfHMetrics to ${hheaTable.numberOfHMetrics}`) }
 			}
 			incrementProgress('更新彩色字体表完成', 1)
 			
-			console.log('\n🎉 Color font tables complete!')
-			console.log('================================\n')
+			if (import.meta.env.DEV) { console.log('\n🎉 Color font tables complete!') }
+			if (import.meta.env.DEV) { console.log('================================\n') }
 		} else {
-			console.log('⚠️ No layers found in characters, skipping color font tables')
+			if (import.meta.env.DEV) { console.log('⚠️ No layers found in characters, skipping color font tables') }
 		}
 	}
 
@@ -1252,19 +1252,19 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 		// checkSumAdjustment字段在head表中的偏移是8字节（version(4) + fontRevision(4) + checkSumAdjustment(4)）
 		const checkSumAdjustmentOffsetInFile = headTableInfo.config.offset + 8
 		
-		console.log(`\n=== Updating head.checkSumAdjustment ===`)
-		console.log(`head table offset: ${headTableInfo.config.offset}`)
-		console.log(`checkSumAdjustment offset in file: ${checkSumAdjustmentOffsetInFile}`)
-		console.log(`checkSumAdjustment value: 0x${headTable.checkSumAdjustment.toString(16).padStart(8, '0')}`)
-		console.log(`checkSumAdjustment bytes:`, checkSumAdjustmentData)
+		if (import.meta.env.DEV) { console.log(`\n=== Updating head.checkSumAdjustment ===`) }
+		if (import.meta.env.DEV) { console.log(`head table offset: ${headTableInfo.config.offset}`) }
+		if (import.meta.env.DEV) { console.log(`checkSumAdjustment offset in file: ${checkSumAdjustmentOffsetInFile}`) }
+		if (import.meta.env.DEV) { console.log(`checkSumAdjustment value: 0x${headTable.checkSumAdjustment.toString(16).padStart(8, '0')}`) }
+		if (import.meta.env.DEV) { console.log(`checkSumAdjustment bytes:`, checkSumAdjustmentData) }
 		
 		fontData[checkSumAdjustmentOffsetInFile] = checkSumAdjustmentData[0]
 		fontData[checkSumAdjustmentOffsetInFile + 1] = checkSumAdjustmentData[1]
 		fontData[checkSumAdjustmentOffsetInFile + 2] = checkSumAdjustmentData[2]
 		fontData[checkSumAdjustmentOffsetInFile + 3] = checkSumAdjustmentData[3]
 		
-		console.log(`Updated bytes at position ${checkSumAdjustmentOffsetInFile}-${checkSumAdjustmentOffsetInFile + 3}`)
-		console.log(`=====================================\n`)
+		if (import.meta.env.DEV) { console.log(`Updated bytes at position ${checkSumAdjustmentOffsetInFile}-${checkSumAdjustmentOffsetInFile + 3}`) }
+		if (import.meta.env.DEV) { console.log(`=====================================\n`) }
 	} else {
 		console.error('❌ head table not found in fontTables!')
 	}
@@ -1273,8 +1273,8 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 	// create font data
 	font.bytes = fontData
 	
-	console.log(`\n=== createFont Complete ===`)
-	console.log(`font.bytes.length: ${fontData.length}`)
+	if (import.meta.env.DEV) { console.log(`\n=== createFont Complete ===`) }
+	if (import.meta.env.DEV) { console.log(`font.bytes.length: ${fontData.length}`) }
 
 	const keys = Object.keys(tables)
 	keys.sort((key1, key2) => {
@@ -1286,8 +1286,8 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 	})
 	font.tables = fontTables
 	
-	console.log(`Font created with ${fontTables.length} tables`)
-	console.log(`==============================\n`)
+	if (import.meta.env.DEV) { console.log(`Font created with ${fontTables.length} tables`) }
+	if (import.meta.env.DEV) { console.log(`==============================\n`) }
 	
 	return font
 }
@@ -1304,8 +1304,8 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
  */
 const toArrayBuffer = async (font: IFont) => {
 	if (font.bytes) {
-		console.log(`\n=== toArrayBuffer ===`)
-		console.log(`font.bytes.length: ${font.bytes.length}`)
+		if (import.meta.env.DEV) { console.log(`\n=== toArrayBuffer ===`) }
+		if (import.meta.env.DEV) { console.log(`font.bytes.length: ${font.bytes.length}`) }
 
     const buffer = new ArrayBuffer(font.bytes.length)
     const intArray = new Uint8Array(buffer)
@@ -1320,11 +1320,11 @@ const toArrayBuffer = async (font: IFont) => {
       await yieldToEventLoop(i + CHUNK, CHUNK)
     }
 
-		console.log(`ArrayBuffer created: ${buffer.byteLength} bytes`)
-		console.log(`===================\n`)
+		if (import.meta.env.DEV) { console.log(`ArrayBuffer created: ${buffer.byteLength} bytes`) }
+		if (import.meta.env.DEV) { console.log(`===================\n`) }
     return buffer
 	} else if (font.rawData) {
-		console.log(`Using rawData.buffer: ${font.rawData.buffer.byteLength} bytes`)
+		if (import.meta.env.DEV) { console.log(`Using rawData.buffer: ${font.rawData.buffer.byteLength} bytes`) }
 		return font.rawData.buffer
 	}
 }

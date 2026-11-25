@@ -75,7 +75,7 @@ export function createWeightVariationExample() {
   // 计算deltas
   // Calculate deltas
   const deltas = calculateDeltas(defaultContours, boldContours)
-  console.log('Weight variation deltas:', deltas)
+  if (import.meta.env.DEV) { console.log('Weight variation deltas:', deltas) }
 
   // 创建字形变化数据
   // Create glyph variation data
@@ -104,7 +104,7 @@ export function interpolationExample() {
   }))
 
   const semiBoldContours = applyDeltas(defaultContours, semiBoldDeltas)
-  console.log('Semi-bold contours:', semiBoldContours)
+  if (import.meta.env.DEV) { console.log('Semi-bold contours:', semiBoldContours) }
 
   // 生成wght=0.25的状态（轻粗体）
   // Generate state at wght=0.25 (light-bold)
@@ -114,7 +114,7 @@ export function interpolationExample() {
   }))
 
   const lightBoldContours = applyDeltas(defaultContours, lightBoldDeltas)
-  console.log('Light-bold contours:', lightBoldContours)
+  if (import.meta.env.DEV) { console.log('Light-bold contours:', lightBoldContours) }
 
   return { semiBoldContours, lightBoldContours }
 }

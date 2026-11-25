@@ -152,7 +152,7 @@ export class CanvasManager {
     }
     
     if (toRemove.length > 0 && import.meta.env.DEV) {
-      console.log(`[CanvasManager] Cleaning up ${toRemove.length} invisible canvases`)
+      if (import.meta.env.DEV) { console.log(`[CanvasManager] Cleaning up ${toRemove.length} invisible canvases`) }
     }
     
     toRemove.forEach(uuid => {

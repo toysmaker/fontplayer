@@ -80,7 +80,7 @@ export function renderContourEditOverlay(canvas: HTMLCanvasElement): void {
   if (!isActive || canvas !== activeOverlayCanvas) return
 
   if (import.meta.env.DEV && renderCallCount === 0) {
-    console.log('[SampledBind] renderContourEditOverlay: first render, isActive=' + isActive)
+    if (import.meta.env.DEV) { console.log('[SampledBind] renderContourEditOverlay: first render, isActive=' + isActive) }
   }
   renderCallCount++
 

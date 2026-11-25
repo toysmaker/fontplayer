@@ -135,7 +135,7 @@ const glyphSkeletonBind = (glyph: CustomGlyph) => {
   // 处理所有Pen类型的组件
   const penComponents = components.filter(comp => comp.type === 'pen') as IGlyphComponent[];
   if (penComponents.length === 0) {
-    console.warn('No pen components found');
+    if (import.meta.env.DEV) { console.warn('No pen components found') };
     return;
   }
 
@@ -171,7 +171,7 @@ const glyphSkeletonBind = (glyph: CustomGlyph) => {
   }
 
   if (bindData.samplePoints.length === 0) {
-    console.warn('No pen component points found for sampling');
+    if (import.meta.env.DEV) { console.warn('No pen component points found for sampling') };
     return;
   }
 
@@ -453,7 +453,7 @@ function skeletonToBones(skeleton: any): Bone[] {
       const strokeBones = callStrokeSkeletonToBones(skeletonType, skeleton);
       bones.push(...strokeBones);
     } catch (error) {
-      console.warn(`Failed to process skeleton type ${skeletonType}:`, error);
+      if (import.meta.env.DEV) { console.warn(`Failed to process skeleton type ${skeletonType}:`, error) };
       // 回退到默认处理
       return skeletonToBones(skeleton);
     }
@@ -567,11 +567,11 @@ function callStrokeSkeletonToBones(skeletonType: SkeletonType, skeleton: any): B
         return skeletonToBones_ping_na(skeleton);
       
       default:
-        console.warn(`No specific skeletonToBones function for type: ${skeletonType}`);
+        if (import.meta.env.DEV) { console.warn(`No specific skeletonToBones function for type: ${skeletonType}`) };
         return [];
     }
   } catch (error) {
-    console.warn(`Failed to call skeletonToBones for type ${skeletonType}:`, error);
+    if (import.meta.env.DEV) { console.warn(`Failed to call skeletonToBones for type ${skeletonType}:`, error) };
     return [];
   }
 }
@@ -600,13 +600,13 @@ export function calculatePointBones(point: { x: number; y: number }, bones: Bone
   
   // 验证输入点
   if (!point || typeof point.x !== 'number' || typeof point.y !== 'number' || isNaN(point.x) || isNaN(point.y)) {
-    console.warn('Invalid point in calculatePointBones:', point);
+    if (import.meta.env.DEV) { console.warn('Invalid point in calculatePointBones:', point) };
     return binding;
   }
   
   // 验证骨骼数组
   if (!bones || bones.length === 0) {
-    console.warn('No bones available for binding');
+    if (import.meta.env.DEV) { console.warn('No bones available for binding') };
     return binding;
   }
   
@@ -616,7 +616,7 @@ export function calculatePointBones(point: { x: number; y: number }, bones: Bone
   bones.forEach((bone, boneIndex) => {
     // 验证骨骼
     if (!bone || typeof bone.length !== 'number' || isNaN(bone.length) || bone.length <= 0) {
-      console.warn('Invalid bone in calculatePointBones:', bone);
+      if (import.meta.env.DEV) { console.warn('Invalid bone in calculatePointBones:', bone) };
       return;
     }
     
@@ -624,14 +624,14 @@ export function calculatePointBones(point: { x: number; y: number }, bones: Bone
     
     // 验证距离计算结果
     if (typeof distance !== 'number' || isNaN(distance) || distance < 0) {
-      console.warn('Invalid distance calculated:', distance, 'for point:', point, 'bone:', bone);
+      if (import.meta.env.DEV) { console.warn('Invalid distance calculated:', distance, 'for point:', point, 'bone:', bone) };
       return;
     }
     
     // 验证局部坐标
     if (!localCoords || typeof localCoords.u !== 'number' || typeof localCoords.v !== 'number' || 
         isNaN(localCoords.u) || isNaN(localCoords.v)) {
-      console.warn('Invalid local coordinates:', localCoords, 'for point:', point, 'bone:', bone);
+      if (import.meta.env.DEV) { console.warn('Invalid local coordinates:', localCoords, 'for point:', point, 'bone:', bone) };
       return;
     }
     
@@ -646,7 +646,7 @@ export function calculatePointBones(point: { x: number; y: number }, bones: Bone
       
       // 验证权重
       if (typeof weight !== 'number' || isNaN(weight) || weight < 0) {
-        console.warn('Invalid weight calculated:', weight, 'for distance:', distance);
+        if (import.meta.env.DEV) { console.warn('Invalid weight calculated:', weight, 'for distance:', distance) };
         return;
       }
       
@@ -656,7 +656,7 @@ export function calculatePointBones(point: { x: number; y: number }, bones: Bone
       
       // 验证衰减值
       if (typeof falloff !== 'number' || isNaN(falloff) || falloff < 0) {
-        console.warn('Invalid falloff calculated:', falloff, 'for u:', u);
+        if (import.meta.env.DEV) { console.warn('Invalid falloff calculated:', falloff, 'for u:', u) };
         return;
       }
       
@@ -664,7 +664,7 @@ export function calculatePointBones(point: { x: number; y: number }, bones: Bone
       
       // 验证最终权重
       if (typeof finalWeight !== 'number' || isNaN(finalWeight) || finalWeight < 0) {
-        console.warn('Invalid final weight:', finalWeight, 'weight:', weight, 'falloff:', falloff);
+        if (import.meta.env.DEV) { console.warn('Invalid final weight:', finalWeight, 'weight:', weight, 'falloff:', falloff) };
         return;
       }
       
@@ -679,7 +679,7 @@ export function calculatePointBones(point: { x: number; y: number }, bones: Bone
   
   // 如果没有有效的骨骼权重，尝试更宽松的绑定策略
   if (boneWeights.length === 0) {
-    console.warn(`No valid bone weights found for point ${pointIndex}, trying fallback strategy`);
+    if (import.meta.env.DEV) { console.warn(`No valid bone weights found for point ${pointIndex}, trying fallback strategy`) };
     
     // 找到最近的骨骼，即使超出阈值
     let minDistance = Infinity;
@@ -721,7 +721,7 @@ export function calculatePointBones(point: { x: number; y: number }, bones: Bone
   
   // 如果仍然没有有效的骨骼权重，返回空绑定
   if (boneWeights.length === 0) {
-    console.warn(`Still no valid bone weights found for point ${pointIndex} after fallback`);
+    if (import.meta.env.DEV) { console.warn(`Still no valid bone weights found for point ${pointIndex} after fallback`) };
     return binding;
   }
   
@@ -732,7 +732,7 @@ export function calculatePointBones(point: { x: number; y: number }, bones: Bone
   // 归一化权重
   const totalWeight = selectedBones.reduce((sum, bone) => {
     if (typeof bone.weight !== 'number' || isNaN(bone.weight)) {
-      console.warn('Invalid bone weight in normalization:', bone.weight);
+      if (import.meta.env.DEV) { console.warn('Invalid bone weight in normalization:', bone.weight) };
       return sum;
     }
     return sum + bone.weight;
@@ -740,7 +740,7 @@ export function calculatePointBones(point: { x: number; y: number }, bones: Bone
   
   // 验证总权重
   if (totalWeight <= 0 || isNaN(totalWeight)) {
-    console.warn('Invalid total weight:', totalWeight, 'selectedBones:', selectedBones);
+    if (import.meta.env.DEV) { console.warn('Invalid total weight:', totalWeight, 'selectedBones:', selectedBones) };
     // 如果总权重无效，给每个骨骼分配相等的权重
     selectedBones.forEach(bone => {
       bone.weight = 1.0 / selectedBones.length;
@@ -759,7 +759,7 @@ export function calculatePointBones(point: { x: number; y: number }, bones: Bone
 function calculateFalloff(u: number): number {
   // 验证输入
   if (typeof u !== 'number' || isNaN(u)) {
-    console.warn('Invalid u value in calculateFalloff:', u);
+    if (import.meta.env.DEV) { console.warn('Invalid u value in calculateFalloff:', u) };
     return 0.5; // 返回中等衰减值而不是0
   }
   
@@ -779,7 +779,7 @@ function calculateFalloff(u: number): number {
   
   // 验证结果
   if (typeof result !== 'number' || isNaN(result) || result < 0) {
-    console.warn('Invalid falloff result:', result, 'for u:', u, 'normalizedU:', normalizedU);
+    if (import.meta.env.DEV) { console.warn('Invalid falloff result:', result, 'for u:', u, 'normalizedU:', normalizedU) };
     return 0.5; // 返回中等衰减值
   }
   
@@ -793,7 +793,7 @@ function pointToBoneDistance(point: { x: number; y: number }, bone: Bone) {
   
   // 验证输入
   if (!start || !end || !uAxis || !vAxis) {
-    console.warn('Invalid bone data in pointToBoneDistance:', bone);
+    if (import.meta.env.DEV) { console.warn('Invalid bone data in pointToBoneDistance:', bone) };
     return { distance: Infinity, localCoords: { u: 0, v: 0 } };
   }
   
@@ -801,7 +801,7 @@ function pointToBoneDistance(point: { x: number; y: number }, bone: Bone) {
   if (isNaN(x) || isNaN(y) || isNaN(start.x) || isNaN(start.y) || 
       isNaN(end.x) || isNaN(end.y) || isNaN(uAxis.x) || isNaN(uAxis.y) || 
       isNaN(vAxis.x) || isNaN(vAxis.y)) {
-    console.warn('NaN values in pointToBoneDistance:', { x, y, start, end, uAxis, vAxis });
+    if (import.meta.env.DEV) { console.warn('NaN values in pointToBoneDistance:', { x, y, start, end, uAxis, vAxis }) };
     return { distance: Infinity, localCoords: { u: 0, v: 0 } };
   }
   
@@ -814,7 +814,7 @@ function pointToBoneDistance(point: { x: number; y: number }, bone: Bone) {
   
   // 验证计算结果
   if (isNaN(u) || isNaN(v)) {
-    console.warn('NaN in local coordinates calculation:', { u, v, toPoint, uAxis, vAxis });
+    if (import.meta.env.DEV) { console.warn('NaN in local coordinates calculation:', { u, v, toPoint, uAxis, vAxis }) };
     return { distance: Infinity, localCoords: { u: 0, v: 0 } };
   }
   
@@ -833,7 +833,7 @@ function pointToBoneDistance(point: { x: number; y: number }, bone: Bone) {
   
   // 验证距离
   if (isNaN(distance) || distance < 0) {
-    console.warn('Invalid distance calculated:', distance, 'for point:', point, 'bone:', bone);
+    if (import.meta.env.DEV) { console.warn('Invalid distance calculated:', distance, 'for point:', point, 'bone:', bone) };
     return { distance: Infinity, localCoords: { u: 0, v: 0 } };
   }
   
@@ -848,7 +848,7 @@ function normalize(vector: { x: number; y: number }): { x: number; y: number } {
   const length = Math.sqrt(vector.x ** 2 + vector.y ** 2);
   
   if (length === 0 || isNaN(length)) {
-    console.warn('Cannot normalize zero or NaN vector:', vector);
+    if (import.meta.env.DEV) { console.warn('Cannot normalize zero or NaN vector:', vector) };
     return { x: 1, y: 0 }; // 返回默认方向
   }
   
@@ -911,7 +911,7 @@ function invertMatrix(matrix: number[]): number[] {
   
   const det = a * d - b * c;
   if (Math.abs(det) < 0.001) {
-    console.warn('Matrix determinant too small for inversion:', det);
+    if (import.meta.env.DEV) { console.warn('Matrix determinant too small for inversion:', det) };
     return [1, 0, 0, 1, 0, 0]; // 返回单位矩阵
   }
   
@@ -953,7 +953,7 @@ export function calculateTransformedPoints(
   const bindData = (glyph as any)._glyph.skeleton?.skeletonBindData;
 
   if (!bindData) {
-    console.warn('No bind data found');
+    if (import.meta.env.DEV) { console.warn('No bind data found') };
     return [];
   }
 
@@ -963,12 +963,12 @@ export function calculateTransformedPoints(
   
   // 验证绑定数据
   if (!bones || !pointsBonesMap || !originalPoints) {
-    console.warn('Invalid bind data:', bindData);
+    if (import.meta.env.DEV) { console.warn('Invalid bind data:', bindData) };
     return [];
   }
   
   if (bones.length === 0) {
-    console.warn('No bones found');
+    if (import.meta.env.DEV) { console.warn('No bones found') };
     return originalPoints.map(p => ({ x: p.x, y: p.y })); // 返回原始点
   }
   
@@ -981,7 +981,7 @@ export function calculateTransformedPoints(
   // 计算每个控制点的新位置
   const transformedPoints = pointsBonesMap.map((binding, index) => {
     if (!binding || !originalPoints[index]) {
-      console.warn('Invalid binding or original point at index:', index);
+      if (import.meta.env.DEV) { console.warn('Invalid binding or original point at index:', index) };
       return { x: 0, y: 0 };
     }
     
@@ -995,7 +995,7 @@ export function calculateTransformedPoints(
 // 更新骨骼的变换矩阵
 function updateBoneMatrices(bones: Bone[], newSkeleton: any): boolean {
   if (!newSkeleton) {
-    console.warn('Invalid skeleton:', newSkeleton);
+    if (import.meta.env.DEV) { console.warn('Invalid skeleton:', newSkeleton) };
     return false;
   }
 
@@ -1027,7 +1027,7 @@ function updateLinearBoneMatrices(bones: Bone[], newSkeleton: any) {
   const end = newSkeleton.end;
   
   if (!start || !end) {
-    console.warn('Invalid start or end point:', start, end);
+    if (import.meta.env.DEV) { console.warn('Invalid start or end point:', start, end) };
     return;
   }
   
@@ -1036,7 +1036,7 @@ function updateLinearBoneMatrices(bones: Bone[], newSkeleton: any) {
   const segments = bones.length;
   
   if (segments === 0) {
-    console.warn('No bones to update in updateLinearBoneMatrices');
+    if (import.meta.env.DEV) { console.warn('No bones to update in updateLinearBoneMatrices') };
     return;
   }
   
@@ -1063,7 +1063,7 @@ function updateLinearBoneMatrices(bones: Bone[], newSkeleton: any) {
     
     // 验证长度
     if (isNaN(bone.length) || bone.length < 0.001) {
-      console.warn('Invalid bone length:', bone.length);
+      if (import.meta.env.DEV) { console.warn('Invalid bone length:', bone.length) };
       bone.length = 0.001; // 设置最小长度
     }
     
@@ -1082,14 +1082,14 @@ function updateCurveBoneMatrices(bones: Bone[], newSkeleton: any) {
   const end = newSkeleton.end;
   
   if (!start || !bend || !end) {
-    console.warn('Invalid skeleton points:', start, bend, end);
+    if (import.meta.env.DEV) { console.warn('Invalid skeleton points:', start, bend, end) };
     return;
   }
   
   const segments = bones.length;
   
   if (segments === 0) {
-    console.warn('No bones to update in updateCurveBoneMatrices');
+    if (import.meta.env.DEV) { console.warn('No bones to update in updateCurveBoneMatrices') };
     return;
   }
   
@@ -1110,7 +1110,7 @@ function updateCurveBoneMatrices(bones: Bone[], newSkeleton: any) {
     
     // 验证长度
     if (isNaN(bone.length) || bone.length < 0.001) {
-      console.warn('Invalid bone length:', bone.length);
+      if (import.meta.env.DEV) { console.warn('Invalid bone length:', bone.length) };
       bone.length = 0.001; // 设置最小长度
     }
     
@@ -1129,7 +1129,7 @@ function updateCompositeBoneMatrices(bones: Bone[], newSkeleton: any, skeletonTy
     const newBones = callStrokeSkeletonToBones(skeletonType, newSkeleton);
 
     if (newBones.length === 0) {
-      console.warn(`No bones generated for skeleton type: ${skeletonType}`);
+      if (import.meta.env.DEV) { console.warn(`No bones generated for skeleton type: ${skeletonType}`) };
       return false;
     }
 
@@ -1171,7 +1171,7 @@ function updateCompositeBoneMatrices(bones: Bone[], newSkeleton: any, skeletonTy
       
       // 验证长度
       if (isNaN(bone.length) || bone.length < 0.001) {
-        console.warn('Invalid bone length:', bone.length);
+        if (import.meta.env.DEV) { console.warn('Invalid bone length:', bone.length) };
         bone.length = 0.001; // 设置最小长度
       }
       
@@ -1180,7 +1180,7 @@ function updateCompositeBoneMatrices(bones: Bone[], newSkeleton: any, skeletonTy
     }
     return false
   } catch (error) {
-    console.warn(`Failed to update composite bone matrices for type ${skeletonType}:`, error);
+    if (import.meta.env.DEV) { console.warn(`Failed to update composite bone matrices for type ${skeletonType}:`, error) };
     // 回退到默认处理
     updateLinearBoneMatrices(bones, newSkeleton);
     return false
@@ -1210,31 +1210,31 @@ function calculatePointTransformation(binding: PointBinding, bones: Bone[], orig
   
   // 添加数据验证
   if (!originalPoint || typeof originalPoint.x !== 'number' || typeof originalPoint.y !== 'number') {
-    console.warn('Invalid original point:', originalPoint);
+    if (import.meta.env.DEV) { console.warn('Invalid original point:', originalPoint) };
     return { x: 0, y: 0 };
   }
   
   if (!binding.bones || binding.bones.length === 0) {
-    console.warn('No bones bound to point:', binding);
+    if (import.meta.env.DEV) { console.warn('No bones bound to point:', binding) };
     return originalPoint;
   }
   
   binding.bones.forEach(({ boneIndex, weight, localCoords }, boneBindingIndex) => {
     const bone = bones[boneIndex];
     if (!bone) {
-      console.warn('Bone not found at index:', boneIndex);
+      if (import.meta.env.DEV) { console.warn('Bone not found at index:', boneIndex) };
       return;
     }
     
     // 验证权重
     if (typeof weight !== 'number' || isNaN(weight) || weight < 0) {
-      console.warn('Invalid weight:', weight);
+      if (import.meta.env.DEV) { console.warn('Invalid weight:', weight) };
       return;
     }
     
     // 验证矩阵
     if (!bone.currentMatrix) {
-      console.warn('Invalid bone currentMatrix:', bone);
+      if (import.meta.env.DEV) { console.warn('Invalid bone currentMatrix:', bone) };
       return;
     }
 
@@ -1243,7 +1243,7 @@ function calculatePointTransformation(binding: PointBinding, bones: Bone[], orig
     
     // 验证变换结果
     if (isNaN(transformedPoint.x) || isNaN(transformedPoint.y)) {
-      console.warn('Invalid transformed point:', transformedPoint, 'for bone:', bone);
+      if (import.meta.env.DEV) { console.warn('Invalid transformed point:', transformedPoint, 'for bone:', bone) };
       return;
     }
     
@@ -1256,7 +1256,7 @@ function calculatePointTransformation(binding: PointBinding, bones: Bone[], orig
   
   // 如果所有计算都失败，返回原始点
   if (isNaN(newX) || isNaN(newY)) {
-    console.warn('Final transformation result is NaN, returning original point');
+    if (import.meta.env.DEV) { console.warn('Final transformation result is NaN, returning original point') };
     return originalPoint;
   }
   
@@ -1266,7 +1266,7 @@ function calculatePointTransformation(binding: PointBinding, bones: Bone[], orig
 // 点变换到局部坐标
 function transformPointToLocal(point: { x: number; y: number }, matrix: number[]): { x: number; y: number } {
   if (!matrix || matrix.length !== 6) {
-    console.warn('Invalid matrix:', matrix);
+    if (import.meta.env.DEV) { console.warn('Invalid matrix:', matrix) };
     return point;
   }
   
@@ -1274,14 +1274,14 @@ function transformPointToLocal(point: { x: number; y: number }, matrix: number[]
   
   // 验证矩阵元素
   if (isNaN(a) || isNaN(b) || isNaN(c) || isNaN(d) || isNaN(tx) || isNaN(ty)) {
-    console.warn('Matrix contains NaN values:', matrix);
+    if (import.meta.env.DEV) { console.warn('Matrix contains NaN values:', matrix) };
     return point;
   }
   
   const det = a * d - b * c;
   
   if (Math.abs(det) < 0.001) {
-    console.warn('Matrix determinant too small:', det);
+    if (import.meta.env.DEV) { console.warn('Matrix determinant too small:', det) };
     return point;
   }
   
@@ -1301,7 +1301,7 @@ function transformPointToLocal(point: { x: number; y: number }, matrix: number[]
   
   // 验证结果
   if (isNaN(result.x) || isNaN(result.y)) {
-    console.warn('Transform result is NaN:', result, 'for point:', point, 'matrix:', matrix);
+    if (import.meta.env.DEV) { console.warn('Transform result is NaN:', result, 'for point:', point, 'matrix:', matrix) };
     return point;
   }
   
@@ -1311,7 +1311,7 @@ function transformPointToLocal(point: { x: number; y: number }, matrix: number[]
 // 点变换到世界坐标
 function transformPointToWorld(point: { x: number; y: number }, matrix: number[]): { x: number; y: number } {
   if (!matrix || matrix.length !== 6) {
-    console.warn('Invalid matrix:', matrix);
+    if (import.meta.env.DEV) { console.warn('Invalid matrix:', matrix) };
     return point;
   }
   
@@ -1319,7 +1319,7 @@ function transformPointToWorld(point: { x: number; y: number }, matrix: number[]
   
   // 验证矩阵元素
   if (isNaN(a) || isNaN(b) || isNaN(c) || isNaN(d) || isNaN(tx) || isNaN(ty)) {
-    console.warn('Matrix contains NaN values:', matrix);
+    if (import.meta.env.DEV) { console.warn('Matrix contains NaN values:', matrix) };
     return point;
   }
   
@@ -1330,7 +1330,7 @@ function transformPointToWorld(point: { x: number; y: number }, matrix: number[]
   
   // 验证结果
   if (isNaN(result.x) || isNaN(result.y)) {
-    console.warn('Transform result is NaN:', result, 'for point:', point, 'matrix:', matrix);
+    if (import.meta.env.DEV) { console.warn('Transform result is NaN:', result, 'for point:', point, 'matrix:', matrix) };
     return point;
   }
   
@@ -1348,7 +1348,7 @@ function skeletonCoordChanged(a: number, b: number): boolean {
 export function applySkeletonTransformation(glyph: CustomGlyph, newSkeleton: any) {
   const penComponents = glyph.components.filter(comp => comp.type === 'pen') as IGlyphComponent[];
   if (penComponents.length === 0) {
-    console.warn('No pen components found in applySkeletonTransformation');
+    if (import.meta.env.DEV) { console.warn('No pen components found in applySkeletonTransformation') };
     return;
   }
 
@@ -1655,14 +1655,14 @@ export function glyphSkeletonBindFromRefGlyph(
   const joints = glyphInstance.getJoints()
 
   if (!reflines || reflines.length === 0) {
-    console.warn('[glyphSkeleton] No reflines on instance')
+    if (import.meta.env.DEV) { console.warn('[glyphSkeleton] No reflines on instance') }
     return false
   }
 
   // 2. 拆分 reflines 为骨骼
   const bones = reflinesToBones(reflines, joints, boneSegments)
   if (bones.length === 0) {
-    console.warn('[glyphSkeleton] Failed to create bones from reflines')
+    if (import.meta.env.DEV) { console.warn('[glyphSkeleton] Failed to create bones from reflines') }
     return false
   }
 
@@ -1678,7 +1678,7 @@ export function glyphSkeletonBindFromRefGlyph(
   // 3. 采样所有钢笔组件的贝塞尔曲线 + 构建绑定数据
   const penComponents = rawGlyph.components?.filter((c: any) => c.type === 'pen') as IGlyphComponent[] || []
   if (penComponents.length === 0) {
-    console.warn('[glyphSkeleton] No pen components in current glyph')
+    if (import.meta.env.DEV) { console.warn('[glyphSkeleton] No pen components in current glyph') }
     return false
   }
 
@@ -1688,7 +1688,7 @@ export function glyphSkeletonBindFromRefGlyph(
   const sampledBindData = buildSampledBindData(penComponents, bones, SAMPLE_TOTAL)
 
   if (sampledBindData.samplePoints.length === 0) {
-    console.warn('[glyphSkeleton] No pen component points found for sampling')
+    if (import.meta.env.DEV) { console.warn('[glyphSkeleton] No pen component points found for sampling') }
     return false
   }
 
@@ -1806,7 +1806,7 @@ export function applyGlyphSkeletonTransformation(glyphInstance: CustomGlyph): vo
 export function glyphSkeletonRebind(glyphInstance: CustomGlyph): void {
   const skeleton = (glyphInstance._glyph as any)?.skeleton
   if (!skeleton?.glyphSkeletonBindData) {
-    if (import.meta.env.DEV) console.warn('[SampledBind] glyphSkeletonRebind: no glyphSkeletonBindData')
+    if (import.meta.env.DEV) { console.warn('[SampledBind] glyphSkeletonRebind: no glyphSkeletonBindData') }
     return
   }
 
@@ -1817,7 +1817,7 @@ export function glyphSkeletonRebind(glyphInstance: CustomGlyph): void {
   const joints = glyphInstance.getJoints()
 
   if (!reflines || reflines.length === 0) {
-    if (import.meta.env.DEV) console.warn('[glyphSkeletonRebind] No reflines, skipping')
+    if (import.meta.env.DEV) { console.warn('[glyphSkeletonRebind] No reflines, skipping') }
     return
   }
 
@@ -1937,8 +1937,8 @@ const bindHandDrawnShape = (glyph) => {
     const bindResult = glyphSkeletonBind(glyph)
     
     if (bindResult) {
-      console.log('绑定成功，骨骼数量:', bindResult.bones.length)
-      console.log('控制点绑定数量:', bindResult.pointsBonesMap.length)
+      if (import.meta.env.DEV) { console.log('绑定成功，骨骼数量:', bindResult.bones.length) }
+      if (import.meta.env.DEV) { console.log('控制点绑定数量:', bindResult.pointsBonesMap.length) }
     }
   }
 }

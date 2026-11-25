@@ -555,7 +555,7 @@ export function createTestHandlers(ctx: MenuHandlerContext): MenuHandlersMap {
       return
     }
     // 直接打印当前编辑字符对象（不做字段遍历）
-    console.log(character)
+    if (import.meta.env.DEV) { console.log(character) }
   }
 
   return {

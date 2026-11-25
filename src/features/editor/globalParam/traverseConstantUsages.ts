@@ -171,7 +171,7 @@ export async function collectProjectConstantUsageHitsAsync(options: {
       try {
         ch = await loadCharacter(file.uuid, meta.uuid)
       } catch (e) {
-        console.warn('[collectProjectConstantUsageHitsAsync] loadCharacter failed', meta.uuid, e)
+        if (import.meta.env.DEV) { console.warn('[collectProjectConstantUsageHitsAsync] loadCharacter failed', meta.uuid, e) }
         ch = null
       }
     }
@@ -225,7 +225,7 @@ export async function collectProjectConstantUsageHitsForUuidsAsync(options: {
       try {
         ch = await loadCharacter(file.uuid, meta.uuid)
       } catch (e) {
-        console.warn('[collectProjectConstantUsageHitsForUuidsAsync] loadCharacter failed', meta.uuid, e)
+        if (import.meta.env.DEV) { console.warn('[collectProjectConstantUsageHitsForUuidsAsync] loadCharacter failed', meta.uuid, e) }
         ch = null
       }
     }

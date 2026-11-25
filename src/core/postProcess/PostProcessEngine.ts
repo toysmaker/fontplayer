@@ -317,7 +317,7 @@ export class PostProcessEngine {
       if (!clipContours.length) continue
       result = contourDifference(result, clipContours)
       if (!result.length) {
-        if (import.meta.env.DEV) console.warn('[PostProcessEngine.applyDiff] contourDifference 返回空!')
+        if (import.meta.env.DEV) { console.warn('[PostProcessEngine.applyDiff] contourDifference 返回空!') }
         break
       }
     }

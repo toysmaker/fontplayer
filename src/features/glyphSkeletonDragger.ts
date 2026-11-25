@@ -184,6 +184,8 @@ export class GlyphSkeletonDragger {
     if (now - this.lastDragTime < this.DRAG_THROTTLE_MS) return
     this.lastDragTime = now
 
+    const t0 = import.meta.env.DEV ? performance.now() : 0
+
     const displayDx = e.clientX - this.startDisplayX
     const displayDy = e.clientY - this.startDisplayY
     const delta = this.convertDeltaToUPM(displayDx, displayDy)
@@ -227,7 +229,14 @@ export class GlyphSkeletonDragger {
       glyphSkeletonRebind(this.glyphInstance)
     }
 
+    const t1 = import.meta.env.DEV ? performance.now() : 0
     this.onRender?.()
+    const t2 = import.meta.env.DEV ? performance.now() : 0
+    if (import.meta.env.DEV) {
+      console.log(
+        `[dragCost][glyphSkel] 变换 ${(t1 - t0).toFixed(2)}ms | 渲染 ${(t2 - t1).toFixed(2)}ms`,
+      )
+    }
   }
 
   private onMouseUp = (e: MouseEvent): void => {

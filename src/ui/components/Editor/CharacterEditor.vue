@@ -118,6 +118,7 @@ import { renderContourEditOverlay, initContourEditOverlay, forceCleanupOverlay }
 import { useEffectStore } from '@/features/effects/effectStore'
 import { useBackgroundFontStore } from '@/features/backgroundFont/backgroundFontStore'
 import { getStrokeWidth } from '@/utils/canvas-utils'
+import { computeGlyphComponentBoundingBox } from '@/core/utils/glyphBounds'
 import { PenSelectTool } from '@/features/tools/select/PenSelectTool'
 import { discardGlobalConstantsDraftOnLeave } from '@/stores/editorConstantsSession'
 import { setEditCanvasContext, clearEditCanvasContext } from '@/features/editor/editCanvas'
@@ -168,6 +169,22 @@ const isRenderingFromWatch = ref(false)
 
 // 串行化画布渲染：骨架拖拽时 dragger onRender 与 orderedList deep watch 可能同帧连续触发，避免交错重绘造成闪烁
 let renderCanvasTail: Promise<void> = Promise.resolve()
+// 在 runRenderCanvasSync 末尾统计耗时: 每次调用的同步绘制真实成本
+function devRecordRenderSyncCost(start: number): void {
+  if (!import.meta.env.DEV) return
+  const cost = performance.now() - start
+  devRenderSyncCount++
+  devRenderSyncTotal += cost
+  if (devRenderSyncCount % 60 === 1) {
+    console.log(
+      `[dragCost][renderSync] 第${devRenderSyncCount}次 单次 ${cost.toFixed(2)}ms | 60次均值 ${(devRenderSyncTotal / devRenderSyncCount).toFixed(2)}ms`,
+    )
+  }
+  if (devRenderSyncCount >= 600) {
+    devRenderSyncCount = 0
+    devRenderSyncTotal = 0
+  }
+}
 
 // Canvas 尺寸
 const canvasWidth = computed(() => {
@@ -311,6 +328,91 @@ function renderCharacterSkeleton(
 }
 // ============ 骨架渲染函数结束 ============
 
+// ============ 拖拽期局部重绘 ============
+// 组件数较多的字符(20+)拖拽卡顿的根因是每帧整幅重绘主画布 —— WKWebView 对 2000×2000
+// (16MB)画布的任何绘制都触发整层栅格化, 每帧整层重画 = 高 CPU + 内存抖动。
+// 方案(叠加层): 拖拽首帧把主画布渲染为"不含被拖组件"的静止场景, 之后主画布不再绘制;
+// 被拖组件画在独立小叠加层(组件包围盒 + 40% 余量)上, 每帧只重绘叠加层;
+// 整体平移用 CSS transform 移动叠加层; 拖拽结束移除叠加层并一次性全量渲染。
+let dragOverlay: HTMLCanvasElement | null = null
+let dragOverlayComp: string | null = null
+let dragOverlayBoxUPM: { x: number; y: number; w: number; h: number } | null = null
+let dragOverlayBaseOx = 0
+let dragOverlayBaseOy = 0
+let dragOverlayRatio = 1
+
+/** 被拖拽组件的世界坐标包围盒(含 ox/oy) */
+function dragComponentBBox(
+  draggingUUID: string,
+  components: any[],
+): { x: number; y: number; w: number; h: number } | null {
+  const comp = components.find((c: any) => c.uuid === draggingUUID)
+  if (!comp) return null
+  return computeGlyphComponentBoundingBox(comp, {
+    ox: (comp as any).ox ?? 0,
+    oy: (comp as any).oy ?? 0,
+  })
+}
+
+/** 拖拽会话首帧: 主画布静止渲染 + 创建叠加层 */
+function ensureDragOverlay(canvas: HTMLCanvasElement, draggingUUID: string, components: any[]): boolean {
+  if (dragOverlay && dragOverlayComp === draggingUUID) return true
+  removeDragOverlay()
+  // 主画布一次性渲染为静止场景(不含被拖组件)
+  render(canvas, true, false, {
+    mode: 'character',
+    character: editingCharacter.value,
+    components: components,
+    background: editorBackground.value,
+    grid: editorGrid.value,
+    layoutTransformGrid: layoutTransformGrid.value,
+    skipComponentUUIDs: [draggingUUID],
+  })
+  const bbox = dragComponentBBox(draggingUUID, components)
+  if (!bbox) return false
+  const pad = Math.max(80, Math.max(bbox.w, bbox.h) * 0.4)
+  const box = { x: bbox.x - pad, y: bbox.y - pad, w: bbox.w + 2 * pad, h: bbox.h + 2 * pad }
+  const ratio = canvas.clientWidth / canvas.width
+  // 画布元素的平移 transform 会移动其视觉位置, 叠加层定位需补偿
+  const view = editingCharacter.value?.view || { translateX: 0, translateY: 0 }
+  const panX = view.translateX || 0
+  const panY = view.translateY || 0
+  const ov = document.createElement('canvas')
+  ov.width = Math.ceil(box.w * 2)
+  ov.height = Math.ceil(box.h * 2)
+  Object.assign(ov.style, {
+    position: 'absolute',
+    pointerEvents: 'none',
+    zIndex: '5',
+    left: `${canvas.offsetLeft + panX + box.x * 2 * ratio}px`,
+    top: `${canvas.offsetTop + panY + box.y * 2 * ratio}px`,
+    width: `${box.w * 2 * ratio}px`,
+    height: `${box.h * 2 * ratio}px`,
+  })
+  canvas.parentElement?.appendChild(ov)
+  const comp = components.find((c: any) => c.uuid === draggingUUID)
+  dragOverlay = ov
+  dragOverlayComp = draggingUUID
+  dragOverlayBoxUPM = box
+  dragOverlayBaseOx = (comp as any)?.ox ?? 0
+  dragOverlayBaseOy = (comp as any)?.oy ?? 0
+  dragOverlayRatio = ratio
+  return true
+}
+
+function removeDragOverlay(): void {
+  if (dragOverlay) {
+    dragOverlay.remove()
+    dragOverlay = null
+  }
+  dragOverlayComp = null
+  dragOverlayBoxUPM = null
+}
+
+// DEV: runRenderCanvasSync 真实绘制开销统计
+let devRenderSyncCount = 0
+let devRenderSyncTotal = 0
+
 function runRenderCanvasSync() {
   if (!canvasRef.value || !editingCharacter.value) {
     if (import.meta.env.DEV) {
@@ -318,18 +420,65 @@ function runRenderCanvasSync() {
     }
     return
   }
-  
+  const devT0 = import.meta.env.DEV ? performance.now() : 0
+
   const components = (characterStore as any).orderedListWithItemsForCurrentCharacterFile
-  
-  render(canvasRef.value, true, false, {
-    mode: 'character',
-    character: editingCharacter.value,
-    components: components,
-    background: editorBackground.value,
-    grid: editorGrid.value,
-    layoutTransformGrid: layoutTransformGrid.value,
-  })
-  
+  const canvas = canvasRef.value
+  const draggingUUID = dragger && dragger.isDragging() ? dragger.getDraggedComponentUUID() : null
+
+  const useOverlay =
+    !!draggingUUID &&
+    components.length > 8 &&
+    !layoutTransformGrid.value &&
+    !editingCharacter.value?.info?.useSkeletonGrid
+
+  if (useOverlay && draggingUUID) {
+    if (!ensureDragOverlay(canvas, draggingUUID, components)) {
+      // 包围盒不可用: 退回全量渲染
+      render(canvas, true, false, {
+        mode: 'character',
+        character: editingCharacter.value,
+        components: components,
+        background: editorBackground.value,
+        grid: editorGrid.value,
+        layoutTransformGrid: layoutTransformGrid.value,
+      })
+    } else {
+      // 每帧: 只重绘叠加层(主画布不动)
+      const ov = dragOverlay!
+      const ctx = ov.getContext('2d')
+      if (ctx) {
+        ctx.clearRect(0, 0, ov.width, ov.height)
+      }
+      render(ov, false, false, {
+        mode: 'character',
+        character: editingCharacter.value,
+        components: components,
+        background: { color: '' } as any,
+        grid: editorGrid.value,
+        layoutTransformGrid: undefined,
+        onlyComponentUUIDs: [draggingUUID],
+        offset: { x: -dragOverlayBoxUPM!.x, y: -dragOverlayBoxUPM!.y },
+      })
+      // 整体平移拖拽: CSS transform 移动叠加层(不触发主画布重绘)
+      const comp = components.find((c: any) => c.uuid === draggingUUID)
+      const dx = (((comp as any)?.ox ?? 0) - dragOverlayBaseOx) * 2 * dragOverlayRatio
+      const dy = (((comp as any)?.oy ?? 0) - dragOverlayBaseOy) * 2 * dragOverlayRatio
+      ov.style.transform = dx !== 0 || dy !== 0 ? `translate(${dx}px, ${dy}px)` : ''
+    }
+  } else {
+    // 非拖拽或组件较少: 常规整幅渲染, 并移除叠加层
+    removeDragOverlay()
+    render(canvas, true, false, {
+      mode: 'character',
+      character: editingCharacter.value,
+      components: components,
+      background: editorBackground.value,
+      grid: editorGrid.value,
+      layoutTransformGrid: layoutTransformGrid.value,
+    })
+  }
+
   // 渲染关键点和辅助线（在主要渲染之后）
   // ============ 骨架渲染 (Character Skeleton Overlay) ============
   // 渲染从位图提取的字符骨架，黑色stroke叠加
@@ -410,6 +559,8 @@ function runRenderCanvasSync() {
       toolRenderFn(canvasRef.value)
     }
   }
+
+  devRecordRenderSyncCost(devT0)
 }
 
 // 初始化拖拽器
@@ -600,6 +751,29 @@ const cleanupTools = () => {
 }
 
 onMounted(async () => {
+  // DEV 底层探针: 画布捕获阶段监听, 确认 mousedown/mousemove 是否到达画布、
+  // 以及拖拽时 buttons 状态 —— 用于定位"拖拽走了哪条路径"
+  if (import.meta.env.DEV && canvasRef.value) {
+    let probeMove = 0
+    canvasRef.value.addEventListener(
+      'mousedown',
+      (e) => {
+        // mousedown 探针降频: 只记录有按钮按下的
+        if (e.buttons === 1) console.log(`[dragProbe][canvas] mousedown buttons=1`)
+      },
+      true,
+    )
+    canvasRef.value.addEventListener(
+      'mousemove',
+      (e) => {
+        probeMove++
+        if (probeMove % 100 === 1 && e.buttons === 1) {
+          console.log(`[dragProbe][canvas] move #${probeMove} buttons=1`)
+        }
+      },
+      true,
+    )
+  }
   // 如果还没有设置编辑字符，从 UUID 设置
   if ((characterStore as any).editingCharacterUUID) {
     if (!(characterStore as any).editingCharacter) {

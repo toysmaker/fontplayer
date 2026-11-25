@@ -87,7 +87,7 @@ export function convertCubicToQuadratic(
 ): IQuadraticBezierCurve[] {
 	// 防止无限递归
 	if (depth >= maxDepth) {
-		console.warn(`⚠️ Max recursion depth (${maxDepth}) reached, using approximation`)
+		if (import.meta.env.DEV) { console.warn(`⚠️ Max recursion depth (${maxDepth}) reached, using approximation`) }
 		// 强制返回近似结果
 		const control: IPoint = {
 			x: (3 * cubic.control1.x + 3 * cubic.control2.x) / 6 + (cubic.start.x + cubic.end.x) / 6,
@@ -236,7 +236,7 @@ export function convertCubicToQuadraticFixed(
 ): IQuadraticBezierCurve[] {
 	// 防止无限递归
 	if (depth >= totalDepth) {
-		console.warn(`⚠️ Max recursion depth (${totalDepth}) reached, using approximation`)
+		if (import.meta.env.DEV) { console.warn(`⚠️ Max recursion depth (${totalDepth}) reached, using approximation`) }
 		// 强制返回近似结果
 		const control: IPoint = {
 			x: (3 * cubic.control1.x + 3 * cubic.control2.x) / 6 + (cubic.start.x + cubic.end.x) / 6,
@@ -478,7 +478,7 @@ export function convertContourToQuadraticSimple(
 	
 	// 只在有很多三次贝塞尔时才打印日志
 	if (cubicCount > 20) {
-		console.log(`⚠️ Contour has ${cubicCount} cubic curves, converted to ${cubicCount * 2} quadratic curves`)
+		if (import.meta.env.DEV) { console.log(`⚠️ Contour has ${cubicCount} cubic curves, converted to ${cubicCount * 2} quadratic curves`) }
 	}
 	
 	return result

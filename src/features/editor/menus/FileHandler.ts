@@ -44,7 +44,7 @@ async function scanProblemGlyphs(file: IFile) {
   const PROBLEM_NAMES = new Set(['竖撇', '挑捺', '斜钩', '横钩', '横弯钩'])
   const charList = file.characterList ?? []
   if (!charList.length) return
-  if (import.meta.env.DEV) console.log(`[scanProblemGlyphs] 开始扫描 ${charList.length} 个字符...`)
+  if (import.meta.env.DEV) { console.log(`[scanProblemGlyphs] 开始扫描 ${charList.length} 个字符...`) }
   const results: Array<{ charText: string; charUuid: string; glyphNames: string[] }> = []
   let lastYield = performance.now()
   for (let i = 0; i < charList.length; i++) {
@@ -61,7 +61,7 @@ async function scanProblemGlyphs(file: IFile) {
     }
     if (found.length) {
       results.push({ charText: meta.character.text, charUuid: meta.uuid, glyphNames: found })
-      if (import.meta.env.DEV) console.log(`[scanProblemGlyphs] [${i + 1}/${charList.length}] 找到: "${meta.character.text}" -> ${found.join(', ')}`)
+      if (import.meta.env.DEV) { console.log(`[scanProblemGlyphs] [${i + 1}/${charList.length}] 找到: "${meta.character.text}" -> ${found.join(', ')}`) }
     }
     const now = performance.now()
     if (now - lastYield >= 16) {
@@ -375,7 +375,7 @@ export class FileHandler {
         const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
         characterDataManager.forceCleanupAllCache()
       } catch (e) {
-        console.warn('[saveFileWeb] failed to cleanup character cache:', e)
+        if (import.meta.env.DEV) { console.warn('[saveFileWeb] failed to cleanup character cache:', e) }
       }
     }
   }
@@ -520,7 +520,7 @@ export class FileHandler {
         const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
         characterDataManager.forceCleanupAllCache()
       } catch (e) {
-        console.warn('[cacheProjectToWeb] failed to cleanup character cache:', e)
+        if (import.meta.env.DEV) { console.warn('[cacheProjectToWeb] failed to cleanup character cache:', e) }
       }
     }
   }
@@ -613,7 +613,7 @@ export class FileHandler {
           const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
           characterDataManager.forceCleanupAllCache()
         } catch (e) {
-          console.warn('[exportProject] failed to cleanup character cache:', e)
+          if (import.meta.env.DEV) { console.warn('[exportProject] failed to cleanup character cache:', e) }
         }
       }
     }
@@ -668,7 +668,7 @@ export class FileHandler {
           const { characterDataManager } = await import('@/core/storage/CharacterDataManager')
           characterDataManager.forceCleanupAllCache()
         } catch (e) {
-          console.warn('[exportProjectAsJson] failed to cleanup character cache:', e)
+          if (import.meta.env.DEV) { console.warn('[exportProjectAsJson] failed to cleanup character cache:', e) }
         }
       }
     }
@@ -971,7 +971,7 @@ export class FileHandler {
         if (char) {
           await write(JSON.stringify(this.plainCharacter(char)))
         } else {
-          console.warn(`[writeProjectStream] missing character ${metadata.uuid}, using metadata`)
+          if (import.meta.env.DEV) { console.warn(`[writeProjectStream] missing character ${metadata.uuid}, using metadata`) }
           await write(JSON.stringify(metadata))
         }
 
@@ -1029,7 +1029,7 @@ export class FileHandler {
       if (character) {
         characterList.push(this.plainCharacter(character))
       } else {
-        console.warn(`Failed to load character ${metadata.uuid} from IndexedDB`)
+        if (import.meta.env.DEV) { console.warn(`Failed to load character ${metadata.uuid} from IndexedDB`) }
       }
       if (onCharacterProgress) {
         onCharacterProgress(i + 1)
@@ -1126,9 +1126,9 @@ export class FileHandler {
         constants: constants.slice(0, 10),
       }
       const sampleJson = JSON.stringify(sampleData)
-      console.log('[FileHandler.exportProject] sample JSON length (3 chars / 3 glyphs):', sampleJson.length)
+      if (import.meta.env.DEV) { console.log('[FileHandler.exportProject] sample JSON length (3 chars / 3 glyphs):', sampleJson.length) }
     } catch (e) {
-      console.warn('[FileHandler.exportProject] logProjectDataSummary failed:', e)
+      if (import.meta.env.DEV) { console.warn('[FileHandler.exportProject] logProjectDataSummary failed:', e) }
     }
   }
 
@@ -1218,7 +1218,7 @@ export class FileHandler {
         glyphSampleHasOField: glyphHasO,
       })
     } catch (e) {
-      console.warn('[FileHandler.exportProject] logProjectDataDetails failed:', e)
+      if (import.meta.env.DEV) { console.warn('[FileHandler.exportProject] logProjectDataDetails failed:', e) }
     }
   }
 

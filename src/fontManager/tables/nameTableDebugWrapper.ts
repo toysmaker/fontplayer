@@ -10,13 +10,13 @@ import { validateNameTable, debugPrintNameTable, calculateNameTableSize } from '
  * 带调试的createTable2包装器
  */
 export function createTable2WithDebug(names: Array<any>, variants?: any) {
-  console.log('=== createTable2 Debug Start ===')
-  console.log('Input names count:', names.length)
-  console.log('Has variants:', !!variants)
+  if (import.meta.env.DEV) { console.log('=== createTable2 Debug Start ===') }
+  if (import.meta.env.DEV) { console.log('Input names count:', names.length) }
+  if (import.meta.env.DEV) { console.log('Has variants:', !!variants) }
   
   if (variants) {
-    console.log('Variants.axes count:', variants.axes?.length || 0)
-    console.log('Variants.instances count:', variants.instances?.length || 0)
+    if (import.meta.env.DEV) { console.log('Variants.axes count:', variants.axes?.length || 0) }
+    if (import.meta.env.DEV) { console.log('Variants.instances count:', variants.instances?.length || 0) }
     
     if (variants.axes) {
       console.log('Axes:', variants.axes.map((a: any) => ({
@@ -39,22 +39,22 @@ export function createTable2WithDebug(names: Array<any>, variants?: any) {
   const nameTable = createTable2(names, variants)
   
   // 验证结果
-  console.log('\n=== Name Table Created ===')
+  if (import.meta.env.DEV) { console.log('\n=== Name Table Created ===') }
   const validation = validateNameTable(nameTable)
   
   if (!validation.valid) {
     console.error('❌ Name table validation failed!')
     validation.issues.forEach(issue => console.error(`  - ${issue}`))
   } else {
-    console.log('✅ Name table validation passed')
+    if (import.meta.env.DEV) { console.log('✅ Name table validation passed') }
   }
   
   debugPrintNameTable(nameTable)
   
   const expectedSize = calculateNameTableSize(nameTable)
-  console.log(`Expected binary size: ${expectedSize} bytes`)
+  if (import.meta.env.DEV) { console.log(`Expected binary size: ${expectedSize} bytes`) }
   
-  console.log('=== createTable2 Debug End ===\n')
+  if (import.meta.env.DEV) { console.log('=== createTable2 Debug End ===\n') }
   
   return nameTable
 }

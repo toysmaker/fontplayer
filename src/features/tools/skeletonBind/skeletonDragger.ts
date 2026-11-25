@@ -16,6 +16,7 @@ import {
 } from "@/stores/skeletonDragger"
 import { releaseStoredBindRuntimeData } from "@/features/skeletonSampling"
 import { setSkeletonTransformPreview } from "@/features/glyphSkeletonBind"
+import { throttle } from "@/utils/performance"
 import * as R from "ramda"
 
 type GetCoord = (coord: number) => number
@@ -72,6 +73,38 @@ export const initSkeletonDragger = (
   let lastX = -1
   let lastY = -1
 
+  /**
+   * 骨架拖拽节流: 每 mousemove 的 onSkeletonDrag(整段轮廓重算) + onRender(整幅重绘)
+   * 是拖拽卡顿的主要来源(JS 40% / Paint 60%); 按 16ms 节流, trailing 保证最终姿态。
+   * delta 为相对 mousedown 的累计位移, 节流不改变语义。
+   */
+  const throttledDragMove = throttle(
+    (dx: number, dy: number) => {
+      const glyph = editGlyphOnDragging.value
+      const instance = glyph?.uuid
+        ? (instanceManager.getInstance(glyph.uuid, () => new CustomGlyph(glyph), "glyph") as unknown as CustomGlyph | null)
+        : null
+      if (draggingJoint.value && (instance as any)?.onSkeletonDrag) {
+        const t0 = import.meta.env.DEV ? performance.now() : 0
+        ;(instance as any).onSkeletonDrag({
+          draggingJoint: draggingJoint.value,
+          deltaX: dx,
+          deltaY: dy,
+        })
+        const t1 = import.meta.env.DEV ? performance.now() : 0
+        onRender()
+        const t2 = import.meta.env.DEV ? performance.now() : 0
+        if (import.meta.env.DEV) {
+          console.log(
+            `[dragCost][panel] 变换 ${(t1 - t0).toFixed(2)}ms | 渲染 ${(t2 - t1).toFixed(2)}ms | 组件数 ${((glyph as any)?.components?.length) ?? '?'}`,
+          )
+        }
+      }
+    },
+    16,
+    { leading: true, trailing: true },
+  )
+
   const onMouseDown = (e: MouseEvent) => {
     const glyphStore = useGlyphStore()
     editGlyphOnDragging.value = R.clone((glyphStore as any).editingGlyph)
@@ -116,21 +149,9 @@ export const initSkeletonDragger = (
   const onMouseMove = (e: MouseEvent) => {
     const dx = getCoord(e.offsetX) - lastX
     const dy = getCoord(e.offsetY) - lastY
-    const glyph = editGlyphOnDragging.value
-    const instance =
-      glyph?.uuid
-        ? (instanceManager.getInstance(glyph.uuid, () => new CustomGlyph(glyph), "glyph") as unknown as CustomGlyph | null)
-        : null
 
     if (mousedown) {
-      if (draggingJoint.value && (instance as any)?.onSkeletonDrag) {
-        ;(instance as any).onSkeletonDrag({
-          draggingJoint: draggingJoint.value,
-          deltaX: dx,
-          deltaY: dy,
-        })
-        onRender()
-      }
+      throttledDragMove(dx, dy)
     } else {
       const joints = getJoints()
       const d = 10
@@ -149,6 +170,8 @@ export const initSkeletonDragger = (
   }
 
   const onMouseUp = (e: MouseEvent) => {
+    // 取消挂起的 trailing 节流(其最终态由下方 onSkeletonDragEnd + onRender 补齐)
+    ;(throttledDragMove as any).cancel?.()
     // 先退出预览模式, 保证随后的 onSkeletonDragEnd 执行最终拟合
     setSkeletonTransformPreview(false)
     const glyph = editGlyphOnDragging.value
@@ -179,6 +202,8 @@ export const initSkeletonDragger = (
     putAtCoord.value = null
     draggingJoint.value = null
     editGlyphOnDragging.value = null
+    // 收尾渲染: 最终拟合结果在 onSkeletonDragEnd 中完成, 需重绘一次呈现
+    onRender()
   }
 
   canvas.addEventListener("mousedown", onMouseDown)

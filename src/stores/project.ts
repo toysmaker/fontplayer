@@ -59,7 +59,7 @@ export const useProjectStore = defineStore('project', () => {
     // 检查是否已存在
     const exists = files.value.find(f => f.uuid === file.uuid)
     if (exists) {
-      console.warn(`File ${file.uuid} already exists`)
+      if (import.meta.env.DEV) { console.warn(`File ${file.uuid} already exists`) }
       return false
     }
 

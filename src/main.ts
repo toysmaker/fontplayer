@@ -112,6 +112,45 @@ declare global {
   }
 }
 
+import { startMemCensus } from '@/features/memCensus'
+
+/**
+ * 控制台输出治理:
+ * - 生产: log/info/debug/warn 一律空操作(消除刷屏与参数求值开销); console.error 保留;
+ * - DEV: 默认静音热路径日志, 只放行探针/普查白名单前缀([dragCost]/[dragProbe]/[memCensus]/[probe]);
+ *        需要看全部日志时在控制台执行 localStorage.debugConsole = '1' 并刷新。
+ */
+if (!import.meta.env.DEV) {
+  const noop = () => {}
+  console.log = noop
+  console.info = noop
+  console.debug = noop
+  console.warn = noop
+} else {
+  const PROBE_PREFIXES = ['[dragCost', '[dragProbe', '[memCensus', '[probe]']
+  const fullLogs = (() => {
+    try {
+      return localStorage.getItem('debugConsole') === '1'
+    } catch {
+      return true
+    }
+  })()
+  const origLog = console.log.bind(console)
+  const origInfo = console.info.bind(console)
+  const origDebug = console.debug.bind(console)
+  const origWarn = console.warn.bind(console)
+  const makeFilter = (orig: (...a: any[]) => void) => (...args: any[]) => {
+    const head = typeof args[0] === 'string' ? args[0] : ''
+    if (fullLogs || PROBE_PREFIXES.some((p) => head.startsWith(p))) {
+      orig(...args)
+    }
+  }
+  console.log = makeFilter(origLog)
+  console.info = makeFilter(origInfo)
+  console.debug = makeFilter(origDebug)
+  console.warn = makeFilter(origWarn)
+}
+
 const app = createApp(App)
 const pinia = createPinia()
 
@@ -272,6 +311,9 @@ void (async () => {
     }
   }
   app.mount('#app')
+
+  // DEV-only 内存普查: 每 5 分钟记录缓存池/工程数据体积, 定位长时间运行后的内存残留
+  startMemCensus()
 
   // 空闲时预热读音释义数据（gzip 154KB，不阻塞启动）
   if (typeof (window as any).requestIdleCallback === 'function') {

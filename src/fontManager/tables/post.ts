@@ -138,8 +138,8 @@ const parse = (data: DataView, offset: number, font: IFont) => {
 const create = (table: IPostTable) => {
 	let data: Array<number> = []
 	
-	console.log(`\n=== Creating post table ===`)
-	console.log(`Version: 0x${table.version.toString(16).padStart(8, '0')} (decimal: ${table.version})`)
+	if (import.meta.env.DEV) { console.log(`\n=== Creating post table ===`) }
+	if (import.meta.env.DEV) { console.log(`Version: 0x${table.version.toString(16).padStart(8, '0')} (decimal: ${table.version})`) }
 
 	// 按固定顺序写入基础字段
 	// write base fields in fixed order

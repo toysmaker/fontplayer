@@ -300,7 +300,7 @@ const createFvarTable = (variants: any) => {
   } else {
     // 用户没有提供instances，自动创建一个默认实例
     // Adobe应用（如Photoshop）需要至少一个instance才能显示可变字体
-    console.warn('⚠️ No instances provided. Creating default instance for Adobe app compatibility.')
+    if (import.meta.env.DEV) { console.warn('⚠️ No instances provided. Creating default instance for Adobe app compatibility.') }
     
     if (table.axes && table.axes.length > 0) {
       // 创建指向所有轴默认值的实例
@@ -313,7 +313,7 @@ const createFvarTable = (variants: any) => {
         postScriptNameID: 6,  // nameID 6 是 PostScript name
       }]
       
-      console.log(`✅ Created default instance: subfamilyNameID=2, coordinates=[${defaultCoordinates.join(', ')}], postScriptNameID=6`)
+      if (import.meta.env.DEV) { console.log(`✅ Created default instance: subfamilyNameID=2, coordinates=[${defaultCoordinates.join(', ')}], postScriptNameID=6`) }
     }
   }
   

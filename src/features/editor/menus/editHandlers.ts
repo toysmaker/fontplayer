@@ -3,11 +3,11 @@ import { doCut, doCopy, doPaste, doDelete } from '@/features/editor/actions/edit
 
 export function createEditHandlers(_ctx: MenuHandlerContext): MenuHandlersMap {
   const handleUndo = () => {
-    console.log('Undo')
+    if (import.meta.env.DEV) { console.log('Undo') }
   }
 
   const handleRedo = () => {
-    console.log('Redo')
+    if (import.meta.env.DEV) { console.log('Redo') }
   }
 
   const handleCut = () => {

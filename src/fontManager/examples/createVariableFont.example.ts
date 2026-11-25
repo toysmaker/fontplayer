@@ -112,8 +112,8 @@ export async function createVariableFontExample(characters: ICharacter[]) {
   })
 
   // 4. 此时，axes数组中的每个对象已经有了nameID
-  console.log('Weight axis nameID:', axes[0].nameID)  // 例如：256
-  console.log('Width axis nameID:', axes[1].nameID)   // 例如：257
+  if (import.meta.env.DEV) { console.log('Weight axis nameID:', axes[0].nameID) }  // 例如：256
+  if (import.meta.env.DEV) { console.log('Width axis nameID:', axes[1].nameID) }   // 例如：257
 
   // 5. 可以使用这些nameID创建fvar表
   // 注意：实际使用中，fvar表应该在createFont内部创建
@@ -134,7 +134,7 @@ export async function createVariableFontExample(characters: ICharacter[]) {
     instances: []
   }
 
-  console.log('fvar table example:', fvarTableExample)
+  if (import.meta.env.DEV) { console.log('fvar table example:', fvarTableExample) }
 
   return font
 }
@@ -210,7 +210,7 @@ export async function createThreeAxisVariableFont(characters: ICharacter[]) {
 
   // 验证nameID已分配
   axes.forEach((axis, index) => {
-    console.log(`${axis.name} (${axis.tag}) nameID: ${axis.nameID}`)
+    if (import.meta.env.DEV) { console.log(`${axis.name} (${axis.tag}) nameID: ${axis.nameID}`) }
   })
 
   return font

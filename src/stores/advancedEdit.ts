@@ -1075,7 +1075,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
         }
       }
       if (failedCount > 0 && import.meta.env.DEV) {
-        console.warn(`[applyMerged] ${failedCount} characters failed`)
+        if (import.meta.env.DEV) { console.warn(`[applyMerged] ${failedCount} characters failed`) }
       }
       projectStore.markFileUnsaved(file.uuid)
       await characterStore.invalidateAllCachedCharacterPreviews()
@@ -1346,7 +1346,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     const styledGlyphs = file.stroke_glyphs.filter((g) => g.style === styleTag)
     if (!styledGlyphs.length) return
 
-    if (import.meta.env.DEV) console.log('[strokeStyleReplace] replacing with tag:', styleTag, 'styledGlyphs:', styledGlyphs.length)
+    if (import.meta.env.DEV) { console.log('[strokeStyleReplace] replacing with tag:', styleTag, 'styledGlyphs:', styledGlyphs.length) }
 
     for (let i = 0; i < characterFile.components.length; i++) {
       const comp = characterFile.components[i]
@@ -1378,7 +1378,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
       const isNewGlyphSkeleton = (newGlyph.skeleton as any)?.type === 'glyphSkeleton'
 
       if (isOldGlyphSkeleton && isNewGlyphSkeleton) {
-        if (import.meta.env.DEV) console.log('[strokeStyleReplace] glyphSkeleton replace:', strokeName, 'oldParams:', srcParams?.length, 'newParams:', destParams?.length)
+        if (import.meta.env.DEV) { console.log('[strokeStyleReplace] glyphSkeleton replace:', strokeName, 'oldParams:', srcParams?.length, 'newParams:', destParams?.length) }
         // 字形骨架切换：复制 ox/oy，保留新风格字形的笔组件（由新骨架变形）
         if ((newGlyph.skeleton as any) && (curGlyph.skeleton as any)) {
           ;(newGlyph.skeleton as any).ox = (curGlyph.skeleton as any).ox ?? 0
@@ -1466,7 +1466,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
   /** 笔画风格切换预览：刷新样例字符 */
   async function refreshStrokeStylePreviews() {
     const tag = strokeStyleTagSelected.value
-    if (import.meta.env.DEV) console.log('[strokeStyleReplace] refreshStrokeStylePreviews, tag:', tag)
+    if (import.meta.env.DEV) { console.log('[strokeStyleReplace] refreshStrokeStylePreviews, tag:', tag) }
     await updateSampleCharactersList()
     const chars: ICharacterFileLite[] = []
     for (const orig of originSampleCharactersList.value) {
@@ -1514,7 +1514,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
     let bulkCompleted = false
 
     try {
-      if (import.meta.env.DEV) console.log('[strokeStyleReplace] applyToEntireProject, tag:', tag, 'charCount:', list.length)
+      if (import.meta.env.DEV) { console.log('[strokeStyleReplace] applyToEntireProject, tag:', tag, 'charCount:', list.length) }
       for (let i = 0; i < list.length; i++) {
         const meta = list[i]
         const ch = await characterDataManager.loadCharacter(file.uuid, meta.uuid)
@@ -1523,7 +1523,7 @@ export const useAdvancedEditStore = defineStore('advancedEdit', () => {
         replaceGlyphComponentsByStyleTag(ch, tag)
         const afterGlyphs = ch.components?.filter((c: any) => c.type === 'glyph') || []
         if (import.meta.env.DEV && afterGlyphs.length > 0 && i < 3) {
-          console.log(`[strokeStyleReplace] char ${i} "${(meta.character as any)?.text || ''}": ${beforeCount} glyphs, styles:`, afterGlyphs.map((c: any) => (c.value as any)?.style || (c.value as any)?.skeleton?.type || 'none'))
+          if (import.meta.env.DEV) { console.log(`[strokeStyleReplace] char ${i} "${(meta.character as any)?.text || ''}": ${beforeCount} glyphs, styles:`, afterGlyphs.map((c: any) => (c.value as any)?.style || (c.value as any)?.skeleton?.type || 'none')) }
         }
         await characterDataManager.updateCharacter(file.uuid, ch)
         projectStore.loadingProgress = i + 1

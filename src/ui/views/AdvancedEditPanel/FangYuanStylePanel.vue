@@ -46,7 +46,7 @@ onMounted(() => {
 })
 
 function handleStrokeStyleChange() {
-  if (import.meta.env.DEV) console.log('[FangYuanStylePanel] handleStrokeStyleChange, tag:', strokeStyleTagSelected.value)
+  if (import.meta.env.DEV) { console.log('[FangYuanStylePanel] handleStrokeStyleChange, tag:', strokeStyleTagSelected.value) }
   nextTick(() => {
     requestAnimationFrame(() => {
       advancedEdit.refreshStrokeStylePreviews()

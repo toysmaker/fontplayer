@@ -60,7 +60,7 @@ export async function addMissingFangYuanStrokes(
       const url = getScriptUrl(`/templates/private/v1/${name}.js`)
       const res = await fetch(url)
       if (!res.ok) {
-        console.warn(`[addMissingFangYuanStrokes] 脚本获取失败: ${name} (${res.status})`)
+        if (import.meta.env.DEV) { console.warn(`[addMissingFangYuanStrokes] 脚本获取失败: ${name} (${res.status})`) }
         continue
       }
       const strokeScript = await res.text()

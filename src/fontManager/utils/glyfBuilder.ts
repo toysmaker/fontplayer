@@ -164,8 +164,8 @@ function convertContourToGlyfFormat(contour: any[]): IContour {
  * @returns IGlyfTable
  */
 export async function buildGlyfTable(characters: ICharacter[]): Promise<IGlyfTable> {
-	console.log('\n=== Building glyf Table ===')
-	console.log(`Processing ${characters.length} glyphs...`)
+	if (import.meta.env.DEV) { console.log('\n=== Building glyf Table ===') }
+	if (import.meta.env.DEV) { console.log(`Processing ${characters.length} glyphs...`) }
 	
 	const glyphTables: IGlyphTable[] = []
 	
@@ -220,14 +220,14 @@ export async function buildGlyfTable(characters: ICharacter[]): Promise<IGlyfTab
 		})
 		
 		if (i === 0 || i === characters.length - 1) {
-			console.log(`  Glyph ${i} (${char.name || 'unnamed'}): ${char.contourNum} contours, ${pointCount} points`)
+			if (import.meta.env.DEV) { console.log(`  Glyph ${i} (${char.name || 'unnamed'}): ${char.contourNum} contours, ${pointCount} points`) }
 		} else if (i === 1) {
-			console.log(`  ...`)
+			if (import.meta.env.DEV) { console.log(`  ...`) }
 		}
 	}
 	
-	console.log(`✅ Built glyf table with ${glyphTables.length} glyphs`)
-	console.log('===========================\n')
+	if (import.meta.env.DEV) { console.log(`✅ Built glyf table with ${glyphTables.length} glyphs`) }
+	if (import.meta.env.DEV) { console.log('===========================\n') }
 	
 	return {
 		glyphTables,
@@ -292,8 +292,8 @@ export function buildLocaTable(
 	glyfTable: IGlyfTable,
 	version: number = 1
 ): ILocaTable {
-	console.log('\n=== Building loca Table ===')
-	console.log(`Version: ${version} (${version === 0 ? 'short/Offset16' : 'long/Offset32'})`)
+	if (import.meta.env.DEV) { console.log('\n=== Building loca Table ===') }
+	if (import.meta.env.DEV) { console.log(`Version: ${version} (${version === 0 ? 'short/Offset16' : 'long/Offset32'})`) }
 	
 	const offsets: number[] = []
 	let currentOffset = 0
@@ -310,26 +310,26 @@ export function buildLocaTable(
 	// 最后一个offset（指向glyf表的末尾）
 	offsets.push(currentOffset)
 	
-	console.log(`Total glyphs: ${glyfTable.glyphTables.length}`)
-	console.log(`Total glyf data size: ${currentOffset} bytes`)
-	console.log(`Offsets array length: ${offsets.length}`)
+	if (import.meta.env.DEV) { console.log(`Total glyphs: ${glyfTable.glyphTables.length}`) }
+	if (import.meta.env.DEV) { console.log(`Total glyf data size: ${currentOffset} bytes`) }
+	if (import.meta.env.DEV) { console.log(`Offsets array length: ${offsets.length}`) }
 	
 	// 显示前几个和后几个offset
-	console.log(`First offsets: [${offsets.slice(0, 5).join(', ')}...]`)
-	console.log(`Last offsets: [...${offsets.slice(-5).join(', ')}]`)
+	if (import.meta.env.DEV) { console.log(`First offsets: [${offsets.slice(0, 5).join(', ')}...]`) }
+	if (import.meta.env.DEV) { console.log(`Last offsets: [...${offsets.slice(-5).join(', ')}]`) }
 	
 	// 检查是否可以使用short格式
 	const maxOffset = currentOffset
 	const canUseShortFormat = maxOffset / 2 < 65536
 	
 	if (version === 0 && !canUseShortFormat) {
-		console.warn(`⚠️ WARNING: Version 0 (short) requested but offsets too large!`)
-		console.warn(`   Max offset: ${maxOffset}, max for short: ${65536 * 2}`)
-		console.warn(`   Consider using version 1 (long) instead`)
+		if (import.meta.env.DEV) { console.warn(`⚠️ WARNING: Version 0 (short) requested but offsets too large!`) }
+		if (import.meta.env.DEV) { console.warn(`   Max offset: ${maxOffset}, max for short: ${65536 * 2}`) }
+		if (import.meta.env.DEV) { console.warn(`   Consider using version 1 (long) instead`) }
 	}
 	
-	console.log(`✅ Built loca table with ${offsets.length} offsets`)
-	console.log('===========================\n')
+	if (import.meta.env.DEV) { console.log(`✅ Built loca table with ${offsets.length} offsets`) }
+	if (import.meta.env.DEV) { console.log('===========================\n') }
 	
 	return {
 		offsets,

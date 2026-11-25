@@ -190,7 +190,7 @@ async function _generateStrokeGlyphs(options: StrokeGenOptions): Promise<number>
         instanceManager.releaseTemporaryInstance(glyph.uuid)
       }
     } else if (import.meta.env.DEV) {
-      console.warn(`[aiGeneration] strokeFnMap 中无笔画类型: ${name}`)
+      if (import.meta.env.DEV) { console.warn(`[aiGeneration] strokeFnMap 中无笔画类型: ${name}`) }
     }
 
     file.stroke_glyphs!.push(glyph)

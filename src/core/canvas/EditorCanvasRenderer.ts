@@ -82,8 +82,7 @@ function flushAccumulatedPathBeforeDirectDraw(
  * 清空画布
  */
 function clearCanvas(canvas: HTMLCanvasElement): void {
-  // 使用 willReadFrequently 选项来优化频繁的 getImageData 调用
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  const ctx = canvas.getContext('2d')
   if (!ctx) return
   ctx.clearRect(0, 0, canvas.width, canvas.height)
 }
@@ -102,7 +101,7 @@ function renderBackgroundFontHint(
   // 未选择字体时不渲染（不预设任何默认字体）
   if (!config.fontFamily?.trim()) return
 
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  const ctx = canvas.getContext('2d')
   if (!ctx) return
 
   ctx.save()
@@ -125,8 +124,7 @@ function renderBackgroundFontHint(
 export function fillBackground(canvas: HTMLCanvasElement, background: IBackground, grid: IGrid): void {
   const width = canvas.width
   const height = canvas.height
-  // 使用 willReadFrequently 选项来优化频繁的 getImageData 调用
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  const ctx = canvas.getContext('2d')
   if (!ctx) return
   
   if (background.type === BackgroundType.Color) {
@@ -160,13 +158,12 @@ export function renderCanvas(
   }
 ): Promise<void> {
   const scale = options.scale || 1
-  // 使用 willReadFrequently 选项来优化频繁的 getImageData 调用
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  const ctx = canvas.getContext('2d')
   if (!ctx) return
   
   if (import.meta.env.DEV && components.length > 0) {
     const types = components.map(c => c?.type || 'nil').join(',')
-    console.log(`[EditorCanvas.renderCanvas] ENTER components=${components.length} types=[${types}] fill=${options.fill} fontRenderStyle="${fontRenderStyle.value}"`)
+    if (import.meta.env.DEV) { console.log(`[EditorCanvas.renderCanvas] ENTER components=${components.length} types=[${types}] fill=${options.fill} fontRenderStyle="${fontRenderStyle.value}"`) }
   }
   let currentPathStarted = false
 
@@ -369,20 +366,24 @@ export function renderCanvas(
       }
       
       if (needsScriptExecution) {
-        console.log('[EditorCanvasRenderer] ✅ Calling executeGlyphScript during render (no tempData):', {
-          instanceKey,
-          hasTempData: false,
-          needsScriptExecution,
-          forceUpdate: options.forceUpdate
-        })
+        if (import.meta.env.DEV) {
+          console.log('[EditorCanvasRenderer] ✅ Calling executeGlyphScript during render (no tempData):', {
+            instanceKey,
+            hasTempData: false,
+            needsScriptExecution,
+            forceUpdate: options.forceUpdate
+          })
+        }
         executeGlyphScript(glyphValue, instanceKey)
       } else if (hasTempData && (!glyphInstance._components || !glyphInstance._components.length || options.forceUpdate)) {
-        console.log('[EditorCanvasRenderer] ⚠️ SKIPPING executeGlyphScript due to tempData (drag in progress):', {
-          instanceKey,
-          hasTempData: true,
-          tempDataKeys: glyphInstance.tempData ? Object.keys(glyphInstance.tempData) : [],
-          wouldNeedExecution: !glyphInstance._components || !glyphInstance._components.length || options.forceUpdate
-        })
+        if (import.meta.env.DEV) {
+          console.log('[EditorCanvasRenderer] ⚠️ SKIPPING executeGlyphScript due to tempData (drag in progress):', {
+            instanceKey,
+            hasTempData: true,
+            tempDataKeys: glyphInstance.tempData ? Object.keys(glyphInstance.tempData) : [],
+            wouldNeedExecution: !glyphInstance._components || !glyphInstance._components.length || options.forceUpdate
+          })
+        }
         // 脚本执行后，重新获取实例
         glyphInstance = instanceManager.acquireTemporaryInstance(
           instanceKey,
@@ -408,17 +409,17 @@ export function renderCanvas(
 
       if (hasLayoutTransform) {
         if (options.forceUpdate) {
-          if (import.meta.env.DEV) console.log(`[EditorCanvas] calling render_grid_forceUpdate for "${glyphValue.name}"`)
+          if (import.meta.env.DEV) { console.log(`[EditorCanvas] calling render_grid_forceUpdate for "${glyphValue.name}"`) }
           glyphInstance.render_grid_forceUpdate(canvas, true, { x: ox, y: oy }, false, scale, g, useSk, glyphTint)
         } else {
-          if (import.meta.env.DEV) console.log(`[EditorCanvas] calling render_grid for "${glyphValue.name}"`)
+          if (import.meta.env.DEV) { console.log(`[EditorCanvas] calling render_grid for "${glyphValue.name}"`) }
           glyphInstance.render_grid(canvas, true, { x: ox, y: oy }, false, scale, g, useSk, glyphTint)
         }
       } else if (options.forceUpdate) {
-        if (import.meta.env.DEV) console.log(`[EditorCanvas] calling render_forceUpdate for "${glyphValue.name}"`)
+        if (import.meta.env.DEV) { console.log(`[EditorCanvas] calling render_forceUpdate for "${glyphValue.name}"`) }
         glyphInstance.render_forceUpdate(canvas, true, { x: ox, y: oy }, false, scale, glyphTint)
       } else {
-        if (import.meta.env.DEV) console.log(`[EditorCanvas] calling render for "${glyphValue.name}", hasLayoutTransform=${hasLayoutTransform} forceUpdate=${options.forceUpdate}`)
+        if (import.meta.env.DEV) { console.log(`[EditorCanvas] calling render for "${glyphValue.name}", hasLayoutTransform=${hasLayoutTransform} forceUpdate=${options.forceUpdate}`) }
         glyphInstance.render(canvas, true, { x: ox, y: oy }, false, scale, glyphTint)
       }
       continue
@@ -709,6 +710,14 @@ export function render(
     grid?: IGrid
     /** 字符九宫格预览：initialGrid + currentGrid + 可选 gridEditTarget */
     layoutTransformGrid?: ILayoutTransformGrid
+    /** 拖拽期局部重绘: 只绘制这些 uuid 的组件(配合渲染背景=false + 外部 blit 静态层) */
+    onlyComponentUUIDs?: string[]
+    /** 拖拽期局部重绘: 静态层快照时跳过这些 uuid 的组件 */
+    skipComponentUUIDs?: string[]
+    /** 跳过开头的 clearCanvas(局部重绘每帧 pass 由调用方先 blit 静态层, 清屏会抹掉 blit) */
+    skipClear?: boolean
+    /** 叠加层渲染: 世界坐标偏移(把组件平移到小叠加层的本地坐标) */
+    offset?: { x: number; y: number }
   } = { mode: 'character' }
 ): void {
   if (import.meta.env.DEV) {
@@ -731,8 +740,10 @@ export function render(
       forceUpdate
     })
   }
-  clearCanvas(canvas)
-  
+  if (!options.skipClear) {
+    clearCanvas(canvas)
+  }
+
   // 默认背景和网格配置
   const defaultBackground: IBackground = {
     type: BackgroundType.Transparent,
@@ -749,8 +760,7 @@ export function render(
   if (renderBackground) {
     fillBackground(canvas, background, grid)
   } else if (background.color) {
-    // 使用 willReadFrequently 选项来优化频繁的 getImageData 调用
-    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+      const ctx = canvas.getContext('2d')
     if (ctx) {
       ctx.fillStyle = background.color
       ctx.fillRect(0, 0, canvas.width, canvas.height)
@@ -758,16 +768,22 @@ export function render(
   }
 
   // 背景字体提示：绘制在背景之上、字符轮廓之下
-  if (options.mode === 'character') {
+  // (拖拽期局部重绘的每帧 pass 不重画提示: 静态层 blit 已包含)
+  if (options.mode === 'character' && !options.onlyComponentUUIDs) {
     renderBackgroundFontHint(canvas, options.character)
   }
 
   if (options.mode === 'character') {
-    if (options.components && options.components.length > 0) {
+    const renderComponents = options.onlyComponentUUIDs
+      ? (options.components || []).filter((c) => options.onlyComponentUUIDs!.includes(c.uuid))
+      : options.skipComponentUUIDs
+        ? (options.components || []).filter((c) => !options.skipComponentUUIDs!.includes(c.uuid))
+        : options.components
+    if (renderComponents && renderComponents.length > 0) {
       if (import.meta.env.DEV) {
         console.log('[EditorCanvasRenderer] Rendering character components:', {
-          componentsCount: options.components.length,
-          componentTypes: options.components.map(c => c.type)
+          componentsCount: renderComponents.length,
+          componentTypes: renderComponents.map(c => c.type)
         })
       }
       // 计算 scale：canvas 显示尺寸 / canvas 实际尺寸
@@ -775,10 +791,10 @@ export function render(
       // 但为了确保组件渲染到整个 canvas，我们需要确保坐标映射正确
       const layoutBundle = options.layoutTransformGrid
       const useSkeletonGrid = options.character?.info?.useSkeletonGrid ?? false
-      renderCanvas(options.components, canvas, {
+      renderCanvas(renderComponents, canvas, {
         forceUpdate,
         fill: false,
-        offset: { x: 0, y: 0 },
+        offset: options.offset || { x: 0, y: 0 },
         scale: 1,
         grid: layoutBundle,
         useSkeletonGrid,
@@ -1005,7 +1021,7 @@ export function render(
             })
           }
           
-          const ctx = canvas.getContext('2d', { willReadFrequently: true })
+          const ctx = canvas.getContext('2d')
           if (ctx) {
             const scriptTint =
               (options.glyph as { fillColor?: string } | undefined)?.fillColor?.trim() || '#000'

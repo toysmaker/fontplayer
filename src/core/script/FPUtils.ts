@@ -77,7 +77,7 @@ const getLineContours = (name, skeleton, weight, options: IGetContoursOption) =>
 	const end = skeleton[`${name}_end`]
 	
 	if (import.meta.env.DEV && (!start || !end)) {
-		console.warn(`[FP.getLineContours] Invalid skeleton for ${name}:`, { start, end, skeleton })
+		if (import.meta.env.DEV) { console.warn(`[FP.getLineContours] Invalid skeleton for ${name}:`, { start, end, skeleton }) }
 	}
 	
 	const angle = Math.atan2(end.y - start.y, end.x - start.x)
@@ -1315,7 +1315,7 @@ const getCurveContours2 = (name, skeleton, weight, options: IGetContoursOption) 
 		const { start, control1, control2, end, bend } = segment
 		// 确保 start 和 end 存在
 		if (!start || !end) {
-			console.warn(`Skeleton segment ${i} is missing start or end point`)
+			if (import.meta.env.DEV) { console.warn(`Skeleton segment ${i} is missing start or end point`) }
 			continue
 		}
 		if (control1 && control2) {
@@ -2148,7 +2148,7 @@ const fitCurvesByPoints = (points: Array<{ x: number, y: number }>, tolerance: n
 		}
 	} catch (error) {
 		// 如果拟合失败，返回空数组而不是 null
-		console.warn('Error in fitCurvesByPoints:', error)
+		if (import.meta.env.DEV) { console.warn('Error in fitCurvesByPoints:', error) }
 		return {
 			curves: []
 		}

@@ -264,7 +264,7 @@ export async function importTemplate3(): Promise<void> {
           instanceManager.releaseTemporaryInstance(glyph.uuid)
         }
       } else {
-        console.warn(`[importTemplate3] strokeFnMap 中无笔画类型: ${name}`)
+        if (import.meta.env.DEV) { console.warn(`[importTemplate3] strokeFnMap 中无笔画类型: ${name}`) }
       }
 
       projectStore.loadingProgress = i + 1

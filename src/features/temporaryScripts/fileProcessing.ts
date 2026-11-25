@@ -23,7 +23,7 @@ async function fetchStrokeTemplateBody(strokeName: string): Promise<string | nul
   if (cached !== undefined) return cached.length > 0 ? cached : null
 
   if (typeof fetch !== 'function') {
-    console.warn('[replaceGlyphScript] fetch unavailable, skip template:', strokeName)
+    if (import.meta.env.DEV) { console.warn('[replaceGlyphScript] fetch unavailable, skip template:', strokeName) }
     templateBodyCache.set(strokeName, '')
     return null
   }
@@ -32,7 +32,7 @@ async function fetchStrokeTemplateBody(strokeName: string): Promise<string | nul
   try {
     const res = await fetch(url)
     if (!res.ok) {
-      console.warn('[replaceGlyphScript] template not found:', strokeName, res.status, url)
+      if (import.meta.env.DEV) { console.warn('[replaceGlyphScript] template not found:', strokeName, res.status, url) }
       templateBodyCache.set(strokeName, '')
       return null
     }
@@ -40,7 +40,7 @@ async function fetchStrokeTemplateBody(strokeName: string): Promise<string | nul
     templateBodyCache.set(strokeName, text)
     return text
   } catch (e) {
-    console.warn('[replaceGlyphScript] fetch failed:', strokeName, e)
+    if (import.meta.env.DEV) { console.warn('[replaceGlyphScript] fetch failed:', strokeName, e) }
     templateBodyCache.set(strokeName, '')
     return null
   }
@@ -176,7 +176,7 @@ export async function replaceGlyphScript(glyphs: ICustomGlyph[]): Promise<void> 
       if (next) {
         glyph.script = next
       } else {
-        console.warn('[replaceGlyphScript] could not parse script wrapper, rewrite with default shell:', glyph.name, glyph.uuid)
+        if (import.meta.env.DEV) { console.warn('[replaceGlyphScript] could not parse script wrapper, rewrite with default shell:', glyph.name, glyph.uuid) }
         glyph.script = wrapTemplateBodyForGlyph(glyph, templateBody)
       }
     } else {
@@ -198,7 +198,7 @@ async function fetchStrokeTemplateBody_custom1(strokeName: string): Promise<stri
   if (cached !== undefined) return cached.length > 0 ? cached : null
 
   if (typeof fetch !== 'function') {
-    console.warn('[replaceGlyphScript_private/v1] fetch unavailable, skip template:', strokeName)
+    if (import.meta.env.DEV) { console.warn('[replaceGlyphScript_private/v1] fetch unavailable, skip template:', strokeName) }
     custom1TemplateBodyCache.set(strokeName, '')
     return null
   }
@@ -207,7 +207,7 @@ async function fetchStrokeTemplateBody_custom1(strokeName: string): Promise<stri
   try {
     const res = await fetch(url)
     if (!res.ok) {
-      console.warn('[replaceGlyphScript_private/v1] template not found:', strokeName, res.status, url)
+      if (import.meta.env.DEV) { console.warn('[replaceGlyphScript_private/v1] template not found:', strokeName, res.status, url) }
       custom1TemplateBodyCache.set(strokeName, '')
       return null
     }
@@ -215,7 +215,7 @@ async function fetchStrokeTemplateBody_custom1(strokeName: string): Promise<stri
     custom1TemplateBodyCache.set(strokeName, text)
     return text
   } catch (e) {
-    console.warn('[replaceGlyphScript_private/v1] fetch failed:', strokeName, e)
+    if (import.meta.env.DEV) { console.warn('[replaceGlyphScript_private/v1] fetch failed:', strokeName, e) }
     custom1TemplateBodyCache.set(strokeName, '')
     return null
   }
@@ -330,13 +330,13 @@ export function addDianGlyphParams_private_v1(strokeGlyphs: ICustomGlyph[] | und
     (g) => g.style === '字玩方圆黑体' && g.name?.trim() === '点',
   )
   if (!dianGlyph) {
-    console.log('[addDianGlyphParams_private/v1] 未找到风格为"字玩方圆黑体"的"点"字形，跳过')
+    if (import.meta.env.DEV) { console.log('[addDianGlyphParams_private/v1] 未找到风格为"字玩方圆黑体"的"点"字形，跳过') }
     return
   }
 
   const dianStroke = strokes.find((s) => s.name === '点')
   if (!dianStroke) {
-    console.warn('[addDianGlyphParams_private/v1] 笔画数据中未找到"点"，跳过')
+    if (import.meta.env.DEV) { console.warn('[addDianGlyphParams_private/v1] 笔画数据中未找到"点"，跳过') }
     return
   }
 
@@ -421,7 +421,7 @@ async function fetchStrokeTemplateBody_templates2(strokeName: string): Promise<s
   if (cached !== undefined) return cached.length > 0 ? cached : null
 
   if (typeof fetch !== 'function') {
-    console.warn('[replaceGlyphScript_templates2] fetch unavailable, skip template:', strokeName)
+    if (import.meta.env.DEV) { console.warn('[replaceGlyphScript_templates2] fetch unavailable, skip template:', strokeName) }
     templates2TemplateBodyCache.set(strokeName, '')
     return null
   }
@@ -430,7 +430,7 @@ async function fetchStrokeTemplateBody_templates2(strokeName: string): Promise<s
   try {
     const res = await fetch(url)
     if (!res.ok) {
-      console.warn('[replaceGlyphScript_templates2] template not found:', strokeName, res.status, url)
+      if (import.meta.env.DEV) { console.warn('[replaceGlyphScript_templates2] template not found:', strokeName, res.status, url) }
       templates2TemplateBodyCache.set(strokeName, '')
       return null
     }
@@ -438,7 +438,7 @@ async function fetchStrokeTemplateBody_templates2(strokeName: string): Promise<s
     templates2TemplateBodyCache.set(strokeName, text)
     return text
   } catch (e) {
-    console.warn('[replaceGlyphScript_templates2] fetch failed:', strokeName, e)
+    if (import.meta.env.DEV) { console.warn('[replaceGlyphScript_templates2] fetch failed:', strokeName, e) }
     templates2TemplateBodyCache.set(strokeName, '')
     return null
   }

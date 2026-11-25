@@ -1,0 +1,267 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]: 首次打开可能会有些慢，感谢耐心等待
+  - generic [ref=e13]:
+    - complementary [ref=e14]:
+      - generic [ref=e17]:
+        - generic [ref=e19] [cursor=pointer]:
+          - img [ref=e21]
+          - generic [ref=e23]: 文件
+        - generic [ref=e25] [cursor=pointer]:
+          - img [ref=e27]
+          - generic [ref=e29]: 编辑
+        - generic [ref=e31] [cursor=pointer]:
+          - img [ref=e33]
+          - generic [ref=e35]: 导入
+        - generic [ref=e37] [cursor=pointer]:
+          - img [ref=e39]
+          - generic [ref=e41]: 导出
+        - generic [ref=e43] [cursor=pointer]:
+          - img [ref=e45]
+          - generic [ref=e47]: 字符
+        - generic [ref=e49] [cursor=pointer]:
+          - img [ref=e51]
+          - generic [ref=e53]: 设置
+        - generic [ref=e55] [cursor=pointer]:
+          - img [ref=e57]
+          - generic [ref=e59]: 模板
+        - generic [ref=e61] [cursor=pointer]:
+          - img [ref=e63]
+          - generic [ref=e65]: 工具
+        - generic [ref=e67] [cursor=pointer]:
+          - img [ref=e69]
+          - generic [ref=e71]: 效果
+        - generic [ref=e73] [cursor=pointer]:
+          - img [ref=e75]
+          - generic [ref=e77]: 应用
+        - generic [ref=e79] [cursor=pointer]:
+          - img [ref=e81]
+          - generic [ref=e83]: 测试
+    - generic [ref=e89]:
+      - banner [ref=e90]:
+        - generic [ref=e92]:
+          - generic [ref=e93]:
+            - img [ref=e94] [cursor=pointer]:
+              - img [ref=e95]
+            - img [ref=e97] [cursor=pointer]:
+              - img [ref=e98]
+            - img [ref=e100] [cursor=pointer]:
+              - img [ref=e101]
+            - img [ref=e103] [cursor=pointer]:
+              - img [ref=e104]
+            - img [ref=e106] [cursor=pointer]:
+              - img [ref=e107]
+            - img [ref=e109] [cursor=pointer]:
+              - img [ref=e110]
+            - img [ref=e112] [cursor=pointer]:
+              - img [ref=e113]
+            - img [ref=e115] [cursor=pointer]:
+              - img [ref=e116]
+            - img [ref=e118] [cursor=pointer]:
+              - img [ref=e119]
+            - img [ref=e121] [cursor=pointer]:
+              - img [ref=e122]
+            - img [ref=e125] [cursor=pointer]:
+              - img [ref=e126]
+            - img [ref=e129] [cursor=pointer]:
+              - img [ref=e130]
+            - img [ref=e133] [cursor=pointer]:
+              - img [ref=e134]
+            - img [ref=e138] [cursor=pointer]:
+              - img [ref=e139]
+            - img [ref=e141] [cursor=pointer]:
+              - img [ref=e142]
+            - img [ref=e145] [cursor=pointer]:
+              - img [ref=e146]
+          - generic [ref=e148] [cursor=pointer]:
+            - img [ref=e149]
+            - generic [ref=e151]: 字符列表
+      - main [ref=e152]:
+        - complementary [ref=e153]:
+          - generic [ref=e155]:
+            - generic [ref=e159] [cursor=pointer]:
+              - generic "全部" [ref=e160]:
+                - generic [ref=e161]: 全部
+              - img "loading" [ref=e162]:
+                - img [ref=e167]
+            - generic [ref=e169]:
+              - generic [ref=e171] [cursor=pointer]:
+                - generic [ref=e172]: 横0
+                - generic [ref=e173]:
+                  - img [ref=e174]:
+                    - img [ref=e175]
+                  - img [ref=e177]:
+                    - img [ref=e178]
+                  - img [ref=e180]:
+                    - img [ref=e181]
+              - generic [ref=e184] [cursor=pointer]:
+                - generic [ref=e185]: 横1
+                - generic [ref=e186]:
+                  - img [ref=e187]:
+                    - img [ref=e188]
+                  - img [ref=e190]:
+                    - img [ref=e191]
+                  - img [ref=e193]:
+                    - img [ref=e194]
+              - generic [ref=e197] [cursor=pointer]:
+                - generic [ref=e198]: 横2
+                - generic [ref=e199]:
+                  - img [ref=e200]:
+                    - img [ref=e201]
+                  - img [ref=e203]:
+                    - img [ref=e204]
+                  - img [ref=e206]:
+                    - img [ref=e207]
+              - generic [ref=e210] [cursor=pointer]:
+                - generic [ref=e211]: 横3
+                - generic [ref=e212]:
+                  - img [ref=e213]:
+                    - img [ref=e214]
+                  - img [ref=e216]:
+                    - img [ref=e217]
+                  - img [ref=e219]:
+                    - img [ref=e220]
+              - generic [ref=e223] [cursor=pointer]:
+                - generic [ref=e224]: 横4
+                - generic [ref=e225]:
+                  - img [ref=e226]:
+                    - img [ref=e227]
+                  - img [ref=e229]:
+                    - img [ref=e230]
+                  - img [ref=e232]:
+                    - img [ref=e233]
+              - generic [ref=e236] [cursor=pointer]:
+                - generic [ref=e237]: 横5
+                - generic [ref=e238]:
+                  - img [ref=e239]:
+                    - img [ref=e240]
+                  - img [ref=e242]:
+                    - img [ref=e243]
+                  - img [ref=e245]:
+                    - img [ref=e246]
+              - generic [ref=e249] [cursor=pointer]:
+                - generic [ref=e250]: 横6
+                - generic [ref=e251]:
+                  - img [ref=e252]:
+                    - img [ref=e253]
+                  - img [ref=e255]:
+                    - img [ref=e256]
+                  - img [ref=e258]:
+                    - img [ref=e259]
+              - generic [ref=e262] [cursor=pointer]:
+                - generic [ref=e263]: 横7
+                - generic [ref=e264]:
+                  - img [ref=e265]:
+                    - img [ref=e266]
+                  - img [ref=e268]:
+                    - img [ref=e269]
+                  - img [ref=e271]:
+                    - img [ref=e272]
+              - generic [ref=e275] [cursor=pointer]:
+                - generic [ref=e276]: 横8
+                - generic [ref=e277]:
+                  - img [ref=e278]:
+                    - img [ref=e279]
+                  - img [ref=e281]:
+                    - img [ref=e282]
+                  - img [ref=e284]:
+                    - img [ref=e285]
+              - generic [ref=e288] [cursor=pointer]:
+                - generic [ref=e289]: 横9
+                - generic [ref=e290]:
+                  - img [ref=e291]:
+                    - img [ref=e292]
+                  - img [ref=e294]:
+                    - img [ref=e295]
+                  - img [ref=e297]:
+                    - img [ref=e298]
+              - generic [ref=e301] [cursor=pointer]:
+                - generic [ref=e302]: 横10
+                - generic [ref=e303]:
+                  - img [ref=e304]:
+                    - img [ref=e305]
+                  - img [ref=e307]:
+                    - img [ref=e308]
+                  - img [ref=e310]:
+                    - img [ref=e311]
+              - generic [ref=e314] [cursor=pointer]:
+                - generic [ref=e315]: 横11
+                - generic [ref=e316]:
+                  - img [ref=e317]:
+                    - img [ref=e318]
+                  - img [ref=e320]:
+                    - img [ref=e321]
+                  - img [ref=e323]:
+                    - img [ref=e324]
+              - generic [ref=e327] [cursor=pointer]:
+                - generic [ref=e328]: 横12
+                - generic [ref=e329]:
+                  - img [ref=e330]:
+                    - img [ref=e331]
+                  - img [ref=e333]:
+                    - img [ref=e334]
+                  - img [ref=e336]:
+                    - img [ref=e337]
+              - generic [ref=e340] [cursor=pointer]:
+                - generic [ref=e341]: 横13
+                - generic [ref=e342]:
+                  - img [ref=e343]:
+                    - img [ref=e344]
+                  - img [ref=e346]:
+                    - img [ref=e347]
+                  - img [ref=e349]:
+                    - img [ref=e350]
+              - generic [ref=e353] [cursor=pointer]:
+                - generic [ref=e354]: 横14
+                - generic [ref=e355]:
+                  - img [ref=e356]:
+                    - img [ref=e357]
+                  - img [ref=e359]:
+                    - img [ref=e360]
+                  - img [ref=e362]:
+                    - img [ref=e363]
+              - generic [ref=e366] [cursor=pointer]:
+                - generic [ref=e367]: 横15
+                - generic [ref=e368]:
+                  - img [ref=e369]:
+                    - img [ref=e370]
+                  - img [ref=e372]:
+                    - img [ref=e373]
+                  - img [ref=e375]:
+                    - img [ref=e376]
+        - main [ref=e378]:
+          - generic [ref=e385]:
+            - generic [ref=e386]: 预览模式
+            - generic [ref=e387]:
+              - generic [ref=e388] [cursor=pointer]:
+                - generic [ref=e389]:
+                  - radio "轮廓" [checked]
+                - generic [ref=e391]: 轮廓
+              - generic [ref=e392] [cursor=pointer]:
+                - generic [ref=e393]:
+                  - radio "黑色"
+                - generic [ref=e395]: 黑色
+              - generic [ref=e396] [cursor=pointer]:
+                - generic [ref=e397]:
+                  - radio "彩色"
+                - generic [ref=e399]: 彩色
+          - generic [ref=e406]:
+            - img [ref=e408] [cursor=pointer]
+            - generic [ref=e410]:
+              - img [ref=e412] [cursor=pointer]
+              - generic [ref=e416]:
+                - textbox "Please Input" [ref=e418]: "100"
+                - generic [ref=e419]:
+                  - generic [ref=e420]: "%"
+                  - button [ref=e421] [cursor=pointer]:
+                    - img [ref=e424]
+                  - button [ref=e425] [cursor=pointer]:
+                    - img [ref=e428]
+              - img [ref=e431] [cursor=pointer]
+        - complementary [ref=e433]:
+          - generic [ref=e436]:
+            - img [ref=e439]
+            - generic [ref=e442]: 请选择一个组件进行编辑
+```

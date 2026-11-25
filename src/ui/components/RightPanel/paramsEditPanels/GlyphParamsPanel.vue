@@ -281,13 +281,15 @@ const handleGlyphSkeletonPick = (templateUuid: string) => {
   const reflines = editInst?.getRefLines?.() || []
   const joints = editInst?.getJoints?.() || []
 
-  console.log('[glyphSkeleton] After script execution:', {
-    jointsCount: joints.length,
-    reflinesCount: reflines.length,
-    hasDragStart: !!editInst.onSkeletonDragStart,
-    hasDrag: !!editInst.onSkeletonDrag,
-    hasDragEnd: !!editInst.onSkeletonDragEnd,
-  })
+  if (import.meta.env.DEV) {
+    console.log('[glyphSkeleton] After script execution:', {
+      jointsCount: joints.length,
+      reflinesCount: reflines.length,
+      hasDragStart: !!editInst.onSkeletonDragStart,
+      hasDrag: !!editInst.onSkeletonDrag,
+      hasDragEnd: !!editInst.onSkeletonDragEnd,
+    })
+  }
 
   if (reflines.length === 0) {
     message.warning('参考字形脚本未生成辅助线，无法创建骨架')

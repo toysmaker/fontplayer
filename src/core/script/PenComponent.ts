@@ -176,7 +176,7 @@ class PenComponent {
         origin: null,
 			})
 			if (import.meta.env.DEV && this.points.length % 10 === 0) {
-				console.log(`[PenComponent] lineTo called: x=${x}, y=${y}, points.length=${this.points.length}`)
+				if (import.meta.env.DEV) { console.log(`[PenComponent] lineTo called: x=${x}, y=${y}, points.length=${this.points.length}`) }
 			}
 		} else {
 			if (import.meta.env.DEV) {

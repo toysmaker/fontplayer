@@ -271,7 +271,7 @@ const validateAndFixCharacterMapping = (characters: Array<ICharacter>): Array<IC
 	}
 	
 	if (conflicts.length > 0) {
-		console.warn(`Found Unicode conflicts: ${conflicts.map(c => `${c} (${String.fromCharCode(c)})`).join(', ')}`)
+		if (import.meta.env.DEV) { console.warn(`Found Unicode conflicts: ${conflicts.map(c => `${c} (${String.fromCharCode(c)})`).join(', ')}`) }
 	}
 	
 	return characters
