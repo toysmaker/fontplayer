@@ -1326,6 +1326,11 @@ function updateComponentPoints(comp: IGlyphComponent, newPoints: Array<{ x: numb
 
     // 重新读取 points（段数变化时数组已被整体替换）
     const curPts = (comp.value as unknown as IPenComponent).points as Array<{ x: number; y: number }>
+    // 清轮廓缓存: points 已变, 缓存的 contour/preview 过期, 避免列表预览/导出复用旧轮廓
+    const penValue = comp.value as unknown as IPenComponent & { contour?: unknown; preview?: unknown; contour2?: unknown }
+    penValue.contour = undefined
+    penValue.preview = undefined
+    penValue.contour2 = undefined
     const bound = getBound(curPts)
     const pc = comp as any
     if (

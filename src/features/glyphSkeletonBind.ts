@@ -1,4 +1,5 @@
 import { getBound } from "../utils/math";
+import { bakeComponentTransformIntoPoints } from "@/core/utils/math";
 import { CustomGlyph } from "@/core/instance/CustomGlyph";
 import { instanceManager } from "@/core/instance/InstanceManager";
 import { executeGlyphScript } from "@/core/script/ScriptExecutor";
@@ -92,6 +93,41 @@ type SkeletonType = 'line' | 'curve' | 'heng' | 'shu' | 'pie' | 'na' |
   'er_heng_zhe' | 'heng_zhe2' | 'shu_tiao' | 'shu_wan_gou' | 'xie_gou' |
   'wan_gou' | 'dian' | 'tiao' | 'ping_na';
 
+/**
+ * 绑定前烘焙: 把每支钢笔组件的组件级变换(移动/缩放/旋转/翻转)按渲染器语义烘焙进
+ * value.points 并归一化组件(盒=新包围盒、rotation=0、flip 归零)。
+ * 烘焙后"原始 points == 字形空间", 采样/拟合写回/自由编辑/笔刷全部自然正确。
+ * 无需烘焙的组件(无有效变换)原样跳过。
+ */
+function bakePenComponentTransformsIntoPoints(penComponents: IGlyphComponent[]): void {
+  for (const comp of penComponents) {
+    const penValue = comp.value as unknown as IPenComponent
+    const baked = bakeComponentTransformIntoPoints(penValue.points as Array<{ x: number; y: number }>, {
+      x: (comp as any).x,
+      y: (comp as any).y,
+      w: (comp as any).w,
+      h: (comp as any).h,
+      rotation: (comp as any).rotation,
+      flipX: (comp as any).flipX,
+      flipY: (comp as any).flipY,
+    })
+    if (!baked) continue
+    penValue.points = baked.points as any
+    ;(comp as any).x = baked.x
+    ;(comp as any).y = baked.y
+    ;(comp as any).w = baked.w
+    ;(comp as any).h = baked.h
+    ;(comp as any).rotation = 0
+    ;(comp as any).flipX = false
+    ;(comp as any).flipY = false
+    // 关键: 清轮廓缓存 —— 烘焙改写了 points, 缓存的 contour/preview 已过期;
+    // 若不清, 引入字符后列表预览/导出可能复用旧轮廓(位置/形状错误)
+    ;(penValue as any).contour = undefined
+    ;(penValue as any).preview = undefined
+    ;(penValue as any).contour2 = undefined
+  }
+}
+
 const glyphSkeletonBind = (glyph: CustomGlyph) => {
   const skeleton = glyph.getSkeleton();
   const components = glyph.components;
@@ -102,6 +138,9 @@ const glyphSkeletonBind = (glyph: CustomGlyph) => {
     console.warn('No pen components found');
     return;
   }
+
+  // 烘焙钢笔组件变换进 points(渲染器语义), 归一化组件盒 —— 修复移动/缩放/旋转钢笔后绑定位置错误
+  bakePenComponentTransformsIntoPoints(penComponents)
 
   // 阶段一：骨架分析
   const bones = skeletonToBones(skeleton);
@@ -1642,6 +1681,9 @@ export function glyphSkeletonBindFromRefGlyph(
     console.warn('[glyphSkeleton] No pen components in current glyph')
     return false
   }
+
+  // 烘焙钢笔组件变换进 points(渲染器语义), 归一化组件盒
+  bakePenComponentTransformsIntoPoints(penComponents)
 
   const sampledBindData = buildSampledBindData(penComponents, bones, SAMPLE_TOTAL)
 

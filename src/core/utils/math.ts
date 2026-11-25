@@ -111,6 +111,83 @@ export function transformPoints(
 }
 
 /**
+ * 骨架绑定烘焙：把钢笔组件的组件级变换按渲染器语义烘焙进 points，并返回归一化后的组件盒。
+ *
+ * 渲染器(EditorCanvasRenderer 钢笔分支)的变换顺序：
+ *   transformPoints(points, {x,y,w,h,rotation:0,flipX,flipY})  → 绕放置中心(x+w/2, y+h/2)旋转 rotation
+ * 烘焙后组件旋转/翻转归零、盒=新 points 包围盒，视觉位置与烘焙前完全一致，
+ * 且"原始 points == 字形空间"，后续采样/写回无需再考虑组件变换。
+ *
+ * @returns 烘焙后的 points 与新包围盒；若组件无有效变换(无需烘焙)则返回 null
+ */
+export function bakeComponentTransformIntoPoints(
+  points: Array<{ x: number; y: number }>,
+  transform: {
+    x?: number
+    y?: number
+    w?: number
+    h?: number
+    rotation?: number
+    flipX?: boolean
+    flipY?: boolean
+  },
+): { points: Array<{ x: number; y: number }>; x: number; y: number; w: number; h: number } | null {
+  if (!points || points.length === 0) return null
+  const rotation = transform.rotation ?? 0
+  const flipX = !!transform.flipX
+  const flipY = !!transform.flipY
+
+  const origin = getBound(points)
+  const originW = origin.w || 1
+  const originH = origin.h || 1
+
+  // 有效组件盒判定: x/y 为数值且 w/h 至少一侧为正(全 0/缺失视为"未设置", 不视为有效位置)
+  const hasBox =
+    typeof transform.x === 'number' &&
+    typeof transform.y === 'number' &&
+    ((transform.w ?? 0) > 0 || (transform.h ?? 0) > 0)
+
+  // 条件烘焙: 仅当组件确有有效变换(盒与点包围盒不一致, 或旋转/翻转非零)
+  const x = hasBox ? transform.x! : origin.x
+  const y = hasBox ? transform.y! : origin.y
+  const w = hasBox ? (transform.w || originW) : originW
+  const h = hasBox ? (transform.h || originH) : originH
+  const hasBoxTransform =
+    hasBox &&
+    (Math.abs(x - origin.x) > 1e-6 ||
+      Math.abs(y - origin.y) > 1e-6 ||
+      Math.abs(w - originW) > 1e-6 ||
+      Math.abs(h - originH) > 1e-6)
+  if (!hasBoxTransform && rotation === 0 && !flipX && !flipY) {
+    return null
+  }
+
+  // 1. 渲染器的 transformPoints(rotation 传 0, 旋转由第 2 步绕放置中心完成)
+  let baked = transformPoints(points, {
+    x, y, w, h,
+    rotation: 0,
+    flipX,
+    flipY,
+  })
+
+  // 2. 绕放置中心旋转(渲染器 ctx.rotate 语义); 无有效盒时退回点包围盒中心
+  if (rotation !== 0) {
+    const cx = hasBox ? x + w / 2 : origin.x + originW / 2
+    const cy = hasBox ? y + h / 2 : origin.y + originH / 2
+    baked = baked.map((p) => rotatePoint(p, { x: cx, y: cy }, rotation))
+  }
+
+  const bound = getBound(baked)
+  return {
+    points: baked,
+    x: bound.x,
+    y: bound.y,
+    w: bound.w || originW,
+    h: bound.h || originH,
+  }
+}
+
+/**
  * Y 向下坐标系中多边形有向面积（鞋带公式）的一半；外轮廓取逆时针时通常为负值。
  */
 export function polygonSignedAreaYDown(

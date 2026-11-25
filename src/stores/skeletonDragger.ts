@@ -47,20 +47,20 @@ const bindEditMode = ref<'assign' | 'clear'>('assign')
 const hoveredBindInfo = ref<any>(null)
 
 // --- Skeleton Free Edit State ---
-// 骨架绑定字形组件的钢笔轮廓自由编辑模式
+// 骨架绑定字形组件的钢笔轮廓自由编辑模式（作用于该字形的所有普通钢笔组件）
 const skeletonFreeEdit = ref(false)
-const skeletonFreeEditPenUUID = ref('')
+const skeletonFreeEditPenUUIDs = ref<string[]>([])
 const skeletonFreeEditGlyphUUID = ref('')
 
-function enterSkeletonFreeEdit(penUUID: string, glyphUUID: string) {
+function enterSkeletonFreeEdit(penUUIDs: string[], glyphUUID: string) {
   skeletonFreeEdit.value = true
-  skeletonFreeEditPenUUID.value = penUUID
+  skeletonFreeEditPenUUIDs.value = penUUIDs
   skeletonFreeEditGlyphUUID.value = glyphUUID
 }
 
 function exitSkeletonFreeEdit() {
   skeletonFreeEdit.value = false
-  skeletonFreeEditPenUUID.value = ''
+  skeletonFreeEditPenUUIDs.value = []
   skeletonFreeEditGlyphUUID.value = ''
 }
 
@@ -84,7 +84,7 @@ export {
   bindEditMode,
   hoveredBindInfo,
   skeletonFreeEdit,
-  skeletonFreeEditPenUUID,
+  skeletonFreeEditPenUUIDs,
   skeletonFreeEditGlyphUUID,
   enterSkeletonFreeEdit,
   exitSkeletonFreeEdit,

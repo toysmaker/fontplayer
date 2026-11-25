@@ -48,6 +48,7 @@ import { getEditCanvasContext } from '@/features/editor/editCanvas'
 import { expandGlyphComponent } from '@/features/editor/services/FormatGlyphService'
 import { precisionFromParamMax, roundToPrecision } from '@/utils/number'
 import { genUUID } from '@/utils/uuid'
+import { bakeComponentTransformIntoPoints } from '@/core/utils/math'
 import {
   collectCharacterComponentHits,
   collectProjectConstantUsageHitsAsync,
@@ -184,61 +185,94 @@ const showSkeletonBindingSection = computed(() => {
 })
 
 const skeletonFreeEditMode = computed(() => skeletonFreeEdit.value)
-function findInnerPenComponent(glyphValue: ICustomGlyph): IGlyphComponent | null {
-  const components = orderedListWithItemsForGlyph(glyphValue)
-  const pen = components.find(c => c.type === 'pen')
-  return (pen as IGlyphComponent) || null
+function findInnerPenComponents(glyphValue: ICustomGlyph): IGlyphComponent[] {
+  // 与绑定引擎对齐：只处理顶层的普通钢笔组件
+  return (glyphValue.components || []).filter((c) => c.type === 'pen') as IGlyphComponent[]
 }
 
 async function handleEnterFreeEdit() {
   try {
     if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return
     const glyphValue = selectedComponent.value.value as ICustomGlyph
-    const innerPen = findInnerPenComponent(glyphValue)
-    if (!innerPen) {
+    const innerPens = findInnerPenComponents(glyphValue)
+    if (innerPens.length === 0) {
       message.warning(t('panels.paramsPanel.skeletonBinding.noPenComponent'))
       return
     }
 
     if (import.meta.env.DEV) {
       console.log('[SampledBind] enterFreeEdit glyphUUID=' + selectedComponent.value.uuid +
-        ' penUUID=' + innerPen.uuid +
+        ' pens=' + innerPens.length +
+        ' penUUIDs=' + innerPens.map((p) => p.uuid).join(',') +
         ' components=' + (glyphValue.components?.length || 0) +
         ' hasSkeleton=' + !!glyphValue.skeleton)
     }
 
     // 模板脚本生成的钢笔点没有 type/uuid/origin 属性，而 PenSelectTool 的
-    // 锚点渲染与命中检测依赖这些属性，需要补充。
+    // 锚点渲染与命中检测依赖这些属性，需要为每支钢笔补充。
     // 三次贝塞尔点结构 [anchor, control1, control2, anchor, ...]：
     // - 锚点在 i % 3 === 0
     // - control1（i % 3 === 1）属于前一锚点 (i-1)
     // - control2（i % 3 === 2）属于后一锚点 (i+1)
-    const rawPoints = (innerPen.value as any)?.points
-    let enrichedPoints = rawPoints
-    if (Array.isArray(rawPoints)) {
-      const uuids = rawPoints.map(() => genUUID())
-      enrichedPoints = rawPoints.map((p: any, i: number) => {
-        const isAnchor = i % 3 === 0
-        let origin: string | null = null
-        if (!isAnchor) {
-          origin = i % 3 === 1
-            ? uuids[i - 1]
-            : uuids[Math.min(i + 1, rawPoints.length - 1)]
-        }
-        return {
-          ...p,
-          type: p.type || (isAnchor ? 'anchor' : 'control'),
-          uuid: p.uuid || uuids[i],
-          isShow: p.isShow !== undefined ? p.isShow : isAnchor,
-          origin: p.origin !== undefined ? p.origin : origin,
-        }
+    const enrichedByUuid = new Map<string, any>()
+    const bakedByUuid = new Map<string, { x: number; y: number; w: number; h: number }>()
+    for (const innerPen of innerPens) {
+      // 烘焙钢笔组件变换进 points(渲染器语义), 使自由编辑的锚点显示真实几何;
+      // 编辑完成后 handleRebind 的包围盒归一化与之一致
+      const baked = bakeComponentTransformIntoPoints((innerPen.value as any)?.points || [], {
+        x: (innerPen as any).x,
+        y: (innerPen as any).y,
+        w: (innerPen as any).w,
+        h: (innerPen as any).h,
+        rotation: (innerPen as any).rotation,
+        flipX: (innerPen as any).flipX,
+        flipY: (innerPen as any).flipY,
       })
+      const bakedPoints = baked ? baked.points : (innerPen.value as any)?.points
+      if (baked) {
+        bakedByUuid.set(innerPen.uuid, { x: baked.x, y: baked.y, w: baked.w, h: baked.h })
+      }
+      const rawPoints = bakedPoints
+      let enrichedPoints = rawPoints
+      if (Array.isArray(rawPoints)) {
+        const uuids = rawPoints.map(() => genUUID())
+        enrichedPoints = rawPoints.map((p: any, i: number) => {
+          const isAnchor = i % 3 === 0
+          let origin: string | null = null
+          if (!isAnchor) {
+            origin = i % 3 === 1
+              ? uuids[i - 1]
+              : uuids[Math.min(i + 1, rawPoints.length - 1)]
+          }
+          return {
+            ...p,
+            type: p.type || (isAnchor ? 'anchor' : 'control'),
+            uuid: p.uuid || uuids[i],
+            isShow: p.isShow !== undefined ? p.isShow : isAnchor,
+            origin: p.origin !== undefined ? p.origin : origin,
+          }
+        })
+      }
+      enrichedByUuid.set(innerPen.uuid, { ...innerPen.value, points: enrichedPoints, editMode: true } as any)
     }
 
-    const penValue = { ...innerPen.value, points: enrichedPoints, editMode: true } as any
-    const updatedComponents = glyphValue.components.map((c: any) =>
-      c.uuid === innerPen.uuid ? { ...c, value: penValue } : c,
-    )
+    const penUuidSet = new Set(innerPens.map((p) => p.uuid))
+    const updatedComponents = glyphValue.components.map((c: any) => {
+      if (!penUuidSet.has(c.uuid)) return c
+      const bakedBox = bakedByUuid.get(c.uuid)
+      const next = { ...c, value: enrichedByUuid.get(c.uuid) }
+      // 烘焙过的钢笔: 归一化组件盒与旋转/翻转
+      if (bakedBox) {
+        next.x = bakedBox.x
+        next.y = bakedBox.y
+        next.w = bakedBox.w
+        next.h = bakedBox.h
+        next.rotation = 0
+        next.flipX = false
+        next.flipY = false
+      }
+      return next
+    })
 
     const updatedGlyphValue = { ...glyphValue, components: updatedComponents }
     modifyComponent({ value: updatedGlyphValue })
@@ -257,10 +291,13 @@ async function handleEnterFreeEdit() {
 
     PenSelectTool.skeletonFreeEditContext = {
       glyphComponent: selectedComponent.value,
-      penComponent: penValue,
-      penUUID: innerPen.uuid,
+      pens: innerPens.map((p) => ({
+        penComponent: enrichedByUuid.get(p.uuid)!,
+        penUUID: p.uuid,
+      })),
+      activePenUUID: innerPens[0].uuid,
     }
-    enterSkeletonFreeEdit(innerPen.uuid, selectedComponent.value.uuid)
+    enterSkeletonFreeEdit(innerPens.map((p) => p.uuid), selectedComponent.value.uuid)
 
     // 切换到参数工具（'params'），轮廓编辑在此工具下进行
     const toolStore = useToolStore()
@@ -281,47 +318,51 @@ async function handleEnterFreeEdit() {
 async function handleRebind() {
   if (!selectedComponent.value || selectedComponent.value.type !== 'glyph') return
   let glyphValue = selectedComponent.value.value as ICustomGlyph
-  const innerPen = findInnerPenComponent(glyphValue)
-  if (!innerPen) return
+  const innerPens = findInnerPenComponents(glyphValue)
+  if (innerPens.length === 0) return
 
   const instanceKey = selectedComponent.value.uuid
 
   try {
-    // 关键：编辑操作写入的是骨架自由编辑上下文中的 penComponent，
-    // 必须先同步编辑后的贝塞尔曲线控制点回 glyphValue，否则采样的是编辑前的旧曲线
+    // 关键：编辑操作写入的是骨架自由编辑上下文中的各支 penComponent，
+    // 必须先同步所有钢笔编辑后的贝塞尔曲线控制点回 glyphValue，否则采样的是编辑前的旧曲线
     const skCtx = PenSelectTool.skeletonFreeEditContext
-    let editedPenValue: any = null
-    if (skCtx?.penComponent?.points && Array.isArray(skCtx.penComponent.points)) {
-      // 清理编辑会话属性（type/uuid/origin/isShow），仅保留 x/y 坐标
-      const cleanPoints = skCtx.penComponent.points.map((p: any) => ({ x: p.x, y: p.y }))
-      editedPenValue = { ...skCtx.penComponent, points: cleanPoints }
-      // 关键：同步更新钢笔组件的包围盒（x/y/w/h）。
-      // 渲染时 transformPoints 会把钢笔点映射到组件包围盒坐标系，
-      // 若包围盒还是编辑前的旧值，编辑后的点会被压缩回旧包围盒 → 视觉上压扁
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-      for (const p of cleanPoints) {
-        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x
-        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y
+    const editedByUuid = new Map<string, any>()
+    if (skCtx?.pens?.length) {
+      for (const entry of skCtx.pens) {
+        const pts = entry.penComponent?.points
+        if (!Array.isArray(pts)) continue
+        // 清理编辑会话属性（type/uuid/origin/isShow），仅保留 x/y 坐标
+        const cleanPoints = pts.map((p: any) => ({ x: p.x, y: p.y }))
+        const editedPenValue = { ...entry.penComponent, points: cleanPoints }
+        editedByUuid.set(entry.penUUID, editedPenValue)
+        // 关键：同步更新钢笔组件的包围盒（x/y/w/h）。
+        // 渲染时 transformPoints 会把钢笔点映射到组件包围盒坐标系，
+        // 若包围盒还是编辑前的旧值，编辑后的点会被压缩回旧包围盒 → 视觉上压扁
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        for (const p of cleanPoints) {
+          if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x
+          if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y
+        }
+        const penBound = {
+          x: minX, y: minY,
+          w: (maxX - minX) || 0, h: (maxY - minY) || 0,
+        }
+        const syncedComponents = glyphValue.components.map((c: any) =>
+          c.uuid === entry.penUUID
+            ? {
+                ...c,
+                x: penBound.x,
+                y: penBound.y,
+                w: penBound.w,
+                h: penBound.h,
+                value: editedPenValue,
+              }
+            : c,
+        )
+        glyphValue = { ...glyphValue, components: syncedComponents }
       }
-      const penBound = {
-        x: minX, y: minY,
-        w: (maxX - minX) || 0, h: (maxY - minY) || 0,
-      }
-      const syncedComponents = glyphValue.components.map((c: any) =>
-        c.uuid === skCtx.penUUID
-          ? {
-              ...c,
-              x: penBound.x,
-              y: penBound.y,
-              w: penBound.w,
-              h: penBound.h,
-              value: editedPenValue,
-            }
-          : c,
-      )
-      glyphValue = { ...glyphValue, components: syncedComponents }
     }
-    const penValue = editedPenValue || (innerPen.value as any)
 
     if (import.meta.env.DEV) {
       const boundsOf = (pts: any[]) => {
@@ -332,12 +373,11 @@ async function handleRebind() {
         }
         return 'x[' + minX.toFixed(1) + ',' + maxX.toFixed(1) + '] y[' + minY.toFixed(1) + ',' + maxY.toFixed(1) + ']'
       }
-      console.log('[SampledBind] rebind step1 editedPoints n=' + (skCtx?.penComponent?.points?.length || 0) +
-        ' ' + boundsOf(skCtx?.penComponent?.points || []))
-      console.log('[SampledBind] rebind step2 syncedGlyphPen n=' + (penValue?.points?.length || 0) +
-        ' ' + boundsOf(penValue?.points || []))
-      console.log('[SampledBind] rebind step3 storePenBeforeBind n=' + ((innerPen.value as any)?.points?.length || 0) +
-        ' ' + boundsOf((innerPen.value as any)?.points || []))
+      console.log('[SampledBind] rebind editedPens=' + editedByUuid.size)
+      for (const [uuid, v] of editedByUuid) {
+        console.log('[SampledBind] rebind pen=' + uuid + ' n=' + (v?.points?.length || 0) +
+          ' ' + boundsOf(v?.points || []))
+      }
     }
 
     // 在临时克隆上调用 instanceBasicGlyph，仅为了获取 getSkeleton 函数，
@@ -379,9 +419,10 @@ async function handleRebind() {
 
     // 更新 glyph value：新的 skeletonBindData + 关闭 editMode
     const updatedSkeleton = { ...glyphValue.skeleton, skeletonBindData: newBindData }
+    const editedUuidSet = new Set(editedByUuid.keys())
     const updatedComponents = glyphValue.components.map((c: any) =>
-      c.uuid === innerPen.uuid
-        ? { ...c, value: { ...penValue, editMode: false } }
+      editedUuidSet.has(c.uuid)
+        ? { ...c, value: { ...(editedByUuid.get(c.uuid) ?? c.value), editMode: false } }
         : c,
     )
     const updatedGlyphValue = { ...glyphValue, skeleton: updatedSkeleton, components: updatedComponents }

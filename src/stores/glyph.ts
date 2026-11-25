@@ -12,6 +12,7 @@ import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
 import { selectedItemByUUID } from '@/core/utils/component'
 import { genUUID } from '@/utils/uuid'
+import { requestSkeletonRebindForEditingGlyph } from '@/features/skeletonRebindScheduler'
 import * as R from 'ramda'
 
 export const useGlyphStore = defineStore('glyph', () => {
@@ -344,6 +345,17 @@ export const useGlyphStore = defineStore('glyph', () => {
       if (v) {
         v.contour = undefined
         v.preview = undefined
+      }
+    }
+
+    // 骨架自动重绑：编辑中字形自身的顶层钢笔几何变化(点编辑/移动/缩放/旋转/翻转)后,
+    // 绑定采样已过期, 请求防抖重绑(嵌套字形组件走手动"重新绑定"流程, 不受影响)
+    if (Object.keys(options).some(k => TRANSFORM_KEYS.includes(k))) {
+      const isTopLevelPen =
+        component.type === 'pen' &&
+        (editingGlyph.value.components || []).some((c) => c.uuid === uuid)
+      if (isTopLevelPen && (editingGlyph.value.skeleton as any)?.skeletonBindData || isTopLevelPen && (editingGlyph.value.skeleton as any)?.glyphSkeletonBindData) {
+        requestSkeletonRebindForEditingGlyph()
       }
     }
 

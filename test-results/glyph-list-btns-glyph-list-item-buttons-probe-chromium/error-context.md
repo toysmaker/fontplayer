@@ -1,0 +1,86 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]: 首次打开可能会有些慢，感谢耐心等待
+  - generic [ref=e13]:
+    - complementary [ref=e14]:
+      - generic [ref=e17]:
+        - generic [ref=e19] [cursor=pointer]:
+          - img [ref=e21]
+          - generic [ref=e23]: 文件
+        - generic [ref=e25] [cursor=pointer]:
+          - img [ref=e27]
+          - generic [ref=e29]: 编辑
+        - generic [ref=e31] [cursor=pointer]:
+          - img [ref=e33]
+          - generic [ref=e35]: 导入
+        - generic [ref=e37] [cursor=pointer]:
+          - img [ref=e39]
+          - generic [ref=e41]: 导出
+        - generic [ref=e43] [cursor=pointer]:
+          - img [ref=e45]
+          - generic [ref=e47]: 字符
+        - generic [ref=e49] [cursor=pointer]:
+          - img [ref=e51]
+          - generic [ref=e53]: 设置
+        - generic [ref=e55] [cursor=pointer]:
+          - img [ref=e57]
+          - generic [ref=e59]: 模板
+        - generic [ref=e61] [cursor=pointer]:
+          - img [ref=e63]
+          - generic [ref=e65]: 工具
+        - generic [ref=e67] [cursor=pointer]:
+          - img [ref=e69]
+          - generic [ref=e71]: 效果
+        - generic [ref=e73] [cursor=pointer]:
+          - img [ref=e75]
+          - generic [ref=e77]: 应用
+        - generic [ref=e79] [cursor=pointer]:
+          - img [ref=e81]
+          - generic [ref=e83]: 测试
+    - generic [ref=e87]:
+      - generic [ref=e89]:
+        - generic [ref=e90] [cursor=pointer]:
+          - generic [ref=e92]: btn-probe
+          - img [ref=e94]
+        - button "高级编辑" [ref=e97] [cursor=pointer]:
+          - img [ref=e99]
+          - generic [ref=e101]: 高级编辑
+        - generic [ref=e102]:
+          - generic [ref=e103]: 预览模式
+          - generic [ref=e104]:
+            - generic [ref=e105] [cursor=pointer]:
+              - generic [ref=e106]:
+                - radio "黑白" [checked]
+              - generic [ref=e108]: 黑白
+            - generic [ref=e109] [cursor=pointer]:
+              - generic [ref=e110]:
+                - radio "彩色"
+              - generic [ref=e112]: 彩色
+          - generic [ref=e113]:
+            - checkbox "纯文本" [ref=e114] [cursor=pointer]:
+              - img [ref=e118]
+              - generic [ref=e121]: 纯文本
+            - generic [ref=e122]:
+              - generic "增大字号":
+                - img
+              - generic "减小字号":
+                - img
+        - generic [ref=e123]:
+          - img [ref=e124] [cursor=pointer]
+          - img [ref=e126] [cursor=pointer]
+          - img [ref=e128] [cursor=pointer]
+          - generic [ref=e130]:
+            - generic [ref=e131] [cursor=pointer]: 中文
+            - generic [ref=e132] [cursor=pointer]: English
+      - generic [ref=e137]:
+        - generic [ref=e143] [cursor=pointer]: 甲
+        - generic [ref=e149] [cursor=pointer]: 乙
+      - generic [ref=e152] [cursor=pointer]:
+        - generic [ref=e153]: 字符
+        - generic [ref=e154]: 笔画
+        - generic [ref=e155]: 部首
+        - generic [ref=e156]: 部件
+        - generic [ref=e157]: 字形
+```

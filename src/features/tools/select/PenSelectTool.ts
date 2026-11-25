@@ -121,18 +121,19 @@ export class PenSelectTool extends BaseTool {
   }
 
   /**
-   * 骨架绑定自由编辑上下文
+   * 骨架绑定自由编辑上下文（作用于该字形的所有普通钢笔组件）
    * 当设置为非 null 时，PenSelectTool 操作内嵌在字形组件中的钢笔轮廓，
    * 而非 store 中直接选中的钢笔组件。
    */
   static skeletonFreeEditContext: {
     glyphComponent: IComponent | IGlyphComponent
-    penComponent: IPenComponent
-    penUUID: string
+    pens: Array<{ penComponent: IPenComponent; penUUID: string }>
+    /** 当前命中的钢笔：mousedown 命中锚点/路径时切换并锁定至 mouseup */
+    activePenUUID: string
   } | null = null
 
   /**
-   * 解析骨架自由编辑上下文，返回替换数据源
+   * 解析骨架自由编辑上下文，返回当前钢笔的替换数据源
    * 若未设置则返回 null，方法应回退到 store 读取
    */
   private resolveSkeletonContext(): {
@@ -142,10 +143,16 @@ export class PenSelectTool extends BaseTool {
   } | null {
     if (PenSelectTool.skeletonFreeEditContext) {
       const ctx = PenSelectTool.skeletonFreeEditContext
+      const active = ctx.pens.find((p) => p.penUUID === ctx.activePenUUID) ?? ctx.pens[0]
+      if (!active) return null
+      // 自愈过期指针：active 不在列表中时回退到第一支钢笔
+      if (active.penUUID !== ctx.activePenUUID) {
+        ctx.activePenUUID = active.penUUID
+      }
       const gc = ctx.glyphComponent
       return {
-        penComponent: ctx.penComponent,
-        penUUID: ctx.penUUID,
+        penComponent: active.penComponent,
+        penUUID: active.penUUID,
         bounds: {
           x: (gc as any).ox ?? gc.x ?? 0,
           y: (gc as any).oy ?? gc.y ?? 0,
@@ -177,21 +184,25 @@ export class PenSelectTool extends BaseTool {
     // 骨架自由编辑模式：使用上下文中的 bounds，不与 store 中的 selectedComponent 交互
     const skCtx = this.resolveSkeletonContext()
     if (skCtx) {
-      if (!editModeFixedBounds.has(skCtx.penUUID)) {
-        // 使用钢笔点的实际包围框作为 origin bounds（用于 hover 检测等）
-        const penPoints = skCtx.penComponent.points
-        const penBound = penPoints && penPoints.length > 0
-          ? getBound(penPoints.reduce((arr: Array<{ x: number; y: number }>, p: IPoint) => {
-              arr.push({ x: p.x, y: p.y })
-              return arr
-            }, []))
-          : { x: skCtx.bounds.x, y: skCtx.bounds.y, w: 100, h: 100 }
-        editModeFixedBounds.set(skCtx.penUUID, {
-          x: penBound.x,
-          y: penBound.y,
-          w: penBound.w || 100,
-          h: penBound.h || 100,
-        })
+      // 为每支钢笔建立固定边界框（hover 检测等使用）
+      const fullCtx = PenSelectTool.skeletonFreeEditContext!
+      for (const entry of fullCtx.pens) {
+        if (!editModeFixedBounds.has(entry.penUUID)) {
+          // 使用钢笔点的实际包围框作为 origin bounds
+          const penPoints = entry.penComponent.points
+          const penBound = penPoints && penPoints.length > 0
+            ? getBound(penPoints.reduce((arr: Array<{ x: number; y: number }>, p: IPoint) => {
+                arr.push({ x: p.x, y: p.y })
+                return arr
+              }, []))
+            : { x: skCtx.bounds.x, y: skCtx.bounds.y, w: 100, h: 100 }
+          editModeFixedBounds.set(entry.penUUID, {
+            x: penBound.x,
+            y: penBound.y,
+            w: penBound.w || 100,
+            h: penBound.h || 100,
+          })
+        }
       }
       this.initialOriginBounds = editModeFixedBounds.get(skCtx.penUUID)!
       this.bindEvents()
@@ -325,15 +336,20 @@ export class PenSelectTool extends BaseTool {
       const localY = _y - oy
 
       const d = getStrokeWidth() * 2
-      const _points = this.transformPenPointsForContext(skCtx, false)
-      const rawPoints = skCtx.penComponent.points
-      const rawClosePath = !!(skCtx.penComponent as any).closePath
+      const fullCtx = PenSelectTool.skeletonFreeEditContext!
 
-      // 检查是否点击在锚点或控制点上
-      for (let i = 0; i < _points.length; i++) {
-        const point = _points[i]
-        if (distance(mx, my, point.x, point.y) <= d) {
-          if (point.type === 'anchor') {
+      // ① 锚点命中：扫描所有钢笔（锚点 uuid 全局唯一），命中即切换 active 钢笔
+      for (const entry of fullCtx.pens) {
+        const entryCtx = {
+          penComponent: entry.penComponent,
+          penUUID: entry.penUUID,
+          bounds: skCtx.bounds,
+        }
+        const entryPoints = this.transformPenPointsForContext(entryCtx, false)
+        for (let i = 0; i < entryPoints.length; i++) {
+          const point = entryPoints[i]
+          if (point.type === 'anchor' && distance(mx, my, point.x, point.y) <= d) {
+            fullCtx.activePenUUID = entry.penUUID
             this.selectAnchor = point.uuid
             this.selectPenPoint = point.uuid
             this.controlFlag = 'none'
@@ -342,7 +358,18 @@ export class PenSelectTool extends BaseTool {
             this.mousedown = true
             this.triggerRender()
             return
-          } else if (this.selectAnchor) {
+          }
+        }
+      }
+
+      // ② 控制点命中：只对当前 active 钢笔生效（保留原单笔语义）
+      const _points = this.transformPenPointsForContext(skCtx, false)
+      const rawPoints = skCtx.penComponent.points
+      const rawClosePath = !!(skCtx.penComponent as any).closePath
+      for (let i = 0; i < _points.length; i++) {
+        const point = _points[i]
+        if (distance(mx, my, point.x, point.y) <= d) {
+          if (this.selectAnchor) {
             const _index: number = (() => {
               for (let j = 0; j < _points.length; j++) {
                 if (_points[j].uuid === this.selectAnchor) return j
@@ -371,12 +398,25 @@ export class PenSelectTool extends BaseTool {
         }
       }
 
-      // 未点击到锚点/控制点：检查是否点击在路径上（新建锚点）
+      // ③ 未点击到锚点/控制点：检查是否点击在路径上（新建锚点），active 优先扫描所有钢笔
       // 使用反旋转后的坐标 _x/_y，与 transformPenPointsForContext 的点空间一致
-      const pathHit = this.hitTestPathForSkeleton(skCtx, _x, _y, d)
-      if (pathHit) {
-        this.insertAnchorAtHitForSkeleton(skCtx, pathHit)
-        return
+      const orderedPens = [
+        fullCtx.pens.find((p) => p.penUUID === fullCtx.activePenUUID) ?? fullCtx.pens[0],
+        ...fullCtx.pens.filter((p) => p.penUUID !== fullCtx.activePenUUID),
+      ]
+      for (const entry of orderedPens) {
+        if (!entry) continue
+        const entryCtx = {
+          penComponent: entry.penComponent,
+          penUUID: entry.penUUID,
+          bounds: skCtx.bounds,
+        }
+        const pathHit = this.hitTestPathForSkeleton(entryCtx, _x, _y, d)
+        if (pathHit) {
+          fullCtx.activePenUUID = entry.penUUID
+          this.insertAnchorAtHitForSkeleton(entryCtx, pathHit)
+          return
+        }
       }
 
       this.selectPenPoint = ''
@@ -1266,30 +1306,56 @@ export class PenSelectTool extends BaseTool {
     }
 
     if (!this.mousedown) {
-      // hover 检测：点已由 transformPenPointsForContext 转换到画布坐标
-      const _points = this.transformPenPointsForContext(skCtx, false)
+      // hover 检测：遍历所有钢笔，点已由 transformPenPointsForContext 转换到画布坐标
+      const fullCtx = PenSelectTool.skeletonFreeEditContext
       const oldHoverPenPoint = this.hoverPenPoint
       this.hoverPenPoint = ''
       const d = getStrokeWidth() * 2
 
-      for (let i = 0; i < _points.length; i++) {
-        const p = _points[i]
-        if (distance(mx, my, p.x, p.y) <= d) {
-          const originalPoint = points.find((op: IPoint) => op.uuid === p.uuid)
-          if (originalPoint) {
-            if (originalPoint.type === 'control' && i === points.length - 1 && points.length >= 2 && originalPoint.x === points[1].x && originalPoint.y === points[1].y) {
-              continue
+      const hoverEntries = fullCtx
+        ? [
+            fullCtx.pens.find((p) => p.penUUID === fullCtx.activePenUUID) ?? fullCtx.pens[0],
+            ...fullCtx.pens.filter((p) => p.penUUID !== fullCtx.activePenUUID),
+          ]
+        : []
+      for (const entry of hoverEntries) {
+        if (!entry || this.hoverPenPoint) break
+        const entryCtx = {
+          penComponent: entry.penComponent,
+          penUUID: entry.penUUID,
+          bounds: skCtx.bounds,
+        }
+        const entryPoints = this.transformPenPointsForContext(entryCtx, false)
+        const entryRaw = entry.penComponent.points
+        for (let i = 0; i < entryPoints.length; i++) {
+          const p = entryPoints[i]
+          if (distance(mx, my, p.x, p.y) <= d) {
+            const originalPoint = entryRaw.find((op: IPoint) => op.uuid === p.uuid)
+            if (originalPoint) {
+              if (originalPoint.type === 'control' && i === entryRaw.length - 1 && entryRaw.length >= 2 && originalPoint.x === entryRaw[1].x && originalPoint.y === entryRaw[1].y) {
+                continue
+              }
+              this.hoverPenPoint = originalPoint.uuid
+              break
             }
-            this.hoverPenPoint = originalPoint.uuid
-            break
           }
         }
       }
 
-      // 未悬停到点时检测路径：悬停在路径上显示「添加锚点」光标
+      // 未悬停到点时检测路径：悬停在路径上显示「添加锚点」光标（active 优先扫描所有钢笔）
       // 使用反旋转后的坐标 _x/_y，与 transformPenPointsForContext 的点空间一致
       if (!this.hoverPenPoint) {
-        const pathHit = this.hitTestPathForSkeleton(skCtx, _x, _y, d)
+        let pathHit: ReturnType<typeof this.hitTestPathForSkeleton> = null
+        for (const entry of hoverEntries) {
+          if (!entry) continue
+          const entryCtx = {
+            penComponent: entry.penComponent,
+            penUUID: entry.penUUID,
+            bounds: skCtx.bounds,
+          }
+          pathHit = this.hitTestPathForSkeleton(entryCtx, _x, _y, d)
+          if (pathHit) break
+        }
         this.canvas.style.cursor = pathHit ? 'copy' : ''
       } else if (this.canvas.style.cursor !== '') {
         this.canvas.style.cursor = ''
@@ -1314,7 +1380,9 @@ export class PenSelectTool extends BaseTool {
     const { penComponent, penUUID, bounds } = skCtx
     const { points } = penComponent
     if (import.meta.env.DEV) {
-      console.log('[SampledBind] renderForSkeletonContext: points=' + (points?.length || 0) +
+      const pensCount = PenSelectTool.skeletonFreeEditContext?.pens.length ?? 1
+      console.log('[SampledBind] renderForSkeletonContext: pens=' + pensCount +
+        ' active=' + penUUID + ' points=' + (points?.length || 0) +
         ' bounds=(' + bounds.x + ',' + bounds.y + ' ' + bounds.w + 'x' + bounds.h + ')' +
         ' canvasSize=' + canvas.width + 'x' + canvas.height)
     }
@@ -1373,12 +1441,21 @@ export class PenSelectTool extends BaseTool {
     ctx.strokeStyle = '#153063'
 
     if (!this.selectAnchor) {
-      for (let i = 0; i < _points.length; i++) {
-        if (_points[i].type === 'anchor') {
-          ctx.beginPath()
-          ctx.ellipse(_points[i].x, _points[i].y, d, d, 0, 0, 2 * Math.PI)
-          ctx.stroke()
-          ctx.closePath()
+      // 未选中锚点时：绘制所有钢笔的锚点
+      const fullCtx = PenSelectTool.skeletonFreeEditContext
+      const allPens = fullCtx ? fullCtx.pens : [{ penComponent: penComponent, penUUID }]
+      for (const entry of allPens) {
+        const entryPoints = this.transformPenPointsForContext(
+          { penComponent: entry.penComponent, penUUID: entry.penUUID, bounds },
+          true,
+        )
+        for (let i = 0; i < entryPoints.length; i++) {
+          if (entryPoints[i].type === 'anchor') {
+            ctx.beginPath()
+            ctx.ellipse(entryPoints[i].x, entryPoints[i].y, d, d, 0, 0, 2 * Math.PI)
+            ctx.stroke()
+            ctx.closePath()
+          }
         }
       }
     } else {
@@ -1416,19 +1493,30 @@ export class PenSelectTool extends BaseTool {
       }
     }
 
-    for (let i = 0; i < _points.length; i++) {
-      if (this.hoverPenPoint === _points[i].uuid) {
-        ctx.fillStyle = '#79bbff'
-        if (_points[i].type === 'anchor') {
-          ctx.beginPath()
-          ctx.ellipse(_points[i].x, _points[i].y, d, d, 0, 0, 2 * Math.PI)
-          ctx.fill()
-          ctx.closePath()
+    // 悬停高亮：hoverPenPoint 可能落在任意一支钢笔上
+    const hoverFullCtx = PenSelectTool.skeletonFreeEditContext
+    const hoverPens = hoverFullCtx ? hoverFullCtx.pens : [{ penComponent: penComponent, penUUID }]
+    for (const entry of hoverPens) {
+      if (!this.hoverPenPoint) break
+      const entryPoints = this.transformPenPointsForContext(
+        { penComponent: entry.penComponent, penUUID: entry.penUUID, bounds },
+        true,
+      )
+      for (let i = 0; i < entryPoints.length; i++) {
+        if (this.hoverPenPoint === entryPoints[i].uuid) {
+          ctx.fillStyle = '#79bbff'
+          if (entryPoints[i].type === 'anchor') {
+            ctx.beginPath()
+            ctx.ellipse(entryPoints[i].x, entryPoints[i].y, d, d, 0, 0, 2 * Math.PI)
+            ctx.fill()
+            ctx.closePath()
+          }
+          if (entryPoints[i].type === 'control' && i >= index - 4 && i <= index + 4) {
+            ctx.fillRect(entryPoints[i].x - d, entryPoints[i].y - d, 2 * d, 2 * d)
+          }
+          ctx.fillStyle = '#fff'
+          break
         }
-        if (_points[i].type === 'control' && i >= index - 4 && i <= index + 4) {
-          ctx.fillRect(_points[i].x - d, _points[i].y - d, 2 * d, 2 * d)
-        }
-        ctx.fillStyle = '#fff'
       }
     }
 

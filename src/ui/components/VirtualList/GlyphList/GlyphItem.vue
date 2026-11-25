@@ -19,7 +19,7 @@
         <font-awesome-icon :icon="['fas', 'copy']" />
       </span>
       <span class="edit-icon" @click.stop @pointerup.stop="handleEdit">
-        <font-awesome-icon icon="fa-solid fa-pen-nib" />
+        <font-awesome-icon :icon="['fas', 'pen-nib']" />
       </span>
       <span class="delete-icon" @click.stop @pointerup.stop="handleDelete">
         <font-awesome-icon :icon="['fas', 'trash']" />
@@ -64,19 +64,24 @@ const isInitialized = ref(false)
 // 标记是否已渲染（用于控制红线显示）
 const hasRendered = ref(false)
 
-const props = defineProps<{
-  glyph: ICustomGlyph
-  /**
-   * 为 true 时不在此组件内执行 onMounted/watch 驱动的缓存恢复与渲染，
-   * 仅注册 canvas，由父列表（如字形选择弹窗）统一调用 GlyphRenderer，避免与父级竞态（Tauri/WKWebView 上尤其明显）。
-   */
-  deferPreviewToParent?: boolean
-  /**
-   * 为 false 时隐藏右上角操作按钮（复制/编辑/删除），
-   * 选择字形弹窗等仅展示场景使用；字符/字形列表页保持默认展示。
-   */
-  showActions?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    glyph: ICustomGlyph
+    /**
+     * 为 true 时不在此组件内执行 onMounted/watch 驱动的缓存恢复与渲染，
+     * 仅注册 canvas，由父列表（如字形选择弹窗）统一调用 GlyphRenderer，避免与父级竞态（Tauri/WKWebView 上尤其明显）。
+     */
+    deferPreviewToParent?: boolean
+    /**
+     * 为 false 时隐藏右上角操作按钮（复制/编辑/删除），
+     * 选择字形弹窗等仅展示场景使用；字符/字形列表页保持默认展示。
+     * 注意：必须显式 default: true —— 布尔类型 prop 不传时 Vue 会规范化为 false，
+     * 导致主页字形列表的按钮被误隐藏。
+     */
+    showActions?: boolean
+  }>(),
+  { showActions: true },
+)
 
 const canvasRef = ref<HTMLCanvasElement>()
 const canvasWidth = 100
@@ -294,6 +299,15 @@ const validateGlyphName = (val: string): string | null => {
   return null
 }
 
+/** 列表变更后统一收尾: 标记未保存 + 版本号推进触发列表刷新 */
+function afterGlyphListMutated() {
+  const file = projectStore.selectedFile
+  if (file) {
+    projectStore.markFileUnsaved(file.uuid)
+  }
+  glyphStore.glyphListVersion++
+}
+
 const onCopyConfirm = (name: string) => {
   const result = findGlyphList()
   if (!result) return
@@ -308,11 +322,13 @@ const onCopyConfirm = (name: string) => {
   newGlyph.script = rewriteScriptUUIDReference(newGlyph.script, newGlyph.uuid)
 
   result.list.push(newGlyph)
+  afterGlyphListMutated()
   message.success('字形已复制')
 }
 
 const onRenameConfirm = (name: string) => {
   props.glyph.name = name
+  afterGlyphListMutated()
   message.success('字形已重命名')
 }
 
@@ -338,7 +354,7 @@ const handleDelete = () => {
       if (idx >= 0) {
         result.list.splice(idx, 1)
       }
-
+      afterGlyphListMutated()
       message.success('字形已删除')
     },
   })

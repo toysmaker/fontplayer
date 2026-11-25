@@ -29,11 +29,13 @@ export function initContourEditOverlay(
     const tool = PenSelectTool.getInstance(canvas, config)
     const skCtx = PenSelectTool.skeletonFreeEditContext
     if (import.meta.env.DEV) {
+      const active = skCtx?.pens.find((p) => p.penUUID === skCtx.activePenUUID) ?? skCtx?.pens[0]
       console.log('[SampledBind] initContourEditOverlay: mode=' + config.mode +
         ' hasSkeletonCtx=' + !!skCtx +
-        ' penUUID=' + (skCtx?.penUUID || 'none') +
-        ' penPoints=' + (skCtx?.penComponent?.points?.length || 0) +
-        ' editMode=' + (skCtx?.penComponent?.editMode))
+        ' pens=' + (skCtx?.pens?.length ?? 0) +
+        ' activePenUUID=' + (skCtx?.activePenUUID || 'none') +
+        ' penPoints=' + (active?.penComponent?.points?.length || 0) +
+        ' editMode=' + (active?.penComponent?.editMode))
     }
     tool.resetInitialBounds()
     tool.activate()

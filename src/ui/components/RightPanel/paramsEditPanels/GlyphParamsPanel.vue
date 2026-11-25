@@ -1014,6 +1014,9 @@ onUnmounted(() => {
       <div class="section-title">{{ t('panels.paramsPanel.glyphParamsPanel.skeletonBinding') }}</div>
 
       <div class="section-body skeleton-wrap">
+        <div class="skeleton-all-pens-hint">
+          {{ t('panels.paramsPanel.glyphParamsPanel.skeletonAllPensHint') }}
+        </div>
         <n-button
           v-if="!editGlyph?.skeleton && (!editGlyphInstance?.getSkeleton || !editGlyphInstance?.getSkeleton())"
           size="small"
@@ -1323,6 +1326,14 @@ onUnmounted(() => {
   width: 100% !important;
   height: 32px !important;
   margin-bottom: 10px !important;
+}
+.skeleton-wrap .skeleton-all-pens-hint {
+  width: 100%;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--light-0);
+  line-height: 1.5;
+  word-break: break-word;
 }
 
 .section-body {

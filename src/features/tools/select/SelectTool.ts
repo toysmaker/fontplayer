@@ -131,32 +131,38 @@ export class SelectTool extends BaseTool {
       }
     }
 
-    // 骨架自由编辑模式：字形组件内的钢笔轮廓进入编辑模式
+    // 骨架自由编辑模式：字形组件内的所有普通钢笔轮廓进入编辑模式
     if (selectedComponent && selectedComponent.type === 'glyph' && skeletonFreeEdit.value) {
       const glyphValue = selectedComponent.value as ICustomGlyph
       const orderedComponents = orderedListWithItemsForGlyph(glyphValue)
-      const innerPen = orderedComponents.find(c => c.type === 'pen')
-      if (innerPen) {
-        const penValue = innerPen.value as unknown as IPenComponent
-        if (penValue && penValue.editMode === true) {
-          PenSelectTool.skeletonFreeEditContext = {
-            glyphComponent: selectedComponent,
-            penComponent: penValue,
-            penUUID: innerPen.uuid,
-          }
-          if (!this.penSelectTool.isToolActive()) {
-            this.penSelectTool.resetInitialBounds()
-            this.penSelectTool.activate()
-          }
-          return
+      const innerPens = orderedComponents.filter(c => c.type === 'pen')
+      const editPens = innerPens.filter((c) => (c.value as unknown as IPenComponent)?.editMode === true)
+      if (editPens.length > 0) {
+        const prev = PenSelectTool.skeletonFreeEditContext
+        PenSelectTool.skeletonFreeEditContext = {
+          glyphComponent: selectedComponent,
+          pens: innerPens.map((c) => ({
+            penComponent: c.value as unknown as IPenComponent,
+            penUUID: c.uuid,
+          })),
+          // 工具重激活时保持上次 active 钢笔（若仍存在）
+          activePenUUID: prev && prev.pens.some((p) => p.penUUID === prev.activePenUUID)
+            ? prev.activePenUUID
+            : innerPens[0].uuid,
         }
+        if (!this.penSelectTool.isToolActive()) {
+          this.penSelectTool.resetInitialBounds()
+          this.penSelectTool.activate()
+        }
+        return
       }
     }
 
     // 清理骨架自由编辑上下文（如果不在骨架编辑模式或editMode已被关闭）
     if (PenSelectTool.skeletonFreeEditContext && this.penSelectTool.isToolActive()) {
       const ctx = PenSelectTool.skeletonFreeEditContext
-      if (ctx.penComponent.editMode !== true || !skeletonFreeEdit.value) {
+      const anyEditing = ctx.pens.some((p) => p.penComponent.editMode === true)
+      if (!anyEditing || !skeletonFreeEdit.value) {
         if (!this.penSelectTool.isDragging()) {
           this.penSelectTool.deactivate()
           PenSelectTool.skeletonFreeEditContext = null
@@ -725,10 +731,10 @@ export class SelectTool extends BaseTool {
           {
             const dx = mx - this.lastMX
             const dy = my - this.lastMY
-            const logicalW = this.getCoord(this.canvas.offsetWidth || 500)
-            const logicalH = this.getCoord(this.canvas.offsetHeight || 500)
-            const newX = Math.max(0, Math.min(logicalW - w, roundToPrecision(x + dx)))
-            const newY = Math.max(0, Math.min(logicalH - h, roundToPrecision(y + dy)))
+            // 不做画布边界钳制: 组件可以自由移动到画布外
+            // (此前 Math.max(0, Math.min(canvas - w, ...)) 会把位置吸附到边缘, 产生"卡边跳动")
+            const newX = roundToPrecision(x + dx)
+            const newY = roundToPrecision(y + dy)
             modifyComponent(uuid, {
               x: newX,
               y: newY,

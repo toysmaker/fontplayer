@@ -12,15 +12,21 @@ const getGlyphParamValue = (glyph: ICustomGlyph, name: string): number | undefin
 }
 
 const calculateGlyphWeight = (glyph: ICustomGlyph) => {
-  const { pointsBonesMap, originalPoints, bones } = (glyph as any).skeleton.skeletonBindData
-  const points = (glyph.components[0].value as unknown as IPenComponent).points
-  const discrete_points = getDiscretePoints(points)
-  const weights = []
-  for (let i = 0; i < bones.length; i++) {
-    const { avgWeight, boneLength } = calculateWeightAtBone(discrete_points, bones[i])
-    weights.push({ avgWeight, boneLength })
+  const { bones } = (glyph as any).skeleton.skeletonBindData
+  // 所有普通钢笔组件：共享骨骼，逐笔计算后按骨长加权汇总。
+  // 注意不能把多支钢笔的离散点拼成一条曲线（会产生跨笔伪线段，交点计算错误）
+  const penComponents = (glyph.components || []).filter((c) => c.type === 'pen')
+  const weights: Array<{ avgWeight: number; boneLength: number }> = []
+  for (const pen of penComponents) {
+    const points = (pen.value as unknown as IPenComponent).points
+    const discrete_points = getDiscretePoints(points)
+    for (let i = 0; i < bones.length; i++) {
+      const { avgWeight, boneLength } = calculateWeightAtBone(discrete_points, bones[i])
+      weights.push({ avgWeight, boneLength })
+    }
   }
   const totalLength = weights.reduce((acc, curr) => acc + curr.boneLength, 0)
+  if (!totalLength) return 0 // 守卫：旧代码此处会得到 NaN
   let weight = 0
   for (let i = 0; i < weights.length; i++) {
     const { avgWeight, boneLength } = weights[i]
@@ -32,27 +38,32 @@ const calculateGlyphWeight = (glyph: ICustomGlyph) => {
 const updateGlyphWeight = (glyph: ICustomGlyph) => {
   const weight = getGlyphParamValue(glyph, '字重') ?? 0
   const originWeight = (glyph as any).skeleton.originWeight
-  const d = (weight - originWeight) / 2
+  // 守卫：originWeight 可能为 undefined（如 glyphSkeleton 路径），此时偏移量为 0
+  const d = originWeight !== undefined ? (weight - originWeight) / 2 : 0
   const points = (glyph as any).skeleton.skeletonBindData.originalPoints//(glyph.components[0].value as unknown as IPenComponent).points
-  const newPoints = R.clone((glyph.components[0].value as unknown as IPenComponent).points)
-  for (let i = 0; i < points.length - 1; i+=3) {
-    const bezier = [points[i], points[i+1], points[i+2], points[i+3]]
-    const angle1 = Math.atan2(bezier[1].y - bezier[0].y, bezier[1].x - bezier[0].x)
-    const angle2 = Math.atan2(bezier[3].y - bezier[2].y, bezier[3].x - bezier[2].x)
-    const p1 = { x: bezier[0].x - Math.sin(angle1) * d, y: bezier[0].y + Math.cos(angle1) * d }
-    const p2 = { x: bezier[1].x - Math.sin(angle1) * d, y: bezier[1].y + Math.cos(angle1) * d }
-    const p3 = { x: bezier[2].x - Math.sin(angle2) * d, y: bezier[2].y + Math.cos(angle2) * d }
-    const p4 = { x: bezier[3].x - Math.sin(angle2) * d, y: bezier[3].y + Math.cos(angle2) * d }
-    newPoints[i].x = p1.x
-    newPoints[i].y = p1.y
-    newPoints[i+1].x = p2.x
-    newPoints[i+1].y = p2.y
-    newPoints[i+2].x = p3.x
-    newPoints[i+2].y = p3.y
-    newPoints[i+3].x = p4.x
-    newPoints[i+3].y = p4.y
-  };
-  (glyph.components[0].value as unknown as IPenComponent).points = newPoints
+  // 对所有普通钢笔组件应用偏移
+  const penComponents = (glyph.components || []).filter((c) => c.type === 'pen')
+  for (const pen of penComponents) {
+    const newPoints = R.clone((pen.value as unknown as IPenComponent).points)
+    for (let i = 0; i < points.length - 1; i+=3) {
+      const bezier = [points[i], points[i+1], points[i+2], points[i+3]]
+      const angle1 = Math.atan2(bezier[1].y - bezier[0].y, bezier[1].x - bezier[0].x)
+      const angle2 = Math.atan2(bezier[3].y - bezier[2].y, bezier[3].x - bezier[2].x)
+      const p1 = { x: bezier[0].x - Math.sin(angle1) * d, y: bezier[0].y + Math.cos(angle1) * d }
+      const p2 = { x: bezier[1].x - Math.sin(angle1) * d, y: bezier[1].y + Math.cos(angle1) * d }
+      const p3 = { x: bezier[2].x - Math.sin(angle2) * d, y: bezier[2].y + Math.cos(angle2) * d }
+      const p4 = { x: bezier[3].x - Math.sin(angle2) * d, y: bezier[3].y + Math.cos(angle2) * d }
+      newPoints[i].x = p1.x
+      newPoints[i].y = p1.y
+      newPoints[i+1].x = p2.x
+      newPoints[i+1].y = p2.y
+      newPoints[i+2].x = p3.x
+      newPoints[i+2].y = p3.y
+      newPoints[i+3].x = p4.x
+      newPoints[i+3].y = p4.y
+    };
+    (pen.value as unknown as IPenComponent).points = newPoints
+  }
   return glyph
 }
 
