@@ -614,22 +614,6 @@ const modifySkeleton = () => {
   strokeFn && strokeFn.instanceBasicGlyph(g)
   strokeFn && strokeFn.updateSkeletonListenerBeforeBind(getEditGlyphInstance())
 
-  if (import.meta.env.DEV) {
-    const inst = getEditGlyphInstance() as any
-    const marker = 'm' + Date.now().toString().slice(-6)
-    if (inst) inst.__dragDiagMarker = marker
-    console.log('[dragDiag] modifySkeleton: type=' + type +
-      ' instance=' + !!inst +
-      ' uuid=' + (inst?.uuid || 'none') +
-      ' hasBeforeBindDrag=' + !!inst?.onSkeletonDrag +
-      ' _glyphIsEditingGlyph=' + (inst?._glyph === g) +
-      ' _jointsLen=' + (inst?._joints?.length ?? -1) +
-      ' isEditing=' + instanceManager.isEditing(g.uuid) +
-      ' ox=' + g.skeleton.ox + ' oy=' + g.skeleton.oy +
-      ' marker=' + marker +
-      ' joints=' + (inst?.getJoints?.()?.map((j: any) => j.name).join(',') || 'none'))
-  }
-
   onSkeletonSelect.value = false
   g.skeleton.onSkeletonBind = true
   onSkeletonDragging.value = true

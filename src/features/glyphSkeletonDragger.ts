@@ -5,7 +5,7 @@
  */
 
 import type { CustomGlyph } from '@/core/instance/CustomGlyph'
-import { glyphSkeletonRebind, setSkeletonTransformPreview } from '@/features/glyphSkeletonBind'
+import { setSkeletonTransformPreview } from '@/features/glyphSkeletonBind'
 import { releaseStoredBindRuntimeData } from '@/features/skeletonSampling'
 
 type CoordFn = (coord: number) => number
@@ -223,11 +223,10 @@ export class GlyphSkeletonDragger {
       this.glyphInstance._components = []
     }
 
-    // 如果已绑定（glyphSkeletonBindData 存在），重新计算骨骼变形
-    const skeleton = (this.glyphInstance._glyph as any)?.skeleton
-    if (skeleton?.glyphSkeletonBindData) {
-      glyphSkeletonRebind(this.glyphInstance)
-    }
+    // 注意: 修改骨架拖拽期间不做 glyphSkeletonRebind 变形。
+    // 本拖拽器只在 onSkeletonBind=true(绑定前/修改骨架)时激活, 此时拖拽仅用于摆放骨架;
+    // 若按旧绑定数据变形写回, 轮廓会在拖拽时直接被改写(用户可见的轮廓跳动/扭曲)。
+    // 绑定后由参数面板滑杆(handleChangeGlyphSkeletonRefParam 等)驱动 glyphSkeletonRebind 变形。
 
     const t1 = import.meta.env.DEV ? performance.now() : 0
     this.onRender?.()
@@ -268,13 +267,10 @@ export class GlyphSkeletonDragger {
       this.glyphInstance._components = []
     }
 
-    // 如果已绑定，最终重新变形
-    const skeleton = (this.glyphInstance._glyph as any)?.skeleton
-    if (skeleton?.glyphSkeletonBindData) {
-      glyphSkeletonRebind(this.glyphInstance)
-    }
+    // 同 onMouseMove: 修改骨架拖拽期间不 glyphSkeletonRebind 变形写回轮廓
 
     // 拖拽结束释放采样绑定运行时缓存（下次拖拽惰性重建）
+    const skeleton = (this.glyphInstance._glyph as any)?.skeleton
     releaseStoredBindRuntimeData(skeleton?.skeletonBindData)
     releaseStoredBindRuntimeData(skeleton?.glyphSkeletonBindData)
 

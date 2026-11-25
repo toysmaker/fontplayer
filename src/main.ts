@@ -127,7 +127,7 @@ if (!import.meta.env.DEV) {
   console.debug = noop
   console.warn = noop
 } else {
-  const PROBE_PREFIXES = ['[dragCost', '[dragProbe', '[memCensus', '[probe]', '[dragDiag']
+  const PROBE_PREFIXES = ['[dragCost', '[dragProbe', '[memCensus', '[probe]']
   const fullLogs = (() => {
     try {
       return localStorage.getItem('debugConsole') === '1'
