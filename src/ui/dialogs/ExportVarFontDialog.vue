@@ -139,7 +139,7 @@ const dialogsStore = useDialogsStore()
 const axes = ref<VarFontAxis[]>([])
 const pickingConstant = ref(false)
 const pickConstantId = ref<string | null>(null)
-const removeOverlap = ref(false)
+const removeOverlap = ref(true)
 const selectedFile = ref<File | null>(null)
 const selectedChars = ref<string[]>([])
 const showCharListModal = ref(false)
@@ -157,7 +157,7 @@ const visible = computed({
 watch(visible, (v) => {
   if (v) {
     axes.value = []; pickingConstant.value = false; pickConstantId.value = null
-    removeOverlap.value = false; initialAxisNames.value = {}
+    removeOverlap.value = true; initialAxisNames.value = {}
     selectedFile.value = null; selectedChars.value = []
   }
 })

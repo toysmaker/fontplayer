@@ -5,6 +5,9 @@ import type { IContours, IContour } from '@/core/font/types'
 import { ContourConverter } from '@/core/font/converter'
 import { characterDataManager } from '@/core/storage/CharacterDataManager'
 import { create, toArrayBuffer, type ICharacter } from '@/fontManager'
+import { loaded, total } from '@/fontManager/utils/loading'
+import { setTauriBuildBusy } from '@/utils/tauri-build-busy'
+import { setProgressObserver } from '@/fontManager/utils/progress'
 import { removeOverlapFromContours, pathToEditingPenComponents } from '@/features/editor/services/RemoveOverlapService'
 import { isTauri } from '@/utils/env'
 
@@ -160,7 +163,7 @@ export async function loadCharacterLiteForExport(
 export type ExportFontMessageApi = { success: (s: string) => void; error: (s: string) => void; warning: (s: string) => void }
 
 /**
- * 构建 OTF 二进制；不负责写盘。
+ * 构建 OTF 二进制(带 Tauri 忙标志: 构建期间白屏恢复的存活检测不 reload)
  */
 export async function buildExportFontBuffer(
   file: IFile,
@@ -169,6 +172,28 @@ export async function buildExportFontBuffer(
     editingCharacter: ICharacterFileLite | null
     onProgress?: (done: number, total: number) => void
     onGenerating?: () => void
+    /** 封装期进度（CFF/表组装等）：done/total 为 fontManager 内部计数，调用方按阶段重置展示 */
+    onAssembling?: (done: number, total: number) => void
+  },
+  options: ExportFontBuildOptions
+): Promise<ArrayBuffer> {
+  await setTauriBuildBusy(true)
+  try {
+    return await buildExportFontBufferInner(file, ctx, options)
+  } finally {
+    await setTauriBuildBusy(false)
+  }
+}
+
+async function buildExportFontBufferInner(
+  file: IFile,
+  ctx: {
+    editingCharacterUUID: string
+    editingCharacter: ICharacterFileLite | null
+    onProgress?: (done: number, total: number) => void
+    onGenerating?: () => void
+    /** 封装期进度（CFF/表组装等）：done/total 为 fontManager 内部计数，调用方按阶段重置展示 */
+    onAssembling?: (done: number, total: number) => void
   },
   options: ExportFontBuildOptions
 ): Promise<ArrayBuffer> {
@@ -266,17 +291,30 @@ export async function buildExportFontBuffer(
 
   ctx.onGenerating?.()
 
-  const font = await create(fontChars, {
-    familyName: file.name,
-    styleName: 'Regular',
-    unitsPerEm,
-    ascender,
-    descender,
-    tables: file.fontSettings?.tables ?? null,
-    contourStorage: options.contourStorage,
-  })
+  // 封装期进度桥接：fontManager 内部已有 loaded/total 计数与让步点，
+  // 通过观察者转发给调用方（进度条从封装期 0 重新走，不再停在 100%）
+  if (ctx.onAssembling) {
+    loaded.value = 0
+    total.value = 0
+    setProgressObserver((done, totalDone) => {
+      ctx.onAssembling?.(done, totalDone)
+    })
+  }
+  try {
+    const font = await create(fontChars, {
+      familyName: file.name,
+      styleName: 'Regular',
+      unitsPerEm,
+      ascender,
+      descender,
+      tables: file.fontSettings?.tables ?? null,
+      contourStorage: options.contourStorage,
+    })
 
-  return toArrayBuffer(font) as ArrayBuffer
+    return (await toArrayBuffer(font)) as ArrayBuffer
+  } finally {
+    setProgressObserver(null)
+  }
 }
 
 async function resolveTauriSavePath(defaultName: string): Promise<string | null> {
@@ -313,6 +351,16 @@ export async function exportFontLibrary(params: {
   const { file, editingCharacterUUID, editingCharacter, options, message, t, projectStore } = params
   const defaultFileName = `${file.name}.otf`
 
+  // 先让用户选择保存路径（Tauri）：取消则直接返回，不再浪费构建时间
+  let filePath: string | null = null
+  if (isTauri()) {
+    filePath = await resolveTauriSavePath(defaultFileName)
+    if (!filePath) {
+      message.warning(t('dialogs.exportFontDialog.cancelled'))
+      return false
+    }
+  }
+
   projectStore.loading = true
   projectStore.loadingTotal = file.characterList.length
   projectStore.loadingProgress = 0
@@ -331,18 +379,17 @@ export async function exportFontLibrary(params: {
         onGenerating: () => {
           projectStore.loadingMessage = t('dialogs.exportFontDialog.generating')
         },
+        onAssembling: (done, total) => {
+          projectStore.loadingProgress = done
+          projectStore.loadingTotal = total
+        },
       },
       options
     )
 
     if (isTauri()) {
-      const filePath = await resolveTauriSavePath(defaultFileName)
-      if (!filePath) {
-        message.warning(t('dialogs.exportFontDialog.cancelled'))
-        return false
-      }
       const { writeFile } = await import('@tauri-apps/plugin-fs')
-      await writeFile(filePath, new Uint8Array(buffer))
+      await writeFile(filePath!, new Uint8Array(buffer))
     } else {
       downloadBuffer(buffer, defaultFileName)
     }

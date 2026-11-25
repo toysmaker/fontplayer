@@ -13,6 +13,19 @@ const ensureLoading = () => {
 	}
 }
 
+/** 进度观察者：封装期（createFont）内部进度对外桥接的唯一出口；构建器在 create 前设置、结束后清除 */
+let progressObserver: ((done: number, total: number) => void) | null = null
+
+export const setProgressObserver = (cb: ((done: number, total: number) => void) | null) => {
+	progressObserver = cb
+}
+
+const notifyObserver = () => {
+	if (progressObserver) {
+		progressObserver(loaded.value, total.value)
+	}
+}
+
 /**
  * 在需要更大的进度预算时调用
  */
@@ -26,6 +39,7 @@ export const reserveProgressBudget = (estimate: number) => {
 	if (remaining < estimate) {
 		total.value += estimate - remaining
 	}
+	notifyObserver()
 }
 
 /**
@@ -48,6 +62,7 @@ export const incrementProgress = (message?: string, step = 1) => {
 	if (total.value < loaded.value) {
 		total.value = loaded.value
 	}
+	notifyObserver()
 }
 
 export const setProgressMessage = (message: string) => {

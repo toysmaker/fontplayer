@@ -92,8 +92,10 @@ export async function buildFontLibrary(options: {
   /** 每个应用唯一的 family 后缀 */
   familySuffix?: string
   onProgress?: (done: number, total: number) => void
+  /** 封装期进度（CFF/表组装等） */
+  onAssembling?: (done: number, total: number) => void
 }): Promise<FontLibrary> {
-  const { colorFont = false, familySuffix = 'default', onProgress } = options
+  const { colorFont = false, familySuffix = 'default', onProgress, onAssembling } = options
 
   const projectStore = useProjectStore()
   const characterStore = useCharacterStore()
@@ -108,6 +110,7 @@ export async function buildFontLibrary(options: {
     editingCharacterUUID: characterStore.editingCharacterUUID,
     editingCharacter: characterStore.editingCharacter,
     onProgress,
+    onAssembling,
   }
 
   // 静音构建日志：逐字符脚本执行会刷大量 console.log，且 Tauri webview 输出极慢

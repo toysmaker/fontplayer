@@ -149,7 +149,7 @@ const projectStore = useProjectStore()
 const message = useMessage()
 
 const fontSize = ref(72)
-const removeOverlap = ref(false)
+const removeOverlap = ref(true)
 const building = ref(false)
 const error = ref('')
 const previewFamily = ref('')

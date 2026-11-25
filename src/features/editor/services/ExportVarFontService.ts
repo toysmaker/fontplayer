@@ -7,7 +7,11 @@ import { unicodeToCode } from '@/utils/unicode'
 import type { IFile, ICharacterFileLite, IFontSettings, IConstant } from '@/core/types'
 import type { IContours } from '@/core/font/types'
 import { create, toArrayBuffer, type ICharacter } from '@/fontManager'
+import { loaded, total } from '@/fontManager/utils/loading'
+import { setProgressObserver } from '@/fontManager/utils/progress'
+import { setTauriBuildBusy } from '@/utils/tauri-build-busy'
 import { convertContoursToQuadratic } from '@/fontManager/utils/cubicToQuadratic'
+import { i18n } from '@/i18n'
 import { setFixedCurvesExportMode } from '@/core/utils/fitCurve'
 import {
   contoursForCharacterFile,
@@ -150,6 +154,25 @@ function axisToCreateShape(a: VarFontAxis): VarFontAxis & { tag: string } {
  * 构建可变字库 ArrayBuffer（ glyf + gvar ）；不负责写盘。
  */
 export async function buildExportVarFontBuffer(
+  file: IFile,
+  ctx: {
+    axes: VarFontAxis[]
+    instances?: unknown[]
+    editingCharacterUUID: string
+    editingCharacter: ICharacterFileLite | null
+    removeOverlap: boolean
+    projectStore: ProjectStore
+  }
+): Promise<ArrayBuffer> {
+  await setTauriBuildBusy(true)
+  try {
+    return await buildExportVarFontBufferInner(file, ctx)
+  } finally {
+    await setTauriBuildBusy(false)
+  }
+}
+
+async function buildExportVarFontBufferInner(
   file: IFile,
   ctx: {
     axes: VarFontAxis[]
@@ -324,21 +347,33 @@ export async function buildExportVarFontBuffer(
 
     setFixedCurvesExportMode(false)
 
-    const font = await create(fontCharacters, {
-      familyName: file.name,
-      styleName: 'Regular',
-      unitsPerEm,
-      ascender,
-      descender,
-      variants: {
-        axes: axesForCreate,
-        instances,
-        combinations,
-      },
-      tables: file.fontSettings?.tables ?? null,
+    // 封装期进度桥接：变体字体的 gvar/CFF/表组装走 fontManager 内部计数
+    loaded.value = 0
+    total.value = 0
+    setProgressObserver((done, totalDone) => {
+      projectStore.loadingProgress = done
+      projectStore.loadingTotal = totalDone
     })
+    projectStore.loadingMessage = i18n.global.t('dialogs.exportVarFontDialog.generating')
+    try {
+      const font = await create(fontCharacters, {
+        familyName: file.name,
+        styleName: 'Regular',
+        unitsPerEm,
+        ascender,
+        descender,
+        variants: {
+          axes: axesForCreate,
+          instances,
+          combinations,
+        },
+        tables: file.fontSettings?.tables ?? null,
+      })
 
-    return toArrayBuffer(font) as ArrayBuffer
+      return (await toArrayBuffer(font)) as ArrayBuffer
+    } finally {
+      setProgressObserver(null)
+    }
   } catch (e) {
     setFixedCurvesExportMode(false)
     projectStore.updateFile(file.uuid, { constants: R.clone(originConstants) })
@@ -372,6 +407,16 @@ export async function exportVariableFontLibrary(params: {
   const instances = (file.variants as { instances?: unknown[] } | undefined)?.instances ?? []
   const defaultFileName = `${file.name}.otf`
 
+  // 先让用户选择保存路径（Tauri）：取消则直接返回，不再浪费构建时间
+  let filePath: string | null = null
+  if (isTauri()) {
+    filePath = await resolveTauriSavePath(defaultFileName)
+    if (!filePath) {
+      message.warning(t('dialogs.exportVarFontDialog.cancelled'))
+      return false
+    }
+  }
+
   projectStore.loading = true
   projectStore.loadingProgress = 0
   projectStore.loadingTotal = 1
@@ -387,16 +432,9 @@ export async function exportVariableFontLibrary(params: {
       projectStore,
     })
 
-    projectStore.loadingMessage = t('dialogs.exportVarFontDialog.generating')
-
     if (isTauri()) {
-      const filePath = await resolveTauriSavePath(defaultFileName)
-      if (!filePath) {
-        message.warning(t('dialogs.exportVarFontDialog.cancelled'))
-        return false
-      }
       const { writeFile } = await import('@tauri-apps/plugin-fs')
-      await writeFile(filePath, new Uint8Array(buffer))
+      await writeFile(filePath!, new Uint8Array(buffer))
     } else {
       downloadBuffer(buffer, defaultFileName)
     }

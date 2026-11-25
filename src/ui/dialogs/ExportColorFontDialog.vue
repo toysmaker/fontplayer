@@ -69,7 +69,7 @@ const projectStore = useProjectStore()
 const characterStore = useCharacterStore()
 const dialogsStore = useDialogsStore()
 
-const removeOverlap = ref(false)
+const removeOverlap = ref(true)
 const selectedFile = ref<File | null>(null)
 const selectedChars = ref<string[]>([])
 const showCharListModal = ref(false)
@@ -81,7 +81,7 @@ const visible = computed({
 })
 
 watch(visible, (v) => {
-  if (v) { removeOverlap.value = false; selectedFile.value = null; selectedChars.value = [] }
+  if (v) { removeOverlap.value = true; selectedFile.value = null; selectedChars.value = [] }
 })
 
 function onUpdateShow(v: boolean) { if (!v) dialogsStore.closeExportColorFontDialog() }

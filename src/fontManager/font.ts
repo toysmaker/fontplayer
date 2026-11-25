@@ -697,22 +697,27 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 			return { cubicCount, quadCount, lineCount }
 		}
 		
-		// 1. 将所有字符的轮廓转换为二次贝塞尔曲线
-		const convertedCharacters = characters.map((char, index) => {
-			const before = checkGlyphPaths(char, index)
+		// 1. 将所有字符的轮廓转换为二次贝塞尔曲线（分块执行并计数，避免大字符集同步阻塞）
+		reserveProgressBudget(characters.length)
+		const convertedCharacters: typeof characters = []
+		for (let i = 0; i < characters.length; i++) {
+			const char = characters[i]
+			const before = checkGlyphPaths(char, i)
 			const converted = {
 				...char,
 				contours: convertContoursToQuadratic(char.contours, 0.5) // tolerance = 0.5
 			}
-			const after = checkGlyphPaths(converted, index)
-			
-			if (index === 7 || index === 11 || index === 12) {
-				console.log(`  Glyph ${index}: cubic=${before.cubicCount}, quad=${before.quadCount}, line=${before.lineCount} → quad=${after.quadCount}, line=${after.lineCount}`)
+			const after = checkGlyphPaths(converted, i)
+
+			if (i === 7 || i === 11 || i === 12) {
+				console.log(`  Glyph ${i}: cubic=${before.cubicCount}, quad=${before.quadCount}, line=${before.lineCount} → quad=${after.quadCount}, line=${after.lineCount}`)
 			}
-			
-			return converted
-		})
-		
+
+			convertedCharacters.push(converted)
+			incrementProgress(undefined, 1)
+			await yieldToEventLoop(i + 1, 50)
+		}
+
 		console.log(`✅ Converted ${convertedCharacters.length} glyphs to quadratic Bezier`)
 		
 		console.log('\n📦 Step 2: Building glyf and loca tables...')
@@ -1006,7 +1011,7 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 		console.log(`  options.variants.combinations.length: ${options.variants?.combinations?.length || 0}`)
 		
 		console.time('gvar table creation')
-		const gvarTable = createGvarTable(options.variants, convertedCharacters)
+		const gvarTable = await createGvarTable(options.variants, convertedCharacters)
 		console.timeEnd('gvar table creation')
 		tables['gvar'] = gvarTable
 		console.log('✅ gvar table created')
@@ -1297,15 +1302,22 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
  * @param font font object
  * @returns buffer
  */
-const toArrayBuffer = (font: IFont) => {
+const toArrayBuffer = async (font: IFont) => {
 	if (font.bytes) {
 		console.log(`\n=== toArrayBuffer ===`)
 		console.log(`font.bytes.length: ${font.bytes.length}`)
-		
+
     const buffer = new ArrayBuffer(font.bytes.length)
     const intArray = new Uint8Array(buffer)
-    for (let i = 0; i < font.bytes.length; i++) {
-      intArray[i] = font.bytes[i]
+    // 分块拷贝并周期性让出事件循环：大字符集（如内置模板 7000+ 字）下整段同步
+    // 拷贝会阻塞主线程数秒，触发 Tauri 白屏恢复的存活检测误判 reload
+    const CHUNK = 1_000_000
+    for (let i = 0; i < font.bytes.length; i += CHUNK) {
+      const end = Math.min(i + CHUNK, font.bytes.length)
+      for (let j = i; j < end; j++) {
+        intArray[j] = font.bytes[j]
+      }
+      await yieldToEventLoop(i + CHUNK, CHUNK)
     }
 
 		console.log(`ArrayBuffer created: ${buffer.byteLength} bytes`)

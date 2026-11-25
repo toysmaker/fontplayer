@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 use std::io::Write;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::fs;
 use std::path::PathBuf;
@@ -1242,6 +1242,10 @@ fn spawn_alive_ping_check(w: tauri::WebviewWindow, handle: AppHandle) {
             append_diag_log("alive-ping received, webview alive");
             return;
         }
+        if BUILD_BUSY.load(Ordering::SeqCst) {
+            append_diag_log("alive-ping NOT received, but font build busy - skip reload");
+            return;
+        }
         append_diag_log("alive-ping NOT received, webview dead, reloading");
         if !allow_white_screen_reload() {
             append_diag_log("reload skipped (cooldown / max attempts)");
@@ -1282,11 +1286,23 @@ fn allow_white_screen_reload() -> bool {
 /// 前端存活 ping 计数：eval 会静默丢弃，只有真正执行到 invoke 才会递增
 static ALIVE_PING_COUNT: AtomicU64 = AtomicU64::new(0);
 
+/// 字库构建忙标志：构建期间主线程有秒级同步段，存活检测可能误判页面死亡；
+/// 前端在构建开始/结束时通过 log_diagnostic('build-busy-start'/'build-busy-end') 通知
+static BUILD_BUSY: AtomicBool = AtomicBool::new(false);
+
 #[tauri::command]
 fn log_diagnostic(msg: String) {
     if msg == "alive-ping" {
         ALIVE_PING_COUNT.fetch_add(1, Ordering::SeqCst);
         return; // 存活回报，不写日志避免刷屏
+    }
+    if msg == "build-busy-start" {
+        BUILD_BUSY.store(true, Ordering::SeqCst);
+        return; // 忙标志切换，不写日志
+    }
+    if msg == "build-busy-end" {
+        BUILD_BUSY.store(false, Ordering::SeqCst);
+        return;
     }
     append_diag_log(&format!("[FRONTEND] {}", msg));
 }
@@ -1442,7 +1458,9 @@ pub fn run() {
                                             }
                                             Err(e2) => {
                                                 append_diag_log(&format!("retry eval FAILED: {:?}, reloading webview", e2));
-                                                if allow_white_screen_reload() {
+                                                if BUILD_BUSY.load(Ordering::SeqCst) {
+                                                    append_diag_log("retry eval failed, but font build busy - skip reload");
+                                                } else if allow_white_screen_reload() {
                                                     if let Err(e3) = w_retry.reload() {
                                                         append_diag_log(&format!("webview reload failed: {:?}", e3));
                                                     }

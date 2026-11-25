@@ -3,6 +3,7 @@ import type { ILine, ICubicBezierCurve, IQuadraticBezierCurve, IPoint } from '..
 import { PathType } from '../character'
 import { encoder } from '../encode'
 import * as decode from '../decode'
+import { incrementProgress, reserveProgressBudget, yieldToEventLoop } from '../utils/progress'
 
 // gvar表格式
 // gvar table format
@@ -759,7 +760,7 @@ const createGlyphVariationData = (
   return gvData
 }
 
-const createGvarTable = (_variants, characters) => {
+const createGvarTable = async (_variants, characters) => {
   const table: IGvarTable = {}
   table.majorVersion = 1
   table.minorVersion = 0
@@ -767,22 +768,23 @@ const createGvarTable = (_variants, characters) => {
   table.sharedTupleCount = 0
   table.glyphCount = characters.length
   table.glyphVariationData = []
-  
+
   // 调试：检查接收到的数据
   console.log('🔍 createGvarTable received:')
   console.log(`  _variants: ${!!_variants}`)
   console.log(`  _variants.combinations: ${!!_variants?.combinations}`)
   console.log(`  _variants.combinations.length: ${_variants?.combinations?.length || 0}`)
-  
+
   // 检查是否有combinations数据
   if (!_variants.combinations || _variants.combinations.length === 0) {
     // 如果没有combinations，返回空的gvar表
     console.warn('⚠️ No variation combinations provided, creating empty gvar table')
     return table
   }
-  
-  // 为每个字符创建variation data
+
+  // 为每个字符创建variation data（分块计数并让步，避免大字符集同步阻塞）
   console.log(`📝 Processing ${characters.length} glyphs for gvar table...`)
+  reserveProgressBudget(characters.length)
   for (let i = 0; i < characters.length; i++) {
     if (i % 5 === 0) {
       console.log(`  Processing glyph ${i}/${characters.length}...`)
@@ -804,50 +806,51 @@ const createGvarTable = (_variants, characters) => {
         pointDeltas: [],
         serializedData: []
       })
-      continue
-    }
-    
-    // 调试：检查默认轮廓
-    if (i === 2) {
-      console.log(`  📍 Glyph ${i}: defaultContours has ${defaultContours?.length || 0} contours`)
-      if (defaultContours && defaultContours.length > 0) {
-        const totalPaths = defaultContours.reduce((sum, contour) => sum + contour.length, 0)
-        console.log(`     Total paths: ${totalPaths}`)
-      }
-    }
-    
-    // 从combinations中提取该字符的变体轮廓
-    const variants = _variants.combinations.map((combination) => {
-      // 检查数据完整性
-      if (!combination.overlapRemovedContours || 
-          !combination.overlapRemovedContours[i] ||
-          !combination.overlapRemovedContours[i].contours) {
-        console.error(`Missing contours for character ${i} in combination`, combination)
-        return null
-      }
-      
-      return {
-        peakTuple: combination.tuple,
-        contours: combination.overlapRemovedContours[i].contours,
-      }
-    }).filter(v => v !== null)  // 过滤掉null值
-    
-    if (variants.length > 0) {
-      table.glyphVariationData.push(createGlyphVariationData(
-        defaultContours,
-        variants,
-      ))
     } else {
-      // 该字符没有变化数据，添加空数据
-      table.glyphVariationData.push({
-        tupleVariationHeaders: [],
-        pointDeltas: [],
-        serializedData: []
-      })
+      // 调试：检查默认轮廓
+      if (i === 2) {
+        console.log(`  📍 Glyph ${i}: defaultContours has ${defaultContours?.length || 0} contours`)
+        if (defaultContours && defaultContours.length > 0) {
+          const totalPaths = defaultContours.reduce((sum, contour) => sum + contour.length, 0)
+          console.log(`     Total paths: ${totalPaths}`)
+        }
+      }
+
+      // 从combinations中提取该字符的变体轮廓
+      const variants = _variants.combinations.map((combination) => {
+        // 检查数据完整性
+        if (!combination.overlapRemovedContours ||
+            !combination.overlapRemovedContours[i] ||
+            !combination.overlapRemovedContours[i].contours) {
+          console.error(`Missing contours for character ${i} in combination`, combination)
+          return null
+        }
+
+        return {
+          peakTuple: combination.tuple,
+          contours: combination.overlapRemovedContours[i].contours,
+        }
+      }).filter(v => v !== null)  // 过滤掉null值
+
+      if (variants.length > 0) {
+        table.glyphVariationData.push(createGlyphVariationData(
+          defaultContours,
+          variants,
+        ))
+      } else {
+        // 该字符没有变化数据，添加空数据
+        table.glyphVariationData.push({
+          tupleVariationHeaders: [],
+          pointDeltas: [],
+          serializedData: []
+        })
+      }
     }
+    incrementProgress(undefined, 1)
+    await yieldToEventLoop(i + 1, 50)
   }
   console.log(`✅ Processed all ${characters.length} glyphs`)
-  
+
   return table
 }
 

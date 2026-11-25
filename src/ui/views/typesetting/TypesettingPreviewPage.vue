@@ -66,7 +66,11 @@
     <div v-if="building" class="typesetting-loading">
       <n-spin size="large" />
       <div class="loading-text">
-        {{ t('typesetting.buildingCharacters') }}（{{ progressDone }}/{{ progressTotal }}）
+        {{
+          buildingPhase === 'assembling'
+            ? t('typesetting.assemblingFont')
+            : t('typesetting.buildingCharacters')
+        }}（{{ progressDone }}/{{ progressTotal }}）
       </div>
       <n-progress type="line" :percentage="progressPercent" :height="8" class="loading-progress" />
     </div>
@@ -96,7 +100,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
@@ -127,6 +131,8 @@ const fileUUID = ref('')
 const building = ref(false)
 const progressDone = ref(0)
 const progressTotal = ref(0)
+/** 构建阶段：characters=逐字符生成, assembling=封装字库数据 */
+const buildingPhase = ref<'characters' | 'assembling'>('characters')
 const error = ref('')
 const family = ref('')
 
@@ -138,6 +144,8 @@ let pendingBuffer: ArrayBuffer | null = null
 // 字号输入框显示值：选区字号一致时显示该字号，混合字号时为 null（输入框显示为空，像 Word）
 const sizeInputValue = ref<number | null>(64)
 const defaultColor = ref('#000000')
+/** 实际应用过的颜色（含选区模式），用于重开窗口时恢复取色器显示 */
+const lastColor = ref('#000000')
 // 全局生效：勾选时字号/颜色作用于全文；不勾选时仅作用于选中字符，无选区则提示并回退
 const globalMode = ref(false)
 // 容器基础字号：仅在全局模式下更新（后续输入继承），选区模式不影响
@@ -366,6 +374,7 @@ watch(defaultColor, (color, oldColor) => {
     const { from, to } = ed.state.selection
     ed.chain().selectAll().unsetMark('selectionHighlight').setColor(color).run()
     ed.chain().setTextSelection({ from, to }).run()
+    lastColor.value = color
     return
   }
   if (!hasSelectionTarget(ed)) {
@@ -375,6 +384,7 @@ watch(defaultColor, (color, oldColor) => {
     return
   }
   applyToSelection((chain) => chain.setColor(color))
+  lastColor.value = color
 })
 
 // ---- FontFace 管理（仿 InfoPanel：单 face + 重建前删除） ----
@@ -436,14 +446,28 @@ const initContent = async () => {
     const cached = await indexedDBManager.get<{
       html: string
       baseFontSize: number
+      sizeInput?: number | null
       defaultColor: string
+      lastColor?: string
       globalMode: boolean
     }>(keys().content)
     if (cached) {
       html = cached.html
       baseFontSize.value = cached.baseFontSize ?? 64
-      defaultColor.value = cached.defaultColor ?? '#000000'
+      // 恢复输入框显示值：优先上次输入框值（含选区模式），回退到基础字号
+      sizeInputValue.value = cached.sizeInput ?? cached.baseFontSize ?? 64
+      // 先恢复 globalMode，再恢复颜色；用抑制标志防止非全局模式下被 watch 回退
       globalMode.value = cached.globalMode ?? false
+      const restoreColor = cached.lastColor ?? cached.defaultColor
+      if (restoreColor) {
+        suppressColorWatch = true
+        defaultColor.value = restoreColor
+        lastColor.value = restoreColor
+        // 兜底复位：恢复值若与当前值相同，watch 不会触发、标志不会自动清除，
+        // 会导致后续颜色修改全部被吞；用 nextTick 保证标志必然复位
+        await nextTick()
+        suppressColorWatch = false
+      }
     }
   } catch (err) {
     if (import.meta.env.DEV) {
@@ -463,7 +487,9 @@ function saveContentCacheNow() {
   const payload = {
     html: ed.getHTML(),
     baseFontSize: baseFontSize.value,
+    sizeInput: sizeInputValue.value,
     defaultColor: defaultColor.value,
+    lastColor: lastColor.value,
     globalMode: globalMode.value,
   }
   indexedDBManager.set(keys().content, payload).catch((err) => {
@@ -529,6 +555,7 @@ const rebuildFont = async () => {
   error.value = ''
   progressDone.value = 0
   progressTotal.value = 0
+  buildingPhase.value = 'characters'
 
   // 静音 fontManager 构建日志（Tauri webview 输出慢）
   const originalLog = console.log
@@ -566,6 +593,12 @@ const rebuildFont = async () => {
         editingCharacterUUID: '',
         editingCharacter: null,
         onProgress: (done, total) => {
+          progressDone.value = done
+          progressTotal.value = total
+        },
+        onAssembling: (done, total) => {
+          // 封装期：进度从 0 重新走，文案切换
+          buildingPhase.value = 'assembling'
           progressDone.value = done
           progressTotal.value = total
         },

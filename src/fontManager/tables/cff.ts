@@ -2659,18 +2659,17 @@ const create = async(_table: ICffTable) => {
 	reserveProgressBudget(1)
 	setProgressMessage('构建 topDictIndex Index…')
 	topDictIndexData = await createIndex([{type: 'raw', value: topDict}])
-	const data: Array<number> = [
-		...headerData,
-		...nameIndexData,
-		...topDictIndexData,
-		...stringIndexData,
-		...globalSubrIndexData,
-		...charsetsData,
-		...fdselect,
-		...charStringsIndexData,
-		...fdIndex,
-		...privateDict,
-	]
+	// 大数组用 concat 而非展开（展开在大字符集下是数秒级的同步拷贝，阻塞主线程）
+	const data: Array<number> = headerData
+		.concat(nameIndexData)
+		.concat(topDictIndexData)
+		.concat(stringIndexData)
+		.concat(globalSubrIndexData)
+		.concat(charsetsData)
+		.concat(fdselect)
+		.concat(charStringsIndexData)
+		.concat(fdIndex)
+		.concat(privateDict)
 
 	return data
 }

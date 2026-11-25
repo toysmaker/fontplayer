@@ -48,6 +48,8 @@ export function useAppEditorPage(
   const building = ref(false)
   const progressDone = ref(0)
   const progressTotal = ref(0)
+  /** 构建阶段：characters=逐字符生成, assembling=封装字库数据 */
+  const buildPhase = ref<'characters' | 'assembling'>('characters')
   const errorText = ref('')
   /** 字库每次（重新）构建/注册后 +1，供画布强制重渲染 */
   const libraryVersion = ref(0)
@@ -58,6 +60,12 @@ export function useAppEditorPage(
   const familySuffix = `${type}-${appId ?? 'new'}`
 
   const onProgress = (done: number, total: number) => {
+    progressDone.value = done
+    progressTotal.value = total
+  }
+
+  const onAssembling = (done: number, total: number) => {
+    buildPhase.value = 'assembling'
     progressDone.value = done
     progressTotal.value = total
   }
@@ -81,12 +89,14 @@ export function useAppEditorPage(
       return
     }
     building.value = true
+    buildPhase.value = 'characters'
     inflightBuild = (async () => {
       try {
         const lib = await buildFontLibrary({
           colorFont,
           familySuffix: `${type}-${d.id}`,
           onProgress,
+          onAssembling,
         })
         d.fontBuffer = lib.buffer
         d.fontFamily = lib.family
@@ -297,6 +307,7 @@ export function useAppEditorPage(
     building,
     progressDone,
     progressTotal,
+    buildPhase,
     errorText,
     libraryVersion,
     showEntryModal,

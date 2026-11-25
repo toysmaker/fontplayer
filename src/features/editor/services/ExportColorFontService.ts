@@ -6,6 +6,9 @@ import type { IFile, ICharacterFileLite, IFontSettings, IComponent } from '@/cor
 import type { IContours } from '@/core/font/types'
 import { ContourConverter } from '@/core/font/converter'
 import { create, toArrayBuffer, type ICharacter } from '@/fontManager'
+import { loaded, total } from '@/fontManager/utils/loading'
+import { setTauriBuildBusy } from '@/utils/tauri-build-busy'
+import { setProgressObserver } from '@/fontManager/utils/progress'
 import {
   contoursForCharacterFile,
   loadCharacterLiteForExport,
@@ -129,6 +132,28 @@ export async function buildExportColorFontBuffer(
     editingCharacter: ICharacterFileLite | null
     onProgress?: (done: number, total: number) => void
     onGenerating?: () => void
+    /** 封装期进度（CFF/表组装等），调用方按阶段重置展示 */
+    onAssembling?: (done: number, total: number) => void
+  },
+  options: { removeOverlap: boolean }
+): Promise<ArrayBuffer> {
+  await setTauriBuildBusy(true)
+  try {
+    return await buildExportColorFontBufferInner(file, ctx, options)
+  } finally {
+    await setTauriBuildBusy(false)
+  }
+}
+
+async function buildExportColorFontBufferInner(
+  file: IFile,
+  ctx: {
+    editingCharacterUUID: string
+    editingCharacter: ICharacterFileLite | null
+    onProgress?: (done: number, total: number) => void
+    onGenerating?: () => void
+    /** 封装期进度（CFF/表组装等），调用方按阶段重置展示 */
+    onAssembling?: (done: number, total: number) => void
   },
   options: { removeOverlap: boolean }
 ): Promise<ArrayBuffer> {
@@ -236,18 +261,30 @@ export async function buildExportColorFontBuffer(
 
   ctx.onGenerating?.()
 
-  const font = await create(fontChars, {
-    familyName: file.name,
-    styleName: 'Regular',
-    unitsPerEm,
-    ascender,
-    descender,
-    tables: file.fontSettings?.tables ?? null,
-    isColorFont: true,
-    contourStorage: 'cff',
-  })
+  // 封装期进度桥接（与 buildExportFontBuffer 一致）
+  if (ctx.onAssembling) {
+    loaded.value = 0
+    total.value = 0
+    setProgressObserver((done, totalDone) => {
+      ctx.onAssembling?.(done, totalDone)
+    })
+  }
+  try {
+    const font = await create(fontChars, {
+      familyName: file.name,
+      styleName: 'Regular',
+      unitsPerEm,
+      ascender,
+      descender,
+      tables: file.fontSettings?.tables ?? null,
+      isColorFont: true,
+      contourStorage: 'cff',
+    })
 
-  return toArrayBuffer(font) as ArrayBuffer
+    return (await toArrayBuffer(font)) as ArrayBuffer
+  } finally {
+    setProgressObserver(null)
+  }
 }
 
 async function resolveTauriSavePath(defaultName: string): Promise<string | null> {
@@ -284,6 +321,16 @@ export async function exportColorFontLibrary(params: {
   const { file, removeOverlap, editingCharacterUUID, editingCharacter, message, t, projectStore } = params
   const defaultFileName = `${file.name}.otf`
 
+  // 先让用户选择保存路径（Tauri）：取消则直接返回，不再浪费构建时间
+  let filePath: string | null = null
+  if (isTauri()) {
+    filePath = await resolveTauriSavePath(defaultFileName)
+    if (!filePath) {
+      message.warning(t('dialogs.exportColorFontDialog.cancelled'))
+      return false
+    }
+  }
+
   projectStore.loading = true
   projectStore.loadingTotal = file.characterList.length
   projectStore.loadingProgress = 0
@@ -302,18 +349,17 @@ export async function exportColorFontLibrary(params: {
         onGenerating: () => {
           projectStore.loadingMessage = t('dialogs.exportColorFontDialog.generating')
         },
+        onAssembling: (done, total) => {
+          projectStore.loadingProgress = done
+          projectStore.loadingTotal = total
+        },
       },
       { removeOverlap }
     )
 
     if (isTauri()) {
-      const filePath = await resolveTauriSavePath(defaultFileName)
-      if (!filePath) {
-        message.warning(t('dialogs.exportColorFontDialog.cancelled'))
-        return false
-      }
       const { writeFile } = await import('@tauri-apps/plugin-fs')
-      await writeFile(filePath, new Uint8Array(buffer))
+      await writeFile(filePath!, new Uint8Array(buffer))
     } else {
       downloadBuffer(buffer, defaultFileName)
     }

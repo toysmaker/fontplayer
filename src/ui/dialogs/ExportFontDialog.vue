@@ -86,7 +86,7 @@ const characterStore = useCharacterStore()
 const dialogsStore = useDialogsStore()
 
 const contourStorage = ref<ExportFontContourStorage>('cff')
-const removeOverlap = ref(false)
+const removeOverlap = ref(true)
 const selectedFile = ref<File | null>(null)
 const selectedChars = ref<string[]>([])
 const showCharListModal = ref(false)
@@ -98,7 +98,7 @@ const visible = computed({
 })
 
 watch(visible, (v) => {
-  if (v) { contourStorage.value = 'cff'; removeOverlap.value = false; selectedFile.value = null; selectedChars.value = [] }
+  if (v) { contourStorage.value = 'cff'; removeOverlap.value = true; selectedFile.value = null; selectedChars.value = [] }
 })
 
 function onUpdateShow(v: boolean) { if (!v) dialogsStore.closeExportFontDialog() }

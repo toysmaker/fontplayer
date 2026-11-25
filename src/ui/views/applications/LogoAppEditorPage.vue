@@ -160,7 +160,11 @@
     </main>
     <div v-if="building" class="build-overlay">
       <n-spin size="large" />
-      <p class="build-text">{{ t('applications.cardEditor.buildingLibrary') }}</p>
+      <p class="build-text">{{
+        buildPhase === 'assembling'
+          ? t('applications.cardEditor.assemblingLibrary')
+          : t('applications.cardEditor.buildingLibrary')
+      }}</p>
       <n-progress type="line" :percentage="progressPercent" :height="6" class="build-progress" />
       <p class="build-count">{{ progressDone }}/{{ progressTotal }}</p>
     </div>
@@ -243,6 +247,7 @@ const {
   building,
   progressDone,
   progressTotal,
+  buildPhase,
   errorText,
   libraryVersion,
   showEntryModal,

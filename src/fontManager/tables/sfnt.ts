@@ -403,7 +403,8 @@ const create = async (tables: any, mark: string = '') => {
 	incrementProgress('合并 SFNT 数据', 1)
 
 	return {
-		data: [...configData, ...recordsData, ...tablesData],
+		// 大数组用 concat 而非展开（大字符集下展开是同步大拷贝，阻塞主线程）
+		data: configData.concat(recordsData).concat(tablesData),
 		tables: _tables,
 		tablesDataMap,
 		checksum,
