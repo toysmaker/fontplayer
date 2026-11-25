@@ -87,6 +87,16 @@ const instanceBasicGlyph_heng = (plainGlyph: ICustomGlyph, glyphInstance?: Custo
 
   updateGlyphByParams(params, glyph)
 
+  if (import.meta.env.DEV) {
+    const stack = (new Error().stack || '').split('\n').slice(1, 6)
+      .map((s) => s.trim().replace(/^at /, '').split(' ')[0] + ':' + (s.split(':').slice(-2)[0] || ''))
+      .join(' > ')
+    console.log('[dragDiag] instanceBasicGlyph_heng done: uuid=' + glyph.uuid +
+      ' joints=' + glyph.getJoints().map((j: any) => j.name).join(',') +
+      ' isEditing=' + instanceManager.isEditing(plainGlyph.uuid) +
+      ' stack=' + stack)
+  }
+
   return
 }
 

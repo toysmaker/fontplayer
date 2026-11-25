@@ -86,6 +86,10 @@ export const initSkeletonDragger = (
         : null
       if (draggingJoint.value && (instance as any)?.onSkeletonDrag) {
         const t0 = import.meta.env.DEV ? performance.now() : 0
+        if (import.meta.env.DEV) {
+          const j = draggingJoint.value
+          console.log('[dragDiag] dragMove: joint=' + j?.name + ' dx=' + dx.toFixed(1) + ' dy=' + dy.toFixed(1))
+        }
         ;(instance as any).onSkeletonDrag({
           draggingJoint: draggingJoint.value,
           deltaX: dx,
@@ -95,9 +99,13 @@ export const initSkeletonDragger = (
         onRender()
         const t2 = import.meta.env.DEV ? performance.now() : 0
         if (import.meta.env.DEV) {
+          const firstJ = getJoints().find((jj: any) => !jj.name?.includes('_ref'))
           console.log(
             `[dragCost][panel] 变换 ${(t1 - t0).toFixed(2)}ms | 渲染 ${(t2 - t1).toFixed(2)}ms | 组件数 ${((glyph as any)?.components?.length) ?? '?'}`,
           )
+          if (firstJ) {
+            console.log('[dragDiag] after dragMove firstJoint=' + firstJ.name + '@' + firstJ.x.toFixed(1) + ',' + firstJ.y.toFixed(1))
+          }
         }
       }
     },
@@ -123,9 +131,20 @@ export const initSkeletonDragger = (
     const mouseDownY = getCoord(e.offsetY)
     const d = 20
 
+    if (import.meta.env.DEV) {
+      console.log('[dragDiag] mousedown at (' + mouseDownX.toFixed(1) + ',' + mouseDownY.toFixed(1) + ') joints=' +
+        joints.map((j: any) => j.name + '@' + j.x.toFixed(0) + ',' + j.y.toFixed(0)).join(' ') +
+        ' instUuid=' + (instance as any).uuid +
+        ' _jointsLen=' + ((instance as any)._joints?.length ?? -1) +
+        ' marker=' + ((instance as any).__dragDiagMarker ?? 'none') +
+        ' isEditing=' + instanceManager.isEditing(glyph.uuid))
+    }
     for (let i = 0; i < joints.length; i++) {
       const { x, y } = joints[i]
       if (distance(x, y, mouseDownX, mouseDownY) <= d) {
+        if (import.meta.env.DEV) {
+          console.log('[dragDiag] hit candidate: ' + joints[i].name + ' dist=' + distance(x, y, mouseDownX, mouseDownY).toFixed(1))
+        }
         draggingJoint.value = joints[i]
         // 拖拽开始: 进入预览模式 (拖拽过程中折线渲染, 松手后拟合恢复)
         setSkeletonTransformPreview(true)
@@ -137,6 +156,10 @@ export const initSkeletonDragger = (
           })
         }
       }
+    }
+    if (import.meta.env.DEV) {
+      console.log('[dragDiag] final draggingJoint=' + (draggingJoint.value?.name || 'none') +
+        ' hasDragStart=' + !!((instance as any).onSkeletonDragStart))
     }
 
     setEditing(true)

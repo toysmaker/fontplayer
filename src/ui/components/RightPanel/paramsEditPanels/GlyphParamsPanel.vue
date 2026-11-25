@@ -34,7 +34,7 @@ import { genUUID } from '@/utils/uuid'
 import AddVariableDialog from '@/ui/dialogs/AddVariableDialog.vue'
 import { kai_strokes as strokes } from '@/templates/strokes_1'
 import { strokeFnMap } from '@/templates/strokeFnMap'
-import { calculateGlyphWeight } from '@/features/glyphWeight'
+import { calculateGlyphWeight, measurePenComponentsWeight } from '@/features/glyphWeight'
 import { bindSkeletonForVariables } from '@/features/skeletonVariableBind'
 import { instanceManager } from '@/core/instance/InstanceManager'
 import { CustomGlyph } from '@/core/instance/CustomGlyph'
@@ -57,7 +57,7 @@ import { buildRibbonOutline } from '@/features/skeletonFitting'
 import { executeGlyphScript } from '@/core/script/ScriptExecutor'
 import { createDebouncedHandler } from '@/utils/debounce-click'
 import { isDefaultScriptTemplate } from '@/features/programming/glyphProgrammingUtils'
-import { glyphSkeletonBindFromRefGlyph, glyphSkeletonRebind } from '@/features/glyphSkeletonBind'
+import { glyphSkeletonBindFromRefGlyph, glyphSkeletonRebind, skeletonToBones } from '@/features/glyphSkeletonBind'
 import { GlyphSkeletonDragger } from '@/features/glyphSkeletonDragger'
 
 const { t } = useI18n()
@@ -71,11 +71,17 @@ const skeletonDragger = new GlyphSkeletonDragger()
 
 const editGlyph = computed<any>(() => (glyphStore as any).editingGlyph)
 
-const editGlyphInstance = computed<CustomGlyph | null>(() => {
+/**
+ * 解析当前实例池中的编辑实例 —— 必须每次现取, 不能用 computed 缓存:
+ * GlyphEditor.onMounted 在子组件渲染之后释放/重建实例, computed 首值缓存的是
+ * 已释放的死实例, 监听器/关节会装到死对象上, 而拖拽与渲染用的是池中新实例
+ * (症状: 重进后「修改骨架」拖第一个关键点无法整体移动)。
+ */
+function getEditGlyphInstance(): CustomGlyph | null {
   const g = editGlyph.value
   if (!g?.uuid) return null
   return instanceManager.getInstance(g.uuid, () => new CustomGlyph(g), 'glyph') as unknown as CustomGlyph
-})
+}
 
 // -------------------------
 // 风格标签（原工程：可切换启用编辑）
@@ -106,7 +112,7 @@ const skeletonOptions = computed(() => {
 
 const skeletonVisible = computed(() => {
   const g = editGlyph.value
-  const inst = editGlyphInstance.value as any
+  const inst = getEditGlyphInstance() as any
   // must keep exact original condition
   return (
     (!g?.skeleton && (!inst?.getSkeleton || !inst?.getSkeleton())) ||
@@ -172,7 +178,7 @@ const onChangeSkeleton = (value: string) => {
 
   const strokeFn: any = (strokeFnMap as any)[type]
   strokeFn && strokeFn.instanceBasicGlyph(g)
-  strokeFn && strokeFn.updateSkeletonListenerBeforeBind(editGlyphInstance.value)
+  strokeFn && strokeFn.updateSkeletonListenerBeforeBind(getEditGlyphInstance())
 
   onSkeletonSelect.value = false
   g.skeleton.onSkeletonBind = true
@@ -252,7 +258,7 @@ const handleGlyphSkeletonPick = (templateUuid: string) => {
   g.script_reference = undefined
 
   // 6. 直接在编辑实例上执行脚本（生成 joints/reflines + 设置 onSkeletonDrag 回调）
-  const editInst = editGlyphInstance.value as any
+  const editInst = getEditGlyphInstance() as any
   if (!editInst) {
     g.skeleton = null
     message.warning('无法获取编辑实例')
@@ -416,7 +422,7 @@ const bindSkeleton = () => {
 
   // glyphSkeleton：执行多组件绑定
   if (g.skeleton?.type === 'glyphSkeleton') {
-    const inst = editGlyphInstance.value as any
+    const inst = getEditGlyphInstance() as any
     if (!inst) return
 
     const refData = g.skeleton.referenceGlyphData
@@ -455,8 +461,25 @@ const bindSkeleton = () => {
   const { type } = g.skeleton
   const strokeFn: any = (strokeFnMap as any)[type]
   if (strokeFn) {
+    // 绑定前对齐字重参数: 绑定时刻的骨架(参考位置偏移)与轮廓带子宽度都依赖字重参数,
+    // 而绑定后会以实际轮廓宽度(originWeight)回写字重参数 —— 若绑定仍用旧参数值,
+    // 退出重进时细节迁移按新字重重建带子, 绝对法向位移叠加到轮廓上 → 轮廓扭曲。
+    // 因此先测量实际宽度、回写参数并重建实例骨架, 再执行绑定, 保证恒等姿态精确还原。
+    const inst = getEditGlyphInstance() as any
+    const penComponents = (g.components || []).filter((c: any) => c.type === 'pen')
+    if (inst?.getSkeleton && penComponents.length > 0) {
+      const measured = measurePenComponentsWeight(penComponents, skeletonToBones(inst.getSkeleton()))
+      if (measured > 0) {
+        if (!Array.isArray(g.parameters)) g.parameters = []
+        const p = (g.parameters as Array<any>).find((x: any) => x?.name === '字重')
+        if (p) p.value = measured
+        g.skeleton.originWeight = measured
+        // 以最终字重重建实例骨架与辅助线(字重参与参考位置偏移)
+        strokeFn.instanceBasicGlyph(g)
+      }
+    }
     strokeFn.bindSkeletonGlyph(g)
-    strokeFn.updateSkeletonListenerAfterBind(editGlyphInstance.value)
+    strokeFn.updateSkeletonListenerAfterBind(getEditGlyphInstance())
   }
 
   onSkeletonDragging.value = false
@@ -485,7 +508,7 @@ const removeSkeleton = () => {
 
   if (type === 'glyphSkeleton') {
     // glyphSkeleton 专用清理
-    const inst = editGlyphInstance.value as any
+    const inst = getEditGlyphInstance() as any
     if (inst) {
       inst.getSkeleton = null
       inst.onSkeletonDragStart = null
@@ -511,7 +534,7 @@ const removeSkeleton = () => {
 
   const stroke = strokes.find((s: any) => s.name === type)
   if (stroke) {
-    const inst = editGlyphInstance.value as any
+    const inst = getEditGlyphInstance() as any
     if (inst) {
       inst.getSkeleton = null
       inst.onSkeletonDragStart = null
@@ -562,7 +585,7 @@ const modifySkeleton = () => {
     g.script = adaptedScript
     g.script_reference = undefined
 
-    const inst = editGlyphInstance.value as any
+    const inst = getEditGlyphInstance() as any
     if (inst) {
       inst.tempData = null
       inst._components = []
@@ -589,7 +612,23 @@ const modifySkeleton = () => {
 
   const strokeFn: any = (strokeFnMap as any)[type]
   strokeFn && strokeFn.instanceBasicGlyph(g)
-  strokeFn && strokeFn.updateSkeletonListenerBeforeBind(editGlyphInstance.value)
+  strokeFn && strokeFn.updateSkeletonListenerBeforeBind(getEditGlyphInstance())
+
+  if (import.meta.env.DEV) {
+    const inst = getEditGlyphInstance() as any
+    const marker = 'm' + Date.now().toString().slice(-6)
+    if (inst) inst.__dragDiagMarker = marker
+    console.log('[dragDiag] modifySkeleton: type=' + type +
+      ' instance=' + !!inst +
+      ' uuid=' + (inst?.uuid || 'none') +
+      ' hasBeforeBindDrag=' + !!inst?.onSkeletonDrag +
+      ' _glyphIsEditingGlyph=' + (inst?._glyph === g) +
+      ' _jointsLen=' + (inst?._joints?.length ?? -1) +
+      ' isEditing=' + instanceManager.isEditing(g.uuid) +
+      ' ox=' + g.skeleton.ox + ' oy=' + g.skeleton.oy +
+      ' marker=' + marker +
+      ' joints=' + (inst?.getJoints?.()?.map((j: any) => j.name).join(',') || 'none'))
+  }
 
   onSkeletonSelect.value = false
   g.skeleton.onSkeletonBind = true
@@ -623,7 +662,7 @@ const isZoneBrushMode = computed(() => {
 
 /** 骨架段下拉选项 (非 ref 辅助线, 标签取起始关节名去后缀) */
 const refLineOptions = computed(() => {
-  const inst = editGlyphInstance.value
+  const inst = getEditGlyphInstance()
   const reflines = (inst?.getRefLines?.() ?? []) as Array<{ start: string; end: string; type?: string }>
   return reflines
     .filter((r) => r.type !== 'ref')
@@ -672,7 +711,7 @@ const initWeightSetting = () => {
 
   if (isZoneBrushMode.value) {
     // 细节迁移路径: 区域指派刷 — 由当前骨架构建会话带子 (凹角模式与绑定时刻一致)
-    const inst = editGlyphInstance.value
+    const inst = getEditGlyphInstance()
     // 退出编辑时实例被释放 (GlyphEditor onUnmounted releaseInstance), 重新进入拿到的
     // 新实例没有脚本状态 (reflines/joints 为空) — 重跑模板脚本恢复, 否则骨架段下拉无数据
     if (inst && !(inst?.getRefLines?.()?.length)) {
@@ -951,7 +990,7 @@ watch([onSkeletonDragging, () => editGlyph.value?.skeleton?.type], ([dragging, s
     if (ctx?.canvas) {
       skeletonDragger.setup(ctx.canvas, ctx.getCoord, () => ctx.onRender())
     }
-    const inst = editGlyphInstance.value as any
+    const inst = getEditGlyphInstance() as any
     if (inst) {
       skeletonDragger.setContext(inst)
     }
@@ -967,7 +1006,7 @@ onUnmounted(() => {
   // 如果退出时还未绑定骨架（onSkeletonBind=true），重置骨架数据
   const g = editGlyph.value
   if (g?.skeleton?.type === 'glyphSkeleton' && g.skeleton.onSkeletonBind) {
-    const inst = editGlyphInstance.value as any
+    const inst = getEditGlyphInstance() as any
     if (inst) {
       inst.onSkeletonDragStart = null
       inst.onSkeletonDrag = null
@@ -1020,7 +1059,7 @@ onUnmounted(() => {
           {{ t('panels.paramsPanel.glyphParamsPanel.skeletonAllPensHint') }}
         </div>
         <n-button
-          v-if="!editGlyph?.skeleton && (!editGlyphInstance?.getSkeleton || !editGlyphInstance?.getSkeleton())"
+          v-if="!editGlyph?.skeleton && (!getEditGlyphInstance()?.getSkeleton || !getEditGlyphInstance()?.getSkeleton())"
           size="small"
           @click="handleAddSkeleton" @pointerup="handleAddSkeleton"
         >

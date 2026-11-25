@@ -11,11 +11,16 @@ const getGlyphParamValue = (glyph: ICustomGlyph, name: string): number | undefin
   return typeof v === "number" ? v : v !== undefined ? Number(v) : undefined
 }
 
-const calculateGlyphWeight = (glyph: ICustomGlyph) => {
-  const { bones } = (glyph as any).skeleton.skeletonBindData
-  // 所有普通钢笔组件：共享骨骼，逐笔计算后按骨长加权汇总。
-  // 注意不能把多支钢笔的离散点拼成一条曲线（会产生跨笔伪线段，交点计算错误）
-  const penComponents = (glyph.components || []).filter((c) => c.type === 'pen')
+/**
+ * 测量普通钢笔组件的实际笔画宽度(字重): 对每支钢笔沿每根骨骼做垂线求与轮廓的交点,
+ * 距离加权平均。所有钢笔组件共享骨骼, 逐笔计算后按骨长加权汇总 ——
+ * 注意不能把多支钢笔的离散点拼成一条曲线(会产生跨笔伪线段, 交点计算错误)。
+ * 纯函数: 不依赖 skeletonBindData, 绑定前即可用于对齐字重参数。
+ */
+export const measurePenComponentsWeight = (
+  penComponents: Array<{ value: unknown }>,
+  bones: Array<any>,
+): number => {
   const weights: Array<{ avgWeight: number; boneLength: number }> = []
   for (const pen of penComponents) {
     const points = (pen.value as unknown as IPenComponent).points
@@ -33,6 +38,12 @@ const calculateGlyphWeight = (glyph: ICustomGlyph) => {
     weight += avgWeight * boneLength / totalLength
   }
   return weight
+}
+
+const calculateGlyphWeight = (glyph: ICustomGlyph) => {
+  const { bones } = (glyph as any).skeleton.skeletonBindData
+  const penComponents = (glyph.components || []).filter((c) => c.type === 'pen')
+  return measurePenComponentsWeight(penComponents as Array<{ value: unknown }>, bones)
 }
 
 const updateGlyphWeight = (glyph: ICustomGlyph) => {

@@ -525,21 +525,19 @@ onMounted(async () => {
       })
     }
     
-    // 直接释放旧实例（如果存在），确保使用最新的 editingGlyph.value 数据
-    // 这样可以避免从字符编辑界面创建的临时实例影响字形编辑界面
+    // 清掉列表预览/字符编辑器遗留的临时实例（可能复用同一 uuid）
     if (instanceManager.isTemporary(instanceKey)) {
       instanceManager.releaseTemporaryInstance(instanceKey)
     }
-    // 释放旧实例（如果存在）
-    if (instanceManager.isEditing(instanceKey)) {
-      // 如果已经在编辑状态，先释放（releaseInstance 会从 editingUUIDs 中删除）
-      instanceManager.releaseInstance(instanceKey)
-    }
-    
-    // 重新标记为编辑状态
+
+    // 标记编辑并复用池中实例（setEditGlyphByUUID 已创建并 markEditing）。
+    // 不再 release+recreate: 子组件(GlyphParamsPanel)在父组件 onMounted 之前已渲染,
+    // 其缓存的实例引用会变成死对象 —— 监听器/关节装到死实例上, 拖拽与渲染用的
+    // 新实例收不到(症状: 重进后「修改骨架」拖第一个关键点无法整体移动)。
+    // executeGlyphScript 内部会 clear() 并重绑 _glyph, 旧状态不会残留。
     instanceManager.markEditing(instanceKey)
-    
-    // 重新创建实例（使用最新的 editingGlyph.value 数据）
+
+    // 获取实例（复用池中实例, 不存在时创建）
     const glyphInstance = instanceManager.getInstance(
       instanceKey,
       () => new CustomGlyph(editingGlyph.value!),

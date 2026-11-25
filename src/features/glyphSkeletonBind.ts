@@ -356,7 +356,7 @@ function detectSkeletonType(skeleton: any): SkeletonType {
 }
 
 // 阶段一：骨架分析 - 将骨架转换为骨骼集合
-function skeletonToBones(skeleton: any): Bone[] {
+export function skeletonToBones(skeleton: any): Bone[] {
   const bones: Bone[] = [];
   const jointNames = Object.keys(skeleton);
   
