@@ -31,12 +31,14 @@ const parse = (data: DataView, offset: number, font: IFont) => {
 	// 启动一个新的decoder
 	// start a new decoder
 	decode.start(data, offset)
+	// loca 表有 numGlyphs + 1 个偏移（最后一个为末字形结束位置），
+	// 此前少读一个，导致末字形无法判断零长度字形
 	if (version === 0) {
-		for (let i = 0; i < numGlyphs; i++) {
+		for (let i = 0; i < numGlyphs + 1; i++) {
 			table.offsets.push(decode.decoder['Offset16']() * 2)
 		}
 	} else if (version === 1) {
-		for (let i = 0; i < numGlyphs; i++) {
+		for (let i = 0; i < numGlyphs + 1; i++) {
 			table.offsets.push(decode.decoder['Offset32']())
 		}
 	}

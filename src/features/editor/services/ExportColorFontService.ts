@@ -12,6 +12,7 @@ import { setProgressObserver } from '@/fontManager/utils/progress'
 import {
   contoursForCharacterFile,
   loadCharacterLiteForExport,
+  resolveContourAdvanceWidth,
   type ExportFontMessageApi,
 } from '@/features/editor/services/ExportFontService'
 import { isTauri } from '@/utils/env'
@@ -75,9 +76,12 @@ export function generateColorFontLayers(
   const opts = {
     unitsPerEm: fs.unitsPerEm,
     descender: fs.descender,
-    advanceWidth: fs.unitsPerEm,
+    // 导入字符坐标按 metrics.advanceWidth 居中存放，导出须用同一值还原
+    advanceWidth: resolveContourAdvanceWidth(char, fs),
     preview: false,
-    forceUpdate: false,
+    // 必须重算：度量工具 hydrate 会以 advanceWidth=unitsPerEm 重写组件缓存 contour
+    // （编辑空间），直接复用缓存会导出错误坐标；重算按自身 advanceWidth 还原字体坐标
+    forceUpdate: true,
     grid: layoutGrid,
     useSkeletonGrid: char.info?.useSkeletonGrid ?? false,
   }

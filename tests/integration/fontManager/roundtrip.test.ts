@@ -25,6 +25,13 @@ describe('fontManager integration roundtrip', () => {
     const font = await create(
       [
         {
+          unicode: 0,
+          name: '.notdef',
+          contourNum: 0,
+          contours: [[]],
+          advanceWidth: 600,
+        },
+        {
           unicode: 65,
           contourNum: 1,
           contours: [contour],
@@ -39,7 +46,7 @@ describe('fontManager integration roundtrip', () => {
         descender: -200,
       },
     )
-    const buf = toArrayBuffer(font)
+    const buf = await toArrayBuffer(font)
     expect(buf?.byteLength).toBeGreaterThan(0)
     const parsed = parse(buf!)
     expect(parsed.settings?.unitsPerEm).toBe(1000)

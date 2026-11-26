@@ -72,7 +72,7 @@ describe('彩色字体端到端（hex 颜色 → COLR/CPAL）', () => {
       isColorFont: true,
       tables: undefined,
     } as never)
-    const buffer = toArrayBuffer(font) as ArrayBuffer
+    const buffer = (await toArrayBuffer(font)) as ArrayBuffer
 
     // 直接扫描 SFNT 表目录（parse 不导出 CPAL/COLR）
     const dv = new DataView(buffer)

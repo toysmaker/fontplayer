@@ -103,6 +103,19 @@ function applyRemoveOverlap(contours: IContours): IContours {
   }
 }
 
+/**
+ * 导出换算的 advanceWidth：
+ * - 导入字符（info.imported）：坐标按 metrics.advanceWidth 居中存放，须用同一值还原
+ *   （formatPoints 的 (upm-advance)/2 项与导入时的居中项严格互逆）
+ * - 工程自身字符：保持既有行为（advanceWidth = unitsPerEm，x 方向零居中）
+ */
+export function resolveContourAdvanceWidth(char: ICharacterFileLite, fs: IFontSettings): number {
+  if (char.info?.imported === true) {
+    return char.info?.metrics?.advanceWidth ?? fs.unitsPerEm
+  }
+  return fs.unitsPerEm
+}
+
 export function contoursForCharacterFile(
   char: ICharacterFileLite,
   file: IFile,
@@ -126,7 +139,7 @@ export function contoursForCharacterFile(
     {
       unitsPerEm: fs.unitsPerEm,
       descender: fs.descender,
-      advanceWidth: fs.unitsPerEm,
+      advanceWidth: resolveContourAdvanceWidth(char, fs),
       preview: false,
       forceUpdate: true,
       grid: layoutGrid,

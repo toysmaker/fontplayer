@@ -31,13 +31,29 @@ export class CharacterDataManager {
 
   /**
    * 批量存储字符数据到IndexedDB
+   * - 分块单事务批量写（此前一次发起全部 setItem，数千个串行事务 + 结构化克隆队列造成长时间卡顿与内存尖峰）
+   * - 每块之间让出事件循环并回调进度，供导入进度条使用
    */
-  async storeCharacters(fileUUID: string, characters: ICharacterFileLite[]): Promise<void> {
-    const promises = characters.map(async (character) => {
-      const key = CharacterDataManager.generateCharacterKey(fileUUID, character.uuid)
-      await indexedDBManager.set(key, character)
-    })
-    await Promise.all(promises)
+  async storeCharacters(
+    fileUUID: string,
+    characters: ICharacterFileLite[],
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<void> {
+    const CHUNK = 200
+    const total = characters.length
+    let done = 0
+    for (let i = 0; i < characters.length; i += CHUNK) {
+      const slice = characters.slice(i, i + CHUNK)
+      const entries = slice.map((character) => [
+        CharacterDataManager.generateCharacterKey(fileUUID, character.uuid),
+        character,
+      ] as [string, ICharacterFileLite])
+      await indexedDBManager.bulkSet(entries)
+      done += slice.length
+      onProgress?.(done, total)
+      // 让出事件循环：写入期间 UI 进度条可刷新
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    }
   }
 
   /**

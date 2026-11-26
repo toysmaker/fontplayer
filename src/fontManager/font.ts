@@ -422,10 +422,11 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 		unitsPerEm: options.unitsPerEm,
 		created: _headTable.created?.timestamp || Math.floor(options.createdTimestamp || Date.now() / 1000) + 2082844800,
 		modified: _headTable.modified?.timestamp || Math.floor(Date.now() / 1000) + 2082844800,
-		xMin: 0,//globals.xMin,
-		yMin: -200,//globals.yMin,
-		xMax: 1000,//globals.xMax,
-		yMax: 800,//globals.yMax,
+		// 使用真实全局边界框（含贝塞尔控制点），空字形/空字库时回退到默认设计网格
+		xMin: Number.isFinite(globals.xMin) ? globals.xMin : 0,
+		yMin: Number.isFinite(globals.yMin) ? globals.yMin : -200,
+		xMax: Number.isFinite(globals.xMax) ? globals.xMax : 1000,
+		yMax: Number.isFinite(globals.yMax) ? globals.yMax : 800,
 		macStyle: _headTable.macStyle ? convertToMacStyle(_headTable.macStyle) : 0,
 		lowestRecPPEM: _headTable.lowestRecPPEM || 7,
 		fontDirectionHint: _headTable.fontDirectionHint || 2,
@@ -594,6 +595,20 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 		postScriptName = (englishFamilyName as string).replace(/\s/g, '') + '-' + englishStyleName;
 	}
 
+	// PostScript 名必须为可打印 ASCII（CFF Name INDEX 与 Windows 字体安装均要求），
+	// 含中文等非 ASCII 字符时转拼音并剔除剩余非法字符（否则 CFF 名会被逐字节截断产生非法字体）
+	const sanitizePostScriptName = (value: string): string => {
+		let out = value ?? ''
+		if (hasChineseChar(out)) {
+			out = convertToPinyin(out)
+		}
+		out = out.replace(/[^\x21-\x7E]/g, '')
+		if (!out) out = 'Untitled-Regular'
+		return out.slice(0, 63)
+	}
+	postScriptName = sanitizePostScriptName(postScriptName)
+	fontNames.postScriptName = { en: postScriptName, zh: postScriptName }
+
 	const names: any = {}
 	for (let n in fontNames) {
 		names[n] = fontNames[n as keyof typeof fontNames]
@@ -628,13 +643,18 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 	if (nameTableEntries && options.familyName) {
 		const postScriptValue = enName.replace(/\s/g, '').slice(0, 63) + '-Regular'
 		nameTableEntries = nameTableEntries.map((entry: any) => {
+			// nameID 6（PostScript 名）必须 ASCII：无论 default 与否都做净化，
+			// 用户手工录入的中文 PostScript 名会产生非法字体（Windows/fontTools 拒绝）
+			if (entry.nameID === 6) {
+				const value = entry.default ? postScriptValue : sanitizePostScriptName(entry.value)
+				return { ...entry, value }
+			}
 			if (!entry.default) return entry
 			if (entry.nameID === 1) return { ...entry, value: options.familyName }
 			if (entry.nameID === 4) {
 				const suffix = entry.langID === 0x804 ? ' 常规体' : ' Regular'
 				return { ...entry, value: options.familyName + suffix }
 			}
-			if (entry.nameID === 6) return { ...entry, value: postScriptValue }
 			return entry
 		})
 	}
@@ -678,7 +698,12 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 			weightName: englishStyleName,
 			postScriptName: postScriptName,
 			unitsPerEm: font.settings.unitsPerEm,
-			fontBBox: [0, globals.yMin, globals.ascender, globals.advanceWidthMax]
+			fontBBox: [
+				Number.isFinite(globals.xMin) ? globals.xMin : 0,
+				Number.isFinite(globals.yMin) ? globals.yMin : -200,
+				Number.isFinite(globals.xMax) ? globals.xMax : 1000,
+				Number.isFinite(globals.yMax) ? globals.yMax : 800,
+			]
 		})
 		tables['CFF '] = cffTable
 	} else {
@@ -1197,7 +1222,12 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 					weightName: englishStyleName,
 					postScriptName: postScriptName,
 					unitsPerEm: font.settings.unitsPerEm,
-					fontBBox: [0, globals.yMin, globals.ascender, globals.advanceWidthMax]
+					fontBBox: [
+						Number.isFinite(globals.xMin) ? globals.xMin : 0,
+						Number.isFinite(globals.yMin) ? globals.yMin : -200,
+						Number.isFinite(globals.xMax) ? globals.xMax : 1000,
+						Number.isFinite(globals.yMax) ? globals.yMax : 800,
+					]
 				})
 				tables['CFF '] = updatedCffTable
 				if (import.meta.env.DEV) { console.log(`✅ CFF table updated with ${allGlyphs.length} total glyphs`) }

@@ -73,9 +73,13 @@ export const useCharacterMetricsDraftStore = defineStore('characterMetricsDraft'
     let bx = { xMin: 0, xMax: unitsPerEm, yMin: 0, yMax: 0 }
     if (components.length > 0) {
       try {
+        // forceUpdate: true —— 从编辑坐标点重算轮廓再取 bbox：
+        // 导入字符的缓存 contour 是按真实 advanceWidth 换算的字体坐标（居中已剔除），
+        // 直接用缓存会导致度量控件原点（xMin - lsb）退回 0、红区贴左。
+        // 对工程自身字符而言是幂等重算（advanceWidth=unitsPerEm 时结果不变）
         const contours = ContourConverter.componentsToContours(
           components,
-          { unitsPerEm, descender, advanceWidth: unitsPerEm, preview: false },
+          { unitsPerEm, descender, advanceWidth: unitsPerEm, preview: false, forceUpdate: true },
           { x: 0, y: 0 },
         )
         bx = collectBBoxFromContours(contours)

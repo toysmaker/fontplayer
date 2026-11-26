@@ -877,9 +877,15 @@ export class ContourConverter {
 
     // 生成 pen 组件的辅助函数
     const genPenComponent = (points: any[], closePath: boolean = true): IComponent => {
-      // 计算边界框
+      // 格式化点（从字体坐标转换为编辑坐标）
+      const formattedPoints = formatPoints(points, options, 0)
+
+      // 组件 x/y/w/h 必须是「存储点（编辑坐标）」的包围盒，而不是字体坐标包围盒。
+      // 渲染/导出时 transformPoints 认为「组件盒 ≠ 点包围盒」时会套用平移+缩放，
+      // 此前盒是字体 bbox、点是编辑坐标，导致导入字符整体偏移
+      // （偏移量 = 字体bbox与编辑bbox之差，随各字体度量变化）
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-      for (const point of points) {
+      for (const point of formattedPoints) {
         minX = Math.min(minX, point.x)
         minY = Math.min(minY, point.y)
         maxX = Math.max(maxX, point.x)
@@ -889,9 +895,6 @@ export class ContourConverter {
       const y = minY
       const w = maxX - minX
       const h = maxY - minY
-
-      // 格式化点（从字体坐标转换为编辑坐标）
-      const formattedPoints = formatPoints(points, options, 0)
 
       // 生成轮廓和预览
       const contour_points = formatPoints(formattedPoints, options, 1)
@@ -933,6 +936,15 @@ export class ContourConverter {
 
     const components: IComponent[] = []
 
+    // app 对字体坐标的既定惯例：genPenContour 以 Math.floor 取整字体轮廓坐标，
+    // 导入的字体存在分数坐标（如二次贝塞尔隐式中点），在入口统一 floor（幂等），
+    // 保证「导入 → 编辑 → 导出」往返与导出结果完全一致（否则每次导出都再次 floor 引入 ≤1 漂移）
+    const floorPoint = (p: { x: number; y: number }) => ({
+      ...p,
+      x: Math.floor(p.x),
+      y: Math.floor(p.y),
+    })
+
     for (const contour of contours) {
       const points: any[] = []
 
@@ -941,10 +953,11 @@ export class ContourConverter {
 
         if (i === 0) {
           // 第一个点作为锚点
+          const startPt = floorPoint(path.start)
           points.push({
             uuid: genLightId(),
-            x: path.start.x,
-            y: path.start.y,
+            x: startPt.x,
+            y: startPt.y,
             type: 'anchor',
             origin: null,
             isShow: true,
@@ -953,26 +966,30 @@ export class ContourConverter {
 
         switch (path.type) {
           case PathType.LINE: {
+            // 直线段的立方表示使用三等分控制点（与 app 自身 paper.js 提取直线的惯例一致），
+            // 保证导出/渲染的曲线参数化与 app 内创建的直线完全一致
+            const s = floorPoint(path.start)
+            const e = floorPoint(path.end)
             const control1 = {
               uuid: genLightId(),
-              x: path.start.x,
-              y: path.start.y,
+              x: s.x + (e.x - s.x) / 3,
+              y: s.y + (e.y - s.y) / 3,
               type: 'control',
               origin: points[points.length - 1].uuid,
               isShow: true,
             }
             const anchor2 = {
               uuid: genLightId(),
-              x: path.end.x,
-              y: path.end.y,
+              x: e.x,
+              y: e.y,
               type: 'anchor',
               origin: null,
               isShow: true,
             }
             const control2 = {
               uuid: genLightId(),
-              x: path.end.x,
-              y: path.end.y,
+              x: s.x + ((e.x - s.x) * 2) / 3,
+              y: s.y + ((e.y - s.y) * 2) / 3,
               type: 'control',
               origin: anchor2.uuid,
               isShow: true,
@@ -983,26 +1000,29 @@ export class ContourConverter {
 
           case PathType.QUADRATIC_BEZIER: {
             const qPath = path as any
+            const s = floorPoint(qPath.start)
+            const c = floorPoint(qPath.control)
+            const e = floorPoint(qPath.end)
             const control1 = {
               uuid: genLightId(),
-              x: qPath.start.x + (2 / 3) * (qPath.control.x - qPath.start.x),
-              y: qPath.start.y + (2 / 3) * (qPath.control.y - qPath.start.y),
+              x: s.x + (2 / 3) * (c.x - s.x),
+              y: s.y + (2 / 3) * (c.y - s.y),
               type: 'control',
               origin: points[points.length - 1].uuid,
               isShow: true,
             }
             const anchor2 = {
               uuid: genLightId(),
-              x: qPath.end.x,
-              y: qPath.end.y,
+              x: e.x,
+              y: e.y,
               type: 'anchor',
               origin: null,
               isShow: true,
             }
             const control2 = {
               uuid: genLightId(),
-              x: qPath.end.x + (2 / 3) * (qPath.control.x - qPath.end.x),
-              y: qPath.end.y + (2 / 3) * (qPath.control.y - qPath.end.y),
+              x: e.x + (2 / 3) * (c.x - e.x),
+              y: e.y + (2 / 3) * (c.y - e.y),
               type: 'control',
               origin: anchor2.uuid,
               isShow: true,
@@ -1013,26 +1033,29 @@ export class ContourConverter {
 
           case PathType.CUBIC_BEZIER: {
             const cPath = path as any
+            const c1 = floorPoint(cPath.control1)
+            const c2 = floorPoint(cPath.control2)
+            const e = floorPoint(cPath.end)
             const control1 = {
               uuid: genLightId(),
-              x: cPath.control1.x,
-              y: cPath.control1.y,
+              x: c1.x,
+              y: c1.y,
               type: 'control',
               origin: points[points.length - 1].uuid,
               isShow: true,
             }
             const anchor2 = {
               uuid: genLightId(),
-              x: cPath.end.x,
-              y: cPath.end.y,
+              x: e.x,
+              y: e.y,
               type: 'anchor',
               origin: null,
               isShow: true,
             }
             const control2 = {
               uuid: genLightId(),
-              x: cPath.control2.x,
-              y: cPath.control2.y,
+              x: c2.x,
+              y: c2.y,
               type: 'control',
               origin: anchor2.uuid,
               isShow: true,
@@ -1043,29 +1066,33 @@ export class ContourConverter {
         }
       }
 
-      // 如果路径未闭合，添加闭合点
-      if (points.length > 0 && 
+      // 如果路径未闭合，添加闭合段（CFF 轮廓的闭合边是隐式的）
+      // 闭合段与 LINE 段一致使用三等分控制点（此前退化三次曲线参数化非均匀，
+      // 几何上虽在线段上，但与 app 内直线惯例不一致）
+      if (points.length > 0 &&
           (points[points.length - 1].x !== points[0].x || points[points.length - 1].y !== points[0].y)) {
+        const lastPt = { x: points[points.length - 1].x, y: points[points.length - 1].y }
+        const firstPt = { x: points[0].x, y: points[0].y }
         points.push({
           uuid: genLightId(),
-          x: points[points.length - 1].x,
-          y: points[points.length - 1].y,
+          x: lastPt.x + (firstPt.x - lastPt.x) / 3,
+          y: lastPt.y + (firstPt.y - lastPt.y) / 3,
           type: 'control',
           origin: points[points.length - 1].uuid,
           isShow: true,
         })
         points.push({
           uuid: genLightId(),
-          x: points[0].x,
-          y: points[0].y,
+          x: lastPt.x + ((firstPt.x - lastPt.x) * 2) / 3,
+          y: lastPt.y + ((firstPt.y - lastPt.y) * 2) / 3,
           type: 'control',
           origin: points[0].uuid,
           isShow: true,
         })
         points.push({
           uuid: genLightId(),
-          x: points[0].x,
-          y: points[0].y,
+          x: firstPt.x,
+          y: firstPt.y,
           type: 'anchor',
           origin: points[0].uuid,
           isShow: true,

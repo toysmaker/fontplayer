@@ -159,7 +159,13 @@ const encoder = {
 		}
 		let bytes = []
 		for (let i = 0; i < (v as string).length; i += 1) {
-			bytes[i] = (v as string).charCodeAt(i)
+			const code = (v as string).charCodeAt(i)
+			// String 类型字段（如 CFF Name INDEX）必须为 ASCII，
+			// 非 ASCII 字符会被截断为低字节产生非法字体，DEV 下显式告警便于定位
+			if (import.meta.env.DEV && (code > 0x7e || code < 0x20)) {
+				console.warn(`[encoder.String] non-ASCII char U+${code.toString(16).toUpperCase()} in string: ${JSON.stringify(v)}`)
+			}
+			bytes[i] = code
 		}
 		return bytes
 	},

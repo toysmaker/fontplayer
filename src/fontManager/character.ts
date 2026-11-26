@@ -162,49 +162,89 @@ const getMetrics = (character: ICharacter) => {
  * @param tables font tables
  * @returns characters
  */
-const parseTablesToCharacters = (tables: Array<ITable>) => {	
+const parseTablesToCharacters = (tables: Array<ITable>) => {
 	const characters: Array<ICharacter> = []
 	const cmapTable = tables.filter((table: ITable) => table.name === 'cmap')[0].table as unknown as ICmapTable
 	const htmxTable = tables.filter((table: ITable) => table.name === 'hmtx')[0].table as unknown as IHmtxTable
 	if (tables.filter((table: ITable) => table.name === 'glyf')[0]) {
 		const glyfTable = tables.filter((table: ITable) => table.name === 'glyf')[0].table as unknown as IGlyfTable
+		// 按 OpenType 规范处理 hmtx 裁剪（numberOfHMetrics < numGlyphs 时，
+		// 后续字形复用最后一个 advanceWidth，lsb 取 leftSideBearings 数组）
+		const hMetrics = htmxTable.hMetrics ?? []
+		const lsbList = htmxTable.leftSideBearings ?? []
+		const getGlyphMetrics = (index: number): { advanceWidth: number; lsb: number } => {
+			if (hMetrics.length === 0) return { advanceWidth: 0, lsb: 0 }
+			if (index < hMetrics.length) return hMetrics[index]
+			const last = hMetrics[hMetrics.length - 1]
+			const extraIndex = index - hMetrics.length
+			return {
+				advanceWidth: last.advanceWidth,
+				lsb: extraIndex < lsbList.length ? lsbList[extraIndex] : 0,
+			}
+		}
 		Object.keys(cmapTable.glyphIndexMap).forEach((code) => {
 			//const unicode = Number(code).toString(16)
 			const index = cmapTable.glyphIndexMap[code]
-			const glyphTable = glyfTable.glyphTables[cmapTable.glyphIndexMap[code]]
+			// 跳过映射到 .notdef（glyph 0）的码点与越界索引（畸形/裁剪字体防御）
+			if (!index) return
+			const glyphTable = glyfTable.glyphTables[index]
+			if (!glyphTable) return
 			const contours: Array<Array<ILine | IQuadraticBezierCurve | ICubicBezierCurve>> = []
 			for (let j = 0; j < glyphTable.contours.length; j++) {
 				contours.push(glyphTable.contours[j].paths)
 			}
+			const metrics = getGlyphMetrics(index)
 			characters.push({
 				unicode: Number(code),
 				contours,
 				contourNum: glyphTable.contours.length,
-				advanceWidth: htmxTable.hMetrics[index].advanceWidth,
-				index: cmapTable.glyphIndexMap[code],
-				name: String.fromCharCode(Number(code)),
+				advanceWidth: metrics.advanceWidth,
+				leftSideBearing: metrics.lsb,
+				index,
+				name: String.fromCodePoint(Number(code)),
 			})
 		})
 	} else if (tables.filter((table: ITable) => table.name === 'CFF ')[0]) {
 		const cffTable = tables.filter((table: ITable) => table.name === 'CFF ')[0].table as unknown as ICffTable
-		
 
-		
+		// OpenType-CFF 字体中 advanceWidth 以 hmtx 表为准（charstring 宽度常缺省，
+		// 回退到 defaultWidthX 会得到错误宽度），hmtx 缺失时回退到 charstring 宽度
+		const hMetrics = htmxTable.hMetrics ?? []
+		const lsbList = htmxTable.leftSideBearings ?? []
+		const getHmtxMetrics = (index: number): { advanceWidth?: number; lsb?: number } => {
+			if (hMetrics.length === 0) return {}
+			if (index < hMetrics.length) return hMetrics[index]
+			return {
+				advanceWidth: hMetrics[hMetrics.length - 1].advanceWidth,
+				lsb: lsbList[index - hMetrics.length],
+			}
+		}
+
 		Object.keys(cmapTable.glyphIndexMap).forEach((code) => {
 			//const unicode = Number(code).toString(16)
 			const index = cmapTable.glyphIndexMap[code]
+			// 跳过映射到 .notdef（glyph 0）的码点
+			if (!index) return
 			const glyphTable = (cffTable.glyphTables as Array<IGlyphTable>)[index]
-			
+
 			// 检查glyphTable是否存在
 			if (!glyphTable) {
 				return
 			}
-			
+
+			const hmtx = getHmtxMetrics(index)
+			// hmtx 表存在时以其为准（包括合法的 0 宽度字形，如组合符号）
+			const advanceWidth =
+				typeof hmtx.advanceWidth === 'number'
+					? hmtx.advanceWidth
+					: glyphTable.advanceWidth ?? 0
+
 			characters.push({
 				unicode: Number(code),
 				contours: glyphTable.contours,
 				contourNum: glyphTable.contours.length,
-				advanceWidth: glyphTable.advanceWidth,
+				advanceWidth,
+				leftSideBearing: hmtx.lsb,
 				index,
 				name: cffTable.charsets?.data[index],
 			})

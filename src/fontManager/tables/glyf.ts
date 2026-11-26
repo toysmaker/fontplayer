@@ -74,74 +74,121 @@ const parse = (data: DataView, offset: number, font: IFont) => {
 	const numGlyphs = font.settings.numGlyphs as number
 	const offsets = (font.tables?.filter((table) => table.name === 'loca')[0].table as unknown as ILocaTable).offsets
 	for (let i = 0; i < numGlyphs; i++) {
+		// 零长度字形：loca[i] === loca[i+1] 表示该字形没有描述数据（如 space/.null），
+		// 必须生成空字形。此前直接按 offset 解析会读到下一个字形的数据，
+		// 导致空格等空字形被错误填充其他字形的轮廓（如 Verdana Italic 的 space 变成 !）
+		if (offsets[i] === offsets[i + 1]) {
+			table.glyphTables.push({
+				numberOfContours: 0,
+				xMin: 0,
+				yMin: 0,
+				xMax: 0,
+				yMax: 0,
+				endPtsOfContours: [],
+				instructionLength: 0,
+				instructions: [],
+				contours: [],
+				flags: [],
+				isComposite: false,
+				components: [],
+			})
+			continue
+		}
 		table.glyphTables.push(parseGlyph(data, offset + offsets[i], font))
 	}
-	for (let i = 0; i < numGlyphs; i++) {
-		const glyfTable = table.glyphTables[i]
-		if (glyfTable.isComposite) {
+	// 复合字形展开：重复多轮直到没有新的字形被展开。
+	// 复合字形可以引用另一个复合字形（且可能引用索引更大的字形），
+	// 单轮展开会静默丢失尚未展开的组件，因此迭代到稳定（上限 8 轮，防御递归引用）。
+	let expandedCount = 0
+	for (let pass = 0; pass < 8; pass++) {
+		let expandedThisPass = 0
+		for (let i = 0; i < numGlyphs; i++) {
+			const glyfTable = table.glyphTables[i]
+			if (!glyfTable.isComposite || (glyfTable as any).expanded) continue
+
+			// 等待所有组件就绪：简单字形天然就绪，复合字形需已展开
+			let allComponentsReady = true
+			for (let j = 0; j < glyfTable.components.length; j += 1) {
+				const componentGlyph = table.glyphTables[glyfTable.components[j].glyphIndex]
+				if (!componentGlyph) { allComponentsReady = false; break }
+				if (componentGlyph.isComposite && !(componentGlyph as any).expanded) {
+					allComponentsReady = false
+					break
+				}
+			}
+			if (!allComponentsReady) continue
+
 			glyfTable.contours = []
-			for (var j = 0; j < glyfTable.components.length; j += 1) {
+			for (let j = 0; j < glyfTable.components.length; j += 1) {
 				const component = glyfTable.components[j]
 				const componentGlyph = table.glyphTables[component.glyphIndex]
-				if (componentGlyph.contours.length) {
-					let contours = []
-					if (component.matchedPoints === undefined) {
-						contours = R.clone(componentGlyph.contours)
-						for (let n = 0; n < contours.length; n++) {
-							const contour = contours[n].paths
-							for (let m = 0; m < contour.length; m++) {
-								const path = contour[m]
-								path.start = transformPoint(path.start, component)
-								path.end = transformPoint(path.end, component)
-								if (path.type === PathType.QUADRATIC_BEZIER) {
-									path.control = transformPoint(path.control, component)
-								}
-							}
-						}
-					} else {
-						let points = []
-						for (let n = 0; n < glyfTable.contours.length; n++) {
-							const contour = glyfTable.contours[n]
-							points = points.concat(contour.points)
-						}
-
-						let componentPoints = []
-						for (let n = 0; n < componentGlyph.contours.length; n++) {
-							const contour = componentGlyph.contours[n]
-							componentPoints = componentPoints.concat(contour.points)
-						}
-
-						if ((component.matchedPoints[0] > points.length - 1) ||
-							(component.matchedPoints[1] > points.length - 1)) {
-							break
-						}
-						var firstPt = points[component.matchedPoints[0]]
-						var secondPt = componentPoints[component.matchedPoints[1]]
-						var transform = {
-							xScale: component.xScale, scale01: component.scale01,
-							scale10: component.scale10, yScale: component.yScale,
-							dx: 0, dy: 0
-						}
-						secondPt = transformPoint(secondPt, transform)
-						transform.dx = firstPt.x - secondPt.x
-						transform.dy = firstPt.y - secondPt.y
-						contours = R.clone(componentGlyph.contours)
-						for (let n = 0; n < contours.length; n++) {
-							const contour = contours[n].paths
-							for (let m = 0; m < contour.length; m++) {
-								const path = contour[m]
-								path.start = transformPoint(path.start, transform)
-								path.end = transformPoint(path.start, transform)
-								if (path.type === PathType.QUADRATIC_BEZIER) {
-									path.control = transformPoint(path.control, transform)
-								}
+				if (!componentGlyph || !componentGlyph.contours.length) continue
+				let contours = []
+				if (component.matchedPoints === undefined) {
+					contours = R.clone(componentGlyph.contours)
+					for (let n = 0; n < contours.length; n++) {
+						const contour = contours[n].paths
+						for (let m = 0; m < contour.length; m++) {
+							const path = contour[m]
+							path.start = transformPoint(path.start, component)
+							path.end = transformPoint(path.end, component)
+							if (path.type === PathType.QUADRATIC_BEZIER) {
+								path.control = transformPoint(path.control, component)
 							}
 						}
 					}
-					glyfTable.contours.push(...contours)
+				} else {
+					let points = []
+					for (let n = 0; n < glyfTable.contours.length; n++) {
+						const contour = glyfTable.contours[n]
+						points = points.concat(contour.points)
+					}
+
+					let componentPoints = []
+					for (let n = 0; n < componentGlyph.contours.length; n++) {
+						const contour = componentGlyph.contours[n]
+						componentPoints = componentPoints.concat(contour.points)
+					}
+
+					// 各自的点数边界分别校验（此前误用同一数组长度比较）
+					if ((component.matchedPoints[0] > points.length - 1) ||
+						(component.matchedPoints[1] > componentPoints.length - 1)) {
+						continue
+					}
+					const firstPt = points[component.matchedPoints[0]]
+					const secondPt = componentPoints[component.matchedPoints[1]]
+					const transform = {
+						xScale: component.xScale, scale01: component.scale01,
+						scale10: component.scale10, yScale: component.yScale,
+						dx: 0, dy: 0
+					}
+					const transformedSecondPt = transformPoint(secondPt, transform)
+					transform.dx = firstPt.x - transformedSecondPt.x
+					transform.dy = firstPt.y - transformedSecondPt.y
+					contours = R.clone(componentGlyph.contours)
+					for (let n = 0; n < contours.length; n++) {
+						const contour = contours[n].paths
+						for (let m = 0; m < contour.length; m++) {
+							const path = contour[m]
+							path.start = transformPoint(path.start, transform)
+							// 此前误写为 transformPoint(path.start, ...)，end 点从未被变换
+							path.end = transformPoint(path.end, transform)
+							if (path.type === PathType.QUADRATIC_BEZIER) {
+								path.control = transformPoint(path.control, transform)
+							}
+						}
+					}
 				}
+				glyfTable.contours.push(...contours)
 			}
+			;(glyfTable as any).expanded = true
+			expandedThisPass++
 		}
+		expandedCount += expandedThisPass
+		if (expandedThisPass === 0) break
+	}
+	if (import.meta.env.DEV && expandedCount > 0) {
+		console.log(`[glyf] composite glyphs expanded: ${expandedCount}`)
 	}
 	return table
 }
@@ -182,7 +229,7 @@ const parseGlyph = (data: DataView, offset: number, font: IFont) => {
 		isComposite = true
 		components = []
 		let moreComponents = true
-		let flags
+		let flags = 0
 		while (moreComponents) {
 			flags = decode.decoder['uint16']()
 			const component = {
@@ -231,6 +278,24 @@ const parseGlyph = (data: DataView, offset: number, font: IFont) => {
 			for (let i = 0; i < instructionLength; i++) {
 				instructions.push(decode.decoder['uint8']())
 			}
+		}
+		// 复合字形描述到此结束：后面没有简单字形的 endPts/指令/坐标数据。
+		// 此前代码继续解析简单字形结构，会把下一个字形的数据误读为指令，
+		// 最终越过 glyf 表边界抛 RangeError（如 Verdana Italic）。
+		decode.end()
+		return {
+			numberOfContours,
+			xMin,
+			yMin,
+			xMax,
+			yMax,
+			endPtsOfContours: [],
+			instructionLength: 0,
+			instructions,
+			contours: [],
+			flags: [],
+			isComposite,
+			components,
 		}
 	}
 

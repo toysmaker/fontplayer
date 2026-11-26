@@ -581,12 +581,13 @@ const parseType2CharString= (charString: any, index: number, topDict: any, font:
 						data.push(stack.shift() as number)
 					}
 					const mask: Array<number> = []
-					let n = (nStems + 7) >> 3
-					while (n) {
+					// 掩码字节紧跟操作符之后（i 当前指向首个掩码字节），
+					// 此前从 i+1 读到 i+maskLen，漏读首字节并多读一个后续指令字节
+					const maskLen = (nStems + 7) >> 3
+					for (let n = 0; n < maskLen; n++) {
 						mask.push(charString[i + n])
-						n--
 					}
-					i += (nStems + 7) >> 3
+					i += maskLen
 					commands.push({
 						command: 'hintmask',
 						data,
@@ -603,12 +604,11 @@ const parseType2CharString= (charString: any, index: number, topDict: any, font:
 						data.push(stack.shift() as number)
 					}
 					const mask: Array<number> = []
-					let n = (nStems + 7) >> 3
-					while (n) {
+					const maskLen = (nStems + 7) >> 3
+					for (let n = 0; n < maskLen; n++) {
 						mask.push(charString[i + n])
-						n--
 					}
-					i += (nStems + 7) >> 3
+					i += maskLen
 					commands.push({
 						command: 'cntrmask',
 						data,
@@ -2026,10 +2026,15 @@ const parse = (data: DataView, offset: number, font: IFont) => {
 	// 解析header
 	// parse header
 	const _header = parseHeader(data, offset)
+	// 仅支持 CFF1（major === 1）；CFF2（可变 CFF，major === 2）结构完全不同，
+	// 按 CFF1 解析会产生乱码字形，这里直接报错而不是静默产出错误轮廓
+	if (_header.data.major !== 1) {
+		throw new Error(`Unsupported CFF version ${_header.data.major}.${_header.data.minor} (only CFF1 is supported)`)
+	}
 	// 解析name index
 	// parse name index
 
-	
+
 	const _nameIndex = parseIndex(data, _header.offset)
 	// 解析topDict index
 	// parse topDic index

@@ -2,7 +2,6 @@ import { getStorageString, hasChineseChar, isChineseChar } from '../utils'
 import type { IFont } from '../font'
 import { encoder } from '../encode'
 import * as decode from '../decode'
-import iconv from 'iconv-lite'
 
 // name表格式
 // name table format
@@ -72,9 +71,11 @@ const parse = (data: DataView, offset: number, font: IFont) => {
 	// start a new decoder
 	decode.start(data, offset)
 	const version = decode.decoder[types['version'] as keyof typeof decode.decoder]() as number
-	const count = decode.decoder[types['version'] as keyof typeof decode.decoder]() as number
+	const count = decode.decoder[types['count'] as keyof typeof decode.decoder]() as number
 	const storageOffset = decode.decoder[types['storageOffset'] as keyof typeof decode.decoder]() as number
 	const nameRecord = []
+	// 字符串存储区绝对位置：表起点 offset + storageOffset（stringOffset 相对存储区起点）
+	const stringPoolStart = offset + storageOffset
 	for (let i = 0; i < count; i++) {
 		const platformID = decode.decoder[types['platformID'] as keyof typeof decode.decoder]() as number
 		const encodingID = decode.decoder[types['encodingID'] as keyof typeof decode.decoder]() as number
@@ -82,7 +83,7 @@ const parse = (data: DataView, offset: number, font: IFont) => {
 		const nameID = decode.decoder[types['nameID'] as keyof typeof decode.decoder]() as number
 		const length = decode.decoder[types['length'] as keyof typeof decode.decoder]() as number
 		const stringOffset = decode.decoder[types['stringOffset'] as keyof typeof decode.decoder]() as number
-		const str = getStorageString(data, stringOffset, length)
+		const str = getStorageString(data, stringPoolStart + stringOffset, length, platformID, encodingID)
 		nameRecord.push({
 			platformID,
 			encodingID,
@@ -102,13 +103,13 @@ const parse = (data: DataView, offset: number, font: IFont) => {
 	}
 
 	if (version >= 1) {
-		table.langTagCount = decode.decoder[types['version'] as keyof typeof decode.decoder]() as number
+		table.langTagCount = decode.decoder[types['langTagCount'] as keyof typeof decode.decoder]() as number
 		table.langTagRecord = []
 		if (table.langTagCount) {
 			for (let i = 0; i < table.langTagCount; i++) {
 				const length = decode.decoder[types['length'] as keyof typeof decode.decoder]() as number
 				const langTagOffset = decode.decoder[types['langTagOffset'] as keyof typeof decode.decoder]() as number
-				const str = getStorageString(data, langTagOffset, length)
+				const str = getStorageString(data, stringPoolStart + langTagOffset, length)
 				table.langTagRecord.push({
 					length,
 					langTagOffset,
@@ -1308,10 +1309,11 @@ const createTable = (names: Array<any>, ltag: Array<any>) => {
 			let macName = encoder.utf16(text)
 			let encodingID = 0
 
+			// 原 iconv.encode(text, 'gbk') 分支为死代码（macName 未被写入任何记录），
+			// 且 iconv-lite 依赖 Node Buffer 全局，在浏览器环境会直接崩溃，已移除
 			if (lang === 'zh') {
 				encodingID = 25
 				macLanguage = 33
-				macName = [...iconv.encode(text, 'gbk')]
 			}
 			//const macNameOffset = addStringToPool(macName, stringPool)
 			
@@ -1365,7 +1367,7 @@ const createTable = (names: Array<any>, ltag: Array<any>) => {
 				//}
 
 				// if (lang === 'zh') {
-				// 	let winName = [...iconv.encode(text, 'gbk')]
+				// 	let winName = [...gbkEncode(text)]
 				// 	let encodingID = 3
 				// 	const winNameOffset = addStringToPool(winName, stringPool)
 				// 	nameRecord.push({

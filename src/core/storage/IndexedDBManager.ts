@@ -40,6 +40,44 @@ export class IndexedDBManager {
   }
 
   /**
+   * 批量写入：优先走 localForage 底层 IndexedDB 连接的单事务批量写
+   * （大字符集导入时数千次单独 setItem 会产生数千个串行事务，极慢且内存尖峰）。
+   * 存储格式与 localForage 的 setItem 完全一致（store.put(value, key)），
+   * 因此读写互操作安全。非 IndexedDB 驱动（WebSQL 等）回退为受限并发写入。
+   */
+  async bulkSet(entries: Array<[string, any]>): Promise<void> {
+    if (!entries.length) return
+    try {
+      const lf = this.db as any
+      await lf.ready()
+      const dbInfo = lf._dbInfo
+      const idb: IDBDatabase | undefined = dbInfo && dbInfo.db
+      if (idb && typeof idb.transaction === 'function' && idb.objectStoreNames?.contains(dbInfo.storeName)) {
+        await new Promise<void>((resolve, reject) => {
+          const tx = idb.transaction(dbInfo.storeName, 'readwrite')
+          const store = tx.objectStore(dbInfo.storeName)
+          for (const [key, value] of entries) {
+            store.put(value, key)
+          }
+          tx.oncomplete = () => resolve()
+          tx.onabort = () => reject(tx.error || new Error('bulkSet transaction aborted'))
+          tx.onerror = () => reject(tx.error || new Error('bulkSet transaction error'))
+        })
+        return
+      }
+    } catch (error) {
+      // 单事务路径失败时退化为分块 setItem，保证导入不中断
+      console.warn('bulkSet via raw IndexedDB failed, falling back to chunked setItem:', error)
+    }
+    // 回退：受限并发（避免同时打开数千个事务）
+    const CONCURRENCY = 32
+    for (let i = 0; i < entries.length; i += CONCURRENCY) {
+      const slice = entries.slice(i, i + CONCURRENCY)
+      await Promise.all(slice.map(([key, value]) => this.set(key, value)))
+    }
+  }
+
+  /**
    * 获取数据
    */
   async get<T = any>(key: string): Promise<T | null> {

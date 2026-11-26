@@ -79,6 +79,11 @@ export interface ICharacterInfo {
     advanceWidth?: number
     useDefaultValues?: boolean
   }
+  /**
+   * 字库导入的字符：坐标已按「advanceWidth 居中」存放在编辑空间，
+   * 导出换算需用 metrics.advanceWidth（而非 unitsPerEm）还原字体坐标。
+   */
+  imported?: boolean
 }
 
 // ==================== 组件类型 ====================

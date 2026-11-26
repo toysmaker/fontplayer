@@ -80,6 +80,20 @@ const format12FieldTypes = {
  * @param font font object
  * @returns ICmapTable object
  */
+/**
+ * 子表平台优先级：值越大越优先。
+ * Windows Unicode 全平面 (3,10) > Unicode (0,x) > Windows BMP (3,1) > Mac (1,0) > 其他
+ * 与 OpenType 推荐的子表选择顺序一致，避免多个子表互相覆盖产生错误映射。
+ */
+const getSubTablePriority = (platformID: number, encodingID: number) => {
+	if (platformID === 3 && encodingID === 10) return 5
+	if (platformID === 0) return 4
+	if (platformID === 3 && encodingID === 1) return 3
+	if (platformID === 3) return 2
+	if (platformID === 1) return 1
+	return 0
+}
+
 const parse = (data: DataView, offset: number, font: IFont) => {
 	let _offset = offset
 	// 启动一个新的decoder
@@ -90,18 +104,22 @@ const parse = (data: DataView, offset: number, font: IFont) => {
 	_offset = decode.getOffset()
 	decode.end()
 	const encodingRecords = []
-	const glyphIndexMap = {}
+	// 只保留一份合并后的映射（大字符集下多份映射会成倍占用内存），
+	// 每个码点记录获胜子表的优先级，低优先级子表的条目直接跳过
+	const glyphIndexMap: { [key: string]: number } = {}
+	const priorityMap: { [key: string]: number } = {}
 
 	for (let i = 0; i < numTables; i++) {
 		// 启动一个新的decoder
 		// start a new decoder
 		decode.start(data, _offset)
-		const platformID = decode.decoder[types['platformID'] as keyof typeof decode.decoder]()
-		const encodingID = decode.decoder[types['encodingID'] as keyof typeof decode.decoder]()
+		const platformID = decode.decoder[types['platformID'] as keyof typeof decode.decoder]() as number
+		const encodingID = decode.decoder[types['encodingID'] as keyof typeof decode.decoder]() as number
 		const subtableOffset = decode.decoder[types['subtableOffset'] as keyof typeof decode.decoder]() as number
 		_offset = decode.getOffset()
 		decode.end()
-		const subTable = getSubTable(data, offset + subtableOffset, glyphIndexMap)
+		const priority = getSubTablePriority(platformID, encodingID)
+		const subTable = getSubTable(data, offset + subtableOffset, glyphIndexMap, priority, priorityMap)
 		encodingRecords.push({
 			platformID,
 			encodingID,
@@ -134,8 +152,17 @@ const parse = (data: DataView, offset: number, font: IFont) => {
  * @param glyphIndexMap glyph and index map
  * @returns subtable according to its format
  */
-const getSubTable = (data: DataView, offset: number, glyphIndexMap: any) => {
+const getSubTable = (data: DataView, offset: number, glyphIndexMap: any, priority: number, priorityMap: any) => {
 	let subTable = null
+	// 仅当码点未被更高优先级子表占用时写入（相等优先级保留先解析的子表）
+	const writeMapEntry = (code: number, glyphIndex: number) => {
+		const key = String(code)
+		const existingPriority = priorityMap[key]
+		if (existingPriority === undefined || priority > existingPriority) {
+			glyphIndexMap[key] = glyphIndex
+			priorityMap[key] = priority
+		}
+	}
 
 	// 启动一个新的decoder
 	// start a new decoder
@@ -183,7 +210,7 @@ const getSubTable = (data: DataView, offset: number, glyphIndexMap: any) => {
 						glyphIndex = (c + idDelta) & 0xFFFF;
 					}
 
-					glyphIndexMap[c] = glyphIndex
+					writeMapEntry(c, glyphIndex)
 				}
 			}
 
@@ -218,7 +245,7 @@ const getSubTable = (data: DataView, offset: number, glyphIndexMap: any) => {
 					startGlyphId,
 				})
 				for (let c = startCharCode; c <= endCharCode; c++) {
-					glyphIndexMap[c] = startGlyphId
+					writeMapEntry(c, startGlyphId)
 					startGlyphId++
 				}
 		  }
