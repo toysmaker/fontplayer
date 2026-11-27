@@ -12,22 +12,25 @@
             v-model:value="item.nameID"
             class="name-id-select"
             :options="nameIDOptions"
-            @update:value="(v: number) => (item.nameLabel = nameTableNames[v])"
+            @update:value="(v: number) => { item.nameLabel = nameTableNames[v]; onEntryEdited(item) }"
           />
           <n-select
             v-model:value="item.langID"
             class="name-lang-select"
             :options="winLangIDOptions"
+            @update:value="() => onEntryEdited(item)"
           />
           <n-select
             v-model:value="item.platformID"
             class="name-lang-select"
             :options="platformIDOptions"
+            @update:value="() => onEntryEdited(item)"
           />
           <n-select
             v-model:value="item.encodingID"
             class="name-lang-select"
             :options="winEncodingIDOptions"
+            @update:value="() => onEntryEdited(item)"
           />
           <n-button
             v-if="!item.default"
@@ -40,7 +43,7 @@
           </n-button>
         </div>
         <div class="name-item-row-2">
-          <n-input v-model:value="item.value" type="text" placeholder="" />
+          <n-input v-model:value="item.value" type="text" placeholder="" @update:value="() => onEntryEdited(item)" />
           <n-tooltip trigger="hover" placement="bottom">
             <template #trigger>
               <span class="name-tip-icon">?</span>
@@ -98,6 +101,17 @@ function removeItem(index: number) {
   const item = props.data[index]
   if (!item?.default) {
     props.data.splice(index, 1)
+  }
+}
+
+/**
+ * 用户编辑默认条目时清除 default 标记：
+ * default: true 的条目会被「工程名称 → name 表」联动同步覆盖，
+ * 编辑后转为用户自定义条目，导出时保留用户设置的值
+ */
+function onEntryEdited(item: NameTableEntry) {
+  if (item.default) {
+    item.default = false
   }
 }
 </script>

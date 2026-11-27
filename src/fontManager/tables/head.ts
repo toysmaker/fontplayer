@@ -30,7 +30,10 @@ interface IHeadTable {
 const types = {
 	majorVersion: 'uint16',
 	minorVersion: 'uint16',
-	fontRevision: 'Fixed',
+	// fontRevision 在 UI/存储中即为 16.16 原始整数值（默认 0x00010000），
+	// 直写四个字节即可。此前用 'Fixed'（会 ×0x10000）在 32 位溢出截断：
+	// 65542 → 0x00060000(6.0)，默认值 0x00010000 → 0.0
+	fontRevision: 'uint32',
 	checkSumAdjustment: 'uint32',
 	magicNumber: 'uint32',
 	flags: 'uint16',

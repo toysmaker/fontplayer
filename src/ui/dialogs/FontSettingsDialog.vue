@@ -62,6 +62,8 @@ import { NModal, NForm, NFormItem, NInput, NInputNumber, NButton } from 'naive-u
 import { useI18n } from 'vue-i18n'
 import { useProjectStore } from '@/stores/project'
 import { createDebouncedHandler } from '@/utils/debounce-click'
+import { hasChineseChar } from '@/fontManager/utils'
+import { convertToPinyin } from 'tiny-pinyin'
 
 const { t, tm } = useI18n()
 const projectStore = useProjectStore()
@@ -139,17 +141,60 @@ function _handleCancel() {
 
 const handleCancel = createDebouncedHandler(_handleCancel, 'FontSettingsDialog.cancel')
 
+/** 工程名称 → PostScript 名（与 ProjectCreator/font.ts 导出侧净化规则一致） */
+function buildPostScriptName(projectName: string): string {
+  let en = hasChineseChar(projectName) ? convertToPinyin(projectName) : projectName
+  en = en.replace(/[^\x21-\x7E]/g, '').replace(/\s/g, '')
+  if (!en) en = 'Untitled'
+  return (en + '-Regular').slice(0, 63)
+}
+
+/**
+ * 单向联动：工程名称 → name 表 default 条目（nameID 1/4/6）。
+ * 仅同步 default 条目（用户手工新增/编辑的非 default 条目不受影响）；
+ * 反向（修改 name 表 → 工程名称）不联动。
+ */
+function syncNameTableWithProjectName(
+  entries: unknown[] | undefined,
+  projectName: string,
+): unknown[] {
+  if (!Array.isArray(entries)) return entries ?? []
+  // 英文记录（0x409 等）同步拼音/ASCII 名（与 font.ts 导出侧同步规则一致）
+  const enName = hasChineseChar(projectName) ? convertToPinyin(projectName) : projectName
+  return entries.map((entry: any) => {
+    if (!entry || entry.default !== true) return entry
+    const familyValue = entry.langID === 0x804 ? projectName : enName
+    if (entry.nameID === 1) return { ...entry, value: familyValue }
+    if (entry.nameID === 4) {
+      const suffix = entry.langID === 0x804 ? ' 常规体' : ' Regular'
+      return { ...entry, value: familyValue + suffix }
+    }
+    if (entry.nameID === 6) return { ...entry, value: buildPostScriptName(projectName) }
+    return entry
+  })
+}
+
 function _handleConfirm() {
   const file = selectedFile.value
   if (!file) return
+  const currentTables: any = file.fontSettings?.tables ?? {}
+  const hasNameEntries = Array.isArray(currentTables.name)
+  const fontSettings: any = {
+    ...file.fontSettings,
+    unitsPerEm: formData.value.unitsPerEm,
+    ascender: formData.value.ascender,
+    descender: formData.value.descender,
+  }
+  // 改名联动 name 表（仅当工程已有 name 表条目时；导入的字体工程无 name 表则不动）
+  if (hasNameEntries) {
+    fontSettings.tables = {
+      ...currentTables,
+      name: syncNameTableWithProjectName(currentTables.name, formData.value.name),
+    }
+  }
   projectStore.updateFile(file.uuid, {
     name: formData.value.name,
-    fontSettings: {
-      ...file.fontSettings,
-      unitsPerEm: formData.value.unitsPerEm,
-      ascender: formData.value.ascender,
-      descender: formData.value.descender,
-    },
+    fontSettings,
   })
   projectStore.markFileUnsaved(file.uuid)
   visible.value = false

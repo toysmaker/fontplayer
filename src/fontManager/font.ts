@@ -541,7 +541,7 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 		sCapHeight: metricsForChar(font, 'HIKLEFJMNTZBDPRAGOQSUVWXY', globals).yMax,
 		usDefaultChar: hasChar(font, ' ') ? 32 : 0,
 		usBreakChar: hasChar(font, ' ') ? 32 : 0,
-		usMaxContext: 0,
+		usMaxContext: _os2Table.usMaxContext || 0,
 		usLowerOpticalPointSize: _os2Table.usLowerOpticalPointSize || 8,
 		usUpperOpticalPointSize: _os2Table.usUpperOpticalPointSize || 72,
 	}
@@ -650,10 +650,13 @@ const createFont = async (characters: Array<ICharacter>, options: IOption) => {
 				return { ...entry, value }
 			}
 			if (!entry.default) return entry
-			if (entry.nameID === 1) return { ...entry, value: options.familyName }
+			// 中文记录（0x804）用原始工程名；英文记录（0x409 等）用拼音/ASCII 名
+			// （如 测试111 → CESHI111），避免英文记录出现中文名
+			const familyValue = entry.langID === 0x804 ? options.familyName : enName
+			if (entry.nameID === 1) return { ...entry, value: familyValue }
 			if (entry.nameID === 4) {
 				const suffix = entry.langID === 0x804 ? ' 常规体' : ' Regular'
-				return { ...entry, value: options.familyName + suffix }
+				return { ...entry, value: familyValue + suffix }
 			}
 			return entry
 		})

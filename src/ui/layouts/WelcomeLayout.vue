@@ -40,15 +40,7 @@
           <div class="description">{{ t('welcome.template.description') }}</div>
         </div>
       </div>
-      <div class="playground-btn">
-        <div class="item-icon playground-icon">
-          <font-awesome-icon :icon="['fas', 'gamepad']" />
-        </div>
-        <div class="playground-main">
-          <div class="playground-text">{{ t('welcome.playground.title') }}</div>
-          <div class="playground-description">{{ t('welcome.playground.description') }}</div>
-        </div>
-      </div>
+      <!-- 玩一玩字玩按钮已隐藏（产品要求），四按钮组由 .welcome 的 flex 居中保持在页面正中 -->
     </div>
 
     <!-- 会话恢复入口：页面最底部居中的灰色小字，不影响主布局 -->
@@ -265,57 +257,6 @@ const handleProjectCreated = () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-}
-
-.welcome .main-panel .playground-btn {
-  width: 360px;
-  background-color: var(--primary-0);
-  margin-top: 50px;
-  border: 1px solid var(--light-5);
-  color: var(--light-0);
-  border-radius: 50px;
-  display: flex;
-  flex-direction: row;
-  height: 68px;
-  cursor: pointer;
-}
-
-.welcome .main-panel .playground-btn:hover {
-  background-color: var(--primary-1);
-}
-
-.welcome .main-panel .playground-btn .playground-icon {
-  display: flex;
-  flex-direction: row;
-  justify-content: center;
-  align-items: center;
-  flex: 0 0 80px;
-  color: var(--light-0);
-}
-
-.welcome .main-panel .playground-btn .playground-icon svg {
-  width: 48px;
-  height: 48px;
-}
-
-.welcome .main-panel .playground-btn .playground-main {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 250px;
-}
-
-.welcome .main-panel .playground-btn .playground-text {
-  font-size: 18px;
-  text-align: center;
-  font-weight: bold;
-}
-
-.welcome .main-panel .playground-btn .playground-description {
-  color: var(--light-2);
-  font-size: 14px;
-  text-align: center;
 }
 
 /* 会话恢复入口：页面最底部居中的灰色小字，不影响主布局 */
