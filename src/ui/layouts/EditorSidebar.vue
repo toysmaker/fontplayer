@@ -666,11 +666,11 @@ const handleProjectCreated = () => {
   width: 60px;
   height: 60px;
   background-color: var(--dark-2);
-  border-radius: 0 20px 0 20px;
+  border-radius: 0 14px 0 14px;
   padding: 8px 4px;
   color: var(--light-0);
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.15s, color 0.15s;
   box-sizing: border-box;
 }
 
@@ -696,7 +696,7 @@ const handleProjectCreated = () => {
 }
 
 .menu-icon-item.is-hovered .menu-icon-item-icon {
-  color: var(--light-0);
+  color: var(--accent);
 }
 
 .menu-icon-item-label {
@@ -713,10 +713,10 @@ const handleProjectCreated = () => {
   position: absolute;
   left: 80px;
   top: 0;
-  background-color: var(--dark-0);
+  background-color: var(--dark-1);
   border: 1px solid var(--dark-4);
-  border-radius: 0;
-  box-shadow: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-float);
   min-width: 200px;
   width: 200px;
   max-width: 200px;
@@ -728,15 +728,15 @@ const handleProjectCreated = () => {
   padding: 0 20px;
   min-height: 36px;
   line-height: 36px;
-  color: var(--light-0);
+  color: var(--light-2);
   cursor: pointer;
   position: relative;
-  transition: color 0.2s;
+  transition: color 0.15s, background-color 0.15s;
 }
 
 .menu-dropdown-item:hover {
-  background-color: transparent;
-  color: var(--primary-4);
+  background-color: var(--dark-3);
+  color: var(--light-0);
 }
 
 .menu-dropdown-item.has-children::after {
@@ -755,10 +755,10 @@ const handleProjectCreated = () => {
   position: absolute;
   left: 200px;
   top: 0;
-  background-color: var(--dark-0);
+  background-color: var(--dark-1);
   border: 1px solid var(--dark-4);
-  border-radius: 0;
-  box-shadow: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-float);
   min-width: 200px;
   width: 200px;
   max-width: 200px;
@@ -770,13 +770,13 @@ const handleProjectCreated = () => {
   padding: 0 20px;
   min-height: 36px;
   line-height: 36px;
-  color: var(--light-0);
+  color: var(--light-2);
   cursor: pointer;
 }
 
 .menu-dropdown-nested .menu-dropdown-item:hover {
-  background-color: transparent;
-  color: var(--primary-4);
+  background-color: var(--dark-3);
+  color: var(--light-0);
 }
 
 .menu-dropdown-item.menu-item-disabled {

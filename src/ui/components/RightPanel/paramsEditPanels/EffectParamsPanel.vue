@@ -137,12 +137,12 @@ const handleCancel = createDebouncedHandler(
   font-size: 15px;
   font-weight: 600;
   margin: 0 0 6px 0;
-  color: var(--text-color-1);
+  color: var(--light-2);
 }
 
 .effect-description {
   font-size: 12px;
-  color: var(--text-color-3);
+  color: var(--light-4);
   margin: 0;
   line-height: 1.5;
 }
@@ -162,7 +162,7 @@ const handleCancel = createDebouncedHandler(
 .param-label {
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-color-2);
+  color: var(--light-3);
 }
 
 .param-controls {

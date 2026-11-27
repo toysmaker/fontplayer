@@ -737,18 +737,23 @@ const openPopover = (e: MouseEvent, uuid: string) => {
   display: flex;
   cursor: pointer;
   padding: 5px 10px;
-  border: 1px solid #54648a;
+  border: 1px solid var(--primary-1);
+  border-radius: 6px;
   background-color: var(--primary-0);
   color: var(--primary-5);
   align-items: center;
+  transition: background-color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
 }
 
 .component:hover {
-  background-color: var(--primary-3);
+  background-color: var(--primary-1);
+  border-color: var(--primary-3);
 }
 
 .component.selected {
   background-color: var(--primary-3);
+  border-color: var(--primary-3);
+  font-weight: 600;
 }
 
 .component .name {
@@ -781,32 +786,36 @@ const openPopover = (e: MouseEvent, uuid: string) => {
   color: var(--primary-1);
 }
 
+/* 组件右键菜单：浮起的深色表面，与画布背景拉开层次 */
 .component-menu {
-  background-color: var(--primary-0);
+  background-color: var(--dark-2);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
 .component-menu-item {
   height: 30px;
   line-height: 30px;
   cursor: pointer;
-  color: var(--primary-5);
-  padding: 0 10px;
+  color: var(--light-2);
+  padding: 0 12px;
+  transition: background-color 0.12s var(--ease-out), color 0.12s var(--ease-out);
 }
 
 .component-menu-item:hover {
-  background-color: var(--primary-3);
-  color: var(--primary-5);
+  background-color: var(--accent-soft);
+  color: var(--light-0);
 }
 
 .component-menu-item:not(:last-child) {
-  border-bottom: 1px solid var(--light-0);
+  border-bottom: 1px solid var(--dark-4);
 }
 
 .filter-header {
   flex-shrink: 0;
   width: 100%;
   border-bottom: 1px solid var(--dark-4);
-  padding: 5px 15px 8px 15px;
+  padding: 6px 15px;
   line-height: 36px;
 }
 
@@ -821,8 +830,10 @@ const openPopover = (e: MouseEvent, uuid: string) => {
 </style>
 
 <style>
+  /* 深色面板上的墨蓝 chip 型筛选下拉（刻意设计，与浅色输入框区分） */
   .list-wrapper .n-base-selection {
     background-color: var(--primary-0) !important;
+    border-color: var(--primary-1) !important;
     .n-base-selection-label {
       color: var(--primary-5) !important;
       background-color: var(--primary-0) !important;

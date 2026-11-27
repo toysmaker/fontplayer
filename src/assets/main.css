@@ -1,3 +1,21 @@
+/**
+ * 字玩 FontPlayer · 设计系统「墨蓝工作台 Ink-Blue Workbench」
+ *
+ * 分层：
+ *  1. reset / 基础排版
+ *  2. :root 设计 token（深色表面、文字、品牌墨蓝、交互强调、浅色条带、语义色、圆角、阴影、动效）
+ *  3. 原生滚动条
+ *  4. 焦点环 / 文本选区
+ *  5. Naive UI 组件级覆盖（对话框、输入、按钮、选择框、菜单、开关、弹出层、消息、空状态等）
+ *  6. 品牌签名样式（右面板 section-title 不对称圆角墨蓝条）
+ *
+ * ⚠️ 交互修复保护（详见 .claude/skills/ui-design-system/SKILL.md）：
+ *  - `.n-base-close` / `.n-base-select-option` 是 main.ts mousedown capture 拦截的目标，
+ *    此处只允许改颜色/背景/圆角等纯视觉属性，禁止 pointer-events / display / visibility / position。
+ *  - 按钮依赖 click + pointerup 双触发，禁止 :active transform 位移，active 反馈只用颜色。
+ *  - 全局 div/span user-select 禁用必须保留（画布拖拽依赖）。
+ */
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -5,9 +23,13 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--dark-0);
+  color: var(--light-2);
 }
 
 #app {
@@ -15,52 +37,119 @@ body {
   height: 100%;
 }
 
+/* 画布拖拽依赖：全局禁止文本选择，勿删 */
 div, span {
   user-select: none !important;
   -webkit-user-select: none !important;
 }
 
+/* ============ 2. 设计 token ============ */
 :root {
-  --dark-0: #1d1d1d;
-  --dark-1: #242424;
-  --dark-2: #323232;
-  --dark-3: #272727;
-  --dark-4: #484848;
+  /* 深色表面（墨蓝倾向，非纯灰） */
+  --dark-0: #14161e; /* 最深：页面底 / 侧栏 / 右面板 */
+  --dark-1: #1b1e28; /* 面板 / 对话框 / 菜单 */
+  --dark-2: #232735; /* 浮起块 / 图标底 / 提示 */
+  --dark-3: #2d3242; /* hover 填充 */
+  --dark-4: #3b4154; /* 描边 / 发丝线 */
 
-  --light-5: #6b6b6b;
-  --light-4: #9a9a9a;
-  --light-3: #bcbcbc;
-  --light-2: #c4c4c4;
-  --light-1: #e6e6e6;
-  --light-0: #eeeeee;
+  /* 深底文字（弱 → 强） */
+  --light-5: #60677a; /* 三级文字 / 占位 */
+  --light-4: #8b93a8; /* 二级文字 */
+  --light-3: #aab1c2; /* 正文 / 菜单文字 */
+  --light-2: #ccd2df; /* 一级文字 */
+  --light-1: #e3e6ee; /* 强调文字 */
+  --light-0: #eef1f7; /* 最强文字 */
 
-  --primary-0: #153063;
-  --primary-1: #37558f;
-  --primary-2: #375e84;
-  --primary-3: #3e66b3;
-  --primary-4: #b2c6d5;
-  --primary-5: #d9e6f0;
+  /* 品牌墨蓝（深 → 浅） */
+  --primary-0: #1e3a6d; /* 主按钮底 / 浅底文字 */
+  --primary-1: #2b4e94; /* 主按钮 hover / 选中底 */
+  --primary-2: #3862b4; /* 主按钮 pressed / 标题描边 */
+  --primary-3: #4f7fd6; /* 交互中蓝 */
+  --primary-4: #b7c6de; /* 浅蓝：暗底强调文字 / 默认按钮 hover */
+  --primary-5: #e4ebf7; /* 最浅蓝：默认按钮底 / 选中底 / 签名条文字 */
+
+  /* 交互强调（选中态 / 焦点环 / 开关激活 / 滑块填充统一用它） */
+  --accent: #5b8def;
+  --accent-hover: #7aa4f4;
+  --accent-soft: rgba(91, 141, 239, 0.14);
+  --accent-ring: rgba(91, 141, 239, 0.45);
+
+  /* 浅色条带（顶部工具条 / 文件条 / 底部栏） */
+  --surface-light: #f6f7fb;
+  --border-light: #d7dce8;
+  --field: #fcfdff; /* 输入框底 */
+
+  /* 语义色 */
+  --danger: #e05c6b;
+  --success: #46b487;
+  --warning: #d8a24d;
+
+  /* 圆角 */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* 阴影 */
+  --shadow-float: 0 4px 16px rgba(8, 11, 19, 0.45), 0 1px 3px rgba(8, 11, 19, 0.35);
+  --shadow-dialog: 0 16px 48px rgba(8, 11, 19, 0.6), 0 2px 8px rgba(8, 11, 19, 0.4);
+
+  /* 动效（仅 color/background/border/shadow） */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
-.right-panel {
-  background-color: var(--dark-0);
-  .section-title {
-    border-bottom: 1px solid var(--primary-2);
-    background-color: var(--primary-0);
-    color: var(--primary-5);
-    border-radius: 20px 5px 20px 5px;
-    width: 100%;
-    box-sizing: border-box;
-    padding: 5px 20px;
-    margin-bottom: 20px;
-    font-size: 15px;
-  }
+/* ============ 3. 原生滚动条 ============ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-/* Naive UI 对话框样式覆盖 */
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--dark-4);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--light-5);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ============ 4. 焦点环 / 文本选区 ============ */
+::selection {
+  background: var(--primary-4);
+  color: var(--primary-0);
+}
+
+/* 按钮键盘焦点环（鼠标点击不触发 :focus-visible，不干扰 click+pointerup 双触发） */
+.n-button:focus-visible,
+.n-base-close:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-ring) !important;
+}
+
+/* 选择框焦点：亮蓝描边 + 柔和光环（输入框的焦点环由 Input 主题 boxShadowFocus 原生提供） */
+.n-base-selection.n-base-selection--focus,
+.n-base-selection.n-base-selection--active {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-ring) !important;
+}
+
+/* ============ 5. Naive UI 组件覆盖 ============ */
+
+/* ---- 对话框 / 模态 ---- */
 .n-modal {
   border: 1px solid var(--dark-4) !important;
-  border-radius: 0 !important;
+  border-radius: 10px !important;
+  box-shadow: var(--shadow-dialog) !important;
+  transition: box-shadow 0.2s var(--ease-out);
 }
 
 .n-modal .n-modal__title {
@@ -68,11 +157,14 @@ div, span {
 }
 
 .n-modal .n-base-close {
-  color: var(--light-2) !important;
+  color: var(--light-4) !important;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s var(--ease-out), background-color 0.15s var(--ease-out);
 }
 
 .n-modal .n-base-close:hover {
-  color: var(--primary-3) !important;
+  color: var(--accent) !important;
+  background-color: var(--accent-soft);
 }
 
 .n-dialog__content {
@@ -83,84 +175,174 @@ div, span {
   margin-right: 10px !important;
 }
 
-/* Naive UI 输入框样式覆盖 */
-.n-input:hover {
-  border-color: var(--primary-0) !important;
-}
-
-.n-input:focus-within {
-  border-color: var(--primary-0) !important;
+/* ---- 输入框 ----
+   注意：naive-ui 的输入框边框画在 `.n-input__border` / `__state-border` 子元素上
+   （border: var(--n-border)），hover/焦点样式由 Input 主题的 borderHover /
+   borderFocus / boxShadowFocus 原生提供（见 App.vue themeOverrides），
+   不要用 border-color 直接覆盖。 */
+.n-input {
+  border-radius: var(--radius-sm) !important;
 }
 
 .n-input__input-el {
   color: var(--primary-0) !important;
+  caret-color: var(--primary-0);
 }
 
 .n-input__placeholder {
-  color: var(--light-4) !important;
+  color: var(--light-5) !important;
 }
 
-/* Naive UI 数字输入框样式覆盖 */
-.n-input-number {
-  border: 1px solid var(--primary-1) !important;
-  border-radius: 0 !important;
+.n-input.n-input--disabled {
+  opacity: 0.55;
 }
 
-.n-input-number:hover {
-  border-color: var(--primary-0) !important;
-}
-
-.n-input-number:focus-within {
-  border-color: var(--primary-0) !important;
+/* ---- 数字输入框 ----
+   结构：.n-input-number > .n-input(内部) > .n-input__suffix > .n-input-number-suffix > .n-button×2
+   注意：步进按钮容器 class 是 n-input-number-suffix（无下划线），与旧代码的 __suffix 不同。 */
+.n-input-number .n-input__suffix {
+  border-left: 1px solid var(--border-light) !important;
 }
 
 .n-input-number__input {
   color: var(--primary-0) !important;
 }
 
-.n-input-number__suffix {
-  border-left: 1px solid var(--primary-1) !important;
-}
-
-.n-input-number__suffix .n-button {
+/* 步进按钮保持墨蓝，圆角跟随输入框右侧 */
+.n-input-number-suffix .n-button {
   background-color: var(--primary-0) !important;
   color: var(--primary-5) !important;
   border-radius: 0 !important;
   border: none !important;
 }
 
-.n-input-number__suffix .n-button:hover {
+.n-input-number-suffix .n-button:hover {
   background-color: var(--primary-1) !important;
 }
 
-/* Naive UI 按钮样式覆盖 */
+.n-input-number-suffix .n-button:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0 !important;
+}
+
+/* ---- 按钮 ---- */
 .n-button {
-  border-radius: 0 !important;
-  border: 1px solid var(--primary-1) !important;
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid var(--border-light) !important;
   background-color: var(--primary-5) !important;
   color: var(--primary-0) !important;
+  transition: background-color 0.15s var(--ease-out), border-color 0.15s var(--ease-out),
+    color 0.15s var(--ease-out);
 }
 
 .n-button--primary-type {
   background-color: var(--primary-0) !important;
   color: var(--primary-5) !important;
-  border: 1px solid var(--primary-3) !important;
+  border: 1px solid var(--primary-1) !important;
 }
 
 .n-button--primary-type:hover {
-  border: 1px solid var(--primary-3) !important;
+  border: 1px solid var(--primary-1) !important;
   background-color: var(--primary-1) !important;
+}
+
+.n-button--primary-type:active {
+  background-color: var(--primary-2) !important;
 }
 
 .n-button--default-type:hover {
   background-color: var(--primary-4) !important;
+  border-color: var(--primary-4) !important;
 }
 
-.n-button:not(.n-button--disabled) .n-button__state-border, .n-button:not(.n-button--disabled) .n-button__border {
+.n-button--default-type:active {
+  background-color: var(--primary-3) !important;
+  border-color: var(--primary-3) !important;
+  color: #ffffff !important;
+}
+
+/* 禁用态：降透明度统一压暗，不改变布局 */
+.n-button--disabled,
+.n-button--disabled:hover,
+.n-button--disabled:active {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+}
+
+.n-button:not(.n-button--disabled) .n-button__state-border,
+.n-button:not(.n-button--disabled) .n-button__border {
   border: none !important;
 }
 
-/* Naive UI 表单标签样式覆盖 */
+/* ---- 选择框 ---- */
+.n-base-selection {
+  background-color: var(--field) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: none !important;
+  outline: none !important;
+  border: 1px solid var(--border-light) !important;
+  transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+}
+
+.n-base-selection .n-base-selection__border,
+.n-base-selection .n-base-selection__state-border {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.n-base-selection .n-base-selection-label {
+  color: var(--primary-0) !important;
+  background-color: var(--field) !important;
+}
+
+.n-base-selection .n-base-selection-label .n-base-selection-input,
+.n-base-selection .n-base-selection-label .n-base-suffix__arrow {
+  color: var(--primary-0) !important;
+}
+
+/* filterable select 失焦时已选值渲染在此元素（非 filterable 用 input__content） */
+.n-base-selection .n-base-selection-label__render-label {
+  color: var(--primary-0) !important;
+}
+
+.n-base-selection .n-base-selection-placeholder {
+  color: var(--light-5) !important;
+}
+
+.n-base-selection .n-base-selection__arrow {
+  color: var(--primary-1) !important;
+}
+
+.n-base-selection:hover {
+  background-color: var(--field) !important;
+  border-color: var(--primary-3) !important;
+}
+
+/* 下拉菜单：墨蓝浮层 */
+.n-base-select-menu {
+  background-color: var(--dark-1) !important;
+  border: 1px solid var(--dark-4);
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-float);
+}
+
+/* 注意：.n-base-select-option 是 mousedown capture 拦截目标，只允许颜色/背景类样式。
+   2.43.2 的选项没有 --hover class：悬浮 = --pending 类的 ::before 覆盖层
+   （颜色走 InternalSelectMenu 主题的 optionColorPending，见 App.vue）；
+   选中 = --selected 类 + optionTextColorActive。此处仅兜底强调色。 */
+.n-base-select-menu .n-base-select-option {
+  transition: color 0.12s var(--ease-out);
+}
+
+.n-base-select-menu .n-base-select-option.n-base-select-option--selected {
+  color: var(--accent) !important;
+}
+
+.n-base-select-menu .n-base-select-option .n-base-select-option__check {
+  color: var(--accent) !important;
+}
+
+/* ---- 表单标签 ---- */
 .n-form-item-label {
   color: var(--light-2) !important;
 }
@@ -169,83 +351,7 @@ div, span {
   gap: 5px !important;
 }
 
-/* 全局样式，覆盖 Naive UI 的默认样式以匹配原工程 */
-.n-base-selection {
-  background-color: var(--light-0) !important;
-  border-radius: 10px 5px 20px !important;
-  box-shadow: 0 0 0 1px var(--primary-1, var(--primary-1)) inset !important;
-  outline: none !important;
-  border: 1px solid var(--primary-2) !important;
-  .n-base-selection__border, .n-base-selection__state-border {
-    outline: none !important;
-    border: none !important;
-    box-shadow: none !important;
-  }
-}
-
-.n-base-selection .n-base-selection-label {
-  color: var(--primary-0) !important;
-  background-color: var(--light-0) !important;
-
-  .n-base-selection-input, .n-base-suffix__arrow {
-    color: var(--primary-0) !important;
-  }
-
-  /* filterable select 失焦时已选值渲染在此元素（非 filterable 用 input__content），补齐深色 */
-  .n-base-selection-label__render-label {
-    color: var(--primary-0) !important;
-  }
-}
-
-.n-base-select-menu .n-base-select-option.n-base-select-option--selected::before {
-  background-color: transparent !important;
-}
-
-.n-base-select-menu .n-base-select-option.n-base-select-option--hover::before {
-  background-color: transparent !important;
-}
-
-.n-base-select-menu .n-base-select-option.n-base-select-option--pending::before {
-  background-color: var(--dark-4) !important;
-}
-
-.n-base-select-menu .n-base-select-option.n-base-select-option--hover {
-  color: var(--light-5) !important;
-}
-
-.n-base-select-menu .n-base-select-option.n-base-select-option--selected {
-  color: var(--light-0) !important;
-}
-
-.n-base-select-menu .n-base-select-option .n-base-select-option__check {
-  color: var(--light-5) !important;
-}
-
-.n-base-selection .n-base-selection__border, .list-wrapper .n-base-selection .n-base-selection__state-border {
-  border: none;
-}
-
-.n-base-selection .n-base-selection-placeholder {
-  color: var(--primary-5) !important;
-}
-
-.n-base-selection .n-base-selection__arrow {
-  color: var(--primary-5) !important;
-}
-
-.n-base-selection:hover {
-  background-color: var(--primary-0) !important;
-}
-
-.n-base-selection.n-base-selection--active {
-  background-color: var(--primary-0) !important;
-  box-shadow: 0 0 0 1px var(--primary-1) inset !important;
-}
-
-.n-icon {
-  font-size: 18px !important;
-}
-
+/* ---- 开关 ---- */
 .n-switch__rail {
   background-color: var(--dark-4) !important;
 }
@@ -254,9 +360,154 @@ div, span {
   background-color: var(--n-rail-color-active) !important;
 }
 
+/* ---- 标签页 ---- */
+.n-tabs-tab {
+  transition: color 0.15s var(--ease-out);
+}
+
+/* ---- 卡片 ---- */
+.n-card {
+  border-radius: var(--radius-md);
+}
+
+/* ---- 弹出层 / 气泡 ---- */
+.n-popover {
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-float);
+  border: 1px solid var(--dark-4) !important;
+}
+
+.n-tooltip {
+  border-radius: 6px !important;
+  box-shadow: var(--shadow-float);
+}
+
+.n-dropdown-menu {
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-float);
+}
+
+/* ---- 消息 / 通知 ---- */
+.n-message {
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-float);
+}
+
+.n-notification {
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-float);
+}
+
+/* ---- 加载条 / 进度 ---- */
+.n-loading-bar {
+  background-color: var(--accent);
+}
+
+.n-progress-graph-line-fill,
+.n-progress-graph-circle-fill {
+  background-color: var(--accent);
+}
+
+/* ---- 空状态 ---- */
+.n-empty__description {
+  color: var(--light-4) !important;
+}
+
+.n-empty__icon {
+  color: var(--light-5) !important;
+}
+
+/* ---- 图标 ---- */
+.n-icon {
+  font-size: 18px !important;
+}
+
+/* ---- 颜色选择器 ---- */
 .n-color-picker-trigger {
   border: none !important;
+  border-radius: var(--radius-sm) !important;
 }
+
+/* ---- 标签 ---- */
+.n-tag {
+  border-radius: var(--radius-sm) !important;
+}
+
+/* ---- 复选框 ----
+   结构：.n-checkbox-box 承载背景色，边框画在 .n-checkbox-box__border 子元素上
+   （border: var(--n-border-checked)），选中色由 Checkbox 主题原生提供。 */
+.n-checkbox .n-checkbox-box,
+.n-checkbox .n-checkbox-box__border {
+  border-radius: 3px;
+}
+
+.n-checkbox .n-checkbox-box {
+  transition: background-color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+
+.n-checkbox.n-checkbox--checked .n-checkbox-box {
+  background-color: var(--accent) !important;
+}
+
+.n-checkbox.n-checkbox--indeterminate .n-checkbox-box {
+  background-color: var(--accent) !important;
+}
+
+/* ---- 单选框 ----
+   选中态 = 描边环 + 内部小圆点（不实心）：整体填充透明，内圆点墨蓝；
+   深色面板上描边环用 accent 保证可见，浅色条带上环跟随内圆点用墨蓝。 */
+.n-radio.n-radio--checked .n-radio__dot {
+  box-shadow: inset 0 0 0 1px var(--accent) !important;
+  background-color: #0000 !important;
+}
+
+.n-radio.n-radio--checked .n-radio__dot::before {
+  background: var(--primary-0) !important;
+}
+
+.style-selection-wrap .n-radio.n-radio--checked .n-radio__dot {
+  box-shadow: inset 0 0 0 1px var(--primary-0) !important;
+}
+
+/* ---- 滑块 ---- */
+.n-slider .n-slider-rail .n-slider-rail__fill {
+  background-color: var(--accent) !important;
+}
+
+/* ---- 浅色条带上的 radio / checkbox（FilesBar / EditFilesBar 的预览样式选择）
+   浅色背景上文本必须用深色，圆点描边用浅色，与深色面板上的 radio 区分。 */
+.style-selection-wrap .n-radio__label,
+.style-selection-wrap .n-checkbox__label {
+  color: var(--primary-0) !important;
+}
+
+.style-selection-wrap .n-radio .n-radio__dot {
+  box-shadow: inset 0 0 0 1px var(--border-light) !important;
+}
+
+.style-selection-wrap .n-checkbox .n-checkbox-box__border {
+  border: 1px solid var(--border-light) !important;
+}
+
+/* ============ 6. 品牌签名样式 ============ */
+
+/* 右面板 section-title：不对称圆角墨蓝条（原工程视觉记忆点，保留并统一）
+   加 !important 是为了统一部分面板内 scoped 的朴素标题样式，让全产品标题一致 */
+.right-panel .section-title {
+  border-bottom: 1px solid var(--primary-2) !important;
+  background: linear-gradient(135deg, var(--primary-0) 0%, var(--primary-1) 100%) !important;
+  color: var(--primary-5) !important;
+  border-radius: 16px 4px 16px 4px !important;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 18px !important;
+  margin-bottom: 20px !important;
+  font-size: 13px !important;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* ---- 保留的既有规则（勿删，见 skill 第 3 节） ---- */
 /* 应用页 radio 统一淡灰样式（与动效编辑页预览模式一致） */
 .app-radio-gray .n-radio__label {
   color: #9aa3b2 !important;
@@ -280,4 +531,14 @@ div, span {
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
+}
+
+/* 减少动态偏好：抑制过渡/动画（不影响画布 JS 交互） */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

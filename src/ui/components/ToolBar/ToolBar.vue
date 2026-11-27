@@ -325,6 +325,7 @@ import { isTauri } from '@/utils/env'
 import { ShapeUnion16Filled, ShapeIntersect16Filled, ShapeSubtract16Filled } from '@vicons/fluent'
 import { genPictureComponent } from '@/features/tools/picture'
 import { createDebouncedHandler } from '@/utils/debounce-click'
+import { markToListNavigation } from '@/utils/listNavGuard'
 import { confirmLeaveGlyphEditIfDirty } from '@/stores/editorConstantsSession'
 import { type BooleanOp } from '@/features/editor/services/BooleanOperationService'
 import {
@@ -513,6 +514,9 @@ const _handleToList = async () => {
     }
     editorStore.setEditStatus(EditStatus.CharacterList)
   }
+
+  // 防误触：跳回列表后鼠标正落在文件条语言切换按钮上，10 秒内屏蔽语言切换点击
+  markToListNavigation()
 }
 const handleToList = createDebouncedHandler(_handleToList, 'ToolBar.handleToList')
 </script>
@@ -526,8 +530,8 @@ const handleToList = createDebouncedHandler(_handleToList, 'ToolBar.handleToList
 .tool-bar-row {
   width: 100%;
   height: 100%;
-  background-color: white;
-  border-bottom: 1px solid #dcdfe6;
+  background-color: var(--surface-light);
+  border-bottom: 1px solid var(--border-light);
   display: flex;
   align-items: center;
   flex-direction: row;
@@ -543,15 +547,16 @@ const handleToList = createDebouncedHandler(_handleToList, 'ToolBar.handleToList
   width: 40px;
   height: 40px;
   cursor: pointer;
-  margin: 5px 0 5px 5px;
+  margin: 4px 0 4px 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.2s ease;
+  border-radius: 6px;
+  transition: background-color 0.15s ease, color 0.15s ease;
   color: var(--primary-0);
 }
 
-.tool-icon:not(.code-icon):hover, .tool-icon:not(.code-icon).selected {
+.tool-icon:not(.code-icon):not(.selected):hover {
   background-color: var(--primary-5);
 }
 
@@ -560,17 +565,24 @@ const handleToList = createDebouncedHandler(_handleToList, 'ToolBar.handleToList
 }
 
 .tool-icon.selected {
-  background-color: var(--primary-5);
+  background-color: var(--primary-0);
+  color: var(--primary-5);
+}
+
+/* 选中后再 hover：保持墨蓝系，避免浅色底 + 浅色图标看不清 */
+.tool-icon.selected:hover {
+  background-color: var(--primary-1);
+  color: var(--primary-5);
 }
 
 .code-icon {
   width: 40px;
   height: 40px;
   cursor: pointer;
-  margin: 5px 0 5px 5px;
+  margin: 4px 0 4px 4px;
   background-color: var(--dark-2);
   color: var(--light-0);
-  border-radius: 5px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -591,24 +603,25 @@ const handleToList = createDebouncedHandler(_handleToList, 'ToolBar.handleToList
   align-items: center;
   justify-content: center;
   flex: 0 0 100px;
-  color: var(--primary-0);
+  color: var(--primary-5);
   cursor: pointer;
-  background-color: var(--primary-5);
-  transition: background-color 0.2s ease;
+  background-color: var(--primary-0);
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
 }
 
 .to-list:hover {
-  background-color: var(--primary-4);
+  background-color: var(--primary-1);
 }
 
 .to-list-icon {
   flex: 0 0 32px;
   text-align: center;
-  color: var(--primary-0);
+  color: var(--primary-5);
 }
 
-.to-list-label { color: var(--primary-0); }
-.boolean-separator { width: 1px; height: 28px; background: var(--primary-0); margin: 4px 8px; flex-shrink: 0; }
+.to-list-label { color: var(--primary-5); }
+.boolean-separator { width: 1px; height: 28px; background: var(--border-light); margin: 4px 8px; flex-shrink: 0; }
 .boolean-icon { cursor: pointer; opacity: 0.65; }
 .boolean-icon:hover { opacity: 1; }
 </style>

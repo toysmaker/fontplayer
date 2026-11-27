@@ -835,3 +835,114 @@ export function dedupAllParameterOptions(file: {
 }
 
 // END 临时代码
+
+// MARK: 临时代码 — 方圆黑体"横折弯钩"：迁移为字玩标准黑体样式的新脚本参数设置
+// 新脚本（public/templates/private/v1/横折弯钩.js）采用字玩标准黑体几何，去掉了凸起起笔，
+// 起笔风格仅保留"无起笔样式"；字重按方圆黑体（v1）设置（字重 × 字重比率）。
+// 仅 dev 模式生效；后续需整段移除。
+
+const HENG_ZHE_WAN_GOU_STROKE_NAME = '横折弯钩'
+
+/** 语义未变化的参数：迁移时保留已有值（避免破坏字符中已有的字形参数调整） */
+const HENG_ZHE_WAN_GOU_KEEP_VALUE_PARAM_NAMES = new Set([
+  '横-水平延伸',
+  '折-水平延伸',
+  '折-竖直延伸',
+  '弯-长度',
+  '字重',
+  '字重比率',
+  '弯曲程度',
+  '转角风格',
+  '转角数值',
+  '收笔风格',
+  '收笔数值',
+  '运笔风格',
+  '运笔数值',
+  '字重变化',
+  '参考位置',
+  '起笔数值',
+])
+
+/** 语义变化的参数：迁移时重置为新默认值。
+ *  - 折-弯曲度：旧脚本尺度为 1~2，新脚本为 0~300（折-弯曲度 + 30 × 弯曲程度）
+ *  - 起笔风格：新脚本仅支持"无起笔样式"
+ *  - 横-竖直延伸 / 折-弯曲游标 / 钩-水平延伸：新脚本新增参数
+ *  - 钩-竖直延伸：默认值由 130 改为字玩标准黑体的 60
+ */
+const HENG_ZHE_WAN_GOU_RESET_PARAM_NAMES = new Set([
+  '横-竖直延伸',
+  '折-弯曲游标',
+  '折-弯曲度',
+  '钩-水平延伸',
+  '钩-竖直延伸',
+  '起笔风格',
+])
+
+/** 将单个字形（字形列表定义或字符组件 value）的"横折弯钩"参数迁移为新脚本参数设置；返回是否迁移 */
+function migrateHengZheWanGouParams(g: ICustomGlyph): boolean {
+  if (!import.meta.env.DEV) return false
+  const style = String(g.style ?? '')
+  if (!FANG_YUAN_STYLE_TAGS.has(style)) return false
+  const name = String(g.name ?? '').trim()
+  if (name !== HENG_ZHE_WAN_GOU_STROKE_NAME) return false
+
+  const stroke = strokes.find((s) => s.name === HENG_ZHE_WAN_GOU_STROKE_NAME)
+  if (!stroke) {
+    if (import.meta.env.DEV) { console.warn('[migrateHengZheWanGou_private/v1] 笔画数据中未找到"横折弯钩"，跳过') }
+    return false
+  }
+
+  const existing = parametersArrayFromGlyphValue(g) ?? []
+  const canonical = buildFangYuanStrokeParameters(stroke)
+  for (const p of canonical) {
+    if (!HENG_ZHE_WAN_GOU_KEEP_VALUE_PARAM_NAMES.has(p.name)) continue
+    const ep = existing.find((e) => e?.name === p.name)
+    if (!ep) continue
+    if (typeof ep.value === 'number' && Number.isFinite(ep.value)) {
+      p.value = ep.value
+    }
+  }
+  g.parameters = canonical as unknown as ICustomGlyph['parameters']
+  return true
+}
+
+/** 对字形定义列表（stroke_glyphs 等）迁移"横折弯钩"参数 */
+export function migrateHengZheWanGouParamsInGlyphDefinitions_private_v1(
+  glyphs: ICustomGlyph[] | undefined,
+): void {
+  if (!import.meta.env.DEV) return
+  if (!glyphs?.length) return
+  let count = 0
+  for (const g of glyphs) {
+    if (!g) continue
+    if (migrateHengZheWanGouParams(g)) count++
+  }
+  if (import.meta.env.DEV && count > 0) {
+    console.log(
+      `[migrateHengZheWanGou_private/v1] 已迁移字形列表中 ${count} 个"横折弯钩"字形参数（重置: ${[...HENG_ZHE_WAN_GOU_RESET_PARAM_NAMES].join('、')}）`,
+    )
+  }
+}
+
+/** 对字符组件树迁移"横折弯钩"参数（递归处理嵌套字形） */
+export function migrateHengZheWanGouParamsInCharacterComponents_private_v1(
+  components: IComponent[] | undefined,
+): void {
+  if (!import.meta.env.DEV) return
+  let count = 0
+  const walk = (comps: Array<IComponent | IGlyphComponent> | undefined): void => {
+    if (!comps?.length) return
+    for (const comp of comps) {
+      if (!comp || comp.type !== 'glyph' || !comp.value) continue
+      const g = comp.value as ICustomGlyph
+      if (migrateHengZheWanGouParams(g)) count++
+      walk(g.components as Array<IComponent | IGlyphComponent> | undefined)
+    }
+  }
+  walk(components)
+  if (import.meta.env.DEV && count > 0) {
+    console.log(`[migrateHengZheWanGou_private/v1] 已迁移字符组件树中 ${count} 个"横折弯钩"字形组件参数`)
+  }
+}
+
+// END 临时代码

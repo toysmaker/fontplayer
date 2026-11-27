@@ -24,7 +24,7 @@
   align-self: stretch;
   padding: 10px;
   border-right: 1px solid var(--primary-0);
-  background-color: #fff;
+  background-color: var(--surface-light);
   box-sizing: border-box;
 }
 
@@ -40,11 +40,11 @@
 
 /* ---------- Tabs（对齐 el-tabs：灰字、激活深蓝+下划线） ---------- */
 .glyph-programming-editor .prog-tabs .n-tabs-nav {
-  border-bottom: 1px solid #dcdfe6;
+  border-bottom: 1px solid var(--border-light);
 }
 
 .glyph-programming-editor .prog-tabs .n-tabs-tab {
-  color: #909399;
+  color: var(--light-5);
   font-size: 14px;
   padding: 0 16px;
   height: 40px;
@@ -146,7 +146,7 @@
 }
 
 .glyph-programming-editor .prog-form-item .n-form-item-label {
-  color: #000 !important;
+  color: var(--primary-0) !important;
 }
 
 .glyph-programming-editor .prog-form-item:not(.prog-form-item--label80) .n-form-item-label {
@@ -189,7 +189,7 @@
 /* ---------- 输入、选择：方角、白底、主色文字（对齐原 el-input） ---------- */
 .glyph-programming-editor .left-panel .n-input .n-input-wrapper {
   border-radius: 0;
-  background-color: #fff;
+  background-color: var(--field);
 }
 
 .glyph-programming-editor .left-panel .n-input__input-el {
@@ -198,7 +198,7 @@
 
 .glyph-programming-editor .left-panel .n-base-selection {
   border-radius: 0;
-  --n-border: 1px solid #dcdfe6;
+  --n-border: 1px solid var(--border-light);
 }
 
 .glyph-programming-editor .left-panel .n-base-selection .n-base-selection-label {
@@ -388,7 +388,7 @@
 }
 
 .glyph-programming-editor .option-item .option-remove-btn:hover {
-  background-color: #f56c6c;
+  background-color: var(--danger);
   color: var(--primary-0);
 }
 
@@ -398,16 +398,16 @@
 }
 
 .glyph-programming-editor .ring-inner-tabs .n-tabs-nav {
-  background-color: #f5f7fa;
-  border: 1px solid #dcdfe6;
+  background-color: var(--surface-light);
+  border: 1px solid var(--border-light);
   border-bottom: none;
   border-radius: 0;
 }
 
 .glyph-programming-editor .ring-inner-tabs .n-tabs-pane-wrapper {
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--border-light);
   padding: 10px;
-  background: #fff;
+  background: var(--surface-light);
   border-radius: 0;
 }
 
@@ -419,7 +419,7 @@
 .glyph-programming-editor .codes-header .reset-btn {
   border-radius: 0 !important;
   margin-left: 8px;
-  background-color: #fff !important;
+  background-color: var(--field) !important;
   border: 1px solid var(--primary-0) !important;
   color: var(--primary-0) !important;
 }

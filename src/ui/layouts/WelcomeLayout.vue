@@ -266,14 +266,14 @@ const handleProjectCreated = () => {
   left: 50%;
   transform: translateX(-50%);
   font-size: 13px;
-  color: #8a8a8a;
+  color: var(--light-5);
   text-align: center;
   cursor: pointer;
   user-select: none;
 }
 
 .welcome .restore-hint:hover {
-  color: var(--primary-0);
+  color: var(--accent);
   text-decoration: underline;
 }
 
@@ -290,17 +290,22 @@ const handleProjectCreated = () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--light-5);
+  border: 1px solid var(--primary-1);
+  border-radius: var(--radius-lg);
   cursor: pointer;
   background-color: var(--primary-0);
+  transition: background-color 0.2s var(--ease-out), border-color 0.2s var(--ease-out),
+    box-shadow 0.2s var(--ease-out);
 }
 
 .welcome .items-wrapper .item:hover {
   background-color: var(--primary-1);
+  border-color: var(--primary-3);
+  box-shadow: 0 8px 24px rgba(8, 11, 19, 0.5);
 }
 
 .welcome .items-wrapper .item:hover .item-icon {
-  color: var(--light-0);
+  color: var(--accent-hover);
 }
 
 .welcome .items-wrapper .item:hover .item-name {

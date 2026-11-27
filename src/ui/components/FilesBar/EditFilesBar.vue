@@ -49,8 +49,8 @@ const {
   width: 100%;
   height: 36px;
   z-index: 99;
-  background-color: white;
-  border-bottom: 1px solid var(--dark-4);
+  background-color: var(--surface-light);
+  border-bottom: 1px solid var(--border-light);
   box-sizing: border-box;
   display: flex;
   align-items: center;

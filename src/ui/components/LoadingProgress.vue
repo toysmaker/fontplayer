@@ -115,9 +115,10 @@ const loadingMessage = computed(() => {
 </style>
 
 <style>
-/* 设置进度条的 primary 颜色 */
+/* 白色卡片上的进度条：墨蓝填充 + 浅蓝轨道（全局深色轨道在这里会糊成黑色） */
 .loading-progress-container .n-progress {
   --n-fill-color: var(--primary-0);
+  --n-rail-color: var(--primary-5) !important;
 }
 
 .loading-progress-container .n-progress-line-fill {

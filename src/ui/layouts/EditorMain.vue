@@ -152,7 +152,6 @@ const handleTabChange = (status: EditStatus) => {
   display: flex;
   flex-direction: row;
   cursor: pointer;
-  line-height: 40px;
   gap: 5px;
   z-index: 100;
 }
@@ -163,24 +162,36 @@ const handleTabChange = (status: EditStatus) => {
 .list-switch .stroke-glyph-list,
 .list-switch .comp-glyph-list {
   flex: 1;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: auto;
   height: 40px;
   padding: 0 20px;
   box-sizing: border-box;
-  color: white;
+  color: var(--light-0);
   border: 1px solid var(--primary-1);
-  line-height: 40px;
   background: var(--primary-0);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(8, 11, 19, 0.35);
   transition: all 0.2s ease;
 }
 
-.list-switch .character-list:hover,
-.list-switch .glyph-list:hover,
-.list-switch .radical-glyph-list:hover,
-.list-switch .stroke-glyph-list:hover,
-.list-switch .comp-glyph-list:hover {
+.list-switch .character-list:not(.selected):hover,
+.list-switch .glyph-list:not(.selected):hover,
+.list-switch .radical-glyph-list:not(.selected):hover,
+.list-switch .stroke-glyph-list:not(.selected):hover,
+.list-switch .comp-glyph-list:not(.selected):hover {
   background-color: var(--primary-1);
+}
+
+/* 选中态 hover：保持浅底深字（否则深底+深字看不清） */
+.list-switch .character-list.selected:hover,
+.list-switch .glyph-list.selected:hover,
+.list-switch .radical-glyph-list.selected:hover,
+.list-switch .stroke-glyph-list.selected:hover,
+.list-switch .comp-glyph-list.selected:hover {
+  background-color: var(--primary-4);
 }
 
 .list-switch .character-list.selected,
@@ -191,7 +202,6 @@ const handleTabChange = (status: EditStatus) => {
   font-weight: bold;
   color: var(--primary-0);
   border: 1px solid var(--primary-1);
-  line-height: 40px;
   background: var(--primary-5);
 }
 

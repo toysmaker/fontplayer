@@ -158,6 +158,7 @@ import { useEditorStore } from '@/stores/editor'
 import { EditStatus } from '@/core/types'
 import { removeFileSnapshot } from '@/features/sessionSnapshot/SessionSnapshotService'
 import { createDebouncedHandler } from '@/utils/debounce-click'
+import { isLanguageSwitchBlocked } from '@/utils/listNavGuard'
 import { isTauri } from '@/utils/env'
 import { confirmLeaveGlyphEditIfDirty } from '@/stores/editorConstantsSession'
 
@@ -169,6 +170,10 @@ const { locale, t } = useI18n()
 
 // 处理语言切换
 const handleLanguageChange = async (lang: 'zh' | 'en') => {
+  // 防误触：刚从编辑态跳回列表时，鼠标正落在此按钮上，10 秒内点击无效
+  if (isLanguageSwitchBlocked()) {
+    return
+  }
   locale.value = lang
   // 更新 Tauri 菜单
   if (isTauri()) {
@@ -375,7 +380,7 @@ const cancelSearch = createDebouncedHandler(_cancelSearch, 'FilesBar.cancelSearc
   width: 100%;
   height: 36px;
   z-index: 99;
-  background-color: white;
+  background-color: var(--surface-light);
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -585,6 +590,6 @@ const cancelSearch = createDebouncedHandler(_cancelSearch, 'FilesBar.cancelSearc
 }
 
 .language-choice-item:not(.selected):hover {
-  background-color: var(--light-0);
+  background-color: var(--primary-5);
 }
 </style>

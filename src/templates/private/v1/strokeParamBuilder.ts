@@ -241,7 +241,7 @@ export const FANG_YUAN_STYLE_RULES: FangYuanStyleRule[] = [
     key: '横起笔',
     label: '横起笔风格',
     paramName: '起笔风格',
-    glyphNames: ['横', '横钩', '横撇', '横撇弯钩', '横弯钩', '横折', '横折2', '横折钩', '横折弯', '横折弯钩', '横折折撇', '横折折弯钩', '二横折'],
+    glyphNames: ['横', '横钩', '横撇', '横撇弯钩', '横弯钩', '横折', '横折2', '横折钩', '横折弯', '横折折撇', '横折折弯钩', '二横折'],
     mode: 'push',
     options: [
       { value: 1, label: '圆切-上' },
@@ -669,13 +669,6 @@ export function buildFangYuanStrokeParameters(stroke: FangYuanStroke): IParamete
         max: 200,
       },
     )
-  } else if (name === '横折弯钩') {
-    const 折弯曲度 = parameters.find(p => p.name === '折-弯曲度')
-    if (折弯曲度) {
-      折弯曲度.value = 1.5
-      折弯曲度.min = 1
-      折弯曲度.max = 2
-    }
   }
 
   // 风格规则表

@@ -49,6 +49,8 @@ import {
   renameFangYuanStyleInCharacterComponents,
   dedupAllParameterOptions,
   dedupCharacterComponentOptions,
+  migrateHengZheWanGouParamsInGlyphDefinitions_private_v1,
+  migrateHengZheWanGouParamsInCharacterComponents_private_v1,
 } from '@/features/temporaryScripts/fileProcessing'
 import { addMissingFangYuanStrokes } from '@/features/temporaryScripts/addMissingFangYuanStrokes'
 import { mergeFangYuanStrokePairsInCharacter } from '@/features/temporaryScripts/fangYuanStrokePairMerge'
@@ -493,6 +495,17 @@ export class ProjectLoader {
           syncFangYuanGlyphParamsToLatest_private_v1(data.stroke_glyphs as ICustomGlyph[])
         } catch (e) {
           console.error('[ProjectLoader] syncFangYuanGlyphParamsToLatest failed', e)
+        }
+      }
+      // END 临时代码
+
+      // MARK: 临时代码 — "横折弯钩"：迁移为新脚本对应的参数设置（脚本已由 replaceGlyphScript_private/v1 同步）
+      // 仅 dev 模式、tag 为字玩方圆黑体 时生效；后续需整段移除
+      if (import.meta.env.DEV && projectTag === TEMP_FP_FANGYUAN_CUSTOM1_SCRIPT_TAG && data.stroke_glyphs?.length) {
+        try {
+          migrateHengZheWanGouParamsInGlyphDefinitions_private_v1(data.stroke_glyphs as ICustomGlyph[])
+        } catch (e) {
+          console.error('[ProjectLoader] migrateHengZheWanGouParamsInGlyphDefinitions failed', e)
         }
       }
       // END 临时代码
@@ -952,6 +965,9 @@ export class ProjectLoader {
       // 必须在 widen 之前执行，保证新增参数的 min/max 也会被正常放宽
       if (import.meta.env.DEV) {
         syncFangYuanCharacterComponentParamsToLatest_private_v1(components)
+        // MARK: 临时代码 — "横折弯钩"：迁移为新脚本对应的参数设置（与 stroke_glyphs 侧一致）
+        migrateHengZheWanGouParamsInCharacterComponents_private_v1(components)
+        // END 临时代码
       }
       // END 临时代码
       widenFangYuanGlyphNumberParamBoundsInCharacterComponents(components)

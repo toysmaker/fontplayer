@@ -172,9 +172,9 @@ const handleConfirm = createDebouncedHandler(_handleConfirm, 'ExportFontDialog.c
 .contour-radio-row { display: flex; flex-direction: row; align-items: center; margin-bottom: 8px; }
 .contour-radio-row:last-child { margin-bottom: 0; }
 .contour-radio { flex: 1; min-width: 0; }
-.export-font-help-icon { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 6px; border-radius: 50%; background: #3c3c3c; color: #a0a0a0; font-size: 11px; font-weight: 600; line-height: 1; cursor: help; user-select: none; }
-.export-font-help-icon:hover { color: #ccc; background: #4a4a4a; }
-.item-check { color: #d4d4d4 !important; }
+.export-font-help-icon { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 6px; border-radius: 50%; background: var(--dark-3); color: var(--light-4); font-size: 11px; font-weight: 600; line-height: 1; cursor: help; user-select: none; }
+.export-font-help-icon:hover { color: var(--light-1); background: var(--dark-4); }
+.item-check { color: var(--light-2) !important; }
 .dialog-footer { display: flex; justify-content: flex-end; gap: 10px; width: 100%; }
 .batch-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid #3e3e42; }
 .batch-row { display: flex; align-items: center; gap: 8px; }

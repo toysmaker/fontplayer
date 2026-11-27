@@ -744,6 +744,12 @@ const strokes = [
         originParam: '横-长度',
       },
       {
+        name: '横-竖直延伸',
+        default: 0,
+        min: 0,
+        max: 1000,
+      },
+      {
         name: '折-水平延伸',
         default: 300,
         min: 0,
@@ -754,6 +760,12 @@ const strokes = [
         default: 380,
         min: 0,
         max: 1000,
+      },
+      {
+        name: '折-弯曲游标',
+        default: 0.5,
+        min: 0,
+        max: 1,
       },
       {
         name: '折-弯曲度',
@@ -768,8 +780,14 @@ const strokes = [
         max: 1000,
       },
       {
+        name: '钩-水平延伸',
+        default: 60,
+        min: 0,
+        max: 300,
+      },
+      {
         name: '钩-竖直延伸',
-        default: 130,
+        default: 60,
         min: 0,
         max: 300,
       },

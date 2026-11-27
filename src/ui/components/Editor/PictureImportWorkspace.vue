@@ -67,7 +67,7 @@ const { t } = useI18n()
   width: 100%;
   border-bottom: 1px solid var(--dark-4);
   line-height: 36px;
-  padding: 5px 15px 8px 15px;
+  padding: 6px 15px;
   box-sizing: border-box;
   color: var(--primary-5);
 }

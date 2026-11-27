@@ -130,7 +130,11 @@ const {
   width: 100%;
   position: relative;
   z-index: 99;
-  background-color: white;
+  background-color: var(--surface-light);
+}
+
+.bottom-bar {
+  border-top: 1px solid var(--border-light);
 }
 
 .bottom-bar-row {
@@ -178,7 +182,7 @@ const {
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 8px;
-  color: var(--text-color-1);
+  color: var(--light-1);
 }
 
 .pen-edit-hint-list {
@@ -189,7 +193,7 @@ const {
 .pen-edit-hint-list li {
   font-size: 12px;
   line-height: 1.7;
-  color: var(--text-color-2);
+  color: var(--light-2);
 }
 
 .tools-wrapper {

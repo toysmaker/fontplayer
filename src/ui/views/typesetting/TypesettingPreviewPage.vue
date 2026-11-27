@@ -435,10 +435,34 @@ const getDefaultHtml = async (): Promise<string> => {
     .join('')
 }
 
+/** 等待 tiptap 编辑器实例就绪（useEditor 异步创建；
+ *  复用上次字体路径中 applyFont 很快，initContent 可能先于编辑器挂载执行，
+ *  早返回会导致内容永远不写入 —— 显示空白编辑区） */
+const waitForEditor = async (timeoutMs = 10_000): Promise<NonNullable<typeof editor.value> | null> => {
+  const start = Date.now()
+  while (!editor.value || editor.value.isDestroyed) {
+    if (Date.now() - start > timeoutMs) return null
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  return editor.value
+}
+
 /** 编辑文本始终实时计算：工程包含的全部字符依次排列（不从 storage 恢复） */
 const initContent = async () => {
-  const ed = editor.value
-  if (!ed || ed.isDestroyed) return
+  const ed = await waitForEditor()
+  if (!ed) {
+    // 编辑器超时未就绪（异常情况）：就绪后自动补一次初始化，避免永久空白
+    const stop = watch(editor, (val) => {
+      if (val && !val.isDestroyed) {
+        stop()
+        void initContent()
+      }
+    })
+    if (import.meta.env.DEV) {
+      console.warn('[TypesettingPreview] editor not ready in time, will retry on ready')
+    }
+    return
+  }
   let html = await getDefaultHtml()
   // 会话级续编辑：当前工程会话内再次进入时恢复上次的内容与样式
   // （重开工程时该缓存已被清除，恢复为默认）
@@ -451,7 +475,9 @@ const initContent = async () => {
       lastColor?: string
       globalMode: boolean
     }>(keys().content)
-    if (cached) {
+    // 防御：竞态期间可能缓存过空内容，空缓存不得覆盖默认内容（否则永远恢复空白）
+    const hasText = cached?.html ? cached.html.replace(/<[^>]*>/g, '').trim() !== '' : false
+    if (cached && hasText) {
       html = cached.html
       baseFontSize.value = cached.baseFontSize ?? 64
       // 恢复输入框显示值：优先上次输入框值（含选区模式），回退到基础字号
@@ -715,6 +741,8 @@ onUnmounted(() => {
   flex-direction: column;
   background: #ffffff;
   overflow: hidden;
+  /* 浅色页面：文档文字默认深色（body 全局是浅色，不设会被编辑器继承成淡蓝） */
+  color: #333333;
 }
 
 .typesetting-header {
@@ -760,11 +788,14 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-/* 全局生效 checkbox：固定在最右侧 */
+/* 全局生效 checkbox：固定在最右侧；浅色页面上用深色文字 + 浅色描边 */
 .global-check {
   margin-left: auto;
   flex: none;
   white-space: nowrap;
+  --n-text-color: #333333 !important;
+  --n-border: 1px solid #c8cdd8 !important;
+  --n-border-checked: 1px solid var(--primary-0) !important;
 }
 
 /* 空 label 插槽会令触发器塌缩为 0 宽：强制颜色预览方块的尺寸 */
@@ -806,6 +837,9 @@ onUnmounted(() => {
 
 .loading-progress {
   width: 320px;
+  /* 白色页面上的进度条：浅色轨道 + 墨蓝填充（全局轨道是中灰，这里会偏深） */
+  --n-rail-color: #e2e5ec !important;
+  --n-fill-color: var(--primary-0) !important;
 }
 
 .typesetting-error {

@@ -2100,7 +2100,7 @@ const handleFormatGlyphComponent = () => {
   margin-bottom: 20px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--dark-4);
-  color: var(--text-color-1);
+  color: var(--light-2);
 }
 
 .param-inputs-grow {

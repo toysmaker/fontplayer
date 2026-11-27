@@ -86,6 +86,6 @@ function onDragStart(segmentId: string, ev: DragEvent) {
 }
 .segment-duration {
   font-size: 10px;
-  color: #999;
+  color: #666666;
 }
 </style>
